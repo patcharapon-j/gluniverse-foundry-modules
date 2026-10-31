@@ -63,6 +63,7 @@
     "styles/combat-intro-aegis.css",
     "styles/stream.css",
     "styles/stream-cards.css",
+    "styles/stream-cards-daggerheart.css",
     "styles/stream-targets.css",
     "styles/hexcrawl.css",
     "styles/hexcrawl-play.css",

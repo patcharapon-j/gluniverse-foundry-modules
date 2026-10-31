@@ -16,11 +16,14 @@ import {
 } from "./card-motion.js";
 
 /**
- * The PF2e roll card.
+ * The stream's roll card.
  *
  * It renders a RollCardModel (see docs/plans/pf2e-roll-card.md) and owns its own motion: the entrance, the
  * outcome reveal, the crit climax, in-place updates for rerolls and spell chains, the merged damage row and
- * the exit. It never reads Foundry documents; the PF2e reader builds the model.
+ * the exit. It never reads Foundry documents; a system's reader builds the model — PF2e's
+ * (`pf2e/read-message.js`) or Daggerheart's (`daggerheart/read-message.js`), whose extra fields (the
+ * duality die, an outcome named by key, chips, a feature's price) are all optional, so a PF2e model draws
+ * exactly as it always did.
  *
  * The look is setting-neutral: a rounded glass strip with a 1px inner rule, tone carried by a top rule
  * that fades out to the right and a quiet wash behind the result. Its motion is plain fade and rise, with
@@ -102,6 +105,30 @@ const DEFAULT_LABELS = {
   Thinks: "Thinks",
   Narration: "Narration",
   Unknown: "Unknown",
+  // Daggerheart (see stream-cards/daggerheart/read-message.js): the duality outcome, the GM's d20, a
+  // posted feature and its price, the GM's Fear chip and a critical's damage.
+  WithHope: "With Hope",
+  WithFear: "With Fear",
+  Critical: "Critical",
+  Hit: "Hit",
+  Miss: "Miss",
+  Evasion: "Evasion",
+  Adversary: "Adversary",
+  Environment: "Environment",
+  PlusFear: "+1 Fear",
+  UsesFeature: "Uses a feature",
+  Spend: "Spend",
+  Mark: "Mark",
+  Hope: "Hope",
+  Fear: "Fear",
+  Stress: "Stress",
+  ArmorSlot: "Armor Slot",
+  ArmorSlots: "Armor Slots",
+  HitPoint: "Hit Point",
+  HitPoints: "Hit Points",
+  CritMax: "Critical",
+  DualityRoll: "Duality Roll",
+  ReactionRoll: "Reaction Roll",
   UsesAction: "Takes an action",
   Action: "Action",
   Actions: "Actions",
@@ -124,6 +151,23 @@ const D20_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true">
   <polygon class="glus-rc-die-facet" points="50,24 77,70 23,70"/>
   <path class="glus-rc-die-facet" d="M50 3L50 24M91 26.5L77 70M91 73.5L77 70M50 97L77 70M50 97L23 70M9 73.5L23 70M9 26.5L23 70M9 26.5L50 24M91 26.5L50 24"/>
 </svg>`;
+
+/**
+ * The Daggerheart duality die: one die's footprint split down the middle, Hope on the left and Fear on
+ * the right. `data-out` on the die lights the half that won (both on a critical, neither on a reaction).
+ */
+const DUALITY_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true">
+  <polygon class="glus-rc-dd-half" data-side="hope" points="50,3 9,26.5 9,73.5 50,97"/>
+  <polygon class="glus-rc-dd-half" data-side="fear" points="50,3 91,26.5 91,73.5 50,97"/>
+  <polygon class="glus-rc-die-edge glus-rc-dd-edge" points="50,3 91,26.5 91,73.5 50,97 9,73.5 9,26.5"/>
+  <path class="glus-rc-dd-split" d="M50 3L50 97"/>
+</svg>`;
+
+/** A die's notation ("d12", "d20") to its face count, for the spin; anything unreadable is a d12. */
+function facesOf(notation) {
+  const n = Math.floor(Number(String(notation ?? "").replace(/^d/i, "")));
+  return Number.isFinite(n) && n > 1 ? n : 12;
+}
 
 function damageIcon(type) {
   const configured = globalThis.CONFIG?.PF2E?.damageTypes?.[type];
@@ -220,14 +264,16 @@ export class RollCard {
 
     const player = this.q(".glus-rc-player");
     const reroll = player.querySelector('[data-chip="reroll"]');
+    // `badgeKey` is a reader's word for the GM's side ("Adversary"); PF2e hands none and reads "NPC".
     player.replaceChildren(
-      el("span", "glus-rc-player-name", model.actor?.isNpc ? `◆ ${this.label("NPC")}` : model.player?.name ?? "")
+      el("span", "glus-rc-player-name", model.actor?.isNpc ? `◆ ${this.label(model.badgeKey ?? "NPC")}` : model.player?.name ?? "")
     );
     if (model.visibility === "ownBlind") {
       const chip = el("span", "glus-rc-chip", this.label("Blind"));
       chip.dataset.chip = "blind";
       player.append(chip);
     }
+    for (const chip of model.chips ?? []) player.append(this.buildChip(chip));
     if (reroll) player.append(reroll);
 
     // A hidden name stays hidden: the reader hands over a label key ("Unknown") and never the name.
@@ -238,7 +284,11 @@ export class RollCard {
     const isAction = model.kind === "action";
     const isText = model.kind === "text";
     const isPlainRoll = model.kind === "roll";
-    const actionLabel = isCast ? this.label("CastsSpell") : isAction ? this.label("UsesAction") : this.checkLabel(model.action);
+    const actionLabel = isCast
+      ? this.label("CastsSpell")
+      : isAction
+        ? this.label(model.action?.verbKey ?? "UsesAction")
+        : this.checkLabel(model.action);
     const actionSub = isCast ? this.castDetail(model.spell) : model.action?.sub;
     const sub = [actionSub, model.target?.name ? `${this.label("Versus")} ${model.target.name}` : null]
       .filter(Boolean)
@@ -258,14 +308,15 @@ export class RollCard {
     } else if (model.roll) {
       const degree = isPlainRoll ? this.buildFormula(model.roll) : this.buildDegree(model.roll);
       if (degree) result.append(degree);
-      if (Number.isFinite(model.roll.natural)) result.append(this.buildDie(model.roll.natural));
+      if (model.duality) result.append(this.buildDuality(model.duality));
+      else if (Number.isFinite(model.roll.natural)) result.append(this.buildDie(model.roll.natural));
       result.append(el("div", "glus-rc-total", "0"));
     } else if (model.damage) {
       // A damage roll with no attack card to merge into: the damage total is the headline.
       const degree = el("div", "glus-rc-degree");
-      degree.append(el("span", "glus-rc-degree-label", model.damage.crit ? this.label("CritDouble") : this.label("Damage")));
+      degree.append(el("span", "glus-rc-degree-label", model.damage.crit ? this.label(model.damage.critKey ?? "CritDouble") : this.label("Damage")));
       const meta = el("span", "glus-rc-degree-meta");
-      meta.textContent = (model.damage.parts ?? []).map((p) => `${p.amount} ${p.type}`).join(" · ");
+      meta.textContent = (model.damage.parts ?? []).map((p) => `${p.amount} ${p.label ?? p.type}`).join(" · ");
       degree.append(meta);
       result.append(degree, el("div", "glus-rc-total", "0"));
       if (model.damage.crit) root.dataset.tone = "crit-success";
@@ -329,13 +380,17 @@ export class RollCard {
    * announce themselves.
    */
   buildDegree(roll) {
-    const key = Number.isInteger(roll.degree) ? DEGREE_LABEL_KEYS[roll.degree] : null;
+    // A reader that names its own outcome (Daggerheart's "With Hope", "Hit") is taken at its word; PF2e
+    // hands a degree index and the label follows from it.
+    const key = roll.outcomeKey ?? (Number.isInteger(roll.degree) ? DEGREE_LABEL_KEYS[roll.degree] : null);
     const hasDc = roll.dcVisible && Number.isFinite(roll.dc);
     if (!key && !hasDc) return null;
     const degree = el("div", "glus-rc-degree");
     if (key) degree.append(el("span", "glus-rc-degree-label", this.label(key)));
     if (hasDc) {
-      const meta = el("span", "glus-rc-degree-meta", this.label("DC"));
+      // "Success · DC 12" — the verdict rides beside the number it was measured against, never without it.
+      const prefix = roll.verdictKey ? `${this.label(roll.verdictKey)} · ` : "";
+      const meta = el("span", "glus-rc-degree-meta", `${prefix}${this.label(roll.dcKey ?? "DC")}`);
       meta.append(el("b", "glus-rc-big-number", roll.dc));
       degree.append(meta);
     }
@@ -380,6 +435,33 @@ export class RollCard {
     return die;
   }
 
+  /**
+   * Daggerheart's two dice in one die's footprint: Hope's face on the left, Fear's on the right. The
+   * half that won is lit (`data-out`), both on a critical and neither on a reaction, which throws the
+   * duality away. Its numbers are the faces as rolled; the total beside it carries everything else.
+   */
+  buildDuality(duality) {
+    const die = el("span", "glus-rc-die glus-rc-duality");
+    die.innerHTML = DUALITY_SVG;
+    die.dataset.out = duality.out ?? "none";
+    for (const side of ["hope", "fear"]) {
+      const value = el("b", "glus-rc-dd-value", duality[side]);
+      value.dataset.side = side;
+      value.dataset.faces = String(facesOf(duality[`${side}Die`]));
+      // Two faces share one die's width: a pair of two-digit faces ("11 11") is set a size smaller.
+      value.dataset.digits = String(Math.max(String(duality.hope ?? "").length, String(duality.fear ?? "").length));
+      die.append(value);
+    }
+    return die;
+  }
+
+  /** A chip beside the player name ("+1 Fear"): its own word, keyed so an in-place refresh can find it. */
+  buildChip(chip) {
+    const node = el("span", "glus-rc-chip", this.label(chip.labelKey));
+    node.dataset.chip = chip.id;
+    return node;
+  }
+
   buildSpell(spell) {
     const box = el("div", "glus-rc-spell");
     box.append(el("span", "glus-rc-spell-name", spell.name ?? ""));
@@ -404,7 +486,13 @@ export class RollCard {
     box.append(el("span", "glus-rc-spell-name", action?.label ?? ""));
     const line = el("span", "glus-rc-spell-line");
     const cost = action?.cost;
-    if (cost?.type === "reaction") line.textContent = this.label("Reaction");
+    if (Array.isArray(action?.price)) {
+      // A Daggerheart feature's price: "Spend 2 Hope · Mark 1 Stress", or nothing when it has none.
+      action.price.forEach((part, index) => {
+        if (index) line.append(document.createTextNode("·"));
+        line.append(document.createTextNode(this.label(part.verbKey)), el("b", "glus-rc-big-number", part.n), document.createTextNode(this.label(part.unitKey)));
+      });
+    } else if (cost?.type === "reaction") line.textContent = this.label("Reaction");
     else if (cost?.type === "free") line.textContent = this.label("FreeAction");
     else if (Number.isFinite(cost?.value)) {
       line.append(el("b", "glus-rc-big-number", cost.value), document.createTextNode(this.label(cost.value === 1 ? "Action" : "Actions")));
@@ -507,7 +595,7 @@ export class RollCard {
     // The rule takes its tone now; a gradient cannot transition, so the new colour fades up instead.
     tween(this.q(".glus-rc-hair"), { opacity: [0.3, 1], duration: 600, ease: EASE_OUT });
     const die = this.q(".glus-rc-die");
-    if (die && m.visibility !== "ownBlind" && (m.roll?.natural === 20 || m.roll?.natural === 1)) {
+    if (die && m.visibility !== "ownBlind" && (m.roll?.natural === 20 || m.roll?.natural === 1 || m.duality?.out === "crit")) {
       tween(die, { scale: [{ from: 1, to: 1.18, duration: 150 }, { to: 1, duration: 230 }], ease: EASE_POP });
     }
     const total = this.q(".glus-rc-total");
@@ -555,8 +643,19 @@ export class RollCard {
       delay,
       ease: EASE_OUT
     });
-    const value = die.querySelector(".glus-rc-die-value");
-    const natural = this.model.roll?.natural;
+    if (this.model.duality) {
+      // Each half spins through its own die's faces and lands on what that die rolled.
+      for (const value of die.querySelectorAll(".glus-rc-dd-value")) {
+        this.spinValue(value, this.model.duality[value.dataset.side], Number(value.dataset.faces) || 12, delay);
+      }
+      return;
+    }
+    this.spinValue(die.querySelector(".glus-rc-die-value"), this.model.roll?.natural, 20, delay);
+  }
+
+  /** Flicker a die's numeral through random faces, then settle it on the face it actually rolled. */
+  spinValue(value, natural, faces, delay = 0) {
+    if (!value) return;
     const id = (value._spin = (value._spin ?? 0) + 1);
     const t0 = performance.now() + delay;
     let lastStep = -1;
@@ -570,7 +669,7 @@ export class RollCard {
       const step = Math.floor(Math.max(0, elapsed) / 50);
       if (step !== lastStep) {
         lastStep = step;
-        value.textContent = 1 + Math.floor(Math.random() * 20);
+        value.textContent = 1 + Math.floor(Math.random() * faces);
       }
       requestAnimationFrame(frame);
     };
@@ -625,6 +724,33 @@ export class RollCard {
     await this.reveal(version);
   }
 
+  /**
+   * Brings the chips beside the player name in step with a new model, without touching the result: a
+   * claim written onto the message after it was posted (the GM's Fear) is news about the roll, not a new
+   * roll, so the total and the die stay exactly where they landed. A new chip rises in; a chip the model
+   * no longer carries leaves.
+   */
+  setChips(model) {
+    if (this.destroyed) return;
+    this.model = { ...this.model, chips: model?.chips ?? [] };
+    const player = this.q(".glus-rc-player");
+    if (!player) return;
+    const want = new Map((this.model.chips ?? []).map((chip) => [chip.id, chip]));
+    for (const node of [...player.querySelectorAll("[data-chip]")]) {
+      const id = node.dataset.chip;
+      if (id === "blind" || id === "reroll") continue;
+      if (want.has(id)) want.delete(id);
+      else node.remove();
+    }
+    const u = this.unit();
+    const before = player.querySelector('[data-chip="reroll"]');
+    for (const chip of want.values()) {
+      const node = this.buildChip(chip);
+      player.insertBefore(node, before);
+      tween(node, { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 300, ease: EASE_OUT });
+    }
+  }
+
   /** Merges a damage roll under the card. A crit attack's fracture carries into the row. */
   async addDamage(damage) {
     if (!damage) return;
@@ -641,13 +767,14 @@ export class RollCard {
     for (const part of damage.parts ?? []) {
       const chip = el("span", "glus-rc-damage-part");
       chip.dataset.type = part.type ?? "untyped";
-      const icon = damageIcon(part.type);
+      // A reader may name the icon itself (Daggerheart's physical and magic are no PF2e damage type).
+      const icon = part.icon ?? damageIcon(part.type);
       if (icon) chip.append(el("i", `fa-solid fa-${icon}`));
-      chip.append(document.createTextNode(`${part.amount} ${part.type ?? ""}`.trim()));
+      chip.append(document.createTextNode(`${part.amount} ${part.label ?? part.type ?? ""}`.trim()));
       parts.append(chip);
     }
     row.append(canvas, el("span", "glus-rc-damage-key", this.label("Damage")), parts);
-    if (damage.crit) row.append(el("span", "glus-rc-damage-crit", this.label("CritDouble")));
+    if (damage.crit) row.append(el("span", "glus-rc-damage-crit", this.label(damage.critKey ?? "CritDouble")));
     const total = el("span", "glus-rc-damage-total", "0");
     row.append(total);
     this.element.append(row);

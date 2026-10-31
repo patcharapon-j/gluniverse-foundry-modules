@@ -1,6 +1,7 @@
 import { MODULE_ID } from "../../stream/constants.js";
 import { RollCard } from "../cards/roll-card.js";
 import { artFor } from "../pf2e/read-message.js";
+import { PF2E_SYSTEM } from "../../stream/chat-filter.mjs";
 import { isDirectorUser } from "../../stream/settings.js";
 import { CARD_FLAGS, getDefaultRollArt, setDefaultRollArt } from "../settings.js";
 import { ART_ASPECT, defaultCrop, isFocus, placement, toFocus } from "./focus-math.js";
@@ -272,14 +273,18 @@ class PortraitFramingApp extends ApplicationV2 {
  */
 function collectEntries(pinned = new Set()) {
   const entries = new Map();
+  // PF2e cards lead a creature with its token; Daggerheart cards lead everyone with the portrait, the
+  // system's own rule. The picture framed here has to be the one the card shows.
+  const tokenFirst = game.system?.id === PF2E_SYSTEM;
   const add = (actor, token, isNpc, player) => {
     const base = token?.baseActor ?? actor;
-    const src = artFor(actor?.img, token?.texture?.src, isNpc);
+    const src = artFor(actor?.img, token?.texture?.src, isNpc && tokenFirst);
     if (!base || !src) return;
     const key = `${base.uuid}|${src}`;
     if (entries.has(key)) return;
     const override = (base.getFlag(MODULE_ID, CARD_FLAGS.portraitFocus) ?? []).find(o => o?.src === src && isFocus(o)) ?? null;
-    entries.set(key, { key, actorUuid: base.uuid, name: token?.name ?? actor.name, src, isNpc, player, override });
+    const imgKind = src === token?.texture?.src && src !== actor?.img ? "token" : "portrait";
+    entries.set(key, { key, actorUuid: base.uuid, name: token?.name ?? actor.name, src, isNpc, player, override, ...(tokenFirst ? {} : { imgKind }) });
   };
   const defaultArt = getDefaultRollArt();
   if (defaultArt.src) {

@@ -1,0 +1,96 @@
+/*
+ * GLUniverse Suite — stream-cards, the Daggerheart roll card.
+ *
+ * Tokens and utilities come from styles/gl-tokens.css; the card itself, its roles and its two voices
+ * (--glus-sans, --glus-serif) from styles/stream-cards.css, which loads first. Class prefix:
+ * .glus-rc-dd-* for the duality die; everything else is the shared .glus-rc-* card.
+ *
+ * What this sheet adds:
+ *   data-tone    hope | fear (a duality roll's outcome), hit | miss (an adversary's d20). A critical
+ *                uses the shared crit-success tone, a reaction the shared none.
+ *   the duality die   one die's footprint split down the middle: Hope's face on the left in gold, Fear's
+ *                on the right in violet. data-out on the die lights the half that won — both on a
+ *                critical, neither on a reaction (data-out="none") or while the total is counting.
+ *   the Fear chip     "+1 Fear" beside the player name once the GM has taken the Fear.
+ *   magic damage      the damage part's icon in the magic hue.
+ *
+ * Setting-neutral like the card it extends: no cut corners, no monospace, one sans for every word and
+ * every number.
+ */
+
+/* ── Tones ── */
+.glus-rc[data-tone="hope"] { --glus-rc-tone: var(--gl-signal); }
+.glus-rc[data-tone="fear"] { --glus-rc-tone: var(--gl-tyrant-hot); }
+.glus-rc[data-tone="hit"] { --glus-rc-tone: var(--gl-hazard); }
+.glus-rc[data-tone="miss"] { --glus-rc-tone: var(--gl-text-dim); }
+/* Fear darkens the whole strip a little towards violet: the roll went the GM's way. */
+.glus-rc[data-tone="fear"]:not([data-pending]):not([data-blind]) .glus-rc-main {
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.04), rgb(var(--gl-tint-light) / 0) 46%),
+    color-mix(in srgb, var(--gl-tyrant-deep) 42%, color-mix(in srgb, var(--gl-ink-1) 86%, transparent));
+}
+
+/* ── The duality die ── */
+.glus-rc-duality {
+  width: calc(3.3 * var(--u));
+  height: calc(3.3 * var(--u));
+}
+/* The outline only: the halves underneath carry the fill. */
+.glus-rc-duality .glus-rc-dd-edge {
+  fill: none;
+  stroke: color-mix(in srgb, var(--gl-text-dim) 70%, transparent);
+}
+.glus-rc-dd-half {
+  stroke: none;
+  transition: fill var(--gl-d-swift) var(--gl-ease);
+}
+.glus-rc-dd-half[data-side="hope"] { fill: color-mix(in srgb, var(--gl-signal) 8%, var(--gl-ink-0)); }
+.glus-rc-dd-half[data-side="fear"] { fill: color-mix(in srgb, var(--gl-tyrant) 12%, var(--gl-ink-0)); }
+.glus-rc-dd-split {
+  stroke: var(--gl-text-dim);
+  stroke-width: 1.5;
+  opacity: 0.45;
+}
+.glus-rc-dd-value {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  line-height: 1;
+  font-family: var(--glus-sans);
+  font-weight: var(--gl-weight-bold);
+  font-size: calc(1.04 * var(--u));
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: var(--glus-rc-text-shadow);
+  transition: color var(--gl-d-swift) var(--gl-ease), opacity var(--gl-d-swift) var(--gl-ease);
+}
+.glus-rc-dd-value[data-side="hope"] { left: 31%; color: var(--gl-signal-hot); }
+.glus-rc-dd-value[data-side="fear"] { left: 69%; color: var(--gl-tyrant-hot); }
+/* Two two-digit faces in one die's width: smaller and tighter, or "11" and "11" run together. */
+.glus-rc-dd-value[data-digits="2"] { font-size: calc(0.8 * var(--u)); letter-spacing: -0.06em; }
+.glus-rc-dd-value[data-digits="2"][data-side="hope"] { left: 29%; }
+.glus-rc-dd-value[data-digits="2"][data-side="fear"] { left: 71%; }
+
+/* The half that won is lit; both on a critical. The settled outcome waits for the total, like the tone. */
+.glus-rc:not([data-pending]) .glus-rc-duality[data-out="hope"] .glus-rc-dd-half[data-side="hope"],
+.glus-rc:not([data-pending]) .glus-rc-duality[data-out="crit"] .glus-rc-dd-half[data-side="hope"] {
+  fill: color-mix(in srgb, var(--gl-signal) 30%, var(--gl-ink-0));
+}
+.glus-rc:not([data-pending]) .glus-rc-duality[data-out="fear"] .glus-rc-dd-half[data-side="fear"],
+.glus-rc:not([data-pending]) .glus-rc-duality[data-out="crit"] .glus-rc-dd-half[data-side="fear"] {
+  fill: color-mix(in srgb, var(--gl-tyrant) 50%, var(--gl-ink-0));
+}
+.glus-rc:not([data-pending]) .glus-rc-duality[data-out="hope"] .glus-rc-dd-edge { stroke: var(--gl-signal); }
+.glus-rc:not([data-pending]) .glus-rc-duality[data-out="fear"] .glus-rc-dd-edge { stroke: var(--gl-tyrant-hot); }
+.glus-rc:not([data-pending]) .glus-rc-duality[data-out="crit"] .glus-rc-dd-edge { stroke: var(--glus-rc-deg-crit-success); }
+/* The face that lost steps back. */
+.glus-rc:not([data-pending]) .glus-rc-duality[data-out="hope"] .glus-rc-dd-value[data-side="fear"],
+.glus-rc:not([data-pending]) .glus-rc-duality[data-out="fear"] .glus-rc-dd-value[data-side="hope"] { opacity: 0.42; }
+/* A reaction throws the duality away: two plain faces, neither one a colour. */
+.glus-rc-duality[data-out="none"] .glus-rc-dd-half { fill: color-mix(in srgb, var(--gl-ink-0) 55%, transparent); }
+.glus-rc-duality[data-out="none"] .glus-rc-dd-value { color: var(--gl-text-bright); }
+
+/* ── Chips ── */
+.glus-rc-chip[data-chip="fear"] { color: var(--gl-ink-0); background: var(--gl-tyrant-hot); }
+
+/* ── Damage ── */
+.glus-rc-damage-part[data-type="magic"] i { color: var(--gl-orchid); }

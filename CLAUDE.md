@@ -1335,10 +1335,10 @@ seam can get wrong fails *silently*:
 node tools/stream-check.mjs
 ```
 
-Zero problems required, plus `node --test tests/*.test.mjs` (190 tests; Node's
+Zero problems required, plus `node --test tests/*.test.mjs` (240 tests; Node's
 directory mode is not supported here, so name the glob).
 
-Seven things are worth knowing before you change any of it.
+Eight things are worth knowing before you change any of it.
 
 **A director's authority is useless unless every road in opens for one**, and
 every road failed *silently* on the way in — the GM's own screen was correct in
@@ -1375,14 +1375,18 @@ return the stored value for a non-GM rather than throwing, so a section declares
 `gmOnly` and the panel disables it rather than widening the attested channel to
 carry a child's keys.
 
-**`stream` must never import its children.** The chat overlay reaches PF2e roll
+**`stream` must never import its children.** The chat overlay reaches roll
 cards through a slot in `extensions.mjs` that `stream-cards` fills, and the
 children reach back for pure modules only. Restore the direct import and the
-three-way split becomes a cycle. The slot is also why the feed factory is
+three-way split becomes a cycle. The slot is also why the feed factories are
 registered from `stream-cards`' **onInit**, not onReady: `stream` builds its
 `ChatOverlay` during its own onReady and the overlay asks for a feed in the
 constructor, so one phase later is forever — the overlay clones chat cards for
-the rest of the session with nothing reported.
+the rest of the session with nothing reported. The slot keeps one factory per
+system id (`registerCardFeed(system, factory)`; PF2e and `gluniverse-daggerheart`
+today) and the overlay asks for `game.system.id`'s, so a system that is in the
+adapter's `system` list with no factory behind it clones chat cards while the
+Control Center says Roll Cards is on.
 
 **The anime.js engine is not yours.** The standalone module set
 `engine.useDefaultMainLoop = false` and re-hosted anime's main loop on the PIXI
@@ -1448,7 +1452,7 @@ have no critical degrees; every other type's ±10 bands and natural-20 shift are
 the system's to apply, and a guess here puts a degree on the stream that the
 player's own chat card does not carry.
 
-**In a PF2e world the overlay clones nothing.** `usesRollCards()` routes every new
+**In a PF2e or Daggerheart world the overlay clones nothing.** `usesRollCards()` routes every new
 message to the feed, so a message this reader returns null for reaches the stream
 as nothing at all — which looks exactly like the overlay being switched off, not
 like a message being filtered. That is why a plain `/r 2d6+3` and a line somebody
@@ -1470,7 +1474,26 @@ total, and an absent filter (the fixtures, the check tools) reads as the shipped
 defaults rather than as rows of `undefined`. Whispers and other players' blind
 rolls are not rows and must never become one. The old `basicCards` and the
 per-kind rows of `statusUpdates` were folded into it once by
-`migrateLegacyChatFilter`.
+`migrateLegacyChatFilter`. A row tagged with `systems` is offered only in those
+worlds (`rowAppliesTo`), and every tag must name a system in `ROLL_CARD_SYSTEMS`.
+
+**Daggerheart has its own reader, and its messages change after they post.**
+`stream-cards/daggerheart/read-message.js` is pure (the world is
+`daggerheart/snapshot.js`'s) and reads the plate the `gluniverse-daggerheart`
+system stores on every roll (`flags["gluniverse-daggerheart"]`); it never
+re-derives a number the plate already decided. Four things there fail silently.
+The system never replaces a message: the GM's Fear (`claimed.fear`) and a reroll
+are written onto the one it posted, so they arrive as `updateChatMessage` and the
+feed's optional `handleUpdate` must keep rewriting the card in place; the feed
+also reads the message again after the dice wait, or a claim that lands while
+the dice tumble never shows. Damage names no attack, so it merges by actor into
+the latest card that offered "Roll damage" (`nextAct`). Every kind the system
+posts is either a card or deliberately nothing (`rest`, an adversary reaction,
+which the system whispers), because a null reads as the overlay being off. And
+the Difficulty is the GM's number unless it is on a player's roll or is a player
+character's own Evasion, which the snapshot proves by name and fails closed on.
+`stream-check` and `tests/daggerheart-read-message.test.mjs` pin all of it. See
+`docs/STREAM.md`.
 
 The stream camera is the only thing that may move the capture client's view:
 `camera/pan-guard.js` refuses Foundry's own `Token#panCanvas` and

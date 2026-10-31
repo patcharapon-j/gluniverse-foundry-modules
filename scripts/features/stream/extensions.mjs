@@ -17,15 +17,23 @@
  * and the overlay may be torn down and rebuilt many times per session.
  */
 
-let cardFeedFactory = null;
+/** system id -> feed factory. One reader per game system; a world whose system has none clones chat cards. */
+const cardFeedFactories = new Map();
 const panelSections = [];
 
+/** The system a factory registered without naming one is for: the slot was PF2e's alone before it was per-system. */
+const LEGACY_FEED_SYSTEM = "pf2e";
+
 /**
- * `stream-cards` calls this with `overlay => new RollCardFeed(overlay)`.
+ * `stream-cards` calls this once per system it reads, with
+ * `("pf2e", overlay => new RollCardFeed(overlay))` and the Daggerheart feed beside it.
+ * `registerCardFeed(factory)` with no system is the slot's original, PF2e-only form and still means that.
  *
  * The feed's contract, as the chat overlay uses it: `handleCreate(message)`
  * (async), `handleDelete(message) → boolean`, `forget(record)`, `prescan()`,
- * `clear()`.
+ * `clear()`, and optionally `handleUpdate(message, changes)` — a system that
+ * rewrites a posted message in place (a Daggerheart reroll, the GM's Fear claim)
+ * hears about it there; one that does not leaves it out.
  *
  * A record the feed pushes onto `overlay.cards` may carry a `card` — anything
  * with `element`, `exit()` and `destroy()`. The overlay then lets that object
@@ -35,20 +43,24 @@ const panelSections = [];
  * the whole seam: spelled differently on the two sides, the card still
  * disappears on cue and everything it was holding leaks for the session.
  */
-export function registerCardFeed(factory) {
-  cardFeedFactory = typeof factory === "function" ? factory : null;
+export function registerCardFeed(system, factory) {
+  if (typeof system === "function") [system, factory] = [LEGACY_FEED_SYSTEM, system];
+  if (typeof system !== "string" || !system) return;
+  if (typeof factory === "function") cardFeedFactories.set(system, factory);
+  else cardFeedFactories.delete(system);
 }
 
-/** True when something has claimed the card-feed slot. */
-export function hasCardFeed() {
-  return Boolean(cardFeedFactory);
+/** True when something has claimed the card-feed slot for this system. */
+export function hasCardFeed(system) {
+  return cardFeedFactories.has(system);
 }
 
-/** Build a feed for an overlay, or null when no feature provides one. */
-export function createCardFeed(overlay) {
-  if (!cardFeedFactory) return null;
+/** Build a feed for an overlay in a world running `system`, or null when no feature reads that system. */
+export function createCardFeed(overlay, system) {
+  const factory = cardFeedFactories.get(system);
+  if (!factory) return null;
   try {
-    return cardFeedFactory(overlay) ?? null;
+    return factory(overlay) ?? null;
   } catch (error) {
     console.error("GLUniverse Suite | Stream: a card feed factory threw; the overlay falls back to cloned chat cards.", error);
     return null;

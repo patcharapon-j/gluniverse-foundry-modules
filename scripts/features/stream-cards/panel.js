@@ -29,6 +29,8 @@ export async function renderSection() {
       defaultRollArt: getDefaultRollArt(),
       status: getStatusSettings(),
       statusLifetime: { ...STATUS_LIFETIME_RANGE, percent: Math.round(getStatusSettings().lifetimeFactor * 100) },
+      // Status cards are read off PF2e's condition items; anywhere else the switches would do nothing.
+      statusCards: game.system?.id === "pf2e",
       canEdit: Boolean(game.user?.isGM)
     }
   );
