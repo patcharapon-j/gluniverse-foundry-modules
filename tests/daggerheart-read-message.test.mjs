@@ -386,6 +386,7 @@ class FakeCard {
   async update(model, options) { this.model = model; this.calls.push(["update", options]); }
   setChips(model) { this.model = { ...this.model, chips: model.chips }; this.calls.push(["chips", model.chips.map((c) => c.id)]); }
   async addDamage(damageModel) { this.calls.push(["damage", damageModel.total]); }
+  removeDamage() { this.calls.push(["removeDamage"]); }
 }
 
 function harness() {
@@ -530,7 +531,40 @@ describe("the feed", () => {
     assert.equal(feed.byMessageId.get(reaction.id), undefined);
   });
 
-  test("deleting the card's message takes the card down; deleting merged damage does not", async () => {
+  test("merged damage that turns private takes its numbers off the card", async () => {
+    const { feed, live, post } = harness();
+    withGame(live);
+    const attack = post(duality({ h: 9, f: 4, attack: true }));
+    await feed.handleCreate(attack);
+    const record = feed.byMessageId.get(attack.id);
+    const hit = post(damage({ rolls: [4, 6], bonus: 2 }));
+    await feed.handleCreate(hit);
+
+    const hidden = structuredClone(live.get(hit.id));
+    hidden.raw.whisper = ["userGameMast"];
+    live.set(hit.id, hidden);
+    await feed.handleUpdate(hit, { whisper: ["userGameMast"] });
+    assert.deepEqual(record.card.calls.at(-1), ["removeDamage"]);
+    assert.equal(record.damage, null);
+    assert.equal(feed.byMessageId.get(hit.id), undefined);
+  });
+
+  test("an attack update after its damage merged does not reopen the damage slot", async () => {
+    const { feed, live, post } = harness();
+    withGame(live);
+    const attack = post(duality({ h: 9, f: 4, attack: true }));
+    await feed.handleCreate(attack);
+    const record = feed.byMessageId.get(attack.id);
+    await feed.handleCreate(post(damage({ rolls: [4, 6], bonus: 2 })));
+
+    live.set(attack.id, withFlags(live.get(attack.id), { claimed: { hope: true } }));
+    await feed.handleUpdate(attack, { flags: {} });
+    const later = post(damage({ rolls: [1], bonus: 0 }));
+    await feed.handleCreate(later);
+    assert.notEqual(feed.byMessageId.get(later.id), record, "unrelated damage gets its own card");
+  });
+
+  test("deleting the card's message takes the card down; deleting merged damage takes only its row", async () => {
     const { feed, overlay, live, post } = harness();
     withGame(live);
     const attack = post(duality({ h: 9, f: 4, attack: true }));
@@ -539,6 +573,7 @@ describe("the feed", () => {
     await feed.handleCreate(hit);
     assert.equal(feed.handleDelete(hit), true);
     assert.equal(overlay.removed.length, 0);
+    assert.deepEqual(feed.byMessageId.get(attack.id).card.calls.at(-1), ["removeDamage"]);
     assert.equal(feed.handleDelete(attack), true);
     assert.equal(overlay.removed.length, 1);
   });

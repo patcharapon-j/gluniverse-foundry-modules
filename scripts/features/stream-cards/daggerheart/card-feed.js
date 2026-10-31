@@ -78,8 +78,9 @@ export class DaggerheartCardFeed {
     const model = this.read(live);
 
     if (message.id !== record.messageId) {
-      // A damage message merged under an attack. It can only lose its visibility or its numbers here.
-      if (!model?.damage) return;
+      // A damage message merged under an attack. It can only lose its visibility or its numbers here, and
+      // a row whose message turned private must not keep printing its numbers.
+      if (!model?.damage) return this.unmergeDamage(record, message.id);
       if (sameDamage(record.damage, model.damage)) return;
       record.damage = model.damage;
       this.touch(record, record.model.fx);
@@ -99,11 +100,23 @@ export class DaggerheartCardFeed {
   handleDelete(message) {
     const record = this.byMessageId.get(message?.id);
     if (!record) return false;
+    // A deleted merged damage roll takes only its row; losing the card's own message takes the card down.
+    if (message.id !== record.messageId) {
+      this.unmergeDamage(record, message.id);
+      return true;
+    }
     this.byMessageId.delete(message.id);
     record.messageIds.delete(message.id);
-    // A deleted merged damage roll leaves its card up; losing the card's own message takes the card down.
-    if (message.id === record.messageId || !record.messageIds.size) this.retire(record);
+    this.retire(record);
     return true;
+  }
+
+  /** Drops a merged damage message from its card. The slot stays spent: the attack offered one roll. */
+  unmergeDamage(record, messageId) {
+    if (this.byMessageId.get(messageId) === record) this.byMessageId.delete(messageId);
+    record.messageIds.delete(messageId);
+    record.damage = null;
+    record.card.removeDamage?.();
   }
 
   /** The most recent card from the same actor that offered "Roll damage", within the window. */
@@ -112,7 +125,7 @@ export class DaggerheartCardFeed {
     const now = Date.now();
     let best = null;
     for (const record of this.byMessageId.values()) {
-      if (record.exiting || record.originKey !== model.originKey || !record.model.opensDamage) continue;
+      if (record.exiting || record.damageTaken || record.originKey !== model.originKey || !record.model.opensDamage) continue;
       if (now - record.touchedAt > MERGE_WINDOW_MS) continue;
       if (!best || record.touchedAt > best.touchedAt) best = record;
     }
@@ -130,6 +143,7 @@ export class DaggerheartCardFeed {
       messageIds: new Set([messageId]),
       model,
       damage: null,
+      damageTaken: false,
       originKey: model.originKey,
       touchedAt: 0,
       timeout: null,
@@ -149,8 +163,9 @@ export class DaggerheartCardFeed {
     this.byMessageId.set(messageId, record);
     record.damage = model.damage;
     // One damage roll per attack card. The system claims the button when it is pressed, so the next
-    // damage roll from this actor belongs to something else and gets a card of its own.
-    record.model = { ...record.model, opensDamage: false };
+    // damage roll from this actor belongs to something else and gets a card of its own. Kept on the
+    // record, not the model: every update to the attack (a reroll, the Fear claim) replaces the model.
+    record.damageTaken = true;
     this.touch(record, model.damage?.crit ? "gold" : record.model.fx);
     await record.card.addDamage(model.damage);
   }

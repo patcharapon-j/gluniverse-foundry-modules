@@ -811,6 +811,13 @@ export class RollCard {
     }
   }
 
+  /** Takes a merged damage row back off the card, when its message is deleted or turns private. */
+  removeDamage() {
+    this.q(".glus-rc-damage")?.remove();
+    crackRenderer.remove(this.damageCrack);
+    this.damageCrack = null;
+  }
+
   /** Slides the card out and collapses its height so the stack closes up. Resolves once it is gone. */
   async exit() {
     this.version++;
