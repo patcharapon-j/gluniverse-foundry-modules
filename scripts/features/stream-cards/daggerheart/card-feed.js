@@ -72,7 +72,8 @@ export class DaggerheartCardFeed {
     if (Array.isArray(changes?.rolls)) {
       // Dice So Nice animates the rerolled die on the update itself; the new number waits for it.
       await this.waitForDice(message);
-      if (record.exiting || record.card?.destroyed) return;
+      // While the dice rolled, the message may have been unmerged (its attack turned blind, it was deleted).
+      if (record.exiting || record.card?.destroyed || this.byMessageId.get(message.id) !== record) return;
     }
     const live = game.messages?.get?.(message.id) ?? message;
     const model = this.read(live);
@@ -80,7 +81,7 @@ export class DaggerheartCardFeed {
     if (message.id !== record.messageId) {
       // A damage message merged under an attack. It can only lose its visibility or its numbers here, and
       // a row whose message turned private must not keep printing its numbers.
-      if (!model?.damage) return this.unmergeDamage(record, message.id);
+      if (!model?.damage || record.model.visibility === "ownBlind") return this.unmergeDamage(record, message.id);
       if (sameDamage(record.damage, model.damage)) return;
       record.damage = model.damage;
       this.touch(record, record.model.fx);

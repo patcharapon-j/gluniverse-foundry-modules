@@ -575,6 +575,33 @@ describe("the feed", () => {
     assert.equal(feed.byMessageId.get(hit.id), undefined);
   });
 
+  test("a damage reroll still rolling when its attack turns blind does not come back", async () => {
+    const { feed, live, post } = harness();
+    withGame(live);
+    const attack = post(duality({ h: 9, f: 4, attack: true }));
+    await feed.handleCreate(attack);
+    const record = feed.byMessageId.get(attack.id);
+    const hit = post(damage({ rolls: [4, 6], bonus: 2, id: "dmgPending" }));
+    await feed.handleCreate(hit);
+    assert.equal(feed.byMessageId.get(hit.id), record);
+
+    let land;
+    feed.waitForDice = () => new Promise((resolve) => { land = resolve; });
+    live.set(hit.id, damage({ rolls: [6, 6], bonus: 2, id: "dmgPending" }));
+    const reroll = feed.handleUpdate(hit, { rolls: [{}] });
+
+    feed.waitForDice = async () => {};
+    const turned = structuredClone(live.get(attack.id));
+    turned.raw.blind = true;
+    turned.raw.whisper = ["userGameMast"];
+    live.set(attack.id, turned);
+    await feed.handleUpdate(attack, { blind: true });
+    land();
+    await reroll;
+    assert.equal(record.damage, null);
+    assert.ok(!record.card.calls.some(([name, total]) => name === "damage" && total === 14));
+  });
+
   test("an attack update after its damage merged does not reopen the damage slot", async () => {
     const { feed, live, post } = harness();
     withGame(live);
