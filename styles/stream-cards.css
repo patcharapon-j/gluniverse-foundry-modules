@@ -79,7 +79,7 @@
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(70% 140% at 100% 50%, color-mix(in srgb, var(--glus-rc-tone) 11%, transparent), transparent 70%);
-  transition: opacity 0.35s;
+  transition: opacity var(--gl-d-swift) var(--gl-ease);
 }
 .glus-rc[data-tone="none"] .glus-rc-main::after,
 .glus-rc[data-pending] .glus-rc-main::after { opacity: 0; }
