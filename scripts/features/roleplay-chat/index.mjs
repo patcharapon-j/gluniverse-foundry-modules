@@ -31,6 +31,8 @@ Suite.register({
   icon: "fa-solid fa-masks-theater",
   settingPrefix: PREFIX,
   requires: [],
+  // The composer and send path speak v14's chat API (`core.messageMode`, `renderChatInput`).
+  minimumGeneration: 14,
   core: false,
   defaultEnabled: false,
 
