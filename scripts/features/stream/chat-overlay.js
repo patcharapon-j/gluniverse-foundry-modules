@@ -64,7 +64,10 @@ export class ChatOverlay {
   }
 
   handleRenderedMessage(message, html) {
-    if (!this.streamMode.active || usesRollCards()) return;
+    if (!this.streamMode.active) return;
+    // A feed may hand a message back to be shown as the system's own card (a Daggerheart card posted
+    // from a sheet), so the stream shows it whole.
+    if (usesRollCards() && !this.feed?.clones?.(message)) return;
     if (!isAudienceVisible(message)) return;
     if (!passesChatFilter(message)) return;
     const source = getElement(html);
@@ -106,7 +109,7 @@ export class ChatOverlay {
       } catch (error) {
         console.error(`${MODULE_ID} | Roll card update failed`, error);
       }
-      return;
+      if (!this.feed?.clones?.(message)) return;
     }
     const id = message?.id;
     if (!id) return;
