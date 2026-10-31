@@ -97,6 +97,11 @@ const DEFAULT_LABELS = {
   Says: "Says",
   Emotes: "Emotes",
   OutOfCharacter: "Out of character",
+  // Roleplay Chat lines (see stream-cards/text/read-text.js), and the name a hidden speaker shows.
+  Does: "Does",
+  Thinks: "Thinks",
+  Narration: "Narration",
+  Unknown: "Unknown",
   UsesAction: "Takes an action",
   Action: "Action",
   Actions: "Actions",
@@ -128,6 +133,8 @@ function damageIcon(type) {
 }
 
 function toneFor(model) {
+  // A reader that decided the tone itself (a Roleplay Chat line) is taken at its word.
+  if (typeof model.tone === "string" && model.tone) return model.tone;
   if (model.kind === "cast" && model.spell && !model.roll) return model.spell.tradition || "none";
   const degree = model.roll?.degree;
   return Number.isInteger(degree) ? DEGREE_TONES[degree] ?? "none" : "none";
@@ -223,7 +230,8 @@ export class RollCard {
     }
     if (reroll) player.append(reroll);
 
-    this.q(".glus-rc-name").textContent = model.actor?.name ?? "";
+    // A hidden name stays hidden: the reader hands over a label key ("Unknown") and never the name.
+    this.q(".glus-rc-name").textContent = model.actor?.name ?? (model.actor?.nameKey ? this.label(model.actor.nameKey) : "");
 
     const action = this.q(".glus-rc-action");
     const isCast = model.kind === "cast" && model.spell && !model.roll;

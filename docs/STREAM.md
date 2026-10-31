@@ -181,13 +181,23 @@ in the world, and the stream is the one screen in a session nobody is watching.
 It is cut to three lines, so an arriving card cannot grow and move the stack
 under it.
 
-Six switches in the panel's **Rolls & Chat** section: the feature, plain rolls,
-speech, emotes, out-of-character, and messages the GM typed. All on by default.
-The reader consults them before it builds a model, so a row that is off costs
-nothing. Their defaults are declared once, beside the gates that read them in
-`pf2e/read-message.js`, and re-exported by `settings.js` — stated twice they
-would drift, and a row whose default said off only on the side that reads it is
-a feature nobody switched off silently not existing.
+What reaches the stream is the **Chat Filter** (`stream/chat-filter.mjs`, the
+`stream.chatFilter` setting): one row per content type, switched per author. The
+typed rows are speech, emote, thought and out of character. Out of character
+ships **off**: a "brb" is table talk, and on a recording it reads as the stream
+leaking. A world that already stored the row keeps what it stored. The reader
+consults the filter before it builds a model, so a row that is off costs nothing.
+
+A chat card is read by `stream-cards/text/read-text.js`, one pure module shared
+with [Roleplay Chat](ROLEPLAY_CHAT.md). When a line carries Roleplay Chat's mode
+flag (`flags["gluniverse-foundry-modules"].rp.mode`) the flag wins over the chat
+style: Say is speech, Do is an emote, Think is its own `thought` row (a thought
+is not something the character said, so a table can keep it off the stream), the
+Narrator rides the speech row as a narration card with no portrait, and OOC is
+out of character. Without the flag the style decides, exactly as before. A line
+whose speaker's name PF2e hides from players is attributed to "Unknown", by the
+same `speakerNameHidden` rule Roleplay Chat applies over the token. A whispered or blind
+line is never a card, from either reader.
 
 ## Status cards
 

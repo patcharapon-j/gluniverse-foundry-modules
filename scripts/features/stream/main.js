@@ -12,7 +12,7 @@
  *   `onReady`           likewise.
  */
 
-import { SUITE_ID } from "../../core/const.mjs";
+import { SUITE_ID, err } from "../../core/const.mjs";
 import { bindSuiteToolClicks } from "../../core/scene-controls.mjs";
 import { CameraController } from "./camera/controller.js";
 import { installPanGuard } from "./camera/pan-guard.js";
@@ -193,7 +193,10 @@ export async function onReady() {
     }, 150);
   });
 
-  await state.streamMode.promptIfNeeded();
+  // Not awaited. The start prompt waits on a person, and the registry runs every feature's onReady in
+  // turn, so awaiting it held back every feature after this one on the capture login (hexcrawl,
+  // theatre, roleplay chat, perf) until somebody answered the dialog.
+  state.streamMode.promptIfNeeded().catch((error) => err("Stream: the start prompt failed.", error));
 }
 
 /** The panic button for a capture login whose UI is hidden. Prefixed, like every

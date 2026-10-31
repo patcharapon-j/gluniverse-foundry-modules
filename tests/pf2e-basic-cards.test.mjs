@@ -39,6 +39,9 @@ function snapshot({ style = 0, content = "", flavor = "", rolls = [], authorIsGM
   };
 }
 
+/** Out-of-character chat ships off; the tests that read it switch it on. */
+const withOoc = { rows: { ...DEFAULT_CHAT_FILTER.rows, ooc: { player: true, gm: true } }, details: DEFAULT_CHAT_FILTER.details };
+
 const d20Roll = { total: 17, formula: "1d20 + 5", dice: [{ faces: 20, results: [12] }], d20Results: [{ result: 12, active: true }], degreeOfSuccess: null, instances: null };
 const d6Roll = { total: 10, formula: "2d6 + 3", dice: [{ faces: 6, results: [4, 3] }], d20Results: null, degreeOfSuccess: null, instances: null };
 
@@ -99,7 +102,22 @@ describe("a typed chat message", () => {
 
     assert.equal(readMessage(snapshot({ style: 3, content: "waves" })).text.style, "emote");
     assert.equal(readMessage(snapshot({ style: 3, content: "waves" })).action.labelKey, "Emotes");
-    assert.equal(readMessage(snapshot({ style: 1, content: "brb" })).action.labelKey, "OutOfCharacter");
+    assert.equal(readMessage(snapshot({ style: 1, content: "brb", chatFilter: withOoc })).action.labelKey, "OutOfCharacter");
+  });
+
+  test("out-of-character chat ships off, for players and the GM alike", () => {
+    // Table talk is the one typed row a stream should not carry until somebody decides it should.
+    assert.equal(readMessage(snapshot({ style: 1, content: "brb" })), null);
+    assert.equal(readMessage(snapshot({ style: 1, content: "brb", authorIsGM: true })), null);
+  });
+
+  test("a whispered or blind line is never a card", () => {
+    const whisper = snapshot({ style: 2, content: "psst" });
+    whisper.raw.whisper = ["gm"];
+    assert.equal(readMessage(whisper), null);
+    const blind = snapshot({ style: 2, content: "psst" });
+    blind.raw.blind = true;
+    assert.equal(readMessage(blind), null);
   });
 
   test("style OTHER is refused — that is every roll and every system card", () => {
@@ -111,7 +129,7 @@ describe("a typed chat message", () => {
   });
 
   test("the author falls back to the speaker's name and then to the player", () => {
-    assert.equal(readMessage(snapshot({ style: 1, content: "brb", authorName: "Player2" })).actor.name, "Player2");
+    assert.equal(readMessage(snapshot({ style: 1, content: "brb", authorName: "Player2", chatFilter: withOoc })).actor.name, "Player2");
   });
 
   test("each row is its own, and each column is its own", () => {

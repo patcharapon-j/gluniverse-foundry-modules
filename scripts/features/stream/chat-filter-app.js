@@ -28,7 +28,7 @@ import { canEditDirectorSettings, getChatFilter, isDirectorUser, setSetting } fr
 const L = (key) => `GLUNIVERSE_STREAM.chatFilter.${key}`;
 
 /** Rows that are typed chat, for the "hide typed chat" shortcut. */
-const TYPED_CHAT_ROWS = ["speech", "emote", "ooc"];
+const TYPED_CHAT_ROWS = ["speech", "emote", "thought", "ooc"];
 
 let instance = null;
 let AppClass = null;

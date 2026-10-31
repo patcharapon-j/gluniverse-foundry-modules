@@ -14,6 +14,21 @@ import {
   sanitizeChatFilter,
   showsDetail
 } from "../../stream/chat-filter.mjs";
+import {
+  TEXT_STYLES,
+  decodeEntities,
+  isPublicText,
+  isTypedText,
+  plainText,
+  readText,
+  shorten,
+  speakerNameHidden,
+  textRowOf
+} from "../text/read-text.js";
+
+// Typed lines are read by the shared, system-agnostic reader. Re-exported so the PF2e reader's own
+// callers and tests keep one import.
+export { TEXT_STYLES, plainText };
 
 export const DEGREES = ["criticalFailure", "failure", "success", "criticalSuccess"];
 
@@ -46,24 +61,11 @@ const CHECK_TYPES = new Set(Object.keys(CHECK_TYPE_KEYS));
  * null and no card was built, which looks exactly like the overlay being switched off. They are cards
  * now, and like every other kind they answer to the GM's chat filter (`stream/chat-filter.mjs`), which
  * is the one place a row is switched for players and for the GM.
- */
-
-/**
- * Foundry's chat styles, and the label each one headlines with.
  *
- * Only these three become cards. Style OTHER (0) is the default every *document* carries — every roll,
- * every PF2e item card, every module's status summary — so accepting it would put the whole of a PF2e
- * session's chat traffic on the stream, at roll-card weight, with nothing to switch off but the
- * feature. A message someone typed carries IC, EMOTE or OOC, and that is the whole test.
+ * Which lines count as typed, and what a typed card says, is `../text/read-text.js`: no part of it is
+ * PF2e's, and every other system's reader builds the same card from it.
  */
-export const TEXT_STYLES = Object.freeze({
-  1: { row: "ooc", key: "OutOfCharacter", name: "ooc" },
-  2: { row: "speech", key: "Says", name: "speech" },
-  3: { row: "emote", key: "Emotes", name: "emote" }
-});
 
-/** A quote longer than this is cut: the card is a glance, and it has three lines to give. */
-const MAX_QUOTE = 240;
 /** A formula longer than this is cut: it sits on one line in the result column beside the total. */
 const MAX_FORMULA = 22;
 /** Individual dice shown under a plain roll before the rest are summarised away. */
@@ -87,6 +89,9 @@ export function readMessage(snapshot) {
   const context = pf2e.context ?? null;
   const kind = kindOf(pf2e, context, derived, raw);
   if (!kind) return null;
+  // A player's own blind *roll* still shows that they rolled. A blind or whispered *line* has nothing
+  // to show without its content, so it is not a card at all.
+  if (kind === "text" && !isPublicText(raw)) return null;
   // The GM's filter: whether this kind is shown at all for whoever posted it, then what it may say.
   const filter = filterOf(derived);
   const author = authorColumn(!!derived.authorIsGM);
@@ -133,7 +138,7 @@ function buildModel(kind, raw, pf2e, context, derived, visibility) {
   if (kind === "damage") return { ...base, ...readDamage(raw, derived) };
   if (kind === "cast") return { ...base, ...readCast(pf2e, derived) };
   if (kind === "roll") return { ...base, ...readPlainRoll(raw, derived) };
-  if (kind === "text") return { ...base, ...readText(raw, derived, base) };
+  if (kind === "text") return { ...base, ...readText(raw, { actor: base.actor, authorName: derived.authorName ?? null }) };
   const cost = derived.item?.actionCost ?? null;
   return {
     ...base,
@@ -181,7 +186,7 @@ export function rowOf(kind, context, raw) {
     case "roll":
       return "roll";
     case "text":
-      return TEXT_STYLES[raw?.style]?.row ?? null;
+      return textRowOf(raw);
     default:
       return null;
   }
@@ -221,7 +226,7 @@ function kindOf(pf2e, context, derived, raw) {
   // Anything left that carries dice is a plain roll: `/r 2d6+3`, a macro, a system PF2e has no context
   // type for. Anything left that carries none is a card only if a person typed it.
   if (derived.rollCount > 0) return "roll";
-  return TEXT_STYLES[raw.style] && plainText(raw.content) ? "text" : null;
+  return isTypedText(raw) ? "text" : null;
 }
 
 /**
@@ -256,31 +261,6 @@ function readPlainRoll(raw, derived) {
   };
 }
 
-/**
- * Something a person typed.
- *
- * The body is plain text, extracted here rather than in the card, because the card renders it through
- * `textContent`: a message is arbitrary HTML from any client in the world, and the stream is the one
- * screen in a session nobody is watching for a script tag.
- *
- * A speaker with no actor behind it — a player typing with nothing selected — still has a name, so the
- * identity falls back to the speaker's alias and then to the author. A name the GM has hidden stays
- * hidden: `actorOf` answers null there and nothing below may fill it back in.
- */
-function readText(raw, derived, base) {
-  const style = TEXT_STYLES[raw.style];
-  const alias = typeof raw.speaker?.alias === "string" ? raw.speaker.alias.trim() : "";
-  const actor = base.actor.name === null
-    ? base.actor
-    : { ...base.actor, name: base.actor.name || alias || derived.authorName || "" };
-  return {
-    actor,
-    action: { label: null, labelKey: style.key, sub: null, map: 0 },
-    text: { body: plainText(raw.content), style: style.name },
-    fx: null
-  };
-}
-
 /** The d20 a plain `1d20+N` came up, or null when the roll is not that shape. */
 export function singleD20Of(roll) {
   const d20s = (roll?.dice ?? []).filter((d) => d.faces === 20 && Array.isArray(d.results));
@@ -300,27 +280,6 @@ export function diceFaces(roll) {
     }
   }
   return faces.length ? faces.join(" · ") : null;
-}
-
-/** Plain text out of chat HTML, collapsed and cut to length. Never returns null; "" means nothing to show. */
-export function plainText(html) {
-  if (typeof html !== "string") return "";
-  const text = decodeEntities(
-    html
-      .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
-      .replace(/<br\s*\/?>/gi, " ")
-      .replace(/<\/(p|div|li|tr|h[1-6])>/gi, " ")
-      .replace(/<[^>]+>/g, "")
-  )
-    .replace(/\s+/g, " ")
-    .trim();
-  return shorten(text, MAX_QUOTE) ?? "";
-}
-
-function shorten(value, max) {
-  const text = typeof value === "string" ? value.trim() : "";
-  if (!text) return null;
-  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
 }
 
 function readCheck(raw, context, derived) {
@@ -455,7 +414,13 @@ function actorOf(derived) {
   const actor = derived.actor ?? {};
   const token = derived.token ?? {};
   const isNpc = !!derived.authorIsGM && !actor.hasPlayerOwner;
-  const hiddenName = isNpc && !!derived.nameVisibilitySetting && token.playersCanSeeName === false;
+  // The one hidden-name rule, shared with every text card and with Roleplay Chat's bubbles and log.
+  const hiddenName = speakerNameHidden({
+    authorIsGM: derived.authorIsGM,
+    hasPlayerOwner: actor.hasPlayerOwner,
+    nameVisibility: derived.nameVisibilitySetting,
+    playersCanSeeName: token.playersCanSeeName
+  });
   const tokenImg = usable(token.textureSrc);
   const own = artFor(actor.img, token.textureSrc, isNpc);
   // A GM roll with nothing of its own to show falls back to the world's default roll art.
@@ -520,10 +485,6 @@ export function headingText(html) {
   return text || null;
 }
 
-function decodeEntities(text) {
-  return text.replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (m, e) => ({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", nbsp: " " })[e]);
-}
-
 /**
  * @typedef {object} RollCardModel
  * @property {string} id
@@ -538,6 +499,7 @@ function decodeEntities(text) {
  * @property {{natural: number|null, total: number|null, dc: number|null, dcVisible: boolean, degree: 0|1|2|3|null, formula?: string|null}|null} roll
  * @property {{name: string, tradition: string|null, rank: number|null, isCantrip: boolean, dc: number|null, save: {statistic: string, basic: boolean}|null, attackBonus: number|null}|null} spell
  * @property {{total: number|null, parts: {type: string, amount: number, persistent: boolean}[], crit: boolean}|null} damage
- * @property {{body: string, style: "speech"|"emote"|"ooc"}|null} text
+ * @property {{body: string, style: "speech"|"emote"|"thought"|"narration"|"ooc"}|null} text
+ * @property {"say"|"do"|"think"|"narrator"|null} [tone]  a Roleplay Chat line's tone; see `../text/read-text.js`
  * @property {"gold"|"red"|"pop"|null} fx
  */

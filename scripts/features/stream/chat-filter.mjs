@@ -53,7 +53,15 @@ export const CHAT_FILTER_GROUPS = Object.freeze([
   },
   {
     id: "chat",
-    rows: [{ id: "speech" }, { id: "emote" }, { id: "ooc" }]
+    rows: [
+      // A Roleplay Chat Narrator line files here too: it is something said, by nobody in particular.
+      { id: "speech" },
+      { id: "emote" },
+      // A Roleplay Chat Think line. Visible to the whole table, so it is the stream's to show.
+      { id: "thought" },
+      // Table talk is the table's, not the broadcast's: off until a GM decides otherwise.
+      { id: "ooc", defaults: { player: false, gm: false } }
+    ]
   },
   {
     id: "status",
@@ -147,19 +155,28 @@ export const PF2E_CHECK_ROWS = Object.freeze({
 export const TEXT_STYLE_ROWS = Object.freeze({ 1: "ooc", 2: "speech", 3: "emote" });
 
 /**
+ * A Roleplay Chat line's mode (`core/rp-mode.mjs`), and its row. The mode wins over the style: Think is
+ * posted as IC and would otherwise file as speech. Kept in step with `RP_TEXT` in
+ * `stream-cards/text/read-text.js`, which the roll-card path reads; the tests hold the two together.
+ */
+export const RP_MODE_ROWS = Object.freeze({ say: "speech", narrator: "speech", do: "emote", think: "thought", ooc: "ooc" });
+
+/**
  * The row a chat message belongs to on the cloned-card path, from plain facts about it.
  *
  * PF2e's own context type is honoured when it is there, so a PF2e world without roll cards still files
- * an attack under Attacks; any other system's dice are a plain roll; a line somebody typed is filed by
- * its style; and everything else — item cards, system summaries, module messages — is `other`.
+ * an attack under Attacks; any other system's dice are a plain roll; a Roleplay Chat line is filed by
+ * its mode; a line somebody typed is filed by its style; and everything else — item cards, system
+ * summaries, module messages — is `other`.
  *
- * @param {{style?: number, rollCount?: number, contextType?: string|null, casting?: boolean, originType?: string|null}} facts
+ * @param {{style?: number, rollCount?: number, contextType?: string|null, casting?: boolean, originType?: string|null, rpMode?: string|null}} facts
  */
-export function classifyMessage({ style = 0, rollCount = 0, contextType = null, casting = false, originType = null } = {}) {
+export function classifyMessage({ style = 0, rollCount = 0, contextType = null, casting = false, originType = null, rpMode = null } = {}) {
   if (contextType && PF2E_CHECK_ROWS[contextType]) return PF2E_CHECK_ROWS[contextType];
   if (contextType === "damage-roll") return "damage";
   if (contextType === "spell-cast" || casting) return "spell";
   if (!contextType && rollCount === 0 && /^(action|feat)$/.test(originType ?? "")) return "action";
   if (rollCount > 0) return "roll";
+  if (rpMode && RP_MODE_ROWS[rpMode]) return RP_MODE_ROWS[rpMode];
   return TEXT_STYLE_ROWS[style] ?? "other";
 }
