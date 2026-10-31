@@ -549,6 +549,32 @@ describe("the feed", () => {
     assert.equal(feed.byMessageId.get(hit.id), undefined);
   });
 
+  test("a blind attack never shows merged damage, before or after it turns blind", async () => {
+    const { feed, live, post } = harness();
+    withGame(live);
+    const blind = post(duality({ h: 9, f: 4, attack: true, blind: true, whisper: ["userGameMast"] }));
+    await feed.handleCreate(blind);
+    assert.equal(feed.byMessageId.get(blind.id).model.visibility, "ownBlind");
+    const first = post(damage({ rolls: [4, 6], bonus: 2 }));
+    await feed.handleCreate(first);
+    assert.notEqual(feed.byMessageId.get(first.id), feed.byMessageId.get(blind.id));
+
+    const attack = post(duality({ h: 9, f: 4, attack: true }));
+    await feed.handleCreate(attack);
+    const record = feed.byMessageId.get(attack.id);
+    const hit = post(damage({ rolls: [4, 6], bonus: 2 }));
+    await feed.handleCreate(hit);
+    assert.equal(feed.byMessageId.get(hit.id), record);
+    const turned = structuredClone(live.get(attack.id));
+    turned.raw.blind = true;
+    turned.raw.whisper = ["userGameMast"];
+    live.set(attack.id, turned);
+    await feed.handleUpdate(attack, { blind: true });
+    assert.ok(record.card.calls.some(([name]) => name === "removeDamage"));
+    assert.equal(record.damage, null);
+    assert.equal(feed.byMessageId.get(hit.id), undefined);
+  });
+
   test("an attack update after its damage merged does not reopen the damage slot", async () => {
     const { feed, live, post } = harness();
     withGame(live);

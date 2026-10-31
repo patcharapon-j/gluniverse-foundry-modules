@@ -88,6 +88,10 @@ export class DaggerheartCardFeed {
     }
 
     if (!model) return this.retire(record);
+    // An attack that turned into a blind roll shows nothing of how it went, its damage included.
+    if (model.visibility === "ownBlind") {
+      for (const id of [...record.messageIds]) if (id !== record.messageId) this.unmergeDamage(record, id);
+    }
     const previous = record.model;
     record.model = model;
     if (resultSignature(previous) !== resultSignature(model)) {
@@ -126,6 +130,8 @@ export class DaggerheartCardFeed {
     let best = null;
     for (const record of this.byMessageId.values()) {
       if (record.exiting || record.damageTaken || record.originKey !== model.originKey || !record.model.opensDamage) continue;
+      // A blind attack keeps its result off the stream, so its damage cannot sit under it.
+      if (record.model.visibility === "ownBlind") continue;
       if (now - record.touchedAt > MERGE_WINDOW_MS) continue;
       if (!best || record.touchedAt > best.touchedAt) best = record;
     }
