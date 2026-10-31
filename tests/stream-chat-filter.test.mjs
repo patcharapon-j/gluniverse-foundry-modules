@@ -13,12 +13,15 @@ import {
   CHAT_FILTER_ROWS,
   DEFAULT_CHAT_FILTER,
   PF2E_CHECK_ROWS,
+  RP_MODE_ROWS,
   allows,
   classifyMessage,
   sanitizeChatFilter,
   showsDetail
 } from "../scripts/features/stream/chat-filter.mjs";
 import { readMessage, rowOf } from "../scripts/features/stream-cards/pf2e/read-message.js";
+import { RP_TEXT } from "../scripts/features/stream-cards/text/read-text.js";
+import { RP_MODES, rpModeFlags } from "../scripts/core/rp-mode.mjs";
 
 const filterWith = (rows = {}, details = {}) => ({
   rows: { ...DEFAULT_CHAT_FILTER.rows, ...rows },
@@ -41,9 +44,14 @@ describe("the filter itself", () => {
     assert.equal(filter.rows.bogus, undefined);
   });
 
-  test("effects start off; everything else starts on", () => {
-    assert.deepEqual(DEFAULT_CHAT_FILTER.rows.effect, { player: false, gm: false });
+  test("effects and out-of-character chat start off; everything else starts on", () => {
+    const off = new Set(["effect", "ooc"]);
+    for (const row of CHAT_FILTER_ROWS) {
+      const want = !off.has(row.id);
+      assert.deepEqual(DEFAULT_CHAT_FILTER.rows[row.id], { player: want, gm: want }, row.id);
+    }
     assert.equal(allows(DEFAULT_CHAT_FILTER, "speech", "gm"), true);
+    assert.equal(allows(DEFAULT_CHAT_FILTER, "thought", "player"), true);
   });
 
   test("a detail with no column for an author is never shown for them", () => {
@@ -72,6 +80,20 @@ describe("both card paths file a message under the same row", () => {
     assert.equal(classifyMessage({ originType: "feat" }), rowOf("action"));
     assert.equal(classifyMessage({ rollCount: 1 }), rowOf("roll"));
     for (const style of [1, 2, 3]) assert.equal(classifyMessage({ style }), rowOf("text", null, { style }));
+  });
+
+  test("a Roleplay Chat line files under its mode's row on both paths, whatever its style", () => {
+    for (const mode of RP_MODES) {
+      const flags = rpModeFlags(mode);
+      // The style each mode is posted with, and the wrong one, to prove the flag wins over it.
+      for (const style of [1, 2, 3]) {
+        const want = RP_TEXT[mode].row;
+        assert.equal(classifyMessage({ style, rpMode: mode }), want, `${mode} as style ${style}`);
+        assert.equal(rowOf("text", null, { style, flags }), want, `${mode} as style ${style}`);
+        assert.equal(RP_MODE_ROWS[mode], want, mode);
+      }
+    }
+    assert.equal(classifyMessage({ style: 2, rpMode: "think", rollCount: 1 }), "roll", "a roll is a roll before it is a line");
   });
 
   test("everything else is `other`, which only the cloned path draws", () => {

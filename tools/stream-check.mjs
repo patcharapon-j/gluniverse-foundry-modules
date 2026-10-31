@@ -658,8 +658,22 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
 // the overlay being switched off. Everything below fails in that same silence.
 {
   const reader = strip(read("scripts/features/stream-cards/pf2e/read-message.js"));
+  const textReader = strip(read("scripts/features/stream-cards/text/read-text.js"));
   const card = strip(read("scripts/features/stream-cards/cards/roll-card.js"));
   const lang = JSON.parse(read("lang/stream-cards.en.json"));
+
+  // Typed text is read once, system-agnostically, in `text/read-text.js`, and every
+  // system reader builds on it. A reader that grew its own copy again would let a
+  // line of speech read differently per system, and the filter rows with it.
+  if (!/from "\.\.\/text\/read-text\.js"/.test(reader)) {
+    fail("read-message.js: no longer imports the shared text reader (../text/read-text.js)");
+  }
+  if (/TEXT_STYLES = Object\.freeze/.test(reader) || /function readText\(/.test(reader)) {
+    fail("read-message.js: declares its own TEXT_STYLES or readText — typed text belongs to text/read-text.js");
+  }
+  if (/\b(game|canvas|ui|foundry|Hooks|document)\s*[.?]/.test(textReader)) {
+    fail("text/read-text.js: reads the world or the DOM — it is pure, and the next system's reader imports it under Node");
+  }
 
   // Which kinds reach the stream is the chat filter's, in `stream`. A reader that
   // stopped consulting it would put every row back on the stream with the page
@@ -676,13 +690,17 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   // summary — so accepting it puts a whole session's chat traffic on the stream
   // at roll-card weight, which renders perfectly and cannot be switched off row
   // by row.
-  const styles = reader.match(/TEXT_STYLES = Object\.freeze\(\{([\s\S]*?)\n\}\)/);
-  if (!styles) fail("read-message.js: could not find TEXT_STYLES");
-  else {
+  const styles = textReader.match(/TEXT_STYLES = Object\.freeze\(\{([\s\S]*?)\n\}\)/);
+  const rpText = textReader.match(/RP_TEXT = Object\.freeze\(\{([\s\S]*?)\n\}\)/);
+  if (!styles) fail("text/read-text.js: could not find TEXT_STYLES");
+  if (!rpText) fail("text/read-text.js: could not find RP_TEXT");
+  if (styles) {
     if (/^\s*0\s*:/m.test(styles[1])) {
-      fail("read-message.js: TEXT_STYLES accepts style 0 (OTHER) — that is the default every roll and every system card carries, not a line somebody typed");
+      fail("text/read-text.js: TEXT_STYLES accepts style 0 (OTHER) — that is the default every roll and every system card carries, not a line somebody typed");
     }
-    for (const m of styles[1].matchAll(/key:\s*"([A-Za-z]+)"/g)) {
+  }
+  for (const block of [styles?.[1], rpText?.[1]].filter(Boolean)) {
+    for (const m of block.matchAll(/key:\s*"([A-Za-z]+)"/g)) {
       // Built at runtime from the model, so nothing else catches a missing one.
       if (!(`GLUNIVERSE_STREAM.rollCard.${m[1]}` in lang)) {
         fail(`lang/stream-cards.en.json: GLUNIVERSE_STREAM.rollCard.${m[1]} is not defined — a chat card would headline with the key itself`);
@@ -692,7 +710,7 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
       }
     }
   }
-  for (const key of ["PlainRoll"]) {
+  for (const key of ["PlainRoll", "Unknown"]) {
     if (!(`GLUNIVERSE_STREAM.rollCard.${key}` in lang)) fail(`lang/stream-cards.en.json: GLUNIVERSE_STREAM.rollCard.${key} is not defined`);
     if (!new RegExp(`\\b${key}:`).test(card)) fail(`roll-card.js: DEFAULT_LABELS has no ${key}`);
   }
@@ -700,8 +718,8 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   // A message body is arbitrary HTML from any client in the world. The card sets
   // it through textContent and the reader flattens it first; innerHTML anywhere
   // on that path is a script tag on the one screen in a session nobody watches.
-  if (/innerHTML/.test(reader)) {
-    fail("read-message.js: touches innerHTML — the reader is pure and flattens chat HTML to text");
+  if (/innerHTML/.test(reader) || /innerHTML/.test(textReader)) {
+    fail("read-message.js / text/read-text.js: touches innerHTML — the readers are pure and flatten chat HTML to text");
   }
   const quote = card.match(/\n  buildQuote\([\s\S]*?\n  \}/);
   if (!quote) fail("roll-card.js: could not find buildQuote");

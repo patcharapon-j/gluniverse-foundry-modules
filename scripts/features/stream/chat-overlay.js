@@ -5,6 +5,7 @@ import { createCardFeed, hasCardFeed } from "./extensions.mjs";
 import { getChatFilter, getChatSettings } from "./settings.js";
 import { allows, authorColumn, classifyMessage } from "./chat-filter.mjs";
 import { frameImage } from "../../core/face-frame.mjs";
+import { rpModeOf } from "../../core/rp-mode.mjs";
 
 /** Where cards slide in from and out to, per overlay corner, in pixels. */
 const CARD_OFFSETS = {
@@ -427,6 +428,9 @@ function isAudienceVisible(message) {
   if (message.blind) return false;
   const whisper = Array.isArray(message.whisper) ? message.whisper : [];
   if (whisper.length === 0) return true;
+  // A Roleplay Chat line whispered to anyone, a player included, is a private line: only its
+  // recipients see it, and the stream is not one of them.
+  if (rpModeOf(message.flags)) return false;
   return whisper.some(id => {
     const user = game.users?.get?.(id);
     return user ? !user.isGM : false;
@@ -444,7 +448,9 @@ function passesChatFilter(message) {
     rollCount: message?.rolls?.length ?? 0,
     contextType: pf2e.context?.type ?? null,
     casting: Boolean(pf2e.casting),
-    originType: pf2e.origin?.type ?? null
+    originType: pf2e.origin?.type ?? null,
+    // A Roleplay Chat line files by its mode, so Think is not speech and an RP OOC line is `ooc`.
+    rpMode: rpModeOf(message?.flags)
   });
   return allows(getChatFilter(), row, authorColumn(Boolean(message?.author?.isGM)));
 }

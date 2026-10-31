@@ -53,5 +53,9 @@
   "GLUNIVERSE_STREAM.rollCard.PlainRoll": "Roll",
   "GLUNIVERSE_STREAM.rollCard.Says": "Says",
   "GLUNIVERSE_STREAM.rollCard.Emotes": "Emotes",
-  "GLUNIVERSE_STREAM.rollCard.OutOfCharacter": "Out of character"
+  "GLUNIVERSE_STREAM.rollCard.OutOfCharacter": "Out of character",
+  "GLUNIVERSE_STREAM.rollCard.Does": "Does",
+  "GLUNIVERSE_STREAM.rollCard.Thinks": "Thinks",
+  "GLUNIVERSE_STREAM.rollCard.Narration": "Narration",
+  "GLUNIVERSE_STREAM.rollCard.Unknown": "Unknown"
 }
