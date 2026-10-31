@@ -1,4 +1,4 @@
-import { cubicBezier, remove } from "../../stream/motion/engine.js";
+import { remove } from "../../stream/motion/engine.js";
 import { crackRenderer } from "../fx/crack-renderer.js";
 import { isFocus, placement } from "../framing/focus-math.js";
 import {
@@ -10,29 +10,39 @@ import {
   EASE_SNAP,
   countUp,
   el,
-  scramble,
   tween,
   waapi,
   wait
 } from "./card-motion.js";
 
 /**
- * The PF2e roll card ("Hairline"), as approved in the design mockup.
+ * The PF2e roll card.
  *
  * It renders a RollCardModel (see docs/plans/pf2e-roll-card.md) and owns its own motion: the entrance, the
  * outcome reveal, the crit climax, in-place updates for rerolls and spell chains, the merged damage row and
  * the exit. It never reads Foundry documents; the PF2e reader builds the model.
  *
+ * The look is setting-neutral: a rounded glass strip with a 1px inner rule, tone carried by a top rule
+ * that fades out to the right and a quiet wash behind the result. Its motion is plain fade and rise, with
+ * no text decode, scan line or light sweep. Only the crit crack is effect, and it is shared with core.
+ *
  * The card always animates. It deliberately ignores reduced-motion preferences: it only renders on the
  * stream client, and its motion is the point of it.
  *
  * Most motion runs on the module's anime.js engine. The Web Animations API is used only where anime.js
- * cannot help: clip-path polygons with calc() (the strip unfold, the name and spell-name wipes, the damage
- * row drop), the result divider's ::before pseudo-element, and the scan line's `top` sweep.
+ * cannot help: clip-path shapes with calc() (the strip unfold, the damage row drop) and the result
+ * divider's ::before pseudo-element.
  */
 
-const STRIP_CLIP = "polygon(0 0,calc(100% - .65*var(--u)) 0,100% calc(.65*var(--u)),100% 100%,0 100%)";
-const STRIP_CLIP_FOLDED = "polygon(0 0,calc(100% - .65*var(--u)) 0,100% calc(.65*var(--u)),100% 0%,0 0%)";
+/*
+ * The strip unfolds downwards inside its own rounded box. Both shapes carry the strip's radius
+ * (`.glus-rc-main` in stream-cards.css): a clip with square corners, or a polygon, re-cuts the corners
+ * for as long as the entrance runs and the card visibly changes shape when it is cleared.
+ */
+const STRIP_RADIUS = "calc(.34*var(--u))";
+const STRIP_CLIP = `inset(0 0 0% 0 round ${STRIP_RADIUS})`;
+const STRIP_CLIP_FOLDED = `inset(0 0 100% 0 round ${STRIP_RADIUS})`;
+const DAMAGE_RADIUS = "0 0 calc(.3*var(--u)) calc(.3*var(--u))";
 
 const DEGREE_TONES = ["crit-failure", "failure", "success", "crit-success"];
 const DEGREE_LABEL_KEYS = ["CritFailure", "Failure", "Success", "CritSuccess"];
@@ -161,8 +171,6 @@ export class RollCard {
       el("div", "glus-rc-result"),
       el("canvas", "glus-rc-fx"),
       el("div", "glus-rc-glow"),
-      el("div", "glus-rc-sheen"),
-      el("div", "glus-rc-scan"),
       el("div", "glus-rc-hair")
     );
     root.append(main);
@@ -430,36 +438,18 @@ export class RollCard {
       main.style.clipPath = "";
       main.getAnimations?.().forEach((a) => a.cancel());
     });
-    waapi(
-      this.q(".glus-rc-scan"),
-      [
-        { top: "0%", opacity: 1 },
-        { top: "100%", opacity: 0.9, offset: 0.85 },
-        { top: "100%", opacity: 0 }
-      ],
-      { duration: 480, easing: CSS_UNFOLD, fill: "none" }
-    );
     tween(this.q(".glus-rc-art-frame"), {
       opacity: [0, 1],
-      translateX: ["-18%", "0%"],
-      scale: [1.12, 1],
-      filter: [`blur(${0.5 * u}px) brightness(1.6)`, "blur(0px) brightness(1)"],
+      translateX: ["-10%", "0%"],
+      scale: [1.06, 1],
       duration: 760,
       delay: 80,
       ease: EASE_OUT
     });
 
-    const playerName = this.q(".glus-rc-player-name");
-    if (playerName) scramble(playerName, playerName.textContent, 380, 120);
-    tween(this.q(".glus-rc-player"), { opacity: [0, 1], duration: 200, delay: 120, ease: "linear" });
-    waapi(
-      this.q(".glus-rc-name"),
-      [
-        { clipPath: "inset(0 100% 0 0)", letterSpacing: ".22em", opacity: 0.4 },
-        { clipPath: "inset(0 0 0 0)", letterSpacing: ".01em", opacity: 1 }
-      ],
-      { duration: 560, delay: 170, easing: "cubic-bezier(.2,.8,.2,1)" }
-    );
+    // Identity: player, name, then action, each fading up into place.
+    tween(this.q(".glus-rc-player"), { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 320, delay: 120, ease: EASE_OUT });
+    tween(this.q(".glus-rc-name"), { opacity: [0, 1], translateY: [0.4 * u, 0], duration: 420, delay: 170, ease: EASE_OUT });
     tween(this.q(".glus-rc-action"), { opacity: [0, 1], translateY: [0.5 * u, 0], duration: 380, delay: 300, ease: EASE_OUT });
 
     waapi(this.q(".glus-rc-result"), [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }], {
@@ -469,14 +459,7 @@ export class RollCard {
       pseudoElement: "::before"
     });
     tween(this.q(".glus-rc-degree-meta"), { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 320, delay: 380, ease: EASE_OUT });
-    waapi(
-      this.q(".glus-rc-spell-name"),
-      [
-        { clipPath: "inset(0 0 0 100%)", transform: `translateX(${0.8 * u}px)` },
-        { clipPath: "inset(0 0 0 0)", transform: "none" }
-      ],
-      { duration: 520, delay: 260, easing: "cubic-bezier(.2,.8,.2,1)" }
-    );
+    tween(this.q(".glus-rc-spell-name"), { opacity: [0, 1], translateY: [0.5 * u, 0], duration: 460, delay: 260, ease: EASE_OUT });
     tween(this.q(".glus-rc-spell-line"), { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 320, delay: 380, ease: EASE_OUT });
     tween(this.q(".glus-rc-quote"), { opacity: [0, 1], translateY: [0.4 * u, 0], duration: 420, delay: 300, ease: EASE_OUT });
 
@@ -500,15 +483,6 @@ export class RollCard {
     if (!this.alive(version)) return;
 
     await this.reveal(version);
-    tween(this.q(".glus-rc-sheen"), {
-      opacity: [1, 1],
-      translateX: ["-100%", "100%"],
-      duration: 900,
-      ease: cubicBezier(0.4, 0, 0.2, 1)
-    }).then(() => {
-      const sheen = this.q(".glus-rc-sheen");
-      if (sheen) sheen.style.opacity = "0";
-    });
   }
 
   alive(version) {
@@ -521,11 +495,9 @@ export class RollCard {
     const u = this.unit();
     this.setPending(false);
     const label = this.q(".glus-rc-degree-label");
-    if (label) {
-      scramble(label, label.textContent, 300);
-      tween(label, { opacity: [0, 1], translateX: [0.4 * u, 0], duration: 260, ease: EASE_OUT });
-    }
-    tween(this.q(".glus-rc-hair"), { filter: ["brightness(2.4)", "brightness(1)"], duration: 600, ease: EASE_OUT });
+    if (label) tween(label, { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 320, ease: EASE_OUT });
+    // The rule takes its tone now; a gradient cannot transition, so the new colour fades up instead.
+    tween(this.q(".glus-rc-hair"), { opacity: [0.3, 1], duration: 600, ease: EASE_OUT });
     const die = this.q(".glus-rc-die");
     if (die && m.visibility !== "ownBlind" && (m.roll?.natural === 20 || m.roll?.natural === 1)) {
       tween(die, { scale: [{ from: 1, to: 1.18, duration: 150 }, { to: 1, duration: 230 }], ease: EASE_POP });
@@ -634,7 +606,7 @@ export class RollCard {
       const chip = el("span", "glus-rc-chip", this.label("Reroll"));
       chip.dataset.chip = "reroll";
       this.q(".glus-rc-player").append(chip);
-      waapi(chip, [{ clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0 0 0)" }], { duration: 300, easing: CSS_SNAP });
+      tween(chip, { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 300, ease: EASE_OUT });
     }
     tween(this.q(".glus-rc-hair"), { scaleX: [0, 1], duration: 420, ease: EASE_SNAP });
     tween(result, { opacity: [0, 1], translateY: [0.5 * u, 0], duration: 320, ease: EASE_OUT });
@@ -675,8 +647,8 @@ export class RollCard {
     await waapi(
       row,
       [
-        { clipPath: "inset(0 0 100% 0)", transform: `translateY(${-u}px)` },
-        { clipPath: "inset(0 0 0% 0)", transform: "none" }
+        { clipPath: `inset(0 0 100% 0 round ${DAMAGE_RADIUS})`, transform: `translateY(${-u}px)` },
+        { clipPath: `inset(0 0 0% 0 round ${DAMAGE_RADIUS})`, transform: "none" }
       ],
       { duration: 380, easing: CSS_SNAP }
     );

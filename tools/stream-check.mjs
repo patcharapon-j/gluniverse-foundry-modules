@@ -580,6 +580,77 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   }
 }
 
+/* ------------------------------------------- the cards stay setting-neutral -- */
+// The stream sits over whatever world the table plays in, so the cards read as a
+// lit page, not a sci-fi HUD. Every piece of the old look comes back without an
+// error and renders perfectly: a chamfer is one polygon, a decode is one helper
+// call, a monospace label is one token. And the entrance clip is the quiet one —
+// left as a polygon it re-cuts the chamfer for as long as the card is arriving,
+// and the card visibly changes shape when the clip is cleared.
+{
+  const css = read("styles/stream-cards.css");
+  const cssBody = strip(css);
+  if (/polygon\(/.test(cssBody)) {
+    fail("styles/stream-cards.css: a clip-path polygon is back — the cards are rounded, and a polygon cuts a chamfer into them");
+  }
+  if (/var\(--gl-tech\)/.test(cssBody)) {
+    fail("styles/stream-cards.css: a label uses --gl-tech — the cards carry no monospace; labels are the sans at a wide track");
+  }
+  for (const gone of ["glus-rc-scan", "glus-rc-sheen"]) {
+    if (cssBody.includes(gone)) fail(`styles/stream-cards.css: .${gone} is back — the scan line and the sheen sweep were the HUD look`);
+  }
+  // The two voices belong to the cards. On :root they would restyle every
+  // feature loaded after this sheet.
+  const roles = cssBody.match(/\.glus-rc,\s*\.glus-sc\s*\{([\s\S]*?)\n\}/);
+  if (!roles || !/--glus-sans:\s*"Google Sans Flex"/.test(roles[1]) || !/--glus-serif:\s*"Cormorant Garamond"/.test(roles[1])) {
+    fail("styles/stream-cards.css: --glus-sans / --glus-serif are not declared on `.glus-rc, .glus-sc` — the cards would fall back to the browser default face");
+  }
+  if (/:root[^{]*\{[^}]*--glus-(sans|serif)/.test(cssBody)) {
+    fail("styles/stream-cards.css: a card font role is declared on :root — it would restyle every feature loaded after this sheet");
+  }
+  // The serif is for narrated text only. On a number it turns the card's one
+  // glanceable value into prose; the sans carries every total, die, DC and value.
+  for (const m of cssBody.matchAll(/([^{}]+)\{[^}]*var\(--glus-serif\)/g)) {
+    const selectors = m[1].split(",").map((s) => s.trim()).filter(Boolean);
+    for (const sel of selectors) {
+      if (!/^\.glus-rc-quote\[data-style="(emote|thought|narration)"\]$/.test(sel)) {
+        fail(`styles/stream-cards.css: "${sel}" is set in the serif — the serif is for the emote, thought and narration quotes only`);
+      }
+    }
+  }
+  for (const style of ["emote", "thought", "narration"]) {
+    if (!new RegExp(`\\.glus-rc-quote\\[data-style="${style}"\\][^{}]*\\{[^}]*var\\(--glus-serif\\)`).test(cssBody)) {
+      fail(`styles/stream-cards.css: the "${style}" quote is not set in the serif — narrated text is what the serif is for`);
+    }
+  }
+
+  const card = strip(read("scripts/features/stream-cards/cards/roll-card.js"));
+  const status = strip(read("scripts/features/stream-cards/cards/status-card.js"));
+  const motion = strip(read("scripts/features/stream-cards/cards/card-motion.js"));
+  for (const [file, src] of [["roll-card.js", card], ["status-card.js", status], ["card-motion.js", motion]]) {
+    if (/\bscramble\b/.test(src)) fail(`stream-cards/cards/${file}: a text scramble is back — names and degrees fade and rise into place`);
+    if (/polygon\(/.test(src)) fail(`stream-cards/cards/${file}: a clip-path polygon in the motion re-cuts a chamfer into a rounded card while it animates`);
+    if (/glus-rc-(scan|sheen)/.test(src)) fail(`stream-cards/cards/${file}: builds or animates the scan line or the sheen, which no longer exist`);
+  }
+  for (const name of ["STRIP_CLIP", "STRIP_CLIP_FOLDED"]) {
+    const m = card.match(new RegExp(`const ${name} = (["'\`])(.*?)\\1;`));
+    if (!m || !/^inset\(.*\bround\b/.test(m[2])) {
+      fail(`roll-card.js: ${name} is not a rounded inset — the unfold must carry the strip's radius or it squares the corners while the card arrives`);
+    }
+  }
+  // A direction word restates the mark beside it, and the room it took pushed a
+  // two-chip card's second chip off the edge. Only "ended" says something new.
+  if (!/direction === "lost"\)\s*chip\.append\(el\("span", "glus-sc-chip-state"/.test(status)) {
+    fail("status-card.js: the chip's direction word is no longer limited to a status that ended — \"gained\", \"raised\" and \"eased\" restate the mark and crowd the second chip out");
+  }
+
+  const overlay = strip(read("scripts/features/stream/chat-overlay.js"));
+  const streamCss = strip(read("styles/stream.css"));
+  if (/chat-sheen/.test(overlay) || /chat-sheen/.test(streamCss)) {
+    fail("stream/chat-overlay.js / styles/stream.css: the cloned card's sheen sweep is back — the wrapper is a quiet frame around Foundry's own card");
+  }
+}
+
 /* ------------------------------------------------ plain rolls and chat text -- */
 // In a PF2e world the overlay hands every new message to this feed and clones no
 // chat card at all, so a plain `/r 2d6+3` and a line somebody typed reach the

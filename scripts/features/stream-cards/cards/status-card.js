@@ -3,8 +3,12 @@
  *
  * Deliberately the *damage row's* size rather than the roll card's. A condition is a consequence, and
  * on a stream a consequence that arrives at the same weight as the roll that caused it reads as a
- * second roll. It sits in the same stack, under the same lifetime, with the same hairline and the same
- * framed art, so it is plainly the same feature speaking more quietly.
+ * second roll. It sits in the same stack, under the same lifetime, with the same fading top rule and the
+ * same framed art (struck round here), so it is plainly the same feature speaking more quietly.
+ *
+ * A chip names its direction with a mark and, for a value, the value itself. The direction word is
+ * printed only for a status that ended: "gained", "raised" and "eased" restate the mark, and the room
+ * they took is what pushed a two-chip card's second chip off its edge.
  *
  * It renders a StatusCardModel (see `pf2e/read-status.js`) and owns its motion. It never reads Foundry
  * documents; the reader builds the model.
@@ -19,9 +23,6 @@ import { CSS_SNAP, EASE_EXIT, EASE_OUT, EASE_POP, EASE_SNAP, el, tween, waapi } 
 import { statusTone } from "../pf2e/read-status.js";
 
 const DEFAULT_LABELS = {
-  Gained: "gained",
-  Raised: "raised",
-  Lowered: "eased",
   Lost: "ended",
   NPC: "NPC"
 };
@@ -34,12 +35,8 @@ const DIRECTION_MARKS = {
   lost: "−"
 };
 
-const DIRECTION_LABEL_KEYS = {
-  gained: "Gained",
-  raised: "Raised",
-  lowered: "Lowered",
-  lost: "Lost"
-};
+/** The strip's radius (`.glus-sc-strip` in stream-cards.css), carried by the unfold so it never squares the corners. */
+const STRIP_RADIUS = "calc(.3*var(--u))";
 
 export class StatusCard {
   /**
@@ -123,7 +120,7 @@ export class StatusCard {
       chip.dataset.valued = "";
       chip.append(el("b", "glus-sc-chip-value", change.value));
     }
-    chip.append(el("span", "glus-sc-chip-state", this.label(DIRECTION_LABEL_KEYS[change.direction] ?? "Gained")));
+    if (change.direction === "lost") chip.append(el("span", "glus-sc-chip-state", this.label("Lost")));
     return chip;
   }
 
@@ -158,7 +155,7 @@ export class StatusCard {
     frame.setAttribute("data-framed", "");
   }
 
-  /** Entrance: the hairline draws, the strip unfolds downwards, then each chip lands in turn. */
+  /** Entrance: the top rule draws, the strip unfolds downwards, then each chip lands in turn. */
   async enter() {
     const u = this.unit();
     tween(this.element, { opacity: [0, 1], translateX: [-0.8 * u, 0], duration: 380, ease: EASE_OUT });
@@ -168,8 +165,8 @@ export class StatusCard {
     await waapi(
       this.strip,
       [
-        { clipPath: "inset(0 0 100% 0)", transform: `translateY(${-0.6 * u}px)` },
-        { clipPath: "inset(0 0 0% 0)", transform: "none" }
+        { clipPath: `inset(0 0 100% 0 round ${STRIP_RADIUS})`, transform: `translateY(${-0.6 * u}px)` },
+        { clipPath: `inset(0 0 0% 0 round ${STRIP_RADIUS})`, transform: "none" }
       ],
       { duration: 340, easing: CSS_SNAP }
     );

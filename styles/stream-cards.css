@@ -2,13 +2,22 @@
  * GLUniverse Suite — stream-cards.
  *
  * Tokens and utilities come from styles/gl-tokens.css; keyframes from
- * styles/gl-motion.css. Class prefix: .gluniverse-stream-*
+ * styles/gl-motion.css. Class prefix: .glus-rc-* (roll card), .glus-sc-* (status card).
  */
 /*
- * GLUniverse Stream: PF2e roll card ("Hairline").
+ * GLUniverse Stream: the PF2e roll card.
  *
- * Every length is a multiple of --u, one percent of a 1920px frame, so the card keeps the proportions
- * approved in the design mockup at any stream resolution. --glus-rc-scale scales the whole card.
+ * Setting-neutral on purpose: the stream sits over whatever world the table plays in, so the card reads
+ * as a lit page, not a HUD. A small radius, a 1px inner rule and a soft drop shadow give it its edge;
+ * tone is a top rule fading out to the right plus a quiet wash behind the result, never a glow. There
+ * are no cut corners, no monospace labels, no scan line, sheen or text decode.
+ *
+ * Two voices of type, both scoped to the cards (--glus-sans, --glus-serif below), never :root:
+ *   sans   everything the card says, and every number on it: totals, dice, DCs, damage, values
+ *   serif  only narrated text: the emote, thought and narration quote styles
+ *
+ * Every length is a multiple of --u, one percent of a 1920px frame, so the card keeps its proportions at
+ * any stream resolution. --glus-rc-scale scales the whole card.
  *
  * State lives in data attributes on the root:
  *   data-tone     crit-success | success | failure | crit-failure | none | arcane | divine | occult | primal
@@ -23,9 +32,9 @@
   position: relative;
   display: grid;
   width: calc(28 * var(--u));
-  font-family: var(--gl-display);
+  font-family: var(--glus-sans);
   color: var(--gl-text);
-  filter: drop-shadow(0 calc(0.35 * var(--u)) calc(0.9 * var(--u)) rgb(var(--gl-tint-dark) / 0.55));
+  filter: drop-shadow(0 calc(0.3 * var(--u)) calc(0.8 * var(--u)) rgb(var(--gl-tint-dark) / 0.5));
   pointer-events: none;
 }
 
@@ -47,15 +56,33 @@
   height: calc(4.4 * var(--u));
   display: grid;
   grid-template-columns: calc(5 * var(--u)) minmax(0, 1fr) auto;
-  background: color-mix(in srgb, var(--gl-surface) 88%, transparent);
-  backdrop-filter: blur(calc(10px * var(--gl-glass-k))) saturate(1.15);
-  box-shadow: var(--gl-etch);
-  clip-path: polygon(0 0, calc(100% - 0.65 * var(--u)) 0, 100% calc(0.65 * var(--u)), 100% 100%, 0 100%);
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), rgb(var(--gl-tint-light) / 0) 46%),
+    color-mix(in srgb, var(--gl-ink-1) 86%, transparent);
+  backdrop-filter: blur(calc(12px * var(--gl-glass-k))) saturate(1.1);
+  box-shadow: inset 0 0 0 1px var(--gl-hair);
+  border-radius: calc(0.34 * var(--u));
   overflow: hidden;
 }
 .glus-rc[data-blind] .glus-rc-main {
-  background: color-mix(in srgb, var(--gl-violet) 14%, color-mix(in srgb, var(--gl-surface) 88%, transparent));
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), rgb(var(--gl-tint-light) / 0) 46%),
+    color-mix(in srgb, var(--gl-violet) 14%, color-mix(in srgb, var(--gl-ink-1) 86%, transparent));
 }
+/*
+ * The tone's wash: a quiet radial light behind the result column. It holds off while the total is
+ * still counting and on a card with no outcome, exactly as the outcome colour does.
+ */
+.glus-rc-main::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(70% 140% at 100% 50%, color-mix(in srgb, var(--glus-rc-tone) 11%, transparent), transparent 70%);
+  transition: opacity var(--gl-d-swift) var(--gl-ease);
+}
+.glus-rc[data-tone="none"] .glus-rc-main::after,
+.glus-rc[data-pending] .glus-rc-main::after { opacity: 0; }
 
 /*
  * Portrait: cropped, never stretched, feathered into the strip on the right and at top and bottom.
@@ -113,8 +140,8 @@
   width: calc(5 * var(--u));
   display: grid;
   place-items: center;
-  font-family: var(--gl-display);
-  font-weight: 700;
+  font-family: var(--glus-sans);
+  font-weight: var(--gl-weight-medium);
   font-size: calc(2.2 * var(--u));
   color: color-mix(in srgb, var(--glus-rc-tone) 45%, transparent);
   background: linear-gradient(90deg, color-mix(in srgb, var(--glus-rc-tone) 14%, transparent), transparent);
@@ -141,10 +168,10 @@
   min-width: 0;
 }
 .glus-rc-player {
-  font-family: var(--gl-tech);
-  font-size: calc(0.6 * var(--u));
-  letter-spacing: 0.22em;
-  color: var(--gl-text-dim);
+  font-weight: var(--gl-weight-medium);
+  font-size: calc(0.5 * var(--u));
+  letter-spacing: var(--gl-track-wide);
+  color: color-mix(in srgb, var(--gl-text-dim) 85%, transparent);
   text-transform: uppercase;
   display: flex;
   gap: calc(0.5 * var(--u));
@@ -154,37 +181,39 @@
 }
 .glus-rc[data-npc] .glus-rc-player-name { color: var(--gl-hazard); }
 .glus-rc-name {
-  font-weight: 600;
-  font-size: calc(1.3 * var(--u));
+  font-weight: var(--gl-weight-medium);
+  font-size: calc(1.28 * var(--u));
   line-height: 1;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.005em;
   color: var(--gl-text-bright);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .glus-rc-action {
-  font-weight: 500;
-  font-size: calc(0.8 * var(--u));
-  color: #c6ccd9;
+  font-weight: var(--glus-weight-body);
+  font-size: calc(0.76 * var(--u));
+  color: color-mix(in srgb, var(--gl-text) 78%, var(--gl-text-dim));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.glus-rc-action-label { color: var(--gl-text); font-weight: 600; }
+.glus-rc-action-label { color: var(--gl-text); font-weight: var(--gl-weight-medium); }
 .glus-rc-map {
-  font-family: var(--gl-tech);
+  font-weight: var(--gl-weight-medium);
   font-size: calc(0.62 * var(--u));
+  font-variant-numeric: tabular-nums;
   color: var(--gl-text-dim);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   margin-left: calc(0.3 * var(--u));
 }
 .glus-rc-chip {
-  font-family: var(--gl-tech);
-  font-size: calc(0.46 * var(--u));
-  letter-spacing: 0.2em;
+  font-weight: var(--gl-weight-bold);
+  font-size: calc(0.42 * var(--u));
+  letter-spacing: var(--gl-track-wide);
   color: var(--gl-ink-0);
-  padding: calc(0.06 * var(--u)) calc(0.3 * var(--u));
+  padding: calc(0.08 * var(--u)) calc(0.3 * var(--u));
+  border-radius: calc(0.12 * var(--u));
   text-transform: uppercase;
   text-shadow: none;
 }
@@ -212,10 +241,10 @@
   content: "";
   position: absolute;
   left: 0;
-  top: 24%;
-  bottom: 24%;
+  top: 18%;
+  bottom: 18%;
   width: 1px;
-  background: var(--gl-edge);
+  background: linear-gradient(180deg, transparent, rgb(var(--gl-tint-light) / 0.14), transparent);
   transform-origin: center;
 }
 .glus-rc-degree {
@@ -224,9 +253,9 @@
   gap: calc(0.16 * var(--u));
 }
 .glus-rc-degree-label {
-  font-weight: 700;
-  font-size: calc(0.74 * var(--u));
-  letter-spacing: 0.14em;
+  font-weight: var(--glus-weight-numeral);
+  font-size: calc(0.64 * var(--u));
+  letter-spacing: var(--gl-track-wide);
   text-transform: uppercase;
   color: var(--glus-rc-tone);
   white-space: nowrap;
@@ -235,29 +264,29 @@
 .glus-rc[data-pending] .glus-rc-degree-label { visibility: hidden; }
 .glus-rc-degree-meta,
 .glus-rc-spell-line {
-  font-family: var(--gl-tech);
-  letter-spacing: 0.12em;
+  font-weight: var(--gl-weight-medium);
+  font-size: calc(0.5 * var(--u));
+  letter-spacing: var(--gl-track-wide);
   white-space: nowrap;
   display: flex;
   align-items: baseline;
   gap: calc(0.25 * var(--u));
   text-transform: uppercase;
 }
-.glus-rc-degree-meta {
-  font-size: calc(0.56 * var(--u));
-  color: var(--gl-text);
-}
+.glus-rc-degree-meta { color: var(--gl-text-dim); }
 .glus-rc-big-number {
-  font-family: var(--gl-display);
-  font-weight: 700;
+  font-weight: var(--glus-weight-numeral);
   font-size: calc(1.15 * var(--u));
-  letter-spacing: 0;
+  letter-spacing: -0.01em;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
   color: var(--gl-text-bright);
+  margin-left: calc(0.1 * var(--u));
 }
 .glus-rc-total {
-  font-weight: 700;
+  font-weight: var(--glus-weight-numeral);
   font-size: calc(2.8 * var(--u));
+  letter-spacing: -0.035em;
   line-height: 1;
   min-width: calc(2.2 * var(--u));
   text-align: right;
@@ -277,7 +306,7 @@
   width: calc(3 * var(--u));
   height: calc(3 * var(--u));
   flex: none;
-  filter: drop-shadow(0 0 calc(0.3 * var(--u)) rgb(var(--gl-tint-dark) / 0.95)) drop-shadow(0 calc(0.1 * var(--u)) calc(0.2 * var(--u)) rgb(var(--gl-tint-dark)));
+  filter: drop-shadow(0 calc(0.1 * var(--u)) calc(0.25 * var(--u)) rgb(var(--gl-tint-dark) / 0.8));
 }
 .glus-rc-die svg {
   position: absolute;
@@ -287,17 +316,17 @@
   overflow: visible;
 }
 .glus-rc-die-edge {
-  fill: color-mix(in srgb, var(--gl-ink-0) 70%, transparent);
+  fill: color-mix(in srgb, var(--gl-ink-0) 55%, transparent);
   stroke: var(--gl-text-dim);
-  stroke-width: 4;
+  stroke-width: 2.5;
   stroke-linejoin: round;
   transition: stroke 0.3s, fill 0.3s;
 }
 .glus-rc-die-facet {
   fill: none;
   stroke: var(--gl-text-dim);
-  stroke-width: 2;
-  opacity: 0.28;
+  stroke-width: 1.5;
+  opacity: 0.2;
   transition: stroke 0.3s;
 }
 .glus-rc-die-value {
@@ -306,9 +335,9 @@
   display: grid;
   place-items: center;
   line-height: 1;
-  font-weight: 700;
-  font-size: calc(1.44 * var(--u));
-  letter-spacing: -0.04em;
+  font-weight: var(--gl-weight-bold);
+  font-size: calc(1.2 * var(--u));
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   color: var(--gl-text-bright);
   text-shadow: var(--glus-rc-text-shadow);
@@ -331,7 +360,7 @@
 .glus-rc[data-blind] .glus-rc-die .glus-rc-die-value { color: var(--gl-violet-hot); }
 .glus-rc[data-pending] .glus-rc-die .glus-rc-die-edge {
   stroke: var(--gl-text-dim);
-  fill: color-mix(in srgb, var(--gl-ink-0) 70%, transparent);
+  fill: color-mix(in srgb, var(--gl-ink-0) 55%, transparent);
 }
 .glus-rc[data-pending] .glus-rc-die .glus-rc-die-facet { stroke: var(--gl-text-dim); }
 .glus-rc[data-pending] .glus-rc-die .glus-rc-die-value { color: var(--gl-text-bright); }
@@ -344,8 +373,9 @@
   max-width: calc(11 * var(--u));
 }
 .glus-rc-spell-name {
-  font-weight: 700;
-  font-size: calc(1.75 * var(--u));
+  font-weight: var(--glus-weight-numeral);
+  font-size: calc(1.6 * var(--u));
+  letter-spacing: -0.02em;
   line-height: 1;
   color: var(--gl-text-bright);
   text-align: right;
@@ -356,7 +386,6 @@
   text-shadow: var(--glus-rc-text-shadow), 0 0 calc(1.6 * var(--u)) rgb(var(--gl-tint-dark) / 0.85);
 }
 .glus-rc-spell-line {
-  font-size: calc(0.6 * var(--u));
   color: var(--glus-rc-tone);
   transition: color 0.35s;
 }
@@ -364,8 +393,6 @@
 /* ── Layers over the strip ── */
 .glus-rc-fx,
 .glus-rc-glow,
-.glus-rc-sheen,
-.glus-rc-scan,
 .glus-rc-hair {
   position: absolute;
   pointer-events: none;
@@ -376,65 +403,49 @@
   height: 100%;
   z-index: 0;
 }
+/* The crit's light: a stronger wash of the tone behind the result, never a glow around the edge. */
 .glus-rc-glow {
   inset: 0;
   z-index: 0;
   opacity: 0;
-  box-shadow: inset 0 0 calc(1.2 * var(--u)) var(--glus-rc-tone);
+  background: radial-gradient(90% 160% at 90% 50%, color-mix(in srgb, var(--glus-rc-tone) 24%, transparent), transparent 65%);
 }
-.glus-rc-sheen {
-  inset: 0;
-  z-index: 2;
-  opacity: 0;
-  background: linear-gradient(105deg, transparent 35%, rgb(var(--gl-tint-light) / 0.16) 48%, rgb(var(--gl-tint-light) / 0.04) 54%, transparent 62%);
-}
-.glus-rc-scan {
-  left: 0;
-  right: 0;
-  top: 0;
-  height: max(1px, calc(0.12 * var(--u)));
-  z-index: 3;
-  opacity: 0;
-  background: linear-gradient(90deg, transparent, var(--glus-rc-tone) 20%, #fff 60%, var(--glus-rc-tone) 85%, transparent);
-  box-shadow: 0 0 calc(0.8 * var(--u)) var(--glus-rc-tone);
-}
+/* The tone's top rule: inset from the rounded corners, fading out to the right, with no glow. */
 .glus-rc-hair {
-  left: 0;
-  right: 0;
+  left: calc(0.34 * var(--u));
+  right: calc(0.34 * var(--u));
   top: 0;
-  height: max(1px, calc(0.09 * var(--u)));
+  height: max(1px, calc(0.07 * var(--u)));
   z-index: 3;
   transform-origin: left;
-  background: var(--glus-rc-tone);
-  box-shadow: 0 0 calc(0.5 * var(--u)) var(--glus-rc-tone);
-  transition: background-color 0.35s, box-shadow 0.35s;
+  background: linear-gradient(90deg, var(--glus-rc-tone), color-mix(in srgb, var(--glus-rc-tone) 55%, transparent) 55%, transparent);
 }
 .glus-rc[data-blind] .glus-rc-hair {
   background: repeating-linear-gradient(90deg, var(--glus-rc-tone) 0 calc(0.5 * var(--u)), transparent 0 calc(0.8 * var(--u)));
-  box-shadow: none;
 }
 
 /* ── Damage row ── */
 .glus-rc-damage {
   position: relative;
   margin-left: calc(2.4 * var(--u));
+  margin-top: 1px;
   height: calc(2.5 * var(--u));
   display: flex;
   align-items: center;
   gap: calc(0.6 * var(--u));
   padding: 0 calc(1 * var(--u)) 0 calc(0.8 * var(--u));
-  background: color-mix(in srgb, var(--gl-ink-2) 90%, transparent);
+  background: color-mix(in srgb, var(--gl-ink-1) 80%, transparent);
   backdrop-filter: blur(calc(10px * var(--gl-glass-k)));
-  border-top: 1px solid var(--gl-hair);
-  clip-path: polygon(0 0, 100% 0, 100% 100%, calc(0.5 * var(--u)) 100%, 0 calc(100% - 0.5 * var(--u)));
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.06);
+  border-radius: 0 0 calc(0.3 * var(--u)) calc(0.3 * var(--u));
   overflow: hidden;
   text-shadow: var(--glus-rc-text-shadow);
 }
 .glus-rc-damage > :not(.glus-rc-fx) { position: relative; z-index: 1; }
 .glus-rc-damage-key {
-  font-family: var(--gl-tech);
-  font-size: calc(0.54 * var(--u));
-  letter-spacing: 0.22em;
+  font-weight: var(--gl-weight-medium);
+  font-size: calc(0.48 * var(--u));
+  letter-spacing: var(--gl-track-wide);
   color: var(--gl-text-dim);
   text-transform: uppercase;
 }
@@ -449,8 +460,9 @@
   display: flex;
   align-items: center;
   gap: calc(0.25 * var(--u));
-  font-family: var(--gl-tech);
+  font-weight: var(--glus-weight-body);
   font-size: calc(0.66 * var(--u));
+  font-variant-numeric: tabular-nums;
   color: var(--gl-text);
   white-space: nowrap;
 }
@@ -466,17 +478,19 @@
 .glus-rc-damage-part[data-type="vitality"] i { color: #ffe9b8; }
 .glus-rc-damage-part[data-type="void"] i { color: #b497ff; }
 .glus-rc-damage-crit {
-  font-family: var(--gl-tech);
-  font-size: calc(0.54 * var(--u));
-  letter-spacing: 0.14em;
+  font-weight: var(--gl-weight-bold);
+  font-size: calc(0.48 * var(--u));
+  letter-spacing: var(--gl-track-wide);
   color: var(--gl-ink-0);
   background: var(--glus-rc-deg-crit-success);
-  padding: calc(0.05 * var(--u)) calc(0.25 * var(--u));
+  padding: calc(0.06 * var(--u)) calc(0.28 * var(--u));
+  border-radius: calc(0.12 * var(--u));
   text-shadow: none;
 }
 .glus-rc-damage-total {
-  font-weight: 700;
+  font-weight: var(--glus-weight-numeral);
   font-size: calc(1.6 * var(--u));
+  letter-spacing: -0.03em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--gl-text-bright);
@@ -499,17 +513,27 @@
  * tokens rather than restating their values.
  */
 /*
- * The status card is in this selector for one role only: --glus-rc-text-shadow.
- * A custom property is substituted where it is *declared*, so a status card that
- * merely referenced a role declared on .glus-rc alone would resolve it to the
- * guaranteed-invalid value and silently inherit whatever text-shadow the overlay
- * happened to carry — legible on a dark shot and gone over a bright one. The
- * degree and tradition roles come along unused, which is the cheaper of the two
- * mistakes available here; the alternative is a second copy of the shadow, and
- * two copies of one value is two chances for the cards to stop matching.
+ * The status card shares this selector. A custom property is substituted where
+ * it is *declared*, so a status card that merely referenced a role declared on
+ * .glus-rc alone would resolve it to the guaranteed-invalid value: the text
+ * shadow would silently fall back to whatever the overlay carried, and the font
+ * roles to the browser default. The degree and tradition roles come along
+ * unused, which is the cheaper of the two mistakes available here; the
+ * alternative is a second copy, and two copies of one value is two chances for
+ * the cards to stop matching.
  */
 .glus-rc,
 .glus-sc {
+  /*
+   * The cards' two voices. Scoped here rather than on :root so no other feature inherits them.
+   * Both faces are declared in gl-fonts.css; the suite tokens behind them are the fallbacks.
+   */
+  --glus-sans: "Google Sans Flex", var(--gl-display);
+  --glus-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  /* Google Sans Flex is variable: numerals sit a touch under bold, running text a touch over normal. */
+  --glus-weight-numeral: 650;
+  --glus-weight-body: 450;
+
   --glus-rc-deg-crit-success: var(--gl-signal);
   --glus-rc-deg-success: var(--gl-good);
   --glus-rc-deg-failure: var(--gl-text-dim);
@@ -532,7 +556,7 @@
  *
  * Deliberately the damage row's size, not the roll card's: a condition is a consequence, and a
  * consequence that arrives at the same weight as the roll that caused it reads as a second roll. Same
- * --u, so it scales with the overlay; same hairline, same framed art, same glass.
+ * --u, so it scales with the overlay; same fading top rule, same framed art (round here), same glass.
  *
  * State lives in data attributes on the root:
  *   data-tone    applied (pressure arriving) | cleared (pressure letting go) | none
@@ -550,9 +574,9 @@
   display: grid;
   width: calc(22 * var(--u));
   margin-left: calc(2.4 * var(--u));
-  font-family: var(--gl-display);
+  font-family: var(--glus-sans);
   color: var(--gl-text);
-  filter: drop-shadow(0 calc(0.2 * var(--u)) calc(0.6 * var(--u)) rgb(var(--gl-tint-dark) / 0.5));
+  filter: drop-shadow(0 calc(0.2 * var(--u)) calc(0.6 * var(--u)) rgb(var(--gl-tint-dark) / 0.45));
   pointer-events: none;
 }
 .glus-sc[data-tone="applied"] { --glus-sc-tone: var(--glus-sc-applied); }
@@ -565,16 +589,15 @@
   align-items: center;
   gap: calc(0.5 * var(--u));
   padding: 0 calc(0.9 * var(--u)) 0 calc(0.5 * var(--u));
-  background: color-mix(in srgb, var(--gl-ink-2) 90%, transparent);
+  background: color-mix(in srgb, var(--gl-ink-1) 84%, transparent);
   backdrop-filter: blur(calc(10px * var(--gl-glass-k)));
-  box-shadow: var(--gl-etch-soft);
-  /* The damage row's chamfer, mirrored: that row hangs off an attack above it, this card stands alone. */
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 0.5 * var(--u)), calc(100% - 0.5 * var(--u)) 100%, 0 100%);
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.07);
+  border-radius: calc(0.3 * var(--u));
   overflow: hidden;
   text-shadow: var(--glus-rc-text-shadow);
 }
 
-/* Thumbnail: the roll card's framing re-struck as a square (focus-math's squareFocus). */
+/* Thumbnail: the roll card's framing re-struck as a square (focus-math's squareFocus), cut round. */
 .glus-sc-art-frame {
   --glus-sc-art-w: calc(1.9 * var(--u));
   position: relative;
@@ -582,7 +605,8 @@
   width: var(--glus-sc-art-w);
   height: var(--glus-sc-art-w);
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--glus-sc-tone) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--glus-sc-tone) 45%, transparent);
+  border-radius: 50%;
   transition: border-color 0.35s;
 }
 .glus-sc-art {
@@ -616,35 +640,40 @@
   flex: none;
   width: calc(1.9 * var(--u));
   height: calc(1.9 * var(--u));
-  font-weight: 700;
-  font-size: calc(1.1 * var(--u));
+  border-radius: 50%;
+  font-weight: var(--gl-weight-medium);
+  font-size: calc(1 * var(--u));
   color: color-mix(in srgb, var(--glus-sc-tone) 55%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--glus-sc-tone) 16%, transparent), transparent);
+  background: color-mix(in srgb, var(--glus-sc-tone) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glus-sc-tone) 30%, transparent);
 }
 
 .glus-sc-name {
-  font-family: var(--gl-tech);
-  font-size: calc(0.62 * var(--u));
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-weight: var(--gl-weight-medium);
+  font-size: calc(0.7 * var(--u));
   color: var(--gl-text-bright);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: calc(6.5 * var(--u));
+  max-width: calc(6 * var(--u));
   flex: none;
 }
 .glus-sc[data-npc] .glus-sc-name { color: color-mix(in srgb, var(--gl-hazard) 45%, var(--gl-text-bright)); }
 
-/* Chips: the conditions themselves. The row scrolls nothing — it ends in an ellipsis like the card above. */
+/*
+ * Chips: the conditions themselves. The row scrolls nothing: a chip that does not fit fades out at the
+ * strip's edge rather than being cut off square. (Mask stops, not veils: a mask reads alpha only.)
+ */
 .glus-sc-chips {
   display: flex;
   align-items: center;
   gap: calc(0.45 * var(--u));
   flex: 1;
   min-width: 0;
-  justify-content: flex-end;
+  justify-content: flex-start;
   overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 1.2 * var(--u)), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 1.2 * var(--u)), transparent);
 }
 .glus-sc-chip {
   --glus-sc-chip-tone: var(--glus-sc-applied);
@@ -654,7 +683,8 @@
   flex: none;
   padding: calc(0.12 * var(--u)) calc(0.42 * var(--u));
   background: color-mix(in srgb, var(--glus-sc-chip-tone) 16%, transparent);
-  border-left: max(1px, calc(0.06 * var(--u))) solid var(--glus-sc-chip-tone);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glus-sc-chip-tone) 30%, transparent);
+  border-radius: calc(0.14 * var(--u));
   white-space: nowrap;
 }
 .glus-sc-chip[data-direction="lowered"],
@@ -669,47 +699,40 @@
   flex: none;
 }
 .glus-sc-chip-mark {
-  font-family: var(--gl-tech);
+  font-weight: var(--gl-weight-bold);
   font-size: calc(0.55 * var(--u));
   line-height: 1;
   color: var(--glus-sc-chip-tone);
 }
 .glus-sc-chip-name {
-  font-weight: 600;
-  font-size: calc(0.72 * var(--u));
+  font-weight: var(--gl-weight-medium);
+  font-size: calc(0.68 * var(--u));
   color: var(--gl-text-bright);
 }
 .glus-sc-chip-value {
-  font-weight: 700;
-  font-size: calc(1 * var(--u));
+  font-weight: var(--gl-weight-bold);
+  font-size: calc(0.95 * var(--u));
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--glus-sc-chip-tone);
 }
+/* Only a status that ended carries a word ("ended"); every other direction is said by its mark. */
 .glus-sc-chip-state {
-  font-family: var(--gl-tech);
+  font-weight: var(--gl-weight-medium);
   font-size: calc(0.46 * var(--u));
-  letter-spacing: 0.18em;
+  letter-spacing: var(--gl-track-wide);
   text-transform: uppercase;
   color: var(--gl-text-dim);
 }
-/*
- * A value says which way it went on its own, so the word beside it would be saying it twice. Marked on
- * the chip rather than matched with :has(), which older OBS browser sources lack — there the rule would
- * simply not apply and every frightened chip would read "2 RAISED".
- */
-.glus-sc-chip[data-valued] .glus-sc-chip-state { display: none; }
 
 .glus-sc-hair {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: calc(0.3 * var(--u));
+  right: calc(0.3 * var(--u));
   top: 0;
-  height: max(1px, calc(0.09 * var(--u)));
+  height: max(1px, calc(0.07 * var(--u)));
   transform-origin: left;
-  background: var(--glus-sc-tone);
-  box-shadow: 0 0 calc(0.4 * var(--u)) var(--glus-sc-tone);
-  transition: background-color 0.35s, box-shadow 0.35s;
+  background: linear-gradient(90deg, var(--glus-sc-tone), color-mix(in srgb, var(--glus-sc-tone) 50%, transparent) 55%, transparent);
   pointer-events: none;
 }
 
@@ -717,16 +740,20 @@
  * ── Plain rolls and chat ──────────────────────────────────────────────────────
  *
  * In a PF2e world the overlay clones no chat cards at all, so a `/r 2d6+3` and a line somebody typed
- * are drawn here too. Both keep the roll card's shape: same strip, same hairline, same framed art.
+ * are drawn here too. Both keep the roll card's shape: same strip, same top rule, same framed art.
  */
 
 /* A plain roll's formula sits where a degree's meta line does, so the column keeps its rhythm; it is
- * the only thing on the card the die and the total do not already say. */
+ * the only thing on the card the die and the total do not already say. Not upper-cased: `2d6+3`. */
 .glus-rc[data-kind="roll"] .glus-rc-degree-meta {
   max-width: calc(8 * var(--u));
   overflow: hidden;
   text-overflow: ellipsis;
   display: block;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: calc(0.6 * var(--u));
+  color: var(--gl-text);
 }
 
 /*
@@ -737,10 +764,14 @@
 .glus-rc[data-kind="text"] .glus-rc-main {
   grid-template-columns: calc(5 * var(--u)) minmax(0, 11fr) minmax(0, 17fr);
 }
+/*
+ * Spoken lines are set in the sans, in quotation marks. Everything narrated rather than spoken (an
+ * emote, a thought, the narrator) is the serif italic, the cards' only use of it.
+ */
 .glus-rc-quote {
   min-width: 0;
   font-size: calc(0.92 * var(--u));
-  line-height: 1.3;
+  line-height: 1.32;
   color: var(--gl-text-bright);
   /* Three lines, then it is cut — the card is a glance, and a growing card moves the stack under it. */
   display: -webkit-box;
@@ -749,9 +780,22 @@
   line-clamp: 3;
   overflow: hidden;
 }
-.glus-rc-quote[data-style="emote"] {
+.glus-rc-quote[data-style="speech"]::before { content: "\201C"; color: var(--glus-rc-tone); }
+.glus-rc-quote[data-style="speech"]::after { content: "\201D"; color: var(--glus-rc-tone); }
+.glus-rc-quote[data-style="emote"],
+.glus-rc-quote[data-style="thought"],
+.glus-rc-quote[data-style="narration"] {
+  font-family: var(--glus-serif);
   font-style: italic;
-  color: var(--gl-text);
+  font-weight: 500;
+  font-size: calc(1.12 * var(--u));
+  line-height: 1.18;
+}
+.glus-rc-quote[data-style="emote"] { color: var(--gl-text); }
+.glus-rc-quote[data-style="thought"] { color: color-mix(in oklab, var(--gl-violet-hot) 75%, var(--gl-text)); }
+.glus-rc-quote[data-style="narration"] {
+  font-size: calc(1.22 * var(--u));
+  color: var(--gl-text-bright);
 }
 .glus-rc-quote[data-style="ooc"] {
   color: var(--gl-text-dim);
