@@ -111,31 +111,28 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   pointer-events: none;
   position: relative;
   isolation: isolate;
-  border-radius: 8px;
+  border-radius: var(--gl-r-sm);
   transform-origin: top left;
   filter:
     blur(var(--stream-chat-blur))
-    drop-shadow(0 0.55rem 1.1rem rgb(var(--gl-tint-dark) / calc(0.48 * var(--stream-chat-shadow))))
-    drop-shadow(0 0.15rem 0.35rem rgb(var(--gl-tint-dark) / calc(0.32 * var(--stream-chat-shadow))));
+    drop-shadow(0 0.45rem 1rem rgb(var(--gl-tint-dark) / calc(0.42 * var(--stream-chat-shadow))))
+    drop-shadow(0 0.12rem 0.3rem rgb(var(--gl-tint-dark) / calc(0.3 * var(--stream-chat-shadow))));
   will-change: opacity, transform, filter, max-height;
 }
 
-.gluniverse-stream-chat-sheen {
+/*
+  The wrapper's 1px inner rule, the same one the stream cards draw. It is an
+  overlay rather than an inset box-shadow on the wrapper because the clone's own
+  background (Foundry's or the system's chat card) would paint over that.
+*/
+.gluniverse-stream-chat-card::after {
+  content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
   z-index: 2;
-  background: linear-gradient(
-    115deg,
-    transparent 28%,
-    rgb(var(--gl-tint-light) / 0.22) 46%,
-    rgb(var(--gl-tint-light) / 0.4) 50%,
-    rgb(var(--gl-tint-light) / 0.22) 54%,
-    transparent 72%
-  );
-  transform: translateX(-130%);
-  opacity: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.08);
+  pointer-events: none;
 }
 
 .gluniverse-stream-chat-card > .chat-message,

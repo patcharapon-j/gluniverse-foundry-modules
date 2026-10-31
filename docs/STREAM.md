@@ -131,6 +131,19 @@ Character art is framed on the face automatically: the suite's head locator
 button. A GM roll with no art of its own can show a chosen picture, framed the
 same way.
 
+The look is setting-neutral, because the stream sits over whatever world the
+table plays in. The strip is rounded glass with a 1px inner rule and a soft drop
+shadow. Tone is a top rule that fades out to the right plus a quiet wash behind
+the result, and a crit's light is a stronger wash rather than a glow. Everything
+the card says, and every number on it, is set in Google Sans Flex; Cormorant
+Garamond italic is kept for narrated text only (the emote, thought and narration
+quote styles). Both roles (`--glus-sans`, `--glus-serif`) are declared on the
+cards, never on `:root`. There are no cut corners, no monospace labels, no scan
+line, sheen or text decode; things fade and rise into place, and the strip
+unfolds inside its own rounded clip. The crit crack stays, since it is shared
+with core. The wrapper a cloned chat card gets on a non-PF2e world takes the same
+radius and inner rule and nothing else; what is inside it is Foundry's.
+
 Card size follows the stream's width and the **Roll card size** slider (default
 50%). That slider lives in the stream client's `chatSettings`, not here: it
 scales the overlay, which the stream client owns.
@@ -144,7 +157,7 @@ card was built, and the result is indistinguishable from the overlay being
 switched off.
 
 Both are cards now, in the same stack, under the same lifetime, with the same
-hairline and the same framed art.
+top rule and the same framed art.
 
 **A plain roll** is anything carrying dice that PF2e did not claim as a check, a
 damage roll or a cast: `/r 2d6+3`, a macro roll, a system PF2e has no context
@@ -184,9 +197,12 @@ creature, and one row per condition with its value and which way it moved.
 It is the **damage row's** size, not the roll card's, and that is the point. A
 condition is a consequence; drawn at the same weight as the roll that caused it,
 it reads as a second roll and the two compete for the same glance. Same `--u`,
-same hairline, same glass, same framed art — the roll card's own framing
-re-struck as a square, so the head is in the frame rather than pushed left by a
-crop shaped for an 8.2:4.4 box.
+same top rule, same glass, same framed art — the roll card's own framing
+re-struck as a square (and cut round), so the head is in the frame rather than
+pushed left by a crop shaped for an 8.2:4.4 box. A chip says its direction with a
+mark and its value; the word is printed only for a condition that ended, since
+"gained", "raised" and "eased" restate the mark and their room pushed a two-chip
+card's second chip off the edge.
 
 **One card per creature.** Everything that lands while a card is up folds into
 it: frightened arriving and then ticking to 2 is one row reading "Frightened 2",
@@ -288,6 +304,12 @@ left alone.
 node tools/stream-check.mjs          # source-shape invariants
 node --test tests/*.test.mjs         # 122 unit tests (directory mode is unsupported)
 ```
+
+To see the cards, `node tools/stream-cards-preview.mjs && node
+tools/preview-server.mjs 8962`, then `/.preview/stream-cards.html`. It imports
+the shipped `RollCard` and `StatusCard` against the shipped stylesheets, for
+every card kind. `?still` shows the settled state, `?scale=0.5` the shipped
+default size, `?bg=bright` a pale floor.
 
 `stream-check` covers what a diff cannot show: import bindings across the
 feature boundary, `stream` never importing a child, hook names that would

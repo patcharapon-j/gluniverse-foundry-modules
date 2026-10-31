@@ -13,7 +13,6 @@ const CARD_OFFSETS = {
   "bottom-left": { enterX: -56, enterY: 4, exitX: -42, exitY: 2 },
   "bottom-right": { enterX: 56, enterY: 4, exitX: 42, exitY: 2 }
 };
-const SHEEN_DELAY_MS = 380;
 
 export class ChatOverlay {
   constructor(streamMode) {
@@ -148,9 +147,6 @@ export class ChatOverlay {
     card.className = `gluniverse-stream-chat-card ${CHAT_CONTEXT_CLASS}`;
     if (messageId) card.dataset.streamMessageId = messageId;
     card.append(this.buildClone(latest, message));
-    const sheen = document.createElement("span");
-    sheen.className = "gluniverse-stream-chat-sheen";
-    card.append(sheen);
     applyThemeContext(card, latest);
     card.style.maxHeight = "0px";
     card.style.opacity = "0";
@@ -158,7 +154,6 @@ export class ChatOverlay {
 
     const record = {
       element: card,
-      sheen,
       messageId,
       phase: "entering",
       timeout: window.setTimeout(() => this.removeCard(card), Math.max(0, Number(settings.lifetimeMs) || 0))
@@ -179,7 +174,8 @@ export class ChatOverlay {
 
   /**
    * The card unfolds to its content height while it slides in from its corner, scales up with a slight
-   * overshoot and comes into focus; the sheen sweeps across once it has mostly arrived.
+   * overshoot and comes into focus. No sweep crosses it: the wrapper is a quiet frame around Foundry's
+   * own card, and a light passing over that card is the HUD look the stream cards gave up.
    */
   animateCardIn(record, position) {
     const card = record.element;
@@ -213,12 +209,6 @@ export class ChatOverlay {
       "--stream-chat-shadow": [0.35, 1],
       duration: 420,
       ease: "outQuint"
-    });
-    animate(record.sheen, { translateX: ["-130%", "140%"], duration: 1400, delay: SHEEN_DELAY_MS, ease: "outQuint" });
-    animate(record.sheen, {
-      opacity: [{ from: 0, to: 0.9, duration: 250 }, { to: 0, duration: 1150 }],
-      delay: SHEEN_DELAY_MS,
-      ease: "linear"
     });
   }
 
@@ -396,7 +386,6 @@ export class ChatOverlay {
     this.feed?.clear();
     document.querySelectorAll(".gluniverse-stream-chat-card").forEach(card => {
       remove(card);
-      remove(card.querySelector(".gluniverse-stream-chat-sheen"));
       card.remove();
     });
   }
