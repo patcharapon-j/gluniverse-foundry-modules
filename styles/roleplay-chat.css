@@ -15,7 +15,7 @@
 
 :is(.glrp-bar, .glrp-hint, #chat-message, .glrp-msg, .glrp-ooc, .glrp-layer, .glrp-lane, .glus-rc) {
   --glrp-sans: "Google Sans Flex", var(--gl-display);
-  --glrp-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --glrp-serif: "Cormorant Garamond", var(--gl-thai), Georgia, "Times New Roman", serif;
   /* Mode hues: the suite's semantic tokens, softened toward text so nothing reads as neon. */
   --glrp-say: color-mix(in oklab, var(--gl-info-hot) 72%, var(--gl-text));
   --glrp-do: var(--gl-signal-pale);
@@ -25,8 +25,10 @@
   --glrp-narr: var(--gl-text);
   --glrp-glass: color-mix(in srgb, var(--gl-ink-1) 84%, transparent);
   --glrp-drop: 0 8px 22px rgb(var(--gl-tint-dark) / 0.45);
-  --glrp-hue: var(--glrp-ooc);
 }
+/* The default hue at zero specificity. Set in the `:is()` above it would carry #chat-message's ID
+   weight and beat every `[data-glrp-mode]` hue below, leaving the box grey in every mode. */
+:where(.glrp-bar, .glrp-hint, #chat-message, .glrp-msg, .glrp-ooc, .glrp-layer, .glrp-lane, .glus-rc) { --glrp-hue: var(--glrp-ooc); }
 [data-glrp-mode="say"] { --glrp-hue: var(--glrp-say); }
 [data-glrp-mode="do"] { --glrp-hue: var(--glrp-do); }
 [data-glrp-mode="think"] { --glrp-hue: var(--glrp-think); }
@@ -195,6 +197,9 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
 .glrp-bar .glrp-picker-row[aria-selected="true"] { background: rgb(var(--gl-tint-light) / 0.08); color: var(--gl-text-bright); }
 .glrp-picker-row .glrp-avatar { width: 24px; height: 24px; }
 .glrp-picker-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A clipped name cuts Thai tone marks off above a tight line box ("น้ำ" reads "นำ"). The padding
+   widens the clip and the margin gives the space back, so nothing moves. */
+:is(.glrp-chip-name, .glrp-picker-name, .glrp-name) { padding-block: 0.2em; margin-block: -0.2em; }
 .glrp-picker-tag {
   margin-left: auto;
   flex: none;
@@ -224,14 +229,120 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   color: var(--gl-text);
 }
 
-/* the box itself: a faint tint of the mode, and the voice the line will appear in */
+/* ── the box: each delivery in its own hue, shape and voice ──────────────
+   Say is a balloon with a tail, Do a square stage direction with a heavy
+   rule down its side, Think a dashed cloud with two puffs, OOC plain. A
+   header names who is speaking and how, and the box sets the line the way
+   the log will print it: Say in quotes, Do after the speaker's name. */
+
+/* The composer speaks louder than the log: here the hue is the whole cue. */
+:is(.glrp-bar, .glrp-hint, #chat-message) {
+  --glrp-say: color-mix(in oklab, var(--gl-info) 82%, var(--gl-text));
+  --glrp-do: var(--gl-signal);
+  --glrp-think: var(--gl-violet);
+}
+.glrp-bar[data-glrp-mode] {
+  box-shadow: inset 0 2px 0 var(--glrp-hue), inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.08), 0 4px 14px rgb(var(--gl-tint-dark) / 0.3);
+}
+.glrp-sub .glrp-seg-btn[data-glrp-sub="say"] { --glrp-hue: var(--glrp-say); }
+.glrp-sub .glrp-seg-btn[data-glrp-sub="do"] { --glrp-hue: var(--glrp-do); }
+.glrp-sub .glrp-seg-btn[data-glrp-sub="think"] { --glrp-hue: var(--glrp-think); }
+.glrp-bar .glrp-sub .glrp-seg-btn { color: color-mix(in oklab, var(--glrp-hue) 62%, var(--gl-text-dim)); padding: 7px 0; }
+.glrp-bar .glrp-sub .glrp-seg-btn:hover:not(:disabled) { color: color-mix(in oklab, var(--glrp-hue) 80%, var(--gl-text-bright)); }
+.glrp-ico { margin-right: 6px; font-size: 11px; }
+.glrp-bar .glrp-sub .glrp-seg-btn[aria-pressed="true"] {
+  color: var(--gl-ink-0);
+  background: var(--glrp-hue);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--glrp-hue) 45%, transparent);
+}
+
 #chat-message[data-glrp-mode] > .editor-container {
-  background: color-mix(in srgb, var(--glrp-hue) 4%, var(--gl-ink-2));
-  border-color: color-mix(in srgb, var(--glrp-hue) 28%, rgb(var(--gl-tint-light) / 0.08));
+  background: color-mix(in srgb, var(--glrp-hue) 9%, var(--gl-ink-2));
+  border-color: color-mix(in srgb, var(--glrp-hue) 75%, transparent);
 }
 #chat-message[data-glrp-mode] > .editor-container .editor-content {
   font-family: var(--glrp-sans);
   color: var(--gl-text-bright);
+}
+/* The header. The content is absolutely placed inside the container, so it moves down by `top`
+   rather than by padding: padded, a scrolled line would slide under the header. */
+#chat-message[data-glrp-mode]:not([data-glrp-mode="ooc"]) > .editor-container::before {
+  content: var(--glrp-head, "");
+  position: absolute;
+  top: 5px;
+  left: 9px;
+  right: 9px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 700 9px/1 var(--glrp-sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--glrp-hue);
+  pointer-events: none;
+}
+#chat-message[data-glrp-mode]:not([data-glrp-mode="ooc"]) > .editor-container .editor-content { top: 17px; }
+#chat-message[data-glrp-mode]:not([data-glrp-mode="ooc"]) > .editor-container::after { padding-top: 12px; }
+#chat-message[data-glrp-mode] > .editor-container::after { color: color-mix(in srgb, var(--glrp-hue) 55%, var(--gl-text-faint)); }
+
+/* Say: a speech balloon. The tail is drawn in the box's own bottom padding, because Foundry clips
+   the box (`overflow: hidden`) and anything hung below it would be cut off. */
+#chat-message[data-glrp-mode="say"],
+#chat-message[data-glrp-mode="think"] { padding-bottom: 9px; }
+#chat-message[data-glrp-mode="say"] > .editor-container { border-radius: 12px; }
+#chat-message[data-glrp-mode="say"]::after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  bottom: 0;
+  width: 14px;
+  height: 11px;
+  background: color-mix(in srgb, var(--glrp-hue) 75%, transparent);
+  clip-path: polygon(0 0, 100% 0, 20% 100%);
+  pointer-events: none;
+}
+/* Do: a stage direction, square, with a heavy rule down the side. */
+#chat-message[data-glrp-mode="do"] > .editor-container {
+  border-radius: 2px;
+  border-width: 1px 1px 1px 5px;
+  border-color: color-mix(in srgb, var(--glrp-hue) 35%, transparent);
+  border-left-color: var(--glrp-hue);
+}
+#chat-message[data-glrp-mode="do"] > .editor-container .editor-content { color: color-mix(in oklab, var(--glrp-do) 35%, var(--gl-text-bright)); }
+/* Think: a cloud, dashed and round, with two puffs. */
+#chat-message[data-glrp-mode="think"] > .editor-container { border-style: dashed; border-radius: 20px; }
+#chat-message[data-glrp-mode="think"] > .editor-container .editor-content { color: color-mix(in oklab, var(--glrp-think) 45%, var(--gl-text-bright)); }
+#chat-message[data-glrp-mode="think"]::after {
+  content: "";
+  position: absolute;
+  left: 26px;
+  bottom: 0;
+  width: 9px;
+  height: 9px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--glrp-hue) 75%, transparent);
+  box-shadow: -11px 3px 0 -2px color-mix(in srgb, var(--glrp-hue) 55%, transparent);
+  pointer-events: none;
+}
+/* OOC: plain. */
+#chat-message[data-glrp-mode="ooc"] > .editor-container { border-color: rgb(var(--gl-tint-light) / 0.14); border-width: 1px; }
+
+/* The line as the log will print it. Nothing is drawn while the box is empty, so the quotes and the
+   name never sit beside Foundry's placeholder; an empty paragraph is `<p><br></p>`, and a mark drawn
+   after its break would land on a line of its own. */
+#chat-message[data-glrp-mode="say"] > .editor-container:not(:has(.editor-content > p:only-child > br:only-child)) .editor-content > p:first-child::before {
+  content: "\201C";
+  color: var(--glrp-hue);
+}
+#chat-message[data-glrp-mode="say"] > .editor-container:not(:has(.editor-content > p:only-child > br:only-child)) .editor-content > p:last-child:not(:has(> br:only-child))::after {
+  content: "\201D";
+  color: var(--glrp-hue);
+}
+#chat-message[data-glrp-mode="do"] > .editor-container:not(:has(.editor-content > p:only-child > br:only-child)) .editor-content > p:first-child::before {
+  content: var(--glrp-speaker, "") " ";
+  font-weight: 700;
+  color: var(--glrp-do);
 }
 #chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-glrp-mode="narrator"]) > .editor-container .editor-content,
 #chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-glrp-mode="narrator"]) > .editor-container::after {
@@ -537,6 +648,82 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
 .glrp-line--narr .glrp-line-txt {
   font: italic 500 25px/1.22 var(--glrp-serif);
   text-shadow: 0 1px 3px rgb(var(--gl-tint-dark) / 1), 0 0 14px rgb(var(--gl-tint-dark) / 0.7);
+}
+
+/* ── asides in a Say line ──────────────────────────────────────────────────
+   "Hold the line! *draws her blade* Run!" The words stay in the speaking
+   voice; the aside drops into the narrated one, in the Do hue, and in a
+   quoted line the quote marks close before it and reopen after it. */
+.glrp-aside {
+  font-family: var(--glrp-serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.1em;
+  font-size-adjust: ex-height from-font;
+  color: color-mix(in oklab, var(--glrp-do) 60%, var(--gl-text));
+  margin-inline: 0.28em;
+}
+.glrp-aside:not([data-closes]) { margin-inline-start: 0; }
+.glrp-aside:not([data-opens]) { margin-inline-end: 0; }
+:is(.chat-message.glrp-msg[data-glrp-mode="say"] .glrp-body, .glrp-line[data-glrp-mode="say"] .glrp-line-txt) .glrp-aside[data-closes]::before,
+:is(.chat-message.glrp-msg[data-glrp-mode="say"] .glrp-body, .glrp-line[data-glrp-mode="say"] .glrp-line-txt) .glrp-aside[data-opens]::after {
+  font-family: var(--glrp-sans);
+  font-style: normal;
+  font-weight: 400;
+  font-size: calc(1em / 1.1);
+  /* The aside's adjust is inherited as the serif's ratio; on the sans it would shrink the mark. */
+  font-size-adjust: none;
+  color: var(--glrp-hue);
+}
+:is(.chat-message.glrp-msg[data-glrp-mode="say"] .glrp-body, .glrp-line[data-glrp-mode="say"] .glrp-line-txt) .glrp-aside[data-closes]::before { content: "\201D"; margin-inline: -0.28em 0.32em; }
+:is(.chat-message.glrp-msg[data-glrp-mode="say"] .glrp-body, .glrp-line[data-glrp-mode="say"] .glrp-line-txt) .glrp-aside[data-opens]::after { content: "\201C"; margin-inline: 0.32em -0.28em; }
+.chat-message.glrp-msg[data-glrp-mode="say"] .glrp-body[data-glrp-open="aside"]::before,
+.chat-message.glrp-msg[data-glrp-mode="say"] .glrp-body[data-glrp-close="aside"]::after,
+.glrp-line[data-glrp-mode="say"] .glrp-line-txt[data-glrp-open="aside"]::before,
+.glrp-line[data-glrp-mode="say"] .glrp-line-txt[data-glrp-close="aside"]::after { content: none; }
+
+/* ── the "…" over a token whose player is writing ───────────────────────── */
+.glrp-typing {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  gap: 4px;
+  padding: 6px 9px;
+  border-radius: 10px 10px 10px 3px;
+  background: var(--glrp-glass);
+  backdrop-filter: blur(calc(10px * var(--gl-glass-k)));
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.12), var(--glrp-drop);
+  transform-origin: 0 100%;
+  transform: translate(-30%, -70%) scale(var(--glrp-scale, 1));
+  will-change: translate;
+}
+/* The pill is placed by its own transform, which a rising entrance would overwrite. */
+.glrp-typing.glrp-enter { animation-name: gl-fade-in; }
+.glrp-typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gl-text-bright);
+  animation: gl-breathe var(--gl-d-cinematic) var(--gl-ease-inout) infinite both;
+}
+.glrp-typing i:nth-child(2) { animation-delay: calc(var(--gl-d-cinematic) / -3 * 2); }
+.glrp-typing i:nth-child(3) { animation-delay: calc(var(--gl-d-cinematic) / -3); }
+
+/* ── Thai in the serif ─────────────────────────────────────────────────────
+   Cormorant has no Thai, so a Thai word in a Do, Think or Narrator line is
+   set in the sans companion (`--gl-thai`), whose x-height is a quarter taller.
+   `font-size-adjust` brings it level with the serif on the same line. It sits
+   down here because every rule above sets the `font` shorthand, which resets
+   it. */
+#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-glrp-mode="narrator"]) > .editor-container .editor-content,
+textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-glrp-mode="narrator"]),
+.chat-message.glrp-msg:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-glrp-mode="narrator"]) .glrp-body,
+.glrp-bub[data-glrp-mode="think"] .glrp-balloon-txt,
+.glrp-cap-line,
+.glrp-line:is([data-glrp-mode="do"], [data-glrp-mode="think"]) .glrp-line-txt,
+.glrp-line--narr .glrp-line-txt {
+  font-size-adjust: ex-height from-font;
 }
 
 /* ── arriving and leaving ──────────────────────────────────────────────── */

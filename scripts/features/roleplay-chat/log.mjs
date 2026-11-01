@@ -11,8 +11,8 @@
  */
 
 import { rpModeOf } from "../../core/rp-mode.mjs";
-import { I18N, isInCharacter } from "./model.mjs";
-import { leadHTML, logHeadHTML, oocTagHTML } from "./render.mjs";
+import { I18N, hasAsides, isInCharacter, quoteEdges } from "./model.mjs";
+import { leadHTML, lineHTML, logHeadHTML, oocTagHTML } from "./render.mjs";
 import { identityOf } from "./identity.mjs";
 
 const loc = (key) => game.i18n.localize(key);
@@ -50,6 +50,50 @@ export function restyleMessage(message, html) {
   content.classList.add("glrp-body");
   if (mode === "do") content.innerHTML = leadHTML(who.name, content.innerHTML.trim());
   else trimEdges(content);
+  if (mode === "say") markAsides(content);
+}
+
+/**
+ * Sets a Say line's `*asides*` apart, in place. Only text nodes are rewritten, so links, enrichers and
+ * anything else bound to the body survive; an aside that straddles markup is left as typed. The quote
+ * marks around each aside, and the line's own outer marks, follow `asideRuns` / `quoteEdges`.
+ */
+export function markAsides(el) {
+  if (!hasAsides(el.textContent)) return;
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (hasAsides(node.textContent) && !node.parentElement?.closest("a, code, pre, .glrp-aside")) nodes.push(node);
+  }
+  if (!nodes.length) return;
+  for (const node of nodes) {
+    const t = document.createElement("template");
+    t.innerHTML = lineHTML("say", node.textContent);
+    node.replaceWith(t.content);
+  }
+  // Each aside's marks are decided across the whole body, not the text node it came from: in
+  // "<b>Hold!</b> *draws* <b>Run!</b>" the words either side live in other elements.
+  const runs = textRuns(el);
+  runs.forEach((run, i) => {
+    if (!run.aside || runs[i - 1]?.aside === run.aside) return;
+    let last = i;
+    while (runs[last + 1]?.aside === run.aside) last += 1;
+    run.aside.toggleAttribute("data-closes", runs[i - 1]?.aside === null);
+    run.aside.toggleAttribute("data-opens", runs[last + 1]?.aside === null);
+  });
+  const edges = quoteEdges(runs.map((run) => ({ aside: Boolean(run.aside) })));
+  if (!edges.opens) el.dataset.glrpOpen = "aside";
+  if (!edges.closes) el.dataset.glrpClose = "aside";
+}
+
+/** The body's visible text nodes in order, each with the aside it sits in, or null. */
+function textRuns(el) {
+  const runs = [];
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node.textContent.trim()) runs.push({ aside: node.parentElement?.closest(".glrp-aside") ?? null });
+  }
+  return runs;
 }
 
 /**

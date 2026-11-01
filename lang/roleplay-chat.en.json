@@ -53,6 +53,8 @@
   "GLRP.settings.overlays.hint": "Show in-character lines over the speaker's token and in the caption lane on this screen. The chat log is unaffected.",
   "GLRP.settings.streamBubbles.name": "Bubbles on the stream",
   "GLRP.settings.streamBubbles.hint": "Also draw bubbles and captions on the stream login. Off by default, because the stream's chat overlay already shows each line as a card.",
+  "GLRP.settings.typing.name": "Typing indicator",
+  "GLRP.settings.typing.hint": "Show a \"…\" over a token while its player writes an in-character line. Nothing is shown for a whisper, a hidden token or the Narrator, and the indicator carries no text.",
 
   "GLRP.keys.toggle.name": "Roleplay Chat: out of character / in character",
   "GLRP.keys.toggle.hint": "Switch the chat box between out of character and in character. Works while typing.",

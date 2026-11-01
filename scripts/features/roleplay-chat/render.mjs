@@ -11,7 +11,7 @@
  */
 
 import { escapeHTML } from "../../core/util.mjs";
-import { leadJoint } from "./model.mjs";
+import { asideRuns, leadJoint, quoteEdges } from "./model.mjs";
 
 const esc = (value) => escapeHTML(value ?? "");
 
@@ -24,12 +24,36 @@ export function avatarHTML({ img, name, cls = "glrp-avatar" }) {
   return `<span class="${cls} glrp-mono" aria-hidden="true">${esc(initial)}</span>`;
 }
 
+/**
+ * Plain text for an overlay, escaped, with a Say line's `*asides*` set apart as actions. Only Say has
+ * asides: a Do line is all action already, and in a thought the stars are the writer's own emphasis.
+ */
+export function lineHTML(mode, text) {
+  if (mode !== "say") return esc(text);
+  return asideRuns(String(text ?? "")).map((run) => (run.aside ? asideHTML(run) : esc(run.text))).join("");
+}
+
+/** One aside. `data-closes` / `data-opens`: words before / after it, where a quoted line draws a mark. */
+export function asideHTML(run) {
+  return `<span class="glrp-aside"${run.closes ? " data-closes" : ""}${run.opens ? " data-opens" : ""}>${esc(run.text)}</span>`;
+}
+
+/** The attributes a quoted Say line takes when it starts or ends on an aside rather than on words. */
+export function quoteEdgeAttrs(mode, text) {
+  if (mode !== "say") return "";
+  const edges = quoteEdges(asideRuns(String(text ?? "")));
+  return `${edges.opens ? "" : " data-glrp-open=\"aside\""}${edges.closes ? "" : " data-glrp-close=\"aside\""}`;
+}
+
 /** The speaker's name in bold, then the rest of a Do line. */
 export function leadHTML(name, restHTML) {
   return `<b class="glrp-lead">${esc(name)}</b>${leadJoint(restHTML)}${restHTML}`;
 }
 
 /* ── the switch ────────────────────────────────────────────────────────────── */
+
+/** One glyph per delivery, so the three read apart at a glance and without colour. */
+export const SUB_ICONS = Object.freeze({ say: "fa-comment", do: "fa-hand", think: "fa-cloud" });
 
 /**
  * The composer bar that sits above Foundry's chat box.
@@ -54,7 +78,8 @@ export function barHTML(s, L) {
   // Narrator speaks in one voice; the Say / Do / Think row is a character's.
   const subs = ic && !s.speaker?.narrator
     ? `<div class="glrp-seg glrp-sub" role="group" aria-label="${esc(L.subLabel)}">${["say", "do", "think"]
-      .map((m) => `<button type="button" class="glrp-seg-btn" data-glrp-action="sub" data-glrp-sub="${m}" aria-pressed="${s.sub === m}">${esc(L.sub[m])}</button>`)
+      .map((m) => `<button type="button" class="glrp-seg-btn" data-glrp-action="sub" data-glrp-sub="${m}" aria-pressed="${s.sub === m}">`
+        + `<i class="glrp-ico fa-solid ${SUB_ICONS[m]}" aria-hidden="true"></i>${esc(L.sub[m])}</button>`)
       .join("")}</div>`
     : "";
   return `<div class="glrp-row">${segs}${chip}${picker}</div>${subs}`;
@@ -127,7 +152,7 @@ export function oocTagHTML(label) {
  */
 export function bubbleLineHTML({ mode, name, text }) {
   if (mode === "do") return `<div class="glrp-cap-line">${leadHTML(name, esc(text))}</div>`;
-  return `<div class="glrp-balloon"><span class="glrp-balloon-who">${esc(name)}</span><span class="glrp-balloon-txt">${esc(text)}</span></div>`;
+  return `<div class="glrp-balloon"><span class="glrp-balloon-who">${esc(name)}</span><span class="glrp-balloon-txt">${lineHTML(mode, text)}</span></div>`;
 }
 
 /** What hangs under a stack of balloons: a tail for Say, two puffs for Think. */
@@ -137,10 +162,15 @@ export function bubbleTailHTML(mode) {
   return "";
 }
 
+/** The "…" over a token while its player is writing in character. Carries no text at all. */
+export function typingHTML() {
+  return `<div class="glrp-typing" aria-hidden="true"><i></i><i></i><i></i></div>`;
+}
+
 /** A line in the caption lane at the bottom of the screen. */
 export function laneLineHTML({ mode, name, img, text }) {
   if (mode === "narrator") return `<div class="glrp-line glrp-line--narr"><div class="glrp-line-txt">${esc(text)}</div></div>`;
-  const txt = mode === "do" ? leadHTML(name, esc(text)) : esc(text);
+  const txt = mode === "do" ? leadHTML(name, esc(text)) : lineHTML(mode, text);
   const who = mode === "do" ? "" : `<div class="glrp-line-who">${esc(name)}</div>`;
-  return `<div class="glrp-line">${avatarHTML({ img, name, cls: "glrp-line-art" })}<div class="glrp-line-body">${who}<div class="glrp-line-txt">${txt}</div></div></div>`;
+  return `<div class="glrp-line">${avatarHTML({ img, name, cls: "glrp-line-art" })}<div class="glrp-line-body">${who}<div class="glrp-line-txt"${quoteEdgeAttrs(mode, text)}>${txt}</div></div></div>`;
 }

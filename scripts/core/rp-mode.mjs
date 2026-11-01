@@ -53,3 +53,74 @@ export function rpModeFlags(mode) {
   if (!RP_MODES.includes(mode)) throw new Error(`Unknown roleplay mode: ${mode}`);
   return { [SUITE_ID]: { rp: { mode } } };
 }
+
+/* ── asides ────────────────────────────────────────────────────────────────── */
+
+/**
+ * `*draws her blade*` inside a spoken line is an action, not words: "Hold the line! *draws her blade*
+ * Run!" Roleplay Chat's log, bubble and caption lane and the stream's text card all set it apart from
+ * what is said, so the rule lives here beside the mode it belongs to. The message keeps the stars as
+ * typed, so nothing is lost on a client without either feature.
+ *
+ * A star pair holds at least one non-space character, no newline and no markup, and `**` is never an
+ * aside. A star touching a Latin letter or a digit on its outside is arithmetic, not an aside: "2*3*4".
+ * Thai runs words together, so a Thai letter beside a star does not count against it.
+ */
+const ASIDE = /(?<![A-Za-z0-9*])\*(?!\*)([^*\n<>]*[^*\s<>][^*\n<>]*)\*(?![A-Za-z0-9*])/g;
+
+/**
+ * A line cut into what is said and what is done, in order. Said pieces keep their spacing; an aside's
+ * own text is trimmed.
+ *
+ * @returns {{aside: boolean, text: string}[]}
+ */
+export function splitAsides(text) {
+  const source = typeof text === "string" ? text : "";
+  const parts = [];
+  let at = 0;
+  for (const match of source.matchAll(ASIDE)) {
+    if (match.index > at) parts.push({ aside: false, text: source.slice(at, match.index) });
+    parts.push({ aside: true, text: match[1].trim() });
+    at = match.index + match[0].length;
+  }
+  if (at < source.length) parts.push({ aside: false, text: source.slice(at) });
+  return parts.length ? parts : [{ aside: false, text: source }];
+}
+
+/** True when a line holds an aside. */
+export function hasAsides(text) {
+  return splitAsides(text).some((part) => part.aside);
+}
+
+/**
+ * The pieces as they are laid out. The spaces either side of an aside are dropped, because each
+ * renderer spaces an aside itself (in a quoted line the space belongs outside the quote mark it closes:
+ * “Hold the line!” draws her blade “Run!”), and said pieces left blank are dropped. On an aside,
+ * `closes` means words come just before it and `opens` that words come just after it: the quote marks a
+ * quoted line draws around the aside. A line that starts or ends on an aside has no outer mark there.
+ *
+ * @returns {{aside: boolean, text: string, closes?: boolean, opens?: boolean}[]}
+ */
+export function asideRuns(text) {
+  const parts = splitAsides(text);
+  if (!parts.some((part) => part.aside)) return parts;
+  const runs = [];
+  parts.forEach((part, i) => {
+    if (part.aside) return runs.push({ ...part });
+    let said = part.text;
+    if (parts[i - 1]?.aside) said = said.trimStart();
+    if (parts[i + 1]?.aside) said = said.trimEnd();
+    if (said) runs.push({ aside: false, text: said });
+  });
+  runs.forEach((run, i) => {
+    if (!run.aside) return;
+    run.closes = runs[i - 1]?.aside === false;
+    run.opens = runs[i + 1]?.aside === false;
+  });
+  return runs;
+}
+
+/** Whether a quoted line opens and closes on words (true) or on an aside (false). */
+export function quoteEdges(runs) {
+  return { opens: runs[0]?.aside !== true, closes: runs[runs.length - 1]?.aside !== true };
+}

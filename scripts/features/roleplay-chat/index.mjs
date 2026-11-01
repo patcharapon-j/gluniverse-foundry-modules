@@ -21,6 +21,7 @@ import { cycle, mountComposer, render, scheduleRender, toggle } from "./composer
 import { onChatMessage, registerThinkCommand } from "./send.mjs";
 import { restyleMessage } from "./log.mjs";
 import { overlay } from "./overlay.mjs";
+import { listenTyping } from "./typing.mjs";
 import { claimChange, renderSection } from "./panel.mjs";
 import * as Model from "./model.mjs";
 
@@ -64,6 +65,7 @@ Suite.register({
     Hooks.on("createChatMessage", (message) => overlay.show(message));
     Hooks.on("deleteChatMessage", (message) => overlay.forget(message.id));
     Hooks.on("canvasTearDown", () => overlay.clearTokens());
+    listenTyping();
 
     registerPanelSection({ id: FEATURE_ID, order: 30, render: renderSection, change: claimChange, gmOnly: true });
     render();

@@ -12,9 +12,42 @@ thought can be shown without anyone saying it aloud.
 ## What the player sees
 
 **The switch.** A bar above the chat box: `OOC | In character`, the speaker chip,
-and, in character, `Say | Do | Think`. The box is tinted by the mode, and Do and
-Think are typed in the narrated serif italic, so the line reads in the voice it
-will appear in before it is sent. Under the box, a hint names the two keys.
+and, in character, `Say | Do | Think`, each with its own icon and hue (Say blue,
+Do gold, Think violet). The pressed delivery is filled with its hue and the bar
+carries a hue line along its top. Under the box, a hint names the two keys.
+
+**The box** takes the shape of what is being written, so the mode reads at a
+glance without colour too:
+
+| Mode | Box |
+| --- | --- |
+| Say | A rounded balloon with a tail |
+| Do | A square stage direction with a heavy rule down its left side |
+| Think | A dashed cloud with two puffs |
+| Narrator | A plain tinted box |
+| OOC | Foundry's own box, with a quiet border |
+
+In character, a header inside the box names who is speaking and how ("SERI VALEN
+· SAYS"), and the box sets the line the way the log will print it: Say between
+quotation marks, Do after the speaker's bold name, Do and Think in the narrated
+serif italic. Nothing is drawn while the box is empty, so the marks never sit
+beside Foundry's placeholder. The header and the name are custom properties the
+composer sets on the box (`--glrp-head`, `--glrp-speaker`).
+
+**Asides.** Inside a Say line, `*draws her blade*` is an action rather than
+words: "Hold the line! *draws her blade* Run!" prints as “Hold the line!” *draws
+her blade* “Run!”, with the aside in the narrated voice and the Do hue. It works
+in the log, on the bubble, in the caption lane and on the stream card. The rule is
+`splitAsides` / `asideRuns` in `core/rp-mode.mjs`: a star pair holding at least
+one non-space character, no newline and no markup; `**` is never an aside, and a
+star touching a Latin letter or digit on its outside is arithmetic ("2*3*4").
+Thai beside a star still counts, because Thai runs words together. Stars in a
+thought or a Do line are left as typed. The message stores the stars, so nothing
+is lost on a client without the feature.
+
+**Typing.** While a player writes an in-character line, a small "…" pill sits on
+their token's top-right corner for everyone who can see that token, and leaves
+when the line arrives. See [Privacy](#privacy) for what it carries.
 
 | Key | Does |
 | --- | --- |
@@ -78,7 +111,10 @@ The flag is `flags["gluniverse-foundry-modules"].rp.mode`, read and written only
 through `core/rp-mode.mjs` (`rpModeOf`, `rpModeFlags`), which accepts both the
 nested and the dotted shape. A Do line is stored **without** the speaker's name
 at its front (typing "Seri draws her blade" stores "draws her blade"); the name
-is put back by every renderer, so it is never doubled.
+is put back by every renderer, so it is never doubled. Thai runs words together,
+so a Thai name typed straight onto a Thai line ("น้ำฝนหยิบแผนที่") is cut too. The
+limit is a short Thai name that is also the start of a longer word: a speaker
+named "น้ำ" writing "น้ำฝนตก" loses "น้ำ".
 
 Every message is created with `chatBubble: false`. Foundry otherwise draws its
 own bubble for an IC message from the client that receives it, which would put
@@ -105,13 +141,38 @@ token's `playersCanSeeName` and the system's name visibility setting. Elsewhere
 it reads the token's display name: Hover and Always are readable, anything else
 is hidden. GMs always see the real name, with a small mark beside it.
 
+**The typing indicator** carries a scene id and a token id over the suite socket
+and nothing else: no text, no name. It is still a claim about somebody, so a
+receiver draws it only when the server's attested sender (`meta.attested`) is a
+GM or owns the token's actor, and only over a token that viewer can see
+(`acceptTyping`). A writer announces nothing for a whisper or a blind line, a
+hidden token, the Narrator, OOC or a slash command (`shouldAnnounceTyping`). It
+pings at most every 2.5 s while text is in the box and says it stopped when the
+box empties, the line is sent or the mode leaves character; a receiver drops a
+pill after 6.5 s without a ping, so a client that closes mid-sentence leaves
+nothing behind. It follows the same switches as bubbles (the client's own
+**Bubbles and captions**, and the stream login's suppression), and the world
+setting **Typing indicator** (`rp.typing`, on by default) turns it off for
+everyone.
+
 ## The stream
 
 A line from this feature becomes a stream chat card through the shared reader,
 `stream-cards/text/read-text.js`, described in [STREAM.md](STREAM.md#plain-rolls-and-chat-text).
 Say is speech, Do an emote, Think its own `thought` row, Narrator a narration
 card on the speech row, OOC out of character (off by default). The card takes the
-mode's tone colour from `styles/roleplay-chat.css`.
+mode's tone colour from `styles/roleplay-chat.css`. A spoken line's asides ride
+the card model as `text.runs` and are built as `.glus-rc-aside` spans through
+text nodes, never markup.
+
+**Thai.** The suite bundles the Thai subset of Google Sans (`--gl-thai`, see
+DESIGN_SYSTEM.md rule 7) and every stack here names it straight after its Latin
+face. Cormorant has no Thai, so a Thai word in a serif line comes from Google
+Sans, brought level with the serif's x-height by `font-size-adjust: ex-height
+from-font`. That property is reset by the `font` shorthand, so its rules sit after
+the ones that set the font. Names that clip (`overflow: hidden` on a tight line
+box) are given room for Thai tone marks above the line. On the stream, a short
+line is set larger (`quoteSize`), counting Thai stacked marks as no width.
 
 On the stream login itself, bubbles and captions are **off** unless the GM turns
 on **Bubbles on the stream** (`rp.streamBubbles`, a world setting, in the Control
@@ -121,7 +182,7 @@ with both shows it twice. The section is GM only.
 ## Files
 
 ```
-scripts/core/rp-mode.mjs                 the mode flag: names, reader, writer
+scripts/core/rp-mode.mjs                 the mode flag and the aside rule
 scripts/features/roleplay-chat/
   index.mjs        adapter and lifecycle
   constants.mjs    ids, setting keys, hooks, CSS names
@@ -134,7 +195,8 @@ scripts/features/roleplay-chat/
   composer.mjs     the bar, the hint, the box's keys
   send.mjs         intercepting a typed line, /think
   log.mjs          the chat log entry
-  overlay.mjs      bubbles, captions, the lane
+  overlay.mjs      bubbles, captions, the lane, the typing pill
+  typing.mjs       the typing indicator's socket, both ends
   panel.mjs        the Control Room section
 scripts/features/stream-cards/text/read-text.js   PURE: the shared text reader
 styles/roleplay-chat.css
@@ -176,6 +238,24 @@ moves; a token that becomes hidden hides its bubble on the next frame.
 **The leave animation is timed in JS.** A line is removed `LEAVE_MS` after it
 starts leaving, which must cover `--gl-d-glide`. The check compares the two.
 
+**Foundry clips the chat box.** `#chat-message` is `overflow: hidden` at a fixed
+height, so the Say tail and the Think puffs are drawn inside the box's own bottom
+padding, not hung below it. The box's content is absolutely placed inside its
+container, so the header moves it down with `top`, never padding: a padded line
+would scroll under the header.
+
+**An empty box is `<p><br></p>`.** The in-box quotes and Do name are drawn only
+when the box is not that, or they sit beside Foundry's placeholder, and a mark
+drawn after the paragraph's break lands on a line of its own.
+
+**The typing pill is placed by its own transform.** `.glrp-enter`'s rising
+entrance animates `transform`, which would overwrite it; the pill fades in
+instead.
+
+**`font-size-adjust` is inherited as a number.** An aside's adjust is computed
+from the serif and inherited by its quote marks, which shrinks them on the sans;
+the marks reset it.
+
 ## Validation
 
 ```bash
@@ -186,7 +266,9 @@ Zero problems required. It imports the pure modules under Node and pins: purity
 and nothing at import; the styles, flags and filter rows agreeing across
 `rp-mode`, the model, `read-text` and the chat filter; message building, slash
 parsing, the composer cycle and speaker resolution; privacy and routing; timing,
-stacking and `LEAVE_MS`; key matching; that every markup string is escaped and
+stacking and `LEAVE_MS`; key matching; Thai names on Do lines; the aside rule
+and its quote edges; the composer's header, icons and in-box marks; the typing
+indicator's announce and accept rules and its socket shape; that every markup string is escaped and
 every class it emits has a rule; the CSS rules of the design system; every
 literal and dynamic `GLRP.*` key; and the wiring (`module.json`, the feature
 index, the GM-only panel section, off by default).

@@ -121,6 +121,34 @@
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
+/* ── Thai companion — Google Sans, Thai subset only ──
+   No suite face carries Thai, so a Thai line used to fall through to
+   whatever the OS had (Leelawadee UI, Tahoma), at the wrong weight and with a
+   faked slant in every italic. Google Sans is Google Sans Flex's own family
+   with a Thai design and true italics. Only the Thai range is declared, so the
+   family is invisible to Latin text: it can sit in any stack (`--gl-thai`,
+   gl-tokens.css) and only ever answers for Thai.
+
+   wght 400–700, normal + italic. */
+@font-face {
+  font-family: "Google Sans";
+  src: url("../assets/fonts/google-sans/GoogleSans-thai.woff2") format("woff2-variations"),
+       url("../assets/fonts/google-sans/GoogleSans-thai.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC;
+}
+@font-face {
+  font-family: "Google Sans";
+  src: url("../assets/fonts/google-sans/GoogleSans-Italic-thai.woff2") format("woff2-variations"),
+       url("../assets/fonts/google-sans/GoogleSans-Italic-thai.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC;
+}
+
 /* Archivo — wght 100–900, wdth 62–125. */
 @font-face {
   font-family: "Archivo";

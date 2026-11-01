@@ -45,6 +45,14 @@ export function registerSettings() {
     type: Boolean,
     default: false
   });
+  game.settings.register(SUITE_ID, SETTINGS.typing, {
+    name: "GLRP.settings.typing.name",
+    hint: "GLRP.settings.typing.hint",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
+  });
 }
 
 /**
@@ -95,6 +103,7 @@ export const getGmPin = () => sanitizePin(read(SETTINGS.gmPin));
 export const setGmPin = (pin) => game.settings.set(SUITE_ID, SETTINGS.gmPin, sanitizePin(pin) ?? {});
 export const overlaysOn = () => read(SETTINGS.overlays) !== false;
 export const streamBubblesOn = () => read(SETTINGS.streamBubbles) === true;
+export const typingOn = () => read(SETTINGS.typing) !== false;
 
 /** The world switch, written by a GM only. Anybody else gets the stored value back. */
 export async function setStreamBubbles(on) {

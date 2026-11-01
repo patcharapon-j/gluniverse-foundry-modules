@@ -1,6 +1,7 @@
 import { remove } from "../../stream/motion/engine.js";
 import { crackRenderer } from "../fx/crack-renderer.js";
 import { isFocus, placement } from "../framing/focus-math.js";
+import { quoteSize } from "../text/read-text.js";
 import {
   CSS_SNAP,
   CSS_UNFOLD,
@@ -425,7 +426,26 @@ export class RollCard {
   buildQuote(text) {
     const quote = el("div", "glus-rc-quote");
     quote.dataset.style = text?.style ?? "speech";
-    quote.textContent = text?.body ?? "";
+    quote.dataset.size = quoteSize(text?.body);
+    const runs = Array.isArray(text?.runs) ? text.runs : null;
+    if (!runs) {
+      quote.textContent = text?.body ?? "";
+      return quote;
+    }
+    // A spoken line with `*asides*`: the words stay quoted, each aside sits between the marks.
+    for (const run of runs) {
+      if (!run.aside) {
+        quote.append(document.createTextNode(run.text));
+        continue;
+      }
+      const aside = el("span", "glus-rc-aside");
+      aside.textContent = run.text;
+      if (run.closes) aside.dataset.closes = "";
+      if (run.opens) aside.dataset.opens = "";
+      quote.append(aside);
+    }
+    if (runs[0]?.aside) quote.dataset.open = "aside";
+    if (runs[runs.length - 1]?.aside) quote.dataset.close = "aside";
     return quote;
   }
 

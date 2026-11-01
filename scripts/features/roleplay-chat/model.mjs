@@ -198,6 +198,13 @@ export function visibilityMode(coreMode, override) {
  *
  * Only a name at the very start of the markup is cut: one wrapped in a tag is left exactly as typed.
  *
+ * Thai puts no space between words, so "น้ำฝนหยิบแผนที่" is the name and then the action. A Thai name
+ * followed straight on by Thai counts as the whole name when the next character starts a new syllable
+ * (a consonant or a leading vowel). A mark or vowel that belongs to the name's last syllable never does:
+ * "ก" is not the name at the start of "กา". Thai gives no surer sign than that, so a short name that is
+ * also the start of a longer word (a speaker called น้ำ writing "น้ำฝน…") is cut there; a space after the
+ * name, or no name at all, avoids it.
+ *
  * @returns {{body: string, matched: "full"|"first"|null}}
  */
 export function stripLeadName(name, html) {
@@ -212,7 +219,7 @@ export function stripLeadName(name, html) {
       if (body.length < spelled.length) continue;
       if (body.slice(0, spelled.length).toLowerCase() !== spelled.toLowerCase()) continue;
       const rest = body.slice(spelled.length);
-      if (rest && !BOUNDARY.test(rest)) continue;
+      if (rest && !BOUNDARY.test(rest) && !thaiJoin(spelled, rest)) continue;
       return { body: rest.replace(/^(?:\s|&nbsp;| )+/, ""), matched: kind };
     }
   }
@@ -222,6 +229,11 @@ export function stripLeadName(name, html) {
 /** What may follow a name for it to be the whole name: the end, a space, punctuation or a possessive. */
 const BOUNDARY = /^(?:\s|&nbsp;| |[.,;:!?…'’)\]-]|<br)/i;
 
+/** A Thai name running straight into Thai that starts a new syllable: a consonant or a leading vowel. */
+function thaiJoin(name, rest) {
+  return /[ก-๎]$/.test(name) && /^[ก-ฮเ-ไ]/.test(rest);
+}
+
 /** The joint between the bold name and the rest of a Do line: none before punctuation or a possessive. */
 export function leadJoint(rest) {
   return /^[.,;:!?…'’)\]]/.test(typeof rest === "string" ? rest : "") ? "" : " ";
@@ -229,6 +241,63 @@ export function leadJoint(rest) {
 
 function escapeText(text) {
   return text.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+}
+
+/* ── asides in a Say line ──────────────────────────────────────────────────── */
+
+// `*draws her blade*` in a Say line. The rule is shared with the stream card, so it lives in core.
+export { asideRuns, hasAsides, quoteEdges, splitAsides } from "../../core/rp-mode.mjs";
+
+/* ── the composer's head ───────────────────────────────────────────────────── */
+
+/**
+ * The line across the top of the chat box in character: who is speaking and how, written the way the
+ * log heads it ("Seri Valen · Says"). The Narrator's is just its label. Out of character there is none:
+ * the box is the author talking.
+ */
+export function composerHead({ mode, name, label }) {
+  if (!isInCharacter(mode)) return "";
+  if (mode === "narrator" || !name) return String(label ?? "");
+  return `${name} · ${label ?? ""}`;
+}
+
+/* ── typing ────────────────────────────────────────────────────────────────── */
+
+/**
+ * The "…" over a token while its player writes a line in character.
+ *
+ * It says that somebody is about to speak and nothing about what, so it carries no text and no mode.
+ * It is still a claim about the fiction, so it only goes out for a line that will be public, from a
+ * speaker with a token on the scene that is not hidden: a GM writing as a hidden creature, or anybody
+ * whispering, would otherwise tell the table that something it cannot see is about to talk.
+ *
+ * `ping` is how often a writer re-announces while still typing; `expire` is how long a viewer keeps the
+ * dots up without hearing again, so a writer who walks away leaves nothing behind.
+ */
+export const TYPING = Object.freeze({ ping: 2500, expire: 6500 });
+
+/**
+ * Whether this client announces that it is typing.
+ * @param {object} p
+ * @param {string} p.mode          the composer's mode
+ * @param {string} p.visibility    from `visibilityMode`; only "public" announces
+ * @param {{hidden: boolean}|null} p.token   the speaker's token on the viewed scene
+ * @param {string} p.text          what is in the box, as plain text
+ */
+export function shouldAnnounceTyping({ mode, visibility, token, text }) {
+  if (!isInCharacter(mode) || mode === "narrator") return false;
+  if (visibility !== "public" || !token || token.hidden) return false;
+  const typed = typeof text === "string" ? text.trim() : "";
+  // A slash command is somebody rolling, whispering or running a macro, not speaking.
+  return typed.length > 0 && !typed.startsWith("/");
+}
+
+/**
+ * Whether a viewer honours a typing announcement: from a user the server attests, who may speak for
+ * that token (its owner, or a GM), about a token this viewer can see.
+ */
+export function acceptTyping({ attested, senderIsGM, senderOwns, tokenVisible }) {
+  return Boolean(attested) && (Boolean(senderIsGM) || Boolean(senderOwns)) && Boolean(tokenVisible);
 }
 
 /* ── building the message ──────────────────────────────────────────────────── */
