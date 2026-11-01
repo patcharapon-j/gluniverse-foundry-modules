@@ -1723,7 +1723,11 @@ the name at its front and every renderer puts it back.
 the hook acts only while an Enter in the box has armed it. Lines are created with
 `chatBubble: false`, or Foundry draws its own bubble beside this one, for viewers
 this feature refused. `/think` is a real `CHAT_COMMANDS` entry so a macro can use
-it.
+it. The typing indicator (`typing.mjs`) carries a scene and a token id only, and
+is drawn only on the server's attested sender owning that token (or being a GM);
+a whisper, a hidden token and the Narrator announce nothing. `*asides*` in a Say
+line are one rule in `core/rp-mode.mjs` (`splitAsides` / `asideRuns`) shared with
+the stream card, which builds them from text nodes, never markup.
 
 **The bar must read over anything.** A collapsed sidebar moves the box into
 `#chat-notifications`, a grid with no background, over the canvas; the bar and

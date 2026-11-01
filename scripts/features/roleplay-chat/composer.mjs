@@ -17,6 +17,7 @@ import {
   bindingMatches,
   chooseIc,
   chooseSub,
+  composerHead,
   composerMode,
   cssString,
   cycleSub,
@@ -27,6 +28,7 @@ import { barHTML, hintHTML } from "./render.mjs";
 import { bindingsFor, getComposer, setComposer } from "./settings.mjs";
 import { currentSpeaker, pick, pickerModel } from "./speaker.mjs";
 import { armSend } from "./send.mjs";
+import { noteTyping, stop as stopTyping } from "./typing.mjs";
 
 const loc = (key) => game.i18n.localize(key);
 
@@ -65,6 +67,7 @@ export function mountComposer(element) {
   if (hint.previousElementSibling !== el) el.after(hint);
   if (!wired.has(el)) {
     el.addEventListener("keydown", onKeyDown, { capture: true });
+    el.addEventListener("input", onInput);
     wired.add(el);
   }
   render();
@@ -127,18 +130,41 @@ export function render() {
   input.dataset.glrpMode = mode;
   const placeholder = game.i18n.format(I18N.placeholder(mode), { name: speaker?.name ?? "" });
   if (input instanceof HTMLTextAreaElement) input.placeholder = placeholder;
-  else input.style.setProperty("--chat-message-placeholder", cssString(placeholder));
+  else {
+    input.style.setProperty("--chat-message-placeholder", cssString(placeholder));
+    // The box's header ("SERI VALEN · SAYS") and the name a Do line will open with.
+    input.style.setProperty("--glrp-head", cssString(composerHead({ mode, name: speaker?.name, label: loc(I18N.label(mode)) })));
+    input.style.setProperty("--glrp-speaker", cssString(speaker?.name ?? ""));
+  }
   Hooks.callAll(HOOKS.composerChanged, { mode, speaker: speaker ? { kind: speaker.kind, name: speaker.name } : null });
+  // A switch to OOC mid-sentence, or to another speaker, moves or takes down the "…".
+  noteTyping({ mode, speaker, text: boxText() });
+}
+
+/** What is in the box right now, as text. */
+function boxText() {
+  if (!input) return "";
+  if (input instanceof HTMLTextAreaElement) return input.value;
+  return input.querySelector(".editor-content")?.textContent ?? "";
+}
+
+function onInput() {
+  const speaker = currentSpeaker();
+  noteTyping({ mode: composerMode(getComposer(), speaker?.kind ?? null), speaker, text: boxText() });
 }
 
 /** Put the box back as Foundry made it (the feature switched off without a reload). */
 export function unmountComposer() {
+  stopTyping();
   bar?.remove();
   hint?.remove();
   if (input) {
     delete input.dataset.glrpMode;
     input.style.setProperty("--chat-message-placeholder", cssString(loc("CHAT.EnterMessage")));
+    input.style.removeProperty("--glrp-head");
+    input.style.removeProperty("--glrp-speaker");
     input.removeEventListener("keydown", onKeyDown, { capture: true });
+    input.removeEventListener("input", onInput);
     wired.delete(input);
   }
   bar = hint = input = null;
@@ -170,6 +196,7 @@ function onKeyDown(event) {
   }
   if (event.key === "Enter" && !event.shiftKey) {
     armSend();
+    stopTyping();
     return;
   }
   const match = (action) => bindingsFor(action).some((binding) => bindingMatches(event, binding));

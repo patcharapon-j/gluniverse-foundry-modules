@@ -625,12 +625,21 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   }
   // The serif is for narrated text only. On a number it turns the card's one
   // glanceable value into prose; the sans carries every total, die, DC and value.
+  // An aside inside a spoken line (`*draws her blade*`) is narration too.
   for (const m of cssBody.matchAll(/([^{}]+)\{[^}]*var\(--glus-serif\)/g)) {
     const selectors = m[1].split(",").map((s) => s.trim()).filter(Boolean);
     for (const sel of selectors) {
-      if (!/^\.glus-rc-quote\[data-style="(emote|thought|narration)"\]$/.test(sel)) {
-        fail(`styles/stream-cards.css: "${sel}" is set in the serif — the serif is for the emote, thought and narration quotes only`);
+      if (!/^\.glus-rc-quote\[data-style="(emote|thought|narration)"\]$/.test(sel) && sel !== ".glus-rc-aside") {
+        fail(`styles/stream-cards.css: "${sel}" is set in the serif — the serif is for the emote, thought and narration quotes and a spoken line's asides only`);
       }
+    }
+  }
+  // Asides are built from text nodes, never markup: a chat body is any client's markup.
+  {
+    const rc = strip(read("scripts/features/stream-cards/cards/roll-card.js"));
+    const build = rc.match(/buildQuote\(text\)\s*\{([\s\S]*?)\n  \}/)?.[1] ?? "";
+    if (!/glus-rc-aside/.test(build) || /innerHTML/.test(build)) {
+      fail("roll-card.js buildQuote: asides must be built as .glus-rc-aside spans through textContent / text nodes, never innerHTML");
     }
   }
   for (const style of ["emote", "thought", "narration"]) {

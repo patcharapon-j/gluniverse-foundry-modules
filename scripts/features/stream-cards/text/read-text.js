@@ -23,7 +23,7 @@
  * here fills it back in — the card shows "Unknown" through `nameKey` instead, with the art kept.
  */
 
-import { rpModeOf } from "../../../core/rp-mode.mjs";
+import { asideRuns, hasAsides, rpModeOf } from "../../../core/rp-mode.mjs";
 
 /**
  * Foundry's chat styles, and the label each one headlines with.
@@ -59,6 +59,32 @@ export const RP_TEXT = Object.freeze({
 
 /** A quote longer than this is cut: the card is a glance, and it has three lines to give. */
 export const MAX_QUOTE = 240;
+
+/**
+ * How big a quote is set, by how long it reads. A two-word line set at the size a three-line paragraph
+ * needs is a small grey smudge on a card built for numerals, so the shorter the line the larger it is
+ * drawn. The card's height never changes: each step's line clamp times its size fits the same strip
+ * (`styles/stream-cards.css`, `.glus-rc-quote[data-size]`).
+ *
+ * `max` is in visible characters: Thai vowel and tone marks stack on the consonant before them and take
+ * no width of their own, so counting them would set a Thai line a step smaller than the same line in
+ * English.
+ */
+export const QUOTE_SIZES = Object.freeze([
+  Object.freeze({ size: "xs", max: 14 }),
+  Object.freeze({ size: "s", max: 32 }),
+  Object.freeze({ size: "m", max: 72 }),
+  Object.freeze({ size: "l", max: Infinity })
+]);
+
+/** Thai marks that sit above or below the consonant before them. */
+const THAI_STACKED = /[ัิ-ฺ็-๎]/g;
+
+/** The size step a quote is set at: xs, s, m or l. */
+export function quoteSize(body) {
+  const visible = String(body ?? "").replace(THAI_STACKED, "").replace(/\s+/g, " ").trim().length;
+  return QUOTE_SIZES.find((step) => visible <= step.max).size;
+}
 
 /** The name a narrator line shows when its message somehow carries no alias. */
 const NARRATOR_FALLBACK = "Narrator";
@@ -121,7 +147,7 @@ export function playersSeeDisplayName(displayName) {
  * @param {object} [context]
  * @param {object|null} [context.actor]      the reader's identity for the speaker; `name: null` = hidden
  * @param {string|null} [context.authorName] the posting user, the last name a speaker falls back to
- * @returns {{actor: object, action: object, text: {body: string, style: string}, tone: string|null, fx: null}|null}
+ * @returns {{actor: object, action: object, text: {body: string, style: string, runs?: object[]}, tone: string|null, fx: null}|null}
  *   null when the line is not public, nobody typed it, or there is nothing in it.
  *
  * A speaker with no actor behind it — a player typing with nothing selected — still has a name, so the
@@ -140,10 +166,12 @@ export function readText(raw, { actor = null, authorName = null } = {}) {
   if (style.narrator) identity = { name: alias || NARRATOR_FALLBACK, isNpc: false, img: null, imgKind: "portrait", focus: null };
   else if (base.name === null) identity = { ...base, name: null, nameKey: "Unknown" };
   else identity = { ...base, name: base.name || alias || authorName || "" };
+  // `*draws her blade*` in a spoken line is an action (`core/rp-mode.mjs`); the card sets it apart.
+  const runs = style.name === "speech" && hasAsides(body) ? asideRuns(body) : null;
   return {
     actor: identity,
     action: { label: null, labelKey: style.key, sub: null, map: 0 },
-    text: { body, style: style.name },
+    text: runs ? { body, style: style.name, runs } : { body, style: style.name },
     tone: style.tone ?? null,
     fx: null
   };

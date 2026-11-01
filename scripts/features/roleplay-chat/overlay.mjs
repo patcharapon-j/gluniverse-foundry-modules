@@ -18,6 +18,7 @@ import { isConfiguredStreamUser } from "../stream/settings.js";
 import { CSS } from "./constants.mjs";
 import {
   STACK,
+  TYPING,
   canView,
   isInCharacter,
   lifetimeMs,
@@ -27,7 +28,7 @@ import {
   routeLine,
   textOf
 } from "./model.mjs";
-import { bubbleLineHTML, bubbleTailHTML, laneLineHTML } from "./render.mjs";
+import { bubbleLineHTML, bubbleTailHTML, laneLineHTML, typingHTML } from "./render.mjs";
 import { identityOf, viewsAsAudience } from "./identity.mjs";
 import { overlaysOn, streamBubblesOn } from "./settings.mjs";
 
@@ -45,6 +46,8 @@ class Overlay {
   lane = null;
   /** `${tokenId}:${place}` → { tokenId, place, mode, el, stackEl, lines: [{ id, el, timer }] } */
   stacks = new Map();
+  /** tokenId → { el, timer }: the "…" over a token whose player is writing. */
+  typers = new Map();
   laneLines = [];
   #tick = null;
 
@@ -53,6 +56,8 @@ class Overlay {
   show(message) {
     const mode = rpModeOf(message?.flags);
     if (!isInCharacter(mode)) return;
+    // The line has arrived: the "…" that announced it has done its job.
+    if (message.speaker?.token) this.typing(message.speaker.token, false);
     const canRead = canView({
       whisper: message.whisper,
       blind: message.blind,
@@ -87,6 +92,34 @@ class Overlay {
     for (const line of this.laneLines.filter((l) => l.id === messageId)) this.#dropLaneLine(line);
   }
 
+  /**
+   * The "…" over a token, up or down. Whoever sent it has already been checked (`typing.mjs`); every
+   * ping restarts the expiry, so a writer who vanishes mid-sentence takes theirs down by themselves.
+   */
+  typing(tokenId, on) {
+    const current = this.typers.get(tokenId);
+    if (!on) {
+      if (!current) return;
+      clearTimeout(current.timer);
+      this.typers.delete(tokenId);
+      this.#leave(current.el);
+      this.#listen();
+      return;
+    }
+    if (current) {
+      clearTimeout(current.timer);
+      current.timer = setTimeout(() => this.typing(tokenId, false), TYPING.expire);
+      return;
+    }
+    this.#mount();
+    const el = parse(typingHTML());
+    el.classList.add("glrp-enter");
+    this.layer.append(el);
+    this.typers.set(tokenId, { el, timer: setTimeout(() => this.typing(tokenId, false), TYPING.expire) });
+    this.#listen();
+    this.#place();
+  }
+
   /** The canvas went away (scene change, teardown): tokens' lines go with it. The lane stays. */
   clearTokens() {
     for (const stack of [...this.stacks.values()]) {
@@ -94,6 +127,11 @@ class Overlay {
       stack.el.remove();
     }
     this.stacks.clear();
+    for (const typer of this.typers.values()) {
+      clearTimeout(typer.timer);
+      typer.el.remove();
+    }
+    this.typers.clear();
     this.#listen();
   }
 
@@ -246,10 +284,11 @@ class Overlay {
 
   #listen() {
     const ticker = canvas?.app?.ticker;
-    if (this.stacks.size && !this.#tick && ticker) {
+    const busy = this.stacks.size > 0 || this.typers.size > 0;
+    if (busy && !this.#tick && ticker) {
       this.#tick = () => this.#place();
       ticker.add(this.#tick);
-    } else if (!this.stacks.size && this.#tick) {
+    } else if (!busy && this.#tick) {
       ticker?.remove(this.#tick);
       this.#tick = null;
     }
@@ -270,6 +309,18 @@ class Overlay {
       stack.el.style.visibility = "";
       stack.el.style.translate = `${Math.round(p.x)}px ${Math.round(p.y)}px`;
       stack.el.style.setProperty("--glrp-scale", scale.toFixed(3));
+    }
+    for (const [tokenId, typer] of this.typers) {
+      const token = canvas.tokens?.get(tokenId);
+      // Over the token's top-right corner, clear of the balloon that will replace it.
+      if (!token || !token.visible) {
+        typer.el.style.visibility = "hidden";
+        continue;
+      }
+      const p = canvas.stage.worldTransform.apply({ x: token.x + (token.w ?? 0), y: token.y });
+      typer.el.style.visibility = "";
+      typer.el.style.translate = `${Math.round(rect.left + p.x)}px ${Math.round(rect.top + p.y)}px`;
+      typer.el.style.setProperty("--glrp-scale", scale.toFixed(3));
     }
   }
 }

@@ -238,6 +238,12 @@ Use `--gl-display` (headings, hero numerals, chrome) and `--gl-tech`
 (micro-labels, readouts, tabular numerals). Both faces are bundled and
 offline-safe; **no stylesheet may add a `@font-face` or a network `@import`**.
 
+Thai has its own token, `--gl-thai` (Google Sans, declared for the Thai range
+only). It is already inside `--gl-display` and `--gl-tech`. A feature stack that
+names a Latin face directly, like the Cormorant serif in Roleplay Chat and the
+stream cards, puts `var(--gl-thai)` straight after it. Leave it out and Thai
+falls through to the OS font, with a faked slant in every italic.
+
 Foundry styles `h1–h6, button, input, select, textarea, a, label` at element
 level, which beats an inherited `font-family`. Any feature root that sets a font
 must also carry `.gl-type` (or replicate its reset), or those controls silently

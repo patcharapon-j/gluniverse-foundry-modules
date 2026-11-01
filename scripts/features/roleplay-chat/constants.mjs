@@ -20,7 +20,9 @@ export const SETTINGS = Object.freeze({
   /** client · bubbles and captions on this screen. */
   overlays: `${PREFIX}overlays`,
   /** world · bubbles and captions on the stream login too (the stream card already shows the line). */
-  streamBubbles: `${PREFIX}streamBubbles`
+  streamBubbles: `${PREFIX}streamBubbles`,
+  /** world · the "…" over a token while its player writes in character. */
+  typing: `${PREFIX}typing`
 });
 
 export const KEYBINDINGS = Object.freeze({

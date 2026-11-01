@@ -156,8 +156,12 @@
   --gl-glass-k: 1;
 
   /* ── Typography ── faces are declared once in gl-fonts.css ── */
-  --gl-display: "Oxanium", "Segoe UI", system-ui, sans-serif;
-  --gl-tech: "Bahnschrift", "JetBrains Mono", "Share Tech Mono", Consolas, monospace;
+  /* The Thai companion. Declared for the Thai range only, so it answers for
+     Thai and nothing else; put it straight after the Latin face in any stack
+     a player's words can reach, sans or serif. */
+  --gl-thai: "Google Sans";
+  --gl-display: "Oxanium", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
+  --gl-tech: "Bahnschrift", "JetBrains Mono", var(--gl-thai), "Share Tech Mono", Consolas, monospace;
 
   /* ── Silhouette ── the notched-corner signature ──
      Three rungs, because the cut has to stay proportional to the thing it cuts:

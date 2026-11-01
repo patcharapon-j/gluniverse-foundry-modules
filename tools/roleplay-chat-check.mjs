@@ -192,6 +192,95 @@ eq(lead("", "Bram nods"), "Bram nods", "no speaker name: nothing cut");
 eq(lead("Bram", lead("Bram", "Bram Bram nods")), "nods", "cutting twice is the writer's own doing, never ours: buildMessage cuts once");
 eq(M.leadJoint("'s eyes"), "", "no space before a possessive");
 eq(M.leadJoint("draws"), " ", "a space before a word");
+// Thai runs words together, so a Thai name typed onto the front of a Thai line is still the name.
+eq(lead("น้ำฝน", "น้ำฝนหยิบแผนที่ขึ้นมาดู"), "หยิบแผนที่ขึ้นมาดู", "a Thai name glued to a Thai line is cut");
+eq(lead("น้ำฝน", "น้ำฝน พยักหน้า"), "พยักหน้า", "a Thai name with a space is cut");
+eq(lead("Seri", "Seriหยิบดาบ"), "Seriหยิบดาบ", "a Latin name glued to Thai is not cut: only Thai joins Thai");
+eq(lead("ก", "กา"), "กา", "a consonant whose vowel follows is not a name boundary");
+
+/* ── asides in a Say line ────────────────────────────────────────────────── */
+const parts = (t) => M.splitAsides(t).map((p) => (p.aside ? `[${p.text}]` : p.text)).join("|");
+eq(parts("Hold the line! *draws her blade* Run!"), "Hold the line! |[draws her blade]| Run!", "an aside in the middle");
+eq(parts("*smiles*"), "[smiles]", "a line that is all aside");
+eq(parts("ถอย*ชักดาบ*ไป"), "ถอย|[ชักดาบ]|ไป", "Thai beside the stars still makes an aside");
+eq(parts("2*3*4"), "2*3*4", "arithmetic is not an aside");
+eq(parts("**bold**"), "**bold**", "a double star is not an aside");
+eq(parts("a ** b"), "a ** b", "an empty pair is not an aside");
+eq(parts("*  *"), "*  *", "a blank pair is not an aside");
+eq(parts("*one\ntwo*"), "*one\ntwo*", "an aside never crosses a line");
+eq(M.hasAsides("no stars"), false, "hasAsides on plain words");
+{
+  const runs = M.asideRuns("Hold the line! *draws her blade* Run!");
+  eq(runs.map((r) => r.text), ["Hold the line!", "draws her blade", "Run!"], "asideRuns trims the spaces around an aside");
+  eq([runs[1].closes, runs[1].opens], [true, true], "an aside between words closes and reopens the quote");
+  eq(M.quoteEdges(runs), { opens: true, closes: true }, "a line of words opens and closes on words");
+  const lead2 = M.asideRuns("*sighs* Fine.");
+  eq([lead2[0].closes, lead2[0].opens], [false, true], "a leading aside only reopens");
+  eq(M.quoteEdges(lead2), { opens: false, closes: true }, "a line starting on an aside has no opening mark");
+  eq(M.quoteEdges(M.asideRuns("*smiles*")), { opens: false, closes: false }, "a line of one aside has no marks at all");
+}
+ok(R.bubbleLineHTML({ mode: "say", name: "S", text: "Go! *runs*" }).includes(`<span class="glrp-aside" data-closes>runs</span>`), "bubbleLineHTML: a Say aside is not set apart");
+ok(!R.bubbleLineHTML({ mode: "think", name: "S", text: "*why*" }).includes("glrp-aside"), "bubbleLineHTML: stars in a thought are the writer's emphasis, not an aside");
+ok(/data-glrp-close="aside"/.test(R.laneLineHTML({ mode: "say", name: "S", img: null, text: "Go! *runs*" })), "laneLineHTML: a Say line ending on an aside still draws its closing mark");
+ok(/markAsides\(/.test(sources["log.mjs"]) && !/\b(content|el)\.innerHTML\s*=\s*lineHTML/.test(sources["log.mjs"]) && /createTreeWalker\(/.test(sources["log.mjs"]), "log.mjs: asides are not marked, or the body is re-parsed rather than its text nodes rewritten");
+{
+  const { readText } = await import(new URL("../scripts/features/stream-cards/text/read-text.js", import.meta.url));
+  const say = readText({ style: 2, content: "Hold! *draws* Run!", flags: rpModeFlags("say"), whisper: [] }, { actor: { name: "Seri" } });
+  eq(say?.text?.runs?.map((r) => r.aside), [false, true, false], "readText: a spoken line carries its asides to the stream card");
+  const thought = readText({ style: 2, content: "*why*", flags: rpModeFlags("think"), whisper: [] }, { actor: { name: "Seri" } });
+  eq("runs" in (thought?.text ?? {}), false, "readText: a thought carries no asides");
+}
+
+/* ── the composer's head ─────────────────────────────────────────────────── */
+eq(M.composerHead({ mode: "say", name: "Seri Valen", label: "Says" }), "Seri Valen · Says", "the head names who and how");
+eq(M.composerHead({ mode: "narrator", name: "Narrator", label: "Narrator" }), "Narrator", "the Narrator's head is one word");
+eq(M.composerHead({ mode: "ooc", name: "Seri", label: "OOC" }), "", "OOC has no head");
+ok(/--glrp-head/.test(sources["composer.mjs"]) && /--glrp-head/.test(cssBare), "composer: the box's head is not wired to the stylesheet");
+ok(/--glrp-speaker/.test(sources["composer.mjs"]) && /var\(--glrp-speaker/.test(cssBare), "composer: the Do line's name prefix is not wired to the stylesheet");
+// The in-box preview must not draw beside Foundry's placeholder: it is shown only on a non-empty box.
+for (const m of cssBare.matchAll(/([^{}]+)\{[^}]*content:\s*(?:"\\201[CD]"|var\(--glrp-speaker)/g)) {
+  if (!/#chat-message/.test(m[1])) continue;
+  ok(/:not\(:has\(\.editor-content > p:only-child > br:only-child\)\)/.test(m[1]), `roleplay-chat.css: an in-box mark draws on an empty box: ${m[1].trim().slice(0, 80)}`);
+}
+{
+  const L0 = { sub: { say: "Say", do: "Do", think: "Think" }, source: {} };
+  for (const sub of M.SUB_MODES) ok(new RegExp(`data-glrp-sub="${sub}"[^>]*>\\s*<i class="glrp-ico fa-solid ${R.SUB_ICONS[sub]}"`).test(R.barHTML({ mode: sub, canIc: true, sub, speaker: { name: "S" } }, L0)), `barHTML: ${sub} has no icon`);
+}
+ok(new Set(Object.values(R.SUB_ICONS)).size === M.SUB_MODES.length, "SUB_ICONS: two deliveries share a glyph");
+// A hue set under a selector list holding #chat-message outweighs `[data-glrp-mode]`: the box goes grey.
+for (const m of cssBare.matchAll(/([^{}]+)\{[^}]*--glrp-hue\s*:/g)) {
+  if (/:is\([^)]*#chat-message/.test(m[1])) fail(`roleplay-chat.css: --glrp-hue is set under ${m[1].trim().slice(0, 60)}…, whose ID weight beats every mode hue`);
+}
+
+/* ── typing indicator ────────────────────────────────────────────────────── */
+const typing = (o) => M.shouldAnnounceTyping({ mode: "say", visibility: "public", token: { hidden: false }, text: "Hold", ...o });
+eq(typing({}), true, "a public Say line over a visible token announces");
+eq(typing({ mode: "do" }), true, "so does Do");
+eq(typing({ mode: "ooc" }), false, "OOC never announces");
+eq(typing({ mode: "narrator" }), false, "the Narrator has no token to type over");
+eq(typing({ visibility: "gm" }), false, "a whisper to the GM never announces");
+eq(typing({ visibility: "blind" }), false, "nor a blind line");
+eq(typing({ token: { hidden: true } }), false, "a hidden token never announces");
+eq(typing({ token: null }), false, "no token, nothing to type over");
+eq(typing({ text: "   " }), false, "an empty box announces nothing");
+eq(typing({ text: "/roll 1d20" }), false, "a slash command is not a line");
+const accept = (o) => M.acceptTyping({ attested: true, senderIsGM: false, senderOwns: true, tokenVisible: true, ...o });
+eq(accept({}), true, "an owner's attested ping over a visible token");
+eq(accept({ attested: false }), false, "an unattested ping is refused");
+eq(accept({ senderOwns: false }), false, "a ping over somebody else's token is refused");
+eq(accept({ senderOwns: false, senderIsGM: true }), true, "a GM may type over any token");
+eq(accept({ tokenVisible: false }), false, "a token this viewer cannot see shows no pill");
+ok(M.TYPING.expire > M.TYPING.ping * 2, "TYPING: a pill expires before two pings are missed");
+{
+  const t = strip(read(`${FEATURE}/typing.mjs`));
+  ok(/meta\?\.attested/.test(t) && /acceptTyping\(/.test(t), "typing.mjs: a ping is honoured without the server's attested sender");
+  ok(/shouldAnnounceTyping\(/.test(t), "typing.mjs: announces without shouldAnnounceTyping");
+  ok(!/\b(text|body|name|content)\s*:/.test(t.match(/emitSocket\([^)]*\)/g)?.join("") ?? ""), "typing.mjs: a ping carries text or a name — it carries a scene and a token only");
+  ok(/validate:/.test(t), "typing.mjs: the socket handler takes payloads unvalidated");
+  ok(/typing\(.*false\)/.test(sources["overlay.mjs"]) && /speaker\?\.token/.test(sources["overlay.mjs"]), "overlay.mjs: a line's arrival does not take its token's pill down");
+  ok(/typers\.size/.test(sources["overlay.mjs"]), "overlay.mjs: the ticker stops while a pill is still up, so it never follows its token");
+}
+ok(/\.glrp-typing\.glrp-enter\s*\{[^}]*gl-fade-in/.test(cssBare), "roleplay-chat.css: the pill's entrance would overwrite the transform that places it");
 
 /* ── privacy and routing ─────────────────────────────────────────────────── */
 // canView mirrors Foundry's ChatMessage#isContentVisible for a message with no rolls.
@@ -300,7 +389,10 @@ ok(/glrp-sub/.test(R.barHTML({ mode: "do", canIc: true, sub: "do", speaker: { na
     R.logHeadHTML({ mode: "narrator", name: "N", label: "Narrator" }),
     R.oocTagHTML("OOC"),
     R.hintHTML({ canIc: true, toggle: "Alt+Q", cycle: "Alt+W" }, L),
-    R.avatarHTML({ img: "a.webp", name: "A" })
+    R.avatarHTML({ img: "a.webp", name: "A" }),
+    R.typingHTML(),
+    R.lineHTML("say", "a *b* c"),
+    R.barHTML({ mode: "say", canIc: true, sub: "say", speaker: { name: "S" } }, L)
   ].join("");
   const emitted = new Set([...allMarkup.matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/)).filter((c) => c.startsWith("glrp-")));
   const glue = Object.values(sources).join("\n");
