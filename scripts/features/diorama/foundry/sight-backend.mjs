@@ -38,6 +38,7 @@ import { distToQ } from "../terrain/model.mjs";
 import { creatureHeightDist, eyeQ } from "../rules/creature.mjs";
 import { SIZE_HEIGHT } from "../constants.mjs";
 import { activeContext, t } from "./context.mjs";
+import { tokenLevelId } from "../terrain/levels.mjs";
 
 /** A light sits at least this far above the ground under it (q). */
 const LIGHT_LIFT_Q = 1;
@@ -71,11 +72,13 @@ export function polygonEyeQ(poly, live) {
   const type = poly?.config?.type;
   if (type !== "sight" && type !== "light") return null;
   const { terrain, grid } = live;
+  // Heights are in the Level's own frame: absolute elevations lose its base.
+  const baseQ = Number(live.baseQ) || 0;
   const doc = poly.config.source?.object?.document;
-  if (type === "sight" && isTokenDoc(doc)) return eyeQ(doc, grid);
+  if (type === "sight" && isTokenDoc(doc)) return eyeQ(doc, grid) - baseQ;
   const o = poly.origin ?? {};
   const ground = terrain.groundAt(o.x ?? 0, o.y ?? 0, grid.size);
-  const own = distToQ(Number(o.elevation) || 0, grid.distance);
+  const own = distToQ(Number(o.elevation) || 0, grid.distance) - baseQ;
   return Math.max(own, ground + LIGHT_LIFT_Q);
 }
 
@@ -201,7 +204,7 @@ export function createHeightSweepClass(Base, { Edge, Vertex, context }) {
           const { terrain, grid } = live;
           const ox = ray.A?.x ?? this.origin.x, oy = ray.A?.y ?? this.origin.y;
           const bx = ray.B?.x ?? destination.x, by = ray.B?.y ?? destination.y;
-          const zB = distToQ(Number(destination?.elevation ?? this.origin.elevation) || 0, grid.distance);
+          const zB = distToQ(Number(destination?.elevation ?? this.origin.elevation) || 0, grid.distance) - (Number(live.baseQ) || 0);
           const at = (s) => rayPoint(ox + (bx - ox) * s, oy + (by - oy) * s, eye + (zB - eye) * s, grid.size);
           const s = rayBlocked(terrain, at(tMin), at(tMax));
           if (s !== null) {
@@ -224,10 +227,11 @@ export function createHeightSweepClass(Base, { Edge, Vertex, context }) {
   };
 }
 
+/** The polygon's own Level (PointSourcePolygon#level, config.level ??= canvas.level). */
 function defaultContext(poly) {
-  let scene;
-  try { scene = poly.scene; } catch { return null; }
-  return activeContext(scene);
+  let scene, level;
+  try { scene = poly.scene; level = poly.level ?? poly.config?.level ?? null; } catch { return null; }
+  return activeContext(scene, level?.id ?? level);
 }
 
 let _cls = null;
@@ -269,7 +273,9 @@ function testLOSWrapper(wrapped, visionSource, mode, target, test) {
   const src = visionSource?.object?.document;
   if (!isTokenDoc(tgt) || !isTokenDoc(src)) return wrapped(visionSource, mode, target, test);
   if (visionSource.level !== test.level) return wrapped(visionSource, mode, target, test);
-  const live = activeContext(src.parent);
+  // Same Level (Foundry's own cross-Level test is left to Foundry): that Level's ground.
+  const lvl = visionSource.level ?? test.level ?? null;
+  const live = activeContext(src.parent, lvl?.id ?? lvl ?? tokenLevelId(src));
   if (!live || !visionSource.los) return wrapped(visionSource, mode, target, test);
 
   // Foundry caches only on its own angle-constrained branch; keep that.
@@ -279,8 +285,8 @@ function testLOSWrapper(wrapped, visionSource, mode, target, test) {
     if (c !== undefined) return c;
   }
   let has = false;
-  const eye = eyeQ(src, live.grid);
-  const foot = Number(tgt.elevation) || 0;
+  const eye = eyeQ(src, live.grid) - (Number(live.baseQ) || 0);
+  const foot = (Number(tgt.elevation) || 0) - (Number(live.base) || 0);
   const h = creatureHeightDist(tgt.actor ?? null, tgt);
   if (targetInClearLine(live, eye, visionSource.origin, test.point, foot, h)) {
     const cfg = { ...visionSource.los.config };

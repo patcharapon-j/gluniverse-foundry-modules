@@ -432,18 +432,31 @@ export function shadowSoftCanvas() {
 }
 
 /**
- * One mote of landing dust: a soft white disc with a slightly denser core,
- * tinted and faded by its material. Clean and round, never photographic grain.
+ * The landing-dust mote's two tones, as [offset, r, g, b, alpha] with the
+ * colour a 0..1 multiplier on the material's tint. The core is darker and a
+ * little warmer than the tint, so a puff reads on pale stone; the rim is the
+ * tint at full value, so it reads on dark earth. It is a shading ramp, not a
+ * colour: the hue still comes from the palette through the material.
+ */
+export const DUST_RAMP = [
+  [0, 0.44, 0.39, 0.33, 0.85],
+  [0.45, 0.58, 0.53, 0.46, 0.7],
+  [0.75, 0.95, 0.93, 0.9, 0.3],
+  [1, 1, 1, 1, 0],
+];
+
+/**
+ * One mote of landing dust: a soft disc with a darker warm core and a lighter
+ * rim (DUST_RAMP), tinted and faded by its material. Clean and round, never
+ * photographic grain.
  */
 export function dustCanvas() {
   if (!hasDom()) return null;
   const c = canvas(64, 64);
   const g = c.getContext("2d");
   const grad = g.createRadialGradient(32, 32, 0, 32, 32, 31);
-  grad.addColorStop(0, "rgba(255,255,255,0.95)");
-  grad.addColorStop(0.45, "rgba(255,255,255,0.82)");
-  grad.addColorStop(0.75, "rgba(255,255,255,0.32)");
-  grad.addColorStop(1, "rgba(255,255,255,0)");
+  const b = (v) => Math.round(v * 255);
+  for (const [o, r, gr, bl, a] of DUST_RAMP) grad.addColorStop(o, `rgba(${b(r)},${b(gr)},${b(bl)},${a})`);
   g.fillStyle = grad;
   g.fillRect(0, 0, 64, 64);
   return c;

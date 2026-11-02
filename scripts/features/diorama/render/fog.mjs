@@ -31,6 +31,8 @@
  *   .group
  *   .setGridSize(px)
  *   .setVision(canvas|null)           the vision bake (R visible, G explored), world-space
+ *   .setGround(fn) / .refreshTop()    (i, j) → a cell's top (cells): the backdrop's box
+ *                                     stands over the highest SEEN ground only
  *   .frame(dt, fx) → bool             true while the clouds drift
  *   .dispose()
  */
@@ -48,6 +50,15 @@ export const FOG_BLUR = 0.75;
 /** The floor of the bank over the highest ground it covers, and the step between sheets (cells). */
 export const FOG_FLOOR = 0.06;
 export const FOG_STEP = 0.26;
+/**
+ * The edge of sight (the soft map's B channel, fogEdge): the unseen grown by
+ * FOG_EDGE_GROW and softened over FOG_EDGE_SOFT (cells), so the mist reaches its
+ * full colour AT the hard line where the ground stops being drawn, however
+ * narrow the unseen patch is. The wide blur (FOG_BLUR) alone never gets there
+ * over a thin wedge behind a pillar, and the ground then ends in a hard dark cut.
+ */
+export const FOG_EDGE_GROW = 0.25;
+export const FOG_EDGE_SOFT = 0.2;
 /** Cells the fog drifts down the wind per TIMING.fogDrift (glsl.mjs dioFogNoise FOG_DRIFT_CELLS). */
 export const FOG_DRIFT_CELLS = 3;
 const MAX_SIDE = 2048;
@@ -149,6 +160,74 @@ export function fogCoverage(rgba, vw, vh, cols, rows, taps = FOG_RAY_TAPS) {
   return { data, width: w, height: h, reach };
 }
 
+/**
+ * The soft map's edge channel: how near a texel is to ground nobody has seen,
+ * 0..255. The never-seen (255 − G) is grown by `grow` texels (a square max
+ * filter: more mist, never less) then softened by two box blurs of `soften`
+ * texels. Only ever widens the unseen, so it cannot show anything the bake hides.
+ * @param {Uint8ClampedArray|Uint8Array} rgba  the bake drawn down to the soft map's size
+ * @returns {Uint8ClampedArray} one byte a texel
+ */
+export function fogEdge(rgba, w, h, grow, soften) {
+  const n = w * h;
+  let a = new Uint8ClampedArray(n);
+  for (let k = 0; k < n; k++) a[k] = 255 - rgba[k * 4 + 1];
+  // one pass along each row (dx) or column, by a running window (max or mean)
+  const pass = (src, r, along, op) => {
+    if (r <= 0) return src;
+    const out = new Uint8ClampedArray(n);
+    const lines = along ? h : w, len = along ? w : h;
+    const at = along ? (l, i) => l * w + i : (l, i) => i * w + l;
+    for (let l = 0; l < lines; l++) {
+      for (let i = 0; i < len; i++) {
+        const i0 = Math.max(0, i - r), i1 = Math.min(len - 1, i + r);
+        let v = 0;
+        if (op === "max") { for (let q = i0; q <= i1; q++) { const s = src[at(l, q)]; if (s > v) v = s; } }
+        else { for (let q = i0; q <= i1; q++) v += src[at(l, q)]; v /= i1 - i0 + 1; }
+        out[at(l, i)] = v;
+      }
+    }
+    return out;
+  };
+  a = pass(pass(a, grow, true, "max"), grow, false, "max");
+  for (let k = 0; k < 2; k++) a = pass(pass(a, soften, true, "mean"), soften, false, "mean");
+  return a;
+}
+
+/**
+ * The cells the party has seen any of (one byte a cell, 1 seen): the cells that
+ * hold an explored bake pixel. Never widened, so no unseen cell is counted.
+ * @returns {Uint8Array} cols × rows, row-major
+ */
+export function fogSeenCells(rgba, vw, vh, cols, rows) {
+  const out = new Uint8Array(Math.max(1, cols * rows));
+  const cx = new Int32Array(vw);
+  for (let x = 0; x < vw; x++) cx[x] = Math.min(cols - 1, Math.floor((x * cols) / vw));
+  for (let y = 0; y < vh; y++) {
+    const cy = Math.min(rows - 1, Math.floor((y * rows) / vh)) * cols, row = y * vw;
+    for (let x = 0; x < vw; x++) if (rgba[(row + x) * 4 + 1] > 127) out[cy + cx[x]] = 1;
+  }
+  return out;
+}
+
+/**
+ * The highest ground the party has seen (cells), the top of the mist backdrop's
+ * box: -Infinity when they have seen none. Unseen ground is never read, so the
+ * box cannot stand as tall as a tower hidden in it.
+ * @param {Uint8Array} seen   fogSeenCells
+ * @param {(i:number, j:number) => number} cellTop   a cell's top, cells (row i, column j)
+ */
+export function fogSeenTop(seen, cols, rows, cellTop) {
+  let top = -Infinity;
+  if (!seen || typeof cellTop !== "function") return top;
+  for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
+    if (!seen[i * cols + j]) continue;
+    const h = Number(cellTop(i, j));
+    if (Number.isFinite(h) && h > top) top = h;
+  }
+  return top;
+}
+
 /** Cells between two vertices of the bank for a board this size. */
 export function fogCell(cols, rows) {
   return Math.max(1, Math.ceil(Math.max(cols, rows, 1) / FOG_MAX_SIDE));
@@ -225,6 +304,13 @@ export class FogLayer {
     this.cover = this.backdrop.material.uniforms.uFogCover;
     this._noCover = this.cover.value;
     this.coverTexture = null;
+    // the box's top: the highest ground seen (fogSeenTop), written each frame
+    this.top = this.backdrop.material.uniforms.uFogTop;
+    /** (i, j) → a cell's top (cells), the drawn ground; the renderer sets it. */
+    this.cellTop = null;
+    this._seenCells = null;
+    this._seenDims = [0, 0];
+    this._seenTop = -Infinity;
     this.backdrop.name = "dio.fog.backdrop";
     this.backdrop.frustumCulled = false;
     this.backdrop.raycast = () => {};
@@ -239,6 +325,22 @@ export class FogLayer {
   }
 
   setGridSize(px) { this.gridSize = px || 100; }
+
+  /**
+   * Where the ground is, for the backdrop's height: (i, j) → a cell's top in
+   * cells. Called again when the terrain changes.
+   * @param {((i:number, j:number) => number)|null} fn
+   */
+  setGround(fn) {
+    this.cellTop = typeof fn === "function" ? fn : null;
+    this.refreshTop();
+  }
+
+  /** The highest seen ground, from the last bake's seen cells and the ground. */
+  refreshTop() {
+    const [c, r] = this._seenDims;
+    this._seenTop = this._seenCells ? fogSeenTop(this._seenCells, c, r, this.cellTop) : -Infinity;
+  }
 
   /** Rebuild the bank's quads when the board's size changes. */
   fitBoard() {
@@ -281,10 +383,22 @@ export class FogLayer {
     g.imageSmoothingEnabled = true;
     g.filter = "none";
     g.drawImage(vision, 0, 0, w, h);
+    // B: the edge of sight, from the bake as drawn down (before the wide blur)
+    let edge = null;
+    try {
+      edge = fogEdge(g.getImageData(0, 0, w, h).data, w, h,
+        Math.max(1, Math.round(FOG_EDGE_GROW * ppc)), Math.max(1, Math.round(FOG_EDGE_SOFT * ppc)));
+    } catch (e) { edge = null; }
     if ("filter" in g) {
       g.filter = `blur(${(FOG_BLUR * ppc).toFixed(2)}px)`;
       g.drawImage(vision, 0, 0, w, h);
       g.filter = "none";
+    }
+    if (edge) {
+      const img = g.getImageData(0, 0, w, h);
+      const d = img.data;
+      for (let k = 0; k < edge.length; k++) d[k * 4 + 2] = edge[k];
+      g.putImageData(img, 0, 0);
     }
     if (!this.texture) {
       const t = new THREE.CanvasTexture(c);
@@ -316,11 +430,18 @@ export class FogLayer {
         g = tmp.getContext("2d");
         g.drawImage(vision, 0, 0);
       }
-      cov = fogCoverage(g.getImageData(0, 0, vw, vh).data, vw, vh, Math.max(1, cols), Math.max(1, rows));
+      const px = g.getImageData(0, 0, vw, vh).data;
+      const C = Math.max(1, Math.round(cols)), R = Math.max(1, Math.round(rows));
+      cov = fogCoverage(px, vw, vh, Math.max(1, cols), Math.max(1, rows));
+      this._seenCells = fogSeenCells(px, vw, vh, C, R);
+      this._seenDims = [C, R];
     } catch (e) {
       console.warn("GLUniverse Suite | diorama: fog coverage fell back to the whole board", e);
       cov = { data: new Uint8Array([255]), width: 1, height: 1 };
+      // nothing known to be seen: the box stays on the lowest ground
+      this._seenCells = null;
     }
+    this.refreshTop();
     let t = this.coverTexture;
     if (!t || t.image.width !== cov.width || t.image.height !== cov.height) {
       t?.dispose();
@@ -354,6 +475,10 @@ export class FogLayer {
     this.backdrop.visible = on;
     const s = this.shared.uFogStyle.value;
     s.x = on ? 1 : 0;
+    // the box's top: the highest SEEN ground, inside the board's own range; none seen, the lowest
+    const hr = this.shared.uHeightRange?.value;
+    const lo = hr ? hr.x : 0, hi = hr ? hr.y : 1;
+    this.top.value = Number.isFinite(this._seenTop) ? Math.min(hi, Math.max(lo, this._seenTop)) : lo;
     // the clock ticks once per TIMING.fogDrift; the shader moves FOG_DRIFT_CELLS per tick
     const drift = this.animated(fx);
     if (drift) this._t += (dt * 1000) / TIMING.fogDrift;

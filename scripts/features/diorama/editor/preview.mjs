@@ -21,6 +21,10 @@ import { Surfaces } from "../../../core/gl-surfaces.mjs";
 import { CAMERA, SETTINGS, WALL_MATERIALS, yawStride } from "../constants.mjs";
 import { backgroundSrc, loadBackground } from "./sample.mjs";
 import { resolveProps, propStates } from "../terrain/props.mjs";
+import { levelsOf, levelBaseQ, shiftTerrain, shiftPropStates, isMultiLevel } from "../terrain/levels.mjs";
+import { stackPlan } from "../view/levels.mjs";
+import { loadFloors, stackProps, wallsOnLevel } from "../view/level-view.mjs";
+import { Q_PER_CELL } from "../constants.mjs";
 
 export const PREVIEW_ID = "gldio-editor-preview";
 /** Terrain re-feed coalescing while a stroke is in progress (ms). Not an animation. */
@@ -161,7 +165,12 @@ function PreviewApp() {
       if (!this._Renderer) { this.#message("GLDIO.editor.preview.unavailable"); return; }
       if (!this.rendered) return;
       this.#message("GLDIO.editor.preview.loading");
-      this._img = await loadBackground(backgroundSrc(this.editor.scene)).catch(() => null);
+      this._img = await loadBackground(backgroundSrc(this.editor.scene, this.editor.levelId)).catch(() => null);
+      // A multi-Level scene: the floors below the edited one, as the view stacks them.
+      this._plan = isMultiLevel(this.editor.scene) ? stackPlan(levelsOf(this.editor.scene), this.editor.levelId, { gm: true }) : null;
+      this._floors = this._plan?.below.length
+        ? await loadFloors(this._plan, this.editor.scene, this.editor.grid.sceneRect).catch(() => [])
+        : [];
       if (!this.rendered) return;
       this.#message(null);
       try {
@@ -204,8 +213,15 @@ function PreviewApp() {
       r.setOverlays?.({});
       r.setOptions?.({ tiltShift: false, cutaway: true, ghosts: false });
       this.r = r;
+      r.setLevels?.(this._floors ?? []);
       this.#syncTerrain();
       this.#syncWalls();
+      // Look at the edited floor, not the table: its ground sits at its Level's base.
+      const baseQ = this.#baseQ();
+      if (baseQ && !this._cam.target) {
+        const sr = g.sceneRect;
+        this._cam = { ...this._cam, target: { x: sr.x + sr.width / 2, y: sr.y + sr.height / 2, zQ: baseQ } };
+      }
       r.setCamera(this._cam, { animate: false });
       this.#resize();
     }
@@ -240,15 +256,30 @@ function PreviewApp() {
       if (!this.r || !this.session) return;
       // A copy: the renderer may hold on to what it is handed, the draft keeps changing.
       const ground = this.session.terrain.clone();
-      this.r.setTerrain(ground);
+      // The draft is in its Level's frame; the view draws it at the Level's base
+      // (0 in a one-Level scene, where nothing below changes).
+      const dq = this.#baseQ();
+      this.r.setTerrain(shiftTerrain(ground, dq));
       // The draft's props, stood on the draft's ground; GM-only ones as ghosts.
-      this.r.setProps?.(propStates(resolveProps(ground, this.session.props).props, { isGM: true }));
+      const own = shiftPropStates(propStates(resolveProps(ground, this.session.props).props, { isGM: true }), { dCells: dq / Q_PER_CELL });
+      const below = this._plan?.below.length ? stackProps(this.editor.scene, this._plan, { isGM: true, viewed: false }) : [];
+      this.r.setProps?.(below.length ? [...own, ...below] : own);
       this.#syncWalls();
+    }
+
+    /** The edited Level's base in whole q (the view's absolute frame). */
+    #baseQ() {
+      return Math.round(levelBaseQ(this.editor.scene, this.editor.levelId, this.editor.grid.distance) || 0);
     }
 
     #syncWalls() {
       if (!this.r || !this.session) return;
-      this.r.setWalls(wallStates(this.editor.scene, this.session.terrain, this.editor.grid.size, this.editor.defaultWallMaterial));
+      const dq = this.#baseQ();
+      const scene = this.editor.scene;
+      let walls = wallStates(scene, this.session.terrain, this.editor.grid.size, this.editor.defaultWallMaterial);
+      walls = wallsOnLevel(walls, (id) => scene.walls?.get?.(id) ?? null, isMultiLevel(scene) ? this.editor.levelId : null);
+      if (dq) walls = walls.map((w) => ({ ...w, baseQ: w.baseQ + dq, topQ: w.topQ + dq }));
+      this.r.setWalls(walls);
       this.#draw();
     }
 

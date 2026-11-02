@@ -1,10 +1,10 @@
 /**
- * Diorama — props: primitive objects placed on the board. See
- * docs/DIORAMA_PROPS.md.
+ * Diorama — props: objects placed on the board. See docs/DIORAMA_PROPS.md.
  *
  * Contract with renderer.mjs:
  *   new PropsLayer(shared, onChange)  shared = createShared() uniforms;
- *                                 onChange() asks for a frame (card art landed)
+ *                                 onChange() asks for a frame (card art or a
+ *                                 model landed)
  *   .group                        THREE.Group added to the scene
  *   .casters                      THREE.Scene the shadow pass draws with its
  *                                 own materials (the depth override cannot
@@ -13,228 +13,60 @@
  *   .rules                        the ground with blocking props stamped in
  *                                 (overlays and picks stand on it), or null
  *   .maxY                         highest prop top, cells (shadow bounds)
+ *   .pxWorld                      world units per device px, written by the
+ *                                 renderer each frame (the level of detail)
  *   .setGridSize(px)
  *   .setTerrain(terrain|null)     the GROUND the props stand on
  *   .setEnvironment(env|null)     wind for sway (environment.mjs's resolved env)
  *   .set(PropState[], now, animate)
+ *   .setRoofFade(Map<propId, 0..1>)  how much of each roof shows (1 = all). A
+ *                                 roof under 0.5 casts no shadow and cannot be
+ *                                 picked; at 0 it is gone. Who fades is the
+ *                                 view's business (render/roofs.mjs).
  *   .animated(fx) → bool          true only while foliage sways (fx.detail high,
  *                                 wind blowing, a foliage part on the board)
- *   .frame(t, dt, camera, fx) → bool
+ *   .frame(t, dt, camera, fx) → bool   true while it wants another frame
  *   .pick(raycaster) → {id, point}|null   blocking props only
  *   .dispose()
  *
- * Drawing: every prop is instanced. A shape is one or more parts (a tree is a
- * trunk and a crown); each (part geometry × material) is one InstancedMesh, so
- * a forest of a hundred trees is two draw calls. Geometries are unit-sized
- * (footprint [-0.5, 0.5]², height [0, 1]) and shared; the instance matrix
- * stands, turns and scales them. Nothing allocates per frame: set() writes the
- * instance buffers once, and an idle board asks for no frames.
+ * Drawing: every prop but a slab and a card is instanced. A shape is one or
+ * more parts (a tree is a trunk and a crown); each (part geometry × material)
+ * is one InstancedMesh, so a forest of a hundred trees is two draw calls. Unit
+ * geometries are shared and sized by the instance matrix; a shape whose
+ * outline is data (an extrusion, a path pipe) has its own geometry, drawn at
+ * scale 1. A kit is drawn as its parts; a model as the meshes of its file
+ * (render/props-models.mjs); slabs are merged meshes drawn with the terrain's
+ * own programs (render/props-slabs.mjs).
+ *
+ * Level of detail: relief and sway fade with the zoom (uPropLod, damped), so
+ * nothing switches off at a line. Nothing allocates per frame: set() writes
+ * the instance buffers once, and an idle board asks for no frames.
  *
  * PURE: never reads the world (the preview page and the check tool drive it).
  */
 
 import * as THREE from "./three.mjs";
 import { PALETTE, hexToRgbFloat } from "../../../core/theme.mjs";
+import { Q_PER_CELL } from "../constants.mjs";
 import { PROPS_PROGRAMS, PROP_MAT_ID, PROP_PART_ID } from "./props-glsl.mjs";
+import { MATERIALS } from "./materials.mjs";
 import { loadDrawable } from "./art.mjs";
-import { stampStates } from "../terrain/props.mjs";
+import { stampStates, kitParts, footprintCells, hashString, ROOF_SHAPES } from "../terrain/props.mjs";
+import { buildPropGeometries, ROCK_VARIANTS, stairs, fence, hip, latheOf, extrusion, pipeAlong, finish } from "./props-geo.mjs";
+import { loadModel, modelScale } from "./props-models.mjs";
+import { SlabSet } from "./props-slabs.mjs";
 
-const TAU = Math.PI * 2;
+export { buildPropGeometries };
+
 const DEG = Math.PI / 180;
-
-/* ================================================================ geometry */
-
-/** Merge geometries (position + normal) into one non-indexed geometry. */
-function merge(list) {
-  const parts = list.map((g) => (g.index ? g.toNonIndexed() : g));
-  let n = 0;
-  for (const g of parts) n += g.attributes.position.count;
-  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
-  let o = 0;
-  for (const g of parts) {
-    pos.set(g.attributes.position.array, o * 3);
-    nor.set(g.attributes.normal.array, o * 3);
-    o += g.attributes.position.count;
-  }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  out.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
-  return out;
-}
-
-/** Scale and move a geometry so its bounds are exactly the given box. */
-function fit(g, [x0, x1], [y0, y1], [z0, z1]) {
-  g.computeBoundingBox();
-  const b = g.boundingBox;
-  const sx = (x1 - x0) / Math.max(1e-6, b.max.x - b.min.x);
-  const sy = (y1 - y0) / Math.max(1e-6, b.max.y - b.min.y);
-  const sz = (z1 - z0) / Math.max(1e-6, b.max.z - b.min.z);
-  g.translate(-b.min.x, -b.min.y, -b.min.z);
-  g.scale(sx, sy, sz);
-  g.translate(x0, y0, z0);
-  return g;
-}
-
-/** Faceted: one normal per face (the low-poly look of rocks and leaves). */
-function facet(g) {
-  const f = g.index ? g.toNonIndexed() : g;
-  f.deleteAttribute("uv");
-  f.computeVertexNormals();
-  return f;
-}
-
-/** A lump: an icosphere pushed out by a deterministic noise (watertight). */
-function lump(radius, detail, amp, seed, [cx, cy, cz] = [0, 0, 0], squash = 1) {
-  const g = new THREE.IcosahedronGeometry(radius, detail);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const l = Math.hypot(x, y, z) || 1;
-    const ux = x / l, uy = y / l, uz = z / l;
-    const k = 1 + amp * (Math.sin(ux * 4.7 + seed * 11.3) * Math.sin(uy * 3.9 + seed * 5.1) * Math.sin(uz * 5.3 + seed * 7.7)
-      + 0.5 * Math.sin(ux * 9.1 - seed * 3.7) * Math.sin(uz * 8.3 + seed * 2.9));
-    p.setXYZ(i, cx + x * k, cy + y * k * squash, cz + z * k);
-  }
-  return g;
-}
-
-/** A rock: a lump with its underside cut flat. */
-function rock(seed) {
-  const g = lump(0.5, 1, 0.28, seed, [0, 0, 0], 0.8);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) if (p.getY(i) < -0.18) p.setY(i, -0.18);
-  return fit(facet(g), [-0.5, 0.5], [0, 1], [-0.5, 0.5]);
-}
-
-function wedge() {
-  const A = [-0.5, 0, -0.5], B = [0.5, 0, -0.5], C = [-0.5, 1, -0.5], D = [0.5, 1, -0.5], E = [-0.5, 0, 0.5], F = [0.5, 0, 0.5];
-  const centre = [0, 0.33, -0.17];
-  const pos = [];
-  const tri = (a, b, c) => {
-    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
-    const m = [(a[0] + b[0] + c[0]) / 3 - centre[0], (a[1] + b[1] + c[1]) / 3 - centre[1], (a[2] + b[2] + c[2]) / 3 - centre[2]];
-    const out = n[0] * m[0] + n[1] * m[1] + n[2] * m[2] >= 0;
-    pos.push(...a, ...(out ? b : c), ...(out ? c : b));
-  };
-  const quad = (a, b, c, d) => { tri(a, b, c); tri(a, c, d); };
-  quad(A, B, D, C);   // back
-  quad(C, D, F, E);   // slope
-  quad(A, B, F, E);   // bottom
-  tri(A, C, E);       // left
-  tri(B, D, F);       // right
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pos), 3));
-  g.computeVertexNormals();
-  return g;
-}
-
-function arch() {
-  const s = new THREE.Shape();
-  s.moveTo(-0.5, 0);
-  s.lineTo(-0.3, 0);
-  s.lineTo(-0.3, 0.55);
-  s.absarc(0, 0.55, 0.3, Math.PI, 0, true);
-  s.lineTo(0.3, 0);
-  s.lineTo(0.5, 0);
-  s.lineTo(0.5, 1);
-  s.lineTo(-0.5, 1);
-  s.closePath();
-  const g = new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: false, curveSegments: 14 });
-  g.clearGroups();
-  g.translate(0, 0, -0.5);
-  g.deleteAttribute("uv");
-  return g;
-}
-
-function barrel() {
-  const g = new THREE.CylinderGeometry(0.42, 0.42, 1, 22, 8);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const y = p.getY(i);            // -0.5..0.5
-    const k = 1 + 0.19 * (1 - (2 * y) * (2 * y));
-    p.setXYZ(i, p.getX(i) * k, y, p.getZ(i) * k);
-  }
-  g.computeVertexNormals();
-  g.translate(0, 0.5, 0);
-  return g;
-}
-
-function pillar() {
-  const base = new THREE.BoxGeometry(1, 0.08, 1).translate(0, 0.04, 0);
-  const shaft = new THREE.CylinderGeometry(0.34, 0.38, 0.84, 24).translate(0, 0.5, 0);
-  const cap = new THREE.BoxGeometry(0.94, 0.08, 0.94).translate(0, 0.96, 0);
-  return merge([base, shaft, cap]);
-}
-
-function crown() {
-  const g = merge([
-    facet(lump(0.42, 1, 0.12, 1.3, [0, 0, 0], 0.85)),
-    facet(lump(0.28, 1, 0.14, 2.7, [0.22, 0.14, 0.08])),
-    facet(lump(0.26, 1, 0.14, 4.1, [-0.2, 0.08, -0.14])),
-    facet(lump(0.22, 1, 0.14, 5.9, [0.02, 0.2, -0.22])),
-  ]);
-  return fit(g, [-0.5, 0.5], [0.36, 1], [-0.5, 0.5]);
-}
-
-function pineCones() {
-  const g = merge([
-    facet(new THREE.ConeGeometry(0.5, 0.46, 9).translate(0, 0.23, 0)),
-    facet(new THREE.ConeGeometry(0.38, 0.42, 9).rotateY(0.35).translate(0, 0.46, 0)),
-    facet(new THREE.ConeGeometry(0.26, 0.4, 9).rotateY(0.7).translate(0, 0.68, 0)),
-  ]);
-  return fit(g, [-0.5, 0.5], [0.16, 1], [-0.5, 0.5]);
-}
-
-function bush() {
-  const g = merge([
-    facet(lump(0.45, 1, 0.14, 3.3, [0, 0, 0], 0.8)),
-    facet(lump(0.3, 1, 0.16, 6.1, [0.3, -0.06, 0.12])),
-    facet(lump(0.28, 1, 0.16, 7.7, [-0.26, -0.08, -0.16])),
-  ]);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) if (p.getY(i) < -0.22) p.setY(i, -0.22);
-  return fit(g, [-0.5, 0.5], [0, 1], [-0.5, 0.5]);
-}
-
-const ROCK_VARIANTS = 4;
-
-/** Every geometry a prop part uses, built once per layer. */
-export function buildPropGeometries() {
-  const G = {
-    box: new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
-    cylinder: new THREE.CylinderGeometry(0.5, 0.5, 1, 26).translate(0, 0.5, 0),
-    cone: new THREE.ConeGeometry(0.5, 1, 26).translate(0, 0.5, 0),
-    sphere: new THREE.SphereGeometry(0.5, 26, 16).translate(0, 0.5, 0),
-    dome: new THREE.SphereGeometry(0.5, 26, 10, 0, TAU, 0, Math.PI / 2).scale(1, 2, 1),
-    pyramid: facet(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4).rotateY(Math.PI / 4).translate(0, 0.5, 0)),
-    wedge: wedge(),
-    torus: new THREE.TorusGeometry(0.375, 0.125, 12, 32).rotateX(Math.PI / 2).translate(0, 0.125, 0).scale(1, 4, 1),
-    capsule: new THREE.CapsuleGeometry(0.5, 1, 6, 18).translate(0, 1, 0).scale(1, 0.5, 1),
-    arch: arch(),
-    pillar: pillar(),
-    barrel: barrel(),
-    trunk: new THREE.CylinderGeometry(0.065, 0.095, 0.56, 9).translate(0, 0.28, 0),
-    crown: crown(),
-    pineTrunk: new THREE.CylinderGeometry(0.06, 0.08, 0.28, 8).translate(0, 0.14, 0),
-    pine: pineCones(),
-    bush: bush(),
-    card: new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0),
-    contact: new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
-  };
-  for (let i = 0; i < ROCK_VARIANTS; i++) G[`rock${i}`] = rock(1.7 + i * 2.3);
-  for (const g of Object.values(G)) {
-    if (g.attributes.uv && g !== G.card && g !== G.contact) g.deleteAttribute("uv");
-    g.computeBoundingSphere();
-    g.computeBoundingBox();
-  }
-  return G;
-}
 
 /**
  * The parts every shape is drawn with. `mat` fixes a part's material (a trunk
  * is bark whatever the crown is); otherwise it takes the prop's. `foliage`
- * parts sway when made of foliage.
+ * parts sway when made of foliage. `variant` names a builder keyed by the
+ * prop's own numbers (geoKey). Shapes with no parts are drawn another way: a
+ * card by its image, a slab as terrain, a kit by its parts, a model from its
+ * file.
  */
 export const SHAPE_PARTS = Object.freeze({
   box: [{ geo: "box", part: "box", bevel: true }],
@@ -255,10 +87,81 @@ export const SHAPE_PARTS = Object.freeze({
   pine: [{ geo: "pineTrunk", part: "trunk", mat: "wood" }, { geo: "pine", foliage: true }],
   bush: [{ geo: "bush", foliage: true }],
   card: [],
+  slab: [],
+  hex: [{ geo: "hex" }],
+  octagon: [{ geo: "octagon" }],
+  pipe: [{ geo: "pipe", variant: "pipe" }],
+  stairs: [{ geo: "stairs", part: "step", variant: "stairs" }],
+  platform: [{ geo: "platform" }],
+  fence: [{ geo: "fence", variant: "fence" }],
+  parapet: [{ geo: "parapet" }],
+  beam: [{ geo: "box", part: "box", bevel: true }],
+  sign: [{ geo: "sign" }],
+  cross: [{ geo: "cross" }],
+  bowl: [{ geo: "bowl" }],
+  brazier: [{ geo: "brazierIron", part: "iron" }, { geo: "coals", part: "coals", mat: "earth" }],
+  lamp: [{ geo: "lampPost", part: "iron" }, { geo: "lantern", part: "lantern", mat: "plaster" }],
+  gable: [{ geo: "gable", part: "roof" }],
+  hip: [{ geo: "hip", part: "roof", variant: "hip" }],
+  lean: [{ geo: "wedge", part: "roof" }],
+  spire: [{ geo: "spire", part: "roof" }],
+  lathe: [{ geo: "lathe", variant: "lathe" }],
+  extrude: [{ geo: "box", variant: "extrude" }],
+  kit: [],
+  model: [],
 });
 
+/** Shapes drawn some way other than by SHAPE_PARTS. */
+export const UNPARTED = Object.freeze(["card", "slab", "kit", "model"]);
+
 /** Shapes whose contact shadow is a disc rather than a rounded box. */
-const ROUND = new Set(["cylinder", "cone", "sphere", "dome", "torus", "capsule", "pillar", "barrel", "rock", "tree", "pine", "bush", "card"]);
+const ROUND = new Set(["cylinder", "cone", "sphere", "dome", "torus", "capsule", "pillar", "barrel", "rock", "tree", "pine", "bush", "card",
+  "hex", "octagon", "bowl", "brazier", "lamp", "lathe"]);
+/** Long thin shapes, often hung in the air: a contact shadow only when standing on something. */
+const HUNG = new Set(["beam", "pipe"]);
+
+/** Level of detail: relief and sway in full from this many device px per cell, gone below the other. */
+export const LOD_FULL_PX = 30;
+export const LOD_NONE_PX = 12;
+/** How fast the level of detail follows the zoom (1/s): a zoom never pops it. */
+const LOD_RATE = 6;
+
+/**
+ * The geometry a part of a state draws with: { key, own } (own = built at
+ * the state's own size, drawn at scale 1).
+ */
+export function geoKey(part, s) {
+  switch (part.variant ?? (part.geo === "rock" ? "rock" : null)) {
+    case "rock": return { key: `rock${Math.floor((Number(s.seed) || 0) * ROCK_VARIANTS) % ROCK_VARIANTS}`, own: false };
+    case "stairs": return { key: `stairs:${Math.max(2, Math.min(16, Math.round((Number(s.h) || 1) / 0.2)))}`, own: false };
+    case "fence": return { key: `fence:${Math.max(2, Math.min(24, Math.round((Number(s.w) || 1) / 0.9) + 1))}`, own: false };
+    case "hip": {
+      const w = Number(s.w) || 1, d = Number(s.d) || 1;
+      return { key: `hip:${w >= d ? "x" : "z"}:${Math.round((Math.min(w, d) / Math.max(w, d)) * 20) / 20}`, own: false };
+    }
+    case "lathe":
+      return { key: s.profile ? `lathe:${hashString(JSON.stringify(s.profile))}` : "lathe", own: false };
+    case "extrude":
+      return s.points ? { key: `extrude:${hashString(JSON.stringify([s.points, s.h, s.bevel ?? 0]))}`, own: true } : { key: "box", own: false };
+    case "pipe":
+      return s.path ? { key: `pipe:${hashString(JSON.stringify([s.path, s.thick]))}`, own: true } : { key: "pipe", own: false };
+    default: return { key: part.geo, own: false };
+  }
+}
+
+/** Build a variant geometry from its key and the state that asked for it. */
+function buildVariant(key, s) {
+  const [kind, a, b] = key.split(":");
+  switch (kind) {
+    case "stairs": return finish(stairs(Number(a)));
+    case "fence": return finish(fence(Number(a)));
+    case "hip": return finish(hip(a, Number(b)));
+    case "lathe": return finish(latheOf(s.profile));
+    case "extrude": return extrusion(s.points, s.h, s.bevel ?? 0.04);
+    case "pipe": return pipeAlong(s.path, s.thick);
+    default: return null;
+  }
+}
 
 /* ================================================================ materials */
 
@@ -283,10 +186,30 @@ export const PROP_MATERIAL_FACTORIES = {
         uBevel: { value: bevel ? 1 : 0 },
         uFoliage: { value: foliage && mat === "foliage" ? 1 : 0 },
         uPropDetail: c.uPropDetail,
+        uPropLod: c.uPropLod,
         uPropSway: c.uPropSway,
         uPropWind: c.uPropWind,
         uGhostColor: c.uGhostColor,
       },
+    });
+  },
+
+  /** A model's part: its own base colour (map × factor), the suite's light. */
+  model(shared, { color = [1, 1, 1], map = null, alphaTest = 0, common = null } = {}) {
+    const c = common ?? propCommon();
+    return new THREE.ShaderMaterial({
+      name: "dio.prop.model",
+      vertexShader: PROPS_PROGRAMS.propModel.vertex,
+      fragmentShader: PROPS_PROGRAMS.propModel.fragment,
+      uniforms: {
+        ...shared,
+        uModelMap: { value: map },
+        uModelHasMap: { value: map ? 1 : 0 },
+        uModelColor: { value: new THREE.Vector3(color[0], color[1], color[2]) },
+        uModelAlphaTest: { value: alphaTest },
+        uGhostColor: c.uGhostColor,
+      },
+      side: THREE.DoubleSide,
     });
   },
 
@@ -303,6 +226,7 @@ export const PROP_MATERIAL_FACTORIES = {
         uHasTex: { value: 0 },
         uCardTint: { value: new THREE.Vector3(1, 1, 1) },
         uCardGhost: { value: 0 },
+        uCardFade: { value: 1 },
         uGhostColor: c.uGhostColor,
       },
       side: THREE.DoubleSide,
@@ -330,14 +254,39 @@ export const PROP_MATERIAL_FACTORIES = {
       polygonOffsetUnits: -2,
     });
   },
+
+  /** A slab's top: the terrain top's look over a free outline. */
+  slabTop(shared, { common = null } = {}) {
+    const c = common ?? propCommon();
+    return new THREE.ShaderMaterial({
+      name: "dio.prop.slab.top",
+      vertexShader: PROPS_PROGRAMS.slabTop.vertex,
+      fragmentShader: PROPS_PROGRAMS.slabTop.fragment,
+      uniforms: { ...shared, uGhostColor: c.uGhostColor },
+    });
+  },
+
+  /** A slab's sides: the terrain's own cliff material, with a ghost and a fade. */
+  slabSide(shared, { common = null } = {}) {
+    const c = common ?? propCommon();
+    const m = MATERIALS.side(shared);
+    m.name = "dio.prop.slab.side";
+    m.vertexShader = PROPS_PROGRAMS.slabSide.vertex;
+    m.fragmentShader = PROPS_PROGRAMS.slabSide.fragment;
+    m.uniforms.uGhostColor = c.uGhostColor;
+    return m;
+  },
 };
 
-export const PROP_MATERIAL_PROGRAM = Object.freeze({ prop: "prop", card: "propCard", contact: "propContact" });
+export const PROP_MATERIAL_PROGRAM = Object.freeze({
+  prop: "prop", model: "propModel", card: "propCard", contact: "propContact", slabTop: "slabTop", slabSide: "slabSide",
+});
 
 /** Uniforms every prop material shares by reference: one write serves all. */
 export function propCommon() {
   return {
     uPropDetail: { value: 0 },
+    uPropLod: { value: 1 },
     uPropSway: { value: 0 },
     uPropWind: { value: new THREE.Vector3(1, 0, 0) },
     uGhostColor: { value: vec3(PALETTE.violet) },
@@ -347,6 +296,24 @@ export function propCommon() {
 /* ================================================================ the layer */
 
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
+
+/**
+ * What a board's props expand to before drawing: a kit becomes its parts
+ * (each standing on the kit's base plus its own offset, keeping the kit's id),
+ * everything else is itself.
+ */
+export function expandStates(states) {
+  const out = [];
+  for (const s of states) {
+    if (s.shape !== "kit") { out.push(s); continue; }
+    for (const q of kitParts(s)) {
+      out.push({ ...q, base: num(s.base) + num(q.elev), ghost: !!s.ghost, seed: s.seed, roof: !!s.roof, blocks: !!s.blocks,
+        floats: true, gm: s.gm, label: s.label, kitOf: s.id });
+    }
+  }
+  return out;
+}
 
 export class PropsLayer {
   constructor(shared, onChange = null) {
@@ -361,16 +328,28 @@ export class PropsLayer {
     this.ground = null;
     this.rules = null;
     this.maxY = 0;
+    this.pxWorld = 0;
     this.states = [];
     this.geos = null;
-    /** bucket key → { mesh, caster, tint, info, capacity, states } */
+    /** variant / own geometry key → BufferGeometry (built on demand, dropped when unused) */
+    this.dyn = new Map();
+    /** bucket key → { mesh, caster, tint, info, fade, capacity, states, geo, material, entries } */
     this.buckets = new Map();
     this.contact = null;
     /** card prop id → { mesh, caster, material, url, texture, aspect } */
     this.cards = new Map();
     this.casterMat = new THREE.MeshBasicMaterial({ colorWrite: false });
+    this.slabs = new SlabSet({
+      top: () => PROP_MATERIAL_FACTORIES.slabTop(this.shared, { common: this.common }),
+      side: () => PROP_MATERIAL_FACTORIES.slabSide(this.shared, { common: this.common }),
+    }, this.group, this.casters, this.casterMat);
+    /** prop id → fade 0..1 (roofs) */
+    this.fades = new Map();
+    /** model src → the materials of its parts */
+    this.modelMats = new Map();
     this.wind = 0;
     this.hasFoliage = false;
+    this._lod = 1;
     this._sunYaw = NaN;
     this._landed = false;
     this._disposed = false;
@@ -390,6 +369,10 @@ export class PropsLayer {
     this.ground = terrain ?? null;
     this.rules = this.ground ? stampStates(this.ground, this.states) : null;
     if (this.rules === this.ground) this.rules = null;
+    if (this.slabs.count || this.states.some((s) => s.shape === "slab")) {
+      this.slabs.set(this.states.filter((s) => s.shape === "slab"), (s) => this.groundMin(s));
+      this.castersDirty = true;
+    }
   }
 
   /** Wind from the resolved environment ({ wind: { x, z, speed } }). */
@@ -405,6 +388,18 @@ export class PropsLayer {
     return this.geos;
   }
 
+  /** The lowest ground under a slab's footprint (cells): where its sides reach down to. */
+  groundMin(s) {
+    const t = this.ground;
+    if (!t) return num(s.base);
+    let lo = Infinity;
+    for (const c of footprintCells(s)) {
+      if (!t.inBounds(c.si, c.sj) || t.isVoid(c.si, c.sj)) continue;
+      lo = Math.min(lo, t.topAt(c.si, c.sj) / Q_PER_CELL);
+    }
+    return Number.isFinite(lo) ? Math.min(lo, num(s.base)) : num(s.base);
+  }
+
   /** @param {object[]} states PropState[] (terrain/props.mjs propStates) */
   set(states) {
     if (this._disposed) return;
@@ -412,43 +407,95 @@ export class PropsLayer {
     this.rules = this.ground ? stampStates(this.ground, this.states) : null;
     if (this.rules === this.ground) this.rules = null;
     if (!this.states.length && !this.geos) return;
-    const G = this.ensureGeometries();
+    this.rebuild();
+  }
 
-    // group the parts by bucket; ghosts last so the casters can stop short
+  /** Redraw from this.states (a model that landed, a terrain change). */
+  rebuild() {
+    if (this._disposed) return;
+    const G = this.ensureGeometries();
+    const drawn = expandStates(this.states);
+
+    // group the parts by bucket; each entry is a state and the scale it is drawn at
     const groups = new Map();
+    const usedDyn = new Set();
     let foliage = false, maxY = 0;
-    const ordered = [...this.states.filter((s) => !s.ghost), ...this.states.filter((s) => s.ghost)];
-    for (const s of ordered) {
+    const add = (key, make, s, sx, sy, sz) => {
+      let g = groups.get(key);
+      if (!g) { g = { ...make, list: [] }; groups.set(key, g); }
+      g.list.push({ s, sx, sy, sz });
+    };
+    for (const s of drawn) {
       maxY = Math.max(maxY, num(s.base) + num(s.h, 1));
-      for (const part of SHAPE_PARTS[s.shape]) {
+      if (s.shape === "model") { this.addModel(s, add); continue; }
+      for (const part of SHAPE_PARTS[s.shape] ?? []) {
         const mat = part.mat ?? s.mat ?? "stone";
-        const geo = part.geo === "rock" ? `rock${Math.floor(num(s.seed) * ROCK_VARIANTS) % ROCK_VARIANTS}` : part.geo;
-        const key = `${geo}|${mat}|${part.part ?? "plain"}|${part.bevel ? 1 : 0}|${part.foliage ? 1 : 0}`;
+        const { key: gk, own } = geoKey(part, s);
+        let src = G[gk];
+        if (!src) {
+          src = this.dyn.get(gk);
+          if (!src) {
+            src = buildVariant(gk, s);
+            if (!src) continue;
+            this.dyn.set(gk, src);
+          }
+          usedDyn.add(gk);
+        }
+        const key = `${gk}|${mat}|${part.part ?? "plain"}|${part.bevel ? 1 : 0}|${part.foliage ? 1 : 0}`;
         if (part.foliage && mat === "foliage") foliage = true;
-        let g = groups.get(key);
-        if (!g) { g = { geo, mat, part, list: [] }; groups.set(key, g); }
-        g.list.push(s);
+        const w = Math.max(0.01, num(s.w, 1)), h = Math.max(0.01, num(s.h, 1)), d = Math.max(0.01, num(s.d, 1));
+        add(key, { src, factory: "prop", opts: { mat, part: part.part ?? "plain", bevel: !!part.bevel, foliage: !!part.foliage } },
+          s, own ? 1 : w, own ? 1 : h, own ? 1 : d);
       }
     }
     this.hasFoliage = foliage;
     this.maxY = maxY;
 
     for (const [key, b] of this.buckets) {
-      if (!groups.has(key)) { b.mesh.count = 0; b.mesh.visible = false; b.caster.count = 0; b.caster.visible = false; b.states = []; }
+      if (!groups.has(key)) {
+        // a bucket whose geometry is gone goes with it; the rest wait, empty, for reuse
+        if (b.dyn && !usedDyn.has(b.dyn)) { this.dropBucket(key); continue; }
+        b.mesh.count = 0; b.mesh.visible = false; b.caster.count = 0; b.caster.visible = false; b.states = []; b.entries = [];
+      }
     }
-    for (const [key, g] of groups) this.fill(key, g, G);
-    this.fillContact(ordered, G);
+    for (const [k, g] of [...this.dyn]) if (!usedDyn.has(k)) { g.dispose(); this.dyn.delete(k); }
+    for (const [key, g] of groups) this.fill(key, g);
+    this.fillContact(drawn, G);
     this.syncCards(G);
+    this.slabs.set(this.states.filter((s) => s.shape === "slab"), (s) => this.groundMin(s));
+    this.slabs.setFade(this.fades);
     this.castersDirty = true;
   }
 
-  fill(key, g, G) {
+  /** A model state: its loaded meshes, or (GM only) a placeholder while it cannot load. */
+  addModel(s, add) {
+    const e = loadModel(s.src, () => {
+      if (this._disposed) return;
+      this._landed = true;
+      this.rebuild();
+      this.onChange?.();
+    });
+    if (e.state === "ready") {
+      const k = modelScale(e.model.size, s);
+      e.model.parts.forEach((p, i) => {
+        add(`model|${s.src}|${i}`, { src: p.geometry, factory: "model", opts: { color: p.color, map: p.map, alphaTest: p.alphaTest }, model: s.src }, s, k, k, k);
+      });
+      return;
+    }
+    if (e.state === "failed" && s.gm) {
+      // the GM sees where a model should be: a hatched box, never a player
+      add("box|stone|box|1|0", { src: this.geos.box, factory: "prop", opts: { mat: "stone", part: "box", bevel: true, foliage: false } },
+        { ...s, ghost: true }, Math.max(0.01, num(s.w, 1)), Math.max(0.01, num(s.h, 1)), Math.max(0.01, num(s.d, 1)));
+    }
+  }
+
+  fill(key, g) {
     let b = this.buckets.get(key);
     const n = g.list.length;
-    if (!b || b.capacity < n) {
+    if (!b || b.capacity < n || b.src !== g.src) {
       if (b) this.dropBucket(key);
       const capacity = Math.max(8, 1 << Math.ceil(Math.log2(n)));
-      const src = G[g.geo];
+      const src = g.src;
       const geo = new THREE.BufferGeometry();
       for (const name of Object.keys(src.attributes)) geo.setAttribute(name, src.attributes[name]);
       if (src.index) geo.setIndex(src.index);
@@ -456,55 +503,97 @@ export class PropsLayer {
       geo.boundingBox = src.boundingBox;
       const tint = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
       const info = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
+      const fade = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(1), 1);
       geo.setAttribute("iTint", tint);
       geo.setAttribute("iInfo", info);
-      const material = PROP_MATERIAL_FACTORIES.prop(this.shared, {
-        mat: g.mat, part: g.part.part ?? "plain", bevel: !!g.part.bevel, foliage: !!g.part.foliage, common: this.common,
-      });
+      geo.setAttribute("iFade", fade);
+      const material = g.factory === "model"
+        ? this.modelMaterial(g.model, key, g.opts)
+        : PROP_MATERIAL_FACTORIES.prop(this.shared, { ...g.opts, common: this.common });
       const mesh = new THREE.InstancedMesh(geo, material, capacity);
       mesh.name = `dio.prop.${key}`;
       mesh.frustumCulled = false;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      // the casters keep their own matrices: a ghost or a faded roof casts nothing
       const caster = new THREE.InstancedMesh(geo, this.casterMat, capacity);
-      caster.instanceMatrix = mesh.instanceMatrix;
+      caster.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       caster.frustumCulled = false;
       this.group.add(mesh);
       this.casters.add(caster);
-      b = { mesh, caster, tint, info, capacity, states: [], geo, material };
+      const dyn = this.dyn.has(key.split("|")[0]) ? key.split("|")[0] : null;
+      b = { mesh, caster, tint, info, fade, capacity, states: [], entries: [], geo, src, material, dyn, ownMaterial: g.factory !== "model" };
       this.buckets.set(key, b);
     }
-    let solid = 0;
     for (let i = 0; i < n; i++) {
-      const s = g.list[i];
-      this.matrixOf(s, this._m);
+      const { s, sx, sy, sz } = g.list[i];
+      this.matrixOf(s, this._m, sx, sy, sz);
       b.mesh.setMatrixAt(i, this._m);
       const t = s.tint ? this._c.setStyle(s.tint, THREE.NoColorSpace) : null;
       b.tint.setXYZ(i, t ? t.r : 1, t ? t.g : 1, t ? t.b : 1);
       b.info.setXYZW(i, num(s.seed), s.ghost ? 1 : 0, num(s.base), t ? 1 : 0);
-      if (!s.ghost) solid++;
     }
     b.mesh.count = n;
     b.mesh.visible = n > 0;
-    b.caster.count = solid;
-    b.caster.visible = solid > 0;
-    b.states = g.list;
+    b.caster.count = n;
+    b.caster.visible = n > 0;
+    b.entries = g.list;
+    b.states = g.list.map((e) => e.s);
     b.mesh.instanceMatrix.needsUpdate = true;
     b.tint.needsUpdate = true;
     b.info.needsUpdate = true;
-    b.mesh.computeBoundingSphere?.();
+    b.restaged = true;
+    this.writeFades(b);
   }
 
-  /** Stand, turn and size a state's unit geometry. */
-  matrixOf(s, m) {
+  /** One material per model part, shared by every prop drawing that model. */
+  modelMaterial(src, key, opts) {
+    let list = this.modelMats.get(src);
+    if (!list) { list = new Map(); this.modelMats.set(src, list); }
+    let m = list.get(key);
+    if (!m) { m = PROP_MATERIAL_FACTORIES.model(this.shared, { ...opts, common: this.common }); list.set(key, m); }
+    return m;
+  }
+
+  /** A bucket's fades and caster matrices from this.fades. → true when a caster changed. */
+  writeFades(b) {
+    let cast = false;
+    if (!b.casting || b.casting.length < b.capacity) { b.casting = new Uint8Array(b.capacity).fill(2); }
+    for (let i = 0; i < b.entries.length; i++) {
+      const { s, sx, sy, sz } = b.entries[i];
+      const a = Math.max(0, Math.min(1, this.fades.get(s.id) ?? 1));
+      b.fade.setX(i, a);
+      const on = s.ghost || a < 0.5 ? 0 : 1;
+      if (b.casting[i] === on && !b.restaged) continue;
+      b.casting[i] = on;
+      b.caster.setMatrixAt(i, on ? this.matrixOf(s, this._m, sx, sy, sz) : ZERO);
+      cast = true;
+    }
+    b.restaged = false;
+    b.fade.needsUpdate = true;
+    if (cast) b.caster.instanceMatrix.needsUpdate = true;
+    return cast;
+  }
+
+  /** Stand, turn and size a state's geometry. */
+  matrixOf(s, m, sx = Math.max(0.01, num(s.w, 1)), sy = Math.max(0.01, num(s.h, 1)), sz = Math.max(0.01, num(s.d, 1))) {
     this._p.set(num(s.x), num(s.base), num(s.y));
     this._e.set(0, -num(s.rot) * DEG, 0);
     this._q.setFromEuler(this._e);
-    this._s.set(Math.max(0.01, num(s.w, 1)), Math.max(0.01, num(s.h, 1)), Math.max(0.01, num(s.d, 1)));
+    this._s.set(sx, sy, sz);
     return m.compose(this._p, this._q, this._s);
   }
 
-  fillContact(ordered, G) {
-    const list = ordered.filter((s) => !s.ghost);
+  /** Does this prop get a contact shadow? Not a slab (it is ground), not a roof, not a beam in the air. */
+  static grounded(s) {
+    if (s.ghost || s.shape === "slab" || s.shape === "kit" || s.roof || ROOF_SHAPES.includes(s.shape)) return false;
+    if (HUNG.has(s.shape) && s.floats) return false;
+    // a model is grounded once it is there to ground: never a shadow under nothing
+    if (s.shape === "model") return loadModel(s.src).state === "ready";
+    return true;
+  }
+
+  fillContact(drawn, G) {
+    const list = drawn.filter((s) => PropsLayer.grounded(s) && (!s.kitOf || num(s.elev) <= 0.01));
     const n = list.length;
     if (!this.contact || this.contact.userData.capacity < n) {
       if (this.contact) { this.group.remove(this.contact); this.contact.geometry.dispose(); this.contact.material.dispose(); }
@@ -532,7 +621,8 @@ export class PropsLayer {
       this._q.setFromEuler(this._e);
       this._s.set(w, 1, d);
       this.contact.setMatrixAt(i, this._m.compose(this._p, this._q, this._s));
-      const strength = s.shape === "torus" || card ? 0.32 : s.shape === "tree" || s.shape === "pine" ? 0.42 : 0.5;
+      const thin = s.shape === "fence" || s.shape === "sign" || s.shape === "cross" || s.shape === "lamp";
+      const strength = s.shape === "torus" || card || thin ? 0.32 : s.shape === "tree" || s.shape === "pine" || s.shape === "platform" ? 0.42 : 0.5;
       info.setXYZW(i, num(s.seed), 0, ROUND.has(s.shape) ? 1 : 0, strength);
     }
     this.contact.count = n;
@@ -598,18 +688,42 @@ export class PropsLayer {
     const h = Math.max(0.05, num(s.h, 1));
     const w = c.aspect > 0 ? h * c.aspect : Math.max(0.05, num(s.w, 1));
     const u = c.material.uniforms;
+    const fade = Math.max(0, Math.min(1, this.fades.get(s.id) ?? 1));
     u.uCardSize.value.set(w, h);
     u.uCardGhost.value = s.ghost ? 1 : 0;
+    u.uCardFade.value = fade;
     if (s.tint) { this._c.setStyle(s.tint, THREE.NoColorSpace); u.uCardTint.value.set(this._c.r, this._c.g, this._c.b); }
     else u.uCardTint.value.set(1, 1, 1);
     c.mesh.position.set(num(s.x), num(s.base), num(s.y));
     c.caster.position.copy(c.mesh.position);
     c.caster.scale.set(w, h, 1);
     c.caster.rotation.set(0, Number.isFinite(this._sunYaw) ? this._sunYaw : 0, 0);
-    // a ghost or an art-less card casts nothing
-    const casts = !s.ghost && !!c.texture;
+    // a ghost, a faded or an art-less card casts nothing
+    const casts = !s.ghost && !!c.texture && fade >= 0.5;
     if (casts && !c.caster.parent) this.casters.add(c.caster);
     if (!casts && c.caster.parent) this.casters.remove(c.caster);
+  }
+
+  /**
+   * How much of each roof shows (1 = all, 0 = gone): Map<propId, 0..1>. A prop
+   * not in the map shows in full. Under half, it casts no shadow and cannot be
+   * picked. Pure bookkeeping: nothing is rebuilt, a fade is one attribute.
+   */
+  setRoofFade(map) {
+    this.fades = map instanceof Map ? map : new Map();
+    let cast = false;
+    for (const b of this.buckets.values()) if (b.entries.length && this.writeFades(b)) cast = true;
+    for (const c of this.cards.values()) {
+      const before = !!c.caster.parent;
+      this.placeCard(c);
+      if (before !== !!c.caster.parent) cast = true;
+    }
+    if (this.slabs.setFade(this.fades)) cast = true;
+    if (cast) {
+      // the renderer reads castersDirty before the roofs fade: ask for the frame that redraws the shadows
+      this.castersDirty = true;
+      this.onChange?.();
+    }
   }
 
   dropCard(id, c) {
@@ -626,23 +740,36 @@ export class PropsLayer {
     if (!b) return;
     this.group.remove(b.mesh);
     this.casters.remove(b.caster);
-    b.material.dispose();
+    if (b.ownMaterial) b.material.dispose();
     b.geo.dispose();
     b.mesh.dispose?.();
+    b.caster.dispose?.();
     this.buckets.delete(key);
   }
 
-  /** Foliage sways only at high detail, in wind, with foliage on the board. */
+  /** Foliage sways only at high detail, in wind, with foliage on the board, close enough to see it. */
   animated(fx) {
-    return !!fx && fx.detail > 0 && this.hasFoliage && this.wind > 0.001;
+    return !!fx && fx.detail > 0 && this.hasFoliage && this.wind > 0.001 && this._lod > 0.01;
   }
 
-  frame(_t, _dt, _camera, fx) {
-    this.common.uPropDetail.value = fx?.detail > 0 ? 1 : 0;
-    this.common.uPropSway.value = this.animated(fx) ? 1 : 0;
+  frame(_t, dt, _camera, fx) {
+    // the level of detail follows the zoom, damped: zooming out fades relief, never pops it
+    const ppc = this.pxWorld > 0 ? 1 / this.pxWorld : LOD_FULL_PX;
+    const k = Math.min(1, Math.max(0, (ppc - LOD_NONE_PX) / (LOD_FULL_PX - LOD_NONE_PX)));
+    const target = k * k * (3 - 2 * k);
+    let moving = false;
+    if (Math.abs(target - this._lod) < 0.002) this._lod = target;
+    else {
+      this._lod += (target - this._lod) * (1 - Math.exp(-LOD_RATE * Math.max(0, Number(dt) || 0)));
+      moving = true;
+    }
+    const detail = fx?.detail > 0 ? 1 : 0;
+    this.common.uPropDetail.value = detail;
+    this.common.uPropLod.value = this._lod;
+    this.common.uPropSway.value = this.animated(fx) ? this._lod : 0;
     if (this.cards.size) {
-      const k = this.shared.uKeyDir.value;
-      const yaw = Math.atan2(k.x, k.z);
+      const kd = this.shared.uKeyDir.value;
+      const yaw = Math.atan2(kd.x, kd.z);
       if (Math.abs(yaw - this._sunYaw) > 1e-4 || !Number.isFinite(this._sunYaw)) {
         this._sunYaw = yaw;
         for (const c of this.cards.values()) c.caster.rotation.set(0, yaw, 0);
@@ -651,21 +778,27 @@ export class PropsLayer {
     }
     const landed = this._landed;
     this._landed = false;
-    return landed;
+    // relief that is still fading asks for frames; with detail shed there is nothing to fade
+    return landed || (moving && detail > 0);
   }
 
   /** The nearest BLOCKING prop under a ray (what a token could stand on). */
   pick(raycaster) {
     const meshes = [];
     for (const b of this.buckets.values()) if (b.mesh.visible) meshes.push(b.mesh);
-    if (!meshes.length) return null;
-    const hits = raycaster.intersectObjects(meshes, false);
-    for (const h of hits) {
-      const b = [...this.buckets.values()].find((x) => x.mesh === h.object);
-      const s = b?.states[h.instanceId];
-      if (s && s.blocks && !s.ghost) return { id: s.id, point: h.point.clone() };
+    let best = null;
+    if (meshes.length) {
+      const hits = raycaster.intersectObjects(meshes, false);
+      for (const h of hits) {
+        let b = null;
+        for (const x of this.buckets.values()) if (x.mesh === h.object) { b = x; break; }
+        const s = b?.states[h.instanceId];
+        if (s && s.blocks && !s.ghost && (this.fades.get(s.id) ?? 1) >= 0.5) { best = { id: s.id, point: h.point.clone(), distance: h.distance }; break; }
+      }
     }
-    return null;
+    const slab = this.slabs.pick(raycaster);
+    if (slab?.blocks && (!best || slab.distance < best.distance)) best = slab;
+    return best ? { id: best.id, point: best.point } : null;
   }
 
   dispose() {
@@ -673,8 +806,13 @@ export class PropsLayer {
     for (const key of [...this.buckets.keys()]) this.dropBucket(key);
     for (const [id, c] of [...this.cards]) this.dropCard(id, c);
     if (this.contact) { this.contact.geometry.dispose(); this.contact.material.dispose(); this.contact = null; }
+    this.slabs.dispose();
+    for (const list of this.modelMats.values()) for (const m of list.values()) m.dispose();
+    this.modelMats.clear();
     this.casterMat.dispose();
     for (const g of Object.values(this.geos ?? {})) g.dispose();
+    for (const g of this.dyn.values()) g.dispose();
+    this.dyn.clear();
     this.geos = null;
     this.group.clear();
     this.casters.clear();

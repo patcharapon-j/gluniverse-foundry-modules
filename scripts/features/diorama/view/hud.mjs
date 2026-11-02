@@ -29,6 +29,7 @@ export const TOOLBAR = Object.freeze([
   { act: "environment", icon: "fa-solid fa-cloud-sun-rain", key: "GLDIO.view.environment", gm: true },
   { act: "summon", icon: "fa-solid fa-users-viewfinder", key: "GLDIO.view.summon", gm: true },
   { act: "asPlayers", icon: "fa-solid fa-eye", key: "GLDIO.view.asPlayers", gm: true, toggle: true },
+  { act: "roofs", icon: "fa-solid fa-house", key: "GLDIO.view.roofs", gm: true, toggle: true },
   { sep: true },
   { act: "peek", icon: "fa-solid fa-map", key: "GLDIO.view.peek", toggle: true, bind: "dio.peek" },
 ]);

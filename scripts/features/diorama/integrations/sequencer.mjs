@@ -46,6 +46,21 @@ const isTemplateRef = (v) => {
   return name === "MeasuredTemplate" || name === "Region";
 };
 
+/** The token id an effect's attachment names (a Token, its document, a uuid or a bare id), else null. */
+export function tokenIdOf(v) {
+  if (!v) return null;
+  if (typeof v === "string") {
+    const m = /(?:^|\.)Token\.([A-Za-z0-9]{16})/.exec(v);
+    if (m) return m[1];
+    return globalThis.canvas?.tokens?.get?.(v) ? v : null;
+  }
+  if (typeof v !== "object") return null;
+  const doc = v.documentName === "Token" ? v : v.document?.documentName === "Token" ? v.document : null;
+  if (doc?.id) return String(doc.id);
+  if (v.uuid || v.id) return tokenIdOf(String(v.uuid ?? v.id));
+  return null;
+}
+
 function fileOf(effect) {
   const f = effect?.data?.file;
   if (typeof f === "string") return f;
@@ -126,11 +141,18 @@ export class SequencerMirror {
     if (this.effects.delete(effect)) this.onChange();
   }
 
-  /** Current EffectState list (positions follow attached effects every call). */
-  states() {
+  /**
+   * Current EffectState list (positions follow attached effects every call).
+   * @param {((tokenId:string) => boolean)|null} [tokenSeen]  whether a token is on this
+   *   viewer's board: an effect attached to (or cast from) one that is not is not drawn,
+   *   or it would outline a hidden creature (a GM's "view as players" included)
+   */
+  states(tokenSeen = null) {
     const out = [];
     for (const [effect, meta] of this.effects) {
       if (effect.destroyed || effect._ended) { this.effects.delete(effect); continue; }
+      if (tokenSeen && [effect.data?.attachTo, effect.data?.source, effect.data?.stretchTo, effect.data?.target, effect.source, effect.target]
+        .some((v) => { const id = tokenIdOf(v); return id && !tokenSeen(id); })) continue;
       const source = mediaOf(effect);
       if (!source) continue;
       if (!meta.sampled && (source.videoWidth || source.naturalWidth || source.width)) {

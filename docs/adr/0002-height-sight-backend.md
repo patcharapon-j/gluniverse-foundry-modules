@@ -56,6 +56,12 @@ and `light`.
   that type and reports a conflict instead of chaining blindly.
 - A flat scene, or one with no terrain flag, adds no edges and tests exactly
   like the base class.
+- **Levels.** Each scene Level has its own terrain, stored relative to the
+  Level's base. A polygon reads its own Level (`PointSourcePolygon#level`), and
+  the eye, a light's own elevation and a point test's destination lose that
+  base before they meet the height field. Detection reads the vision source's
+  Level and only wraps a same-Level test; Foundry's cross-Level test is left
+  alone. A scene with one Level has base 0, so it behaves as before.
 
 ## Consequences
 

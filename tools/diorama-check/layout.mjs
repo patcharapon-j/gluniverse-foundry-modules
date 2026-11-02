@@ -35,8 +35,10 @@ export default async function check(ctx) {
     // Props: every mirrored prop has its twin, and every one stands clear of a token.
     const want = lion.props.reduce((n, p) => n + (p.mirror ? 2 : 1), 0);
     ctx.ok("the example's props all come back, mirrored ones twice", L.props?.length === want, `${L.props?.length} of ${want}`);
-    const unpaired = (L.props ?? []).filter((p) => !L.props.some((q) => q.shape === p.shape && Math.abs(q.x - (29 - p.x)) < 1e-6 && q.y === p.y));
-    ctx.ok("the example's props are symmetric", unpaired.length === 0, unpaired.map((p) => p.id).join());
+    // The art is not perfectly symmetric (its boats are not), so only a mirrored entry owes a twin.
+    const mirrored = new Set(lion.props.filter((p) => p.mirror).map((p) => p.label));
+    const unpaired = (L.props ?? []).filter((p) => mirrored.has(p.label) && !L.props.some((q) => q.shape === p.shape && Math.abs(q.x - (29 - p.x)) < 1e-6 && q.y === p.y));
+    ctx.ok("the example's mirrored props are symmetric", mirrored.size > 0 && unpaired.length === 0, unpaired.map((p) => p.id).join());
     const onToken = (L.props ?? []).filter((p) => L.tokens.some((t) => Math.abs(t.j + 0.5 - p.x) < (p.w + 1) / 2 && Math.abs(t.i + 0.5 - p.y) < (p.d + 1) / 2));
     ctx.ok("no example prop stands on a token's square", onToken.length === 0, onToken.map((p) => p.label).join());
     const tree = L.props?.find((p) => p.shape === "tree");
@@ -112,6 +114,63 @@ export default async function check(ctx) {
   const onAxis = compileLayout({ palette: pal, mirror: { cols: 12 }, ops: [], props: [{ shape: "rock", at: [2, 6], mirror: true }] }, grid);
   ctx.ok("a prop on its own mirror axis is not doubled", onAxis.props?.length === 1 && onAxis.warnings.some((w) => /own mirror axis/.test(w)));
 
+  // ── slabs, paths, kits and models ──
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  const SL = compileLayout({ palette: pal, mirror: { cols: 12 }, ops: [], props: [
+    { id: "dais", shape: "slab", points: [[1, 1], [1, 4], [3.5, 4], [3.5, 1]], h: 5, cliff: "metal", mirror: true },
+    { id: "duct", shape: "pipe", path: [[6, 1], [6, 4, 5]], thick: 0.3 },
+    { id: "font", shape: "lathe", at: [8, 8], profile: [[0, 0], [1, 0.3], [0.4, 1]] },
+  ] }, { cols: 14, rows: 12, offset: { i: 1, j: 2 }, map: { cols: 12, rows: 10 }, distance: 5 });
+  if (SL.props) {
+    const dais = SL.props.find((p) => p.id === "dais"), twin = SL.props.find((p) => p.id === "daism");
+    const corners = (p) => p.points.map(([u, v]) => [p.y + v, p.x + u]);
+    ctx.ok("a slab's [row, col] corners on the map come back as its outline on the canvas",
+      dais && near(dais.x, 2 + 2.5) && near(dais.y, 1 + 2.25) && dais.h === 1 && dais.cliff === "metal" && dais.rot === 0 && dais.w === 3 && dais.d === 2.5
+      && corners(dais).some(([r, c]) => near(r, 2) && near(c, 3)), JSON.stringify(dais));
+    ctx.ok("a mirrored slab reflects its outline point by point, never turned",
+      twin && near(twin.x, 2 + 12 - 2.5) && twin.rot === 0 && corners(twin).some(([r, c]) => near(r, 2) && near(c, 2 + 12 - 1)), JSON.stringify(twin));
+    const duct = SL.props.find((p) => p.id === "duct");
+    ctx.ok("a pipe's path is its centre line, heights in the layout's unit (resting on the floor when left out)",
+      duct && duct.path.length === 2 && near(duct.path[0][2], 0.15) && near(duct.path[1][2], 1) && near(duct.d, 0.3), JSON.stringify(duct));
+    ctx.ok("a lathe keeps its profile", SL.props.find((p) => p.id === "font")?.profile?.length === 3);
+  } else ctx.ok("slab layout compiles", false, JSON.stringify(SL.errors));
+
+  const stall = { parts: [
+    { shape: "box", at: [0, -0.5], w: 1, d: 1, h: 2.5 },
+    { shape: "gable", at: [0, 0], w: 2, d: 1, h: 2.5, elev: 2.5 },
+  ] };
+  const KL = compileLayout({ palette: pal, mirror: { cols: 12 }, kits: { stall }, ops: [], props: [
+    { id: "s", shape: "kit", kit: "stall", at: [5, 3], rot: 90, mirror: true },
+    { id: "big", shape: "kit", kit: "stall", at: [8, 6], scale: 2 },
+  ] }, grid);
+  if (KL.props) {
+    const s = KL.props.find((p) => p.id === "s"), sm = KL.props.find((p) => p.id === "sm"), big = KL.props.find((p) => p.id === "big");
+    ctx.ok("a kit stands its origin at \"at\" and keeps its parts inline, heights in cells",
+      s && s.x === 3 && s.y === 5 && s.rot === 90 && s.parts.length === 2 && s.parts[0].h === 0.5 && s.parts[1].elev === 0.5 && s.h === 1, JSON.stringify(s));
+    ctx.ok("a kit's scenery roof part stays scenery, its box stays solid", s && s.parts[0].solid === true && s.parts[1].solid === false, JSON.stringify(s?.parts));
+    const boxX = (p) => p.parts.find((q) => q.shape === "box").x;
+    ctx.ok("a mirrored kit reflects its parts in its own frame",
+      sm && near(sm.x, 12 - s.x) && sm.rot === 270 && near(boxX(sm), -boxX(s)),
+      JSON.stringify([s?.parts.map((q) => q.x), sm?.parts.map((q) => q.x), sm?.rot]));
+    ctx.ok("a scaled kit scales every part with it", big && near(big.w, s.w * 2) && near(big.h, s.h * 2), JSON.stringify([big?.w, big?.h, s?.w, s?.h]));
+  } else ctx.ok("kit layout compiles", false, JSON.stringify(KL.errors));
+  const alias = compileLayout({ palette: pal, models: { stall }, ops: [], props: [{ shape: "kit", kit: "stall", at: [2, 2] }] }, grid);
+  ctx.ok("\"models\" is read as \"kits\", with a warning to rename it", alias.props?.length === 1 && alias.warnings.some((w) => /"models" is read as "kits"/.test(w)), JSON.stringify(alias.errors));
+  const mod = compileLayout({ palette: pal, ops: [], props: [{ shape: "model", at: [2, 2], src: "worlds/x/well.glb", scale: 0.5, rules: "none", h: 10 }] }, grid);
+  ctx.ok("a model keeps its file, its scale and its rules", mod.props?.[0]?.src === "worlds/x/well.glb" && mod.props[0].scale === 0.5 && mod.props[0].rules === "none" && mod.props[0].h === 2,
+    JSON.stringify(mod.props?.[0] ?? mod.errors));
+  const roofy = compileLayout({ palette: pal, ops: [], props: [{ shape: "hip", at: [2, 2] }, { shape: "box", at: [4, 4], roof: true }] }, grid);
+  ctx.ok("a roof shape is a roof unless told otherwise, and any prop can be one", roofy.props?.[0]?.roof === true && roofy.props?.[1]?.roof === true);
+  const ignored = compileLayout({ palette: pal, ops: [], props: [{ shape: "box", at: [2, 2], cliff: "stone", src: "a.glb", path: [[0, 0], [1, 1]] }] }, grid);
+  ctx.ok("a field another shape keeps is a warning on this one, not a failure",
+    ignored.props?.length === 1 && ["cliff", "src", "path"].every((k) => ignored.warnings.some((w) => w.includes(`"${k}"`))), JSON.stringify(ignored.warnings));
+  if (L.props) {
+    ctx.ok("the example's braziers are braziers (their fire comes from the shape, not the label)",
+      L.props.filter((p) => /brazier/i.test(p.label)).every((p) => p.shape === "brazier"));
+    ctx.ok("the example shows slabs, kits and the newer shapes",
+      ["slab", "kit", "parapet", "lamp"].every((s) => L.props.some((p) => p.shape === s)));
+  }
+
   // ── every mistake is a sentence, and nothing is half painted ──
   const bad = [
     [null, /not a JSON object/],
@@ -135,6 +194,21 @@ export default async function check(ctx) {
     [{ palette: pal, ops: [], props: [{ shape: "box", at: [1, 1], solid: "yes" }] }, /"solid" must be true or false/],
     [{ palette: pal, ops: [], props: [{ shape: "box", at: [1, 1], mirror: true }] }, /props\[0\] \(box\): "mirror" needs/],
     [{ palette: pal, ops: [], props: [{ shape: "box", at: [1, 1], id: "a" }, { shape: "box", at: [2, 2], id: "a" }] }, /props\[1\].*used twice/],
+    [{ palette: pal, ops: [], props: [{ shape: "slab" }] }, /a slab needs "at" .* or "points"/],
+    [{ palette: pal, ops: [], props: [{ shape: "slab", points: [[1, 1], [2, 2]] }] }, /"points" must be 3 to/],
+    [{ palette: pal, ops: [], props: [{ shape: "slab", at: [1, 1], cliff: "gold" }] }, /"cliff" must be one of/],
+    [{ palette: pal, ops: [], props: [{ shape: "pipe" }] }, /a pipe needs "at" .* or "path"/],
+    [{ palette: pal, ops: [], props: [{ shape: "lathe", at: [1, 1], profile: [[0, 0], [2, 1]] }] }, /"profile" must be/],
+    [{ palette: pal, ops: [], props: [{ shape: "extrude", at: [1, 1], bevel: 3 }] }, /"bevel" must be/],
+    [{ palette: pal, ops: [], props: [{ shape: "gable", at: [1, 1], roof: "yes" }] }, /"roof" must be true or false/],
+    [{ palette: pal, ops: [], props: [{ shape: "model", at: [1, 1] }] }, /a model needs "src"/],
+    [{ palette: pal, ops: [], props: [{ shape: "model", at: [1, 1], src: "a.png" }] }, /a model needs "src"/],
+    [{ palette: pal, ops: [], props: [{ shape: "model", at: [1, 1], src: "a.glb", rules: "all" }] }, /"rules" must be one of/],
+    [{ palette: pal, ops: [], props: [{ shape: "kit", at: [1, 1] }] }, /a kit placement needs "kit"/],
+    [{ palette: pal, kits: { a: { parts: [{ shape: "box", at: [0, 0] }] } }, ops: [], props: [{ shape: "kit", kit: "b", at: [1, 1] }] }, /no kit called "b".*"a"/],
+    [{ palette: pal, kits: { a: { parts: [{ shape: "slab", at: [0, 0] }] } }, ops: [] }, /kits\["a"\]\.parts\[0\] \(slab\): "shape" must be one of/],
+    [{ palette: pal, kits: { a: { parts: [] } }, ops: [] }, /kits\["a"\] needs "parts"/],
+    [{ palette: pal, kits: [], ops: [] }, /"kits" must be an object/],
   ];
   for (const [layout, re] of bad) {
     const r = compileLayout(layout, grid);

@@ -17,6 +17,7 @@ import { Perf, setDetailedProbes } from "./runtime.mjs";
 import { Overrides } from "./overrides.mjs";
 import { Patches } from "./patches.mjs";
 import { benchmarking, lastReport, longTasks, runBenchmark, saveReport, watchLongTasks } from "./report.mjs";
+import { readouts } from "./readouts.mjs";
 
 const REPAINT_MS = 500;
 /** Per-browser convenience only: where this player left the overlay. */
@@ -182,6 +183,12 @@ function paint() {
   if (ladders.length) {
     frag.append(el("div", "glperf-sub gl-tech-label", L("GLPERF.overlay.ladders")));
     for (const l of ladders) frag.append(row(l.id, `${l.level} / ${l.length}`, l.level ? "is-warn" : ""));
+  }
+
+  // Features' own costs (readouts.mjs), e.g. the 3D view's GPU time.
+  for (const s of readouts()) {
+    frag.append(el("div", "glperf-sub gl-tech-label", s.id));
+    for (const [k, v] of s.rows) frag.append(row(k, v));
   }
 
   const spent = Object.entries(_spentAvg).filter(([, v]) => v >= 0.05).sort((a, b) => b[1] - a[1]).slice(0, 8);

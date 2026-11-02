@@ -43,7 +43,8 @@ import { FLAG_ALTITUDE } from "../constants.mjs";
 import { qToDist } from "../terrain/model.mjs";
 import { isGroundAction } from "../rules/path.mjs";
 import { PF2E } from "../rules/systems.mjs";
-import { activeContext, anyContext, rulesOn } from "./context.mjs";
+import { activeContext, anyContext, rulesOn, tokenContext } from "./context.mjs";
+import { tokenLevelId } from "../terrain/levels.mjs";
 
 const EPS = 1e-4;
 const ALTITUDE_PATH = `flags.${SUITE_ID}.${FLAG_ALTITUDE}`;
@@ -66,20 +67,23 @@ export function footprintTopQ(terrain, gridSize, x, y, wCells = 1, hCells = 1) {
   return terrain.footprintTop(i0, j0, j1 - j0 + 1, i1 - i0 + 1);
 }
 
+/** Ground under a footprint, ABSOLUTE distance units: the Level's own ground plus its base. */
 function groundFrom(live, x, y, w, h) {
-  return round(qToDist(footprintTopQ(live.terrain, live.grid.size, x, y, w, h), live.grid.distance));
+  return round(qToDist(footprintTopQ(live.terrain, live.grid.size, x, y, w, h), live.grid.distance) + (Number(live.base) || 0));
 }
 
 /**
- * Ground under a footprint in distance units (0 where the scene has no terrain).
+ * Ground under a footprint in absolute distance units (the Level's base where
+ * the scene has no terrain).
  * @param {Scene} scene
  * @param {number} x  top-left px
  * @param {number} y
  * @param {number} [wCells=1]
  * @param {number} [hCells=1]
+ * @param {string|null} [level]  the Level (default: the one viewed, else the initial one)
  */
-export function groundDistAt(scene, x, y, wCells = 1, hCells = 1) {
-  const live = anyContext(scene);
+export function groundDistAt(scene, x, y, wCells = 1, hCells = 1, level = null) {
+  const live = anyContext(scene, level);
   if (!live) return 0;
   return groundFrom(live, x, y, wCells, hCells);
 }
@@ -178,7 +182,9 @@ function dragWaypointWrapper(wrapped, current, changes, options) {
   const pos = wrapped(current, changes, options);
   try {
     const doc = this.document;
-    const live = activeContext(doc?.parent);
+    // v14 puts a drag waypoint on the Level it lands in (the viewed one): read that Level's ground.
+    const fromLevel = current?.level ?? tokenLevelId(doc);
+    const live = activeContext(doc?.parent, pos?.level ?? fromLevel);
     if (!live || !pos) return pos;
     const action = this._getDragMovementAction?.() ?? doc.movementAction;
     if (action === "burrow") return pos;
@@ -191,7 +197,8 @@ function dragWaypointWrapper(wrapped, current, changes, options) {
     } else if (action === "fly") {
       pos.elevation = round(Math.max(Number(pos.elevation) || 0, ground));
     } else {
-      const was = groundFrom(live, current?.x ?? src.x, current?.y ?? src.y, w, h);
+      const from = live.levelId === fromLevel ? live : (anyContext(doc.parent, fromLevel) ?? live);
+      const was = groundFrom(from, current?.x ?? src.x, current?.y ?? src.y, w, h);
       const alt = Math.max(0, (Number(current?.elevation ?? pos.elevation) || 0) - was);
       pos.elevation = round(ground + alt);
     }
@@ -204,7 +211,7 @@ function dragWaypointWrapper(wrapped, current, changes, options) {
 /** MIXED wrapper: Token#_getMovementCostFunction(options). */
 function costFunctionWrapper(wrapped, options) {
   const fn = wrapped(options);
-  const live = activeContext(this.document?.parent);
+  const live = tokenContext(this.document);
   if (!live) return fn;
   const terrain = live.terrain;
   return (from, to, distance, segment) => {
@@ -263,11 +270,12 @@ export function correctionOptions(plans) {
 /** `updateToken` hook. */
 export function onUpdateToken(doc, changes, options) {
   if (options?.dioSync || !changes) return;
-  const moved = ["x", "y", "width", "height"].some((k) => k in changes);
+  // A change of Level is a move: the token now stands on another Level's ground.
+  const moved = ["x", "y", "width", "height", "level"].some((k) => k in changes);
   const elevationChanged = "elevation" in changes;
   if (!moved && !elevationChanged) return;
   if (!isActiveGM()) return;
-  const live = activeContext(doc.parent);
+  const live = tokenContext(doc);
   if (!live) return;
   if (doc.movement?.state === "pending") return; // correct once, when the move lands
   const plan = planToken(doc, live, { elevationChanged });
@@ -301,7 +309,7 @@ export function onPreUpdateToken(doc, changes, options) {
     // Not only where the rules run: the 3D view moves a token at ground + altitude on a flat or
     // unprepared scene too, so an edit there must land in the flag or the next drag drops it.
     if (!rulesOn()) return;
-    const ground = groundDistAt(doc.parent, src.x, src.y, src.width ?? 1, src.height ?? 1);
+    const ground = groundDistAt(doc.parent, src.x, src.y, src.width ?? 1, src.height ?? 1, tokenLevelId(doc));
     const p = planElevation({ elevation: changes.elevation, action: doc.movementAction, ground,
       altFlag: altitudeFlag(doc), elevationChanged: true });
     if (p?.writeAltitude) fu.setProperty(changes, ALTITUDE_PATH, p.altitude);
@@ -318,8 +326,9 @@ export function onPreUpdateToken(doc, changes, options) {
 export function onPreCreateToken(doc, _data, options) {
   if (options?.dioSync) return;
   try {
-    const live = activeContext(doc?.parent);
     const src = doc?._source;
+    // A new token stands on the Level it is created on.
+    const live = src ? activeContext(doc.parent, tokenLevelId(doc)) : null;
     if (!live || !src) return;
     const altFlag = altitudeFlag(doc);
     let action;
@@ -337,24 +346,40 @@ export function onPreCreateToken(doc, _data, options) {
 }
 
 /**
- * Re-seat every token of a scene on repainted ground, in ONE batched update.
- * @param {Scene} scene
- * @param {import("../terrain/model.mjs").Terrain|null} [oldTerrain]  terrain before
- *   the repaint, used for tokens with no stored altitude
+ * The corrections a repaint needs, pure over its inputs: every token on a
+ * Level in `levels` (all when null) re-seated on its OWN Level's ground.
+ * @param {Iterable<object>} tokens
+ * @param {(levelId:string|null) => object|null} liveOf  a Level's live terrain
+ * @param {{old?: Map<string, object>|object|null, levels?: Set<string>|null}} [o]
+ *   old: terrain before the repaint (per Level id, or one for every Level)
  */
-export async function resyncScene(scene, oldTerrain = null) {
-  if (!isActiveGM() || !scene) return;
-  const live = anyContext(scene);
-  if (!live) return;
-  const old = oldTerrain ? { terrain: oldTerrain, grid: live.grid } : null;
+export function planResync(tokens, liveOf, { old = null, levels = null } = {}) {
   const plans = [];
-  for (const doc of scene.tokens ?? []) {
+  for (const doc of tokens ?? []) {
     if (doc.movement?.state === "pending") continue;
+    const live = liveOf(tokenLevelId(doc));
+    if (!live || (levels && !levels.has(live.levelId))) continue;
+    const before = old instanceof Map ? old.get(live.levelId) : old;
     const src = doc._source ?? doc;
-    const fallbackGround = old ? groundFrom(old, src.x, src.y, src.width ?? 1, src.height ?? 1) : undefined;
+    const fallbackGround = before
+      ? groundFrom({ terrain: before, grid: live.grid, base: live.base }, src.x, src.y, src.width ?? 1, src.height ?? 1)
+      : undefined;
     const p = planToken(doc, live, { fallbackGround });
     if (p) plans.push(p);
   }
+  return plans;
+}
+
+/**
+ * Re-seat the tokens of a scene on repainted ground, in ONE batched update.
+ * @param {Scene} scene
+ * @param {Map<string, import("../terrain/model.mjs").Terrain>|import("../terrain/model.mjs").Terrain|null} [oldTerrain]
+ *   terrain before the repaint, per Level id: used for tokens with no stored altitude
+ * @param {{levels?: Set<string>|null}} [o]  only tokens on these Levels (null: all)
+ */
+export async function resyncScene(scene, oldTerrain = null, { levels = null } = {}) {
+  if (!isActiveGM() || !scene) return;
+  const plans = planResync(scene.tokens ?? [], (id) => anyContext(scene, id), { old: oldTerrain, levels });
   if (!plans.length) return;
   try {
     await scene.updateEmbeddedDocuments("Token", plans.map((p) => p.update), correctionOptions(plans));

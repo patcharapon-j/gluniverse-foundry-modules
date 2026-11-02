@@ -20,6 +20,8 @@ import { PropStore } from "./terrain/props-store.mjs";
 import { installRules, readyRules } from "./foundry/install.mjs";
 import { wireSocket } from "./view/sync.mjs";
 import { watchTargetLines } from "./integrations/target-lines.mjs";
+import { registerReadout } from "../perf/readouts.mjs";
+import { readoutRows } from "./view/readout.mjs";
 import { wireStandee } from "./view/standee-app.mjs";
 import { EntryChip } from "./view/entry.mjs";
 
@@ -175,6 +177,14 @@ function registerKeybindings() {
     precedence: priority,
     onDown: () => _view?.cyclePitch() ?? false,
   });
+  // The GM's "cut away roofs" (docs/DIORAMA_BUILDINGS.md). No default key.
+  game.keybindings.register(SUITE_ID, "dio.roofs", {
+    name: "GLDIO.keys.roofs",
+    hint: "GLDIO.keys.roofsHint",
+    editable: [],
+    restricted: true,
+    onDown: () => { if (!_view?.isOpen?.()) return false; _view.toggleRoofs(); return true; },
+  });
 }
 
 function onUpdateScene(scene, changes) {
@@ -209,6 +219,12 @@ function onCanvasTearDown() {
   _entry?.set(false);
 }
 
+/** A Level's elevation sets where its terrain stands: a Level change drops the scene's cache. */
+function onLevelChange(level) {
+  const scene = level?.parent;
+  if (scene?.documentName === "Scene" || scene?.levels) invalidate(scene);
+}
+
 export function onInit() {
   try {
     const p = installRules();
@@ -224,6 +240,7 @@ export function onInit() {
   Hooks.on("updateScene", onUpdateScene);
   Hooks.on("updateSetting", onUpdateSetting);
   Hooks.on("canvasReady", onCanvasReady);
+  for (const h of ["createLevel", "updateLevel", "deleteLevel"]) Hooks.on(h, onLevelChange);
   Hooks.on("canvasTearDown", onCanvasTearDown);
 }
 
@@ -235,6 +252,12 @@ export function onReady() {
     err("diorama: readyRules failed", e);
   }
   wireSocket(loadView, isOpen);
+  // The perf overlay's Diorama section: only while the view is open (it reads
+  // nothing otherwise, and the renderer times frames only while the overlay is up).
+  registerReadout(game.i18n.localize("GLDIO.graphics.readout.section"), () => {
+    const r = _view?.isOpen?.() ? _view.viewRenderer?.() : null;
+    return r ? readoutRows(r.profile(), (k) => game.i18n.localize(k)) : null;
+  });
   // The way in, labelled, on the 2D board (the scene-control button and Shift+V stay).
   _entry = new EntryChip({ onOpen: toggleOnce });
   refreshEntry();

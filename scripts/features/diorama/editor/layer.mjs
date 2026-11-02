@@ -29,7 +29,7 @@ import { SUB, KIND } from "../constants.mjs";
 import { PALETTE, hexToInt, hexToRgb } from "../../../core/theme.mjs";
 import { parseKey } from "./difficult.mjs";
 import { BRUSHED } from "./session.mjs";
-import { footprintCorners, worldOf, SHAPE_DEFAULTS } from "../terrain/props.mjs";
+import { footprintCorners, footprintOutline, kitParts, worldOf, SHAPE_DEFAULTS } from "../terrain/props.mjs";
 import { snapCentre } from "./props-tool.mjs";
 
 const CAPTURE_Z = 10000;
@@ -377,16 +377,27 @@ export class EditorLayer {
     const on = s.mode === "props";
     const sel = s.propTool.selected;
     for (const p of s.props) {
-      const pts = footprintCorners(p).map(([x, y]) => [x * size, y * size]);
+      // a slab's or an extrusion's own outline, the w × d box of everything else
+      const pts = footprintOutline(p).map(([x, y]) => [x * size, y * size]);
       const picked = on && p.id === sel;
       const c = picked ? col("signal") : p.hidden ? col("violet") : col("textBright");
       g.beginFill(c, picked ? 0.24 : on ? 0.12 : 0.05);
       g.lineStyle({ width: 1, color: c, alpha: on ? 0.95 : 0.4, native: true });
       g.moveTo(pts[0][0], pts[0][1]);
-      for (let i = 1; i < 4; i++) g.lineTo(pts[i][0], pts[i][1]);
+      for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
       g.lineTo(pts[0][0], pts[0][1]);
       g.endFill();
-      if (picked) {
+      if (picked && p.shape === "kit") {
+        // a kit: each of its parts, faint, inside its box
+        g.lineStyle({ width: 1, color: c, alpha: 0.6, native: true });
+        for (const q of kitParts(p)) {
+          const qs = footprintOutline(q).map(([x, y]) => [x * size, y * size]);
+          g.moveTo(qs[0][0], qs[0][1]);
+          for (let i = 1; i < qs.length; i++) g.lineTo(qs[i][0], qs[i][1]);
+          g.lineTo(qs[0][0], qs[0][1]);
+        }
+      }
+      if (picked && !p.points) {
         // the front edge (local +y): where a wedge runs down, where a card faces
         const [a, b] = [worldOf(p, -0.35, 0.5), worldOf(p, 0.35, 0.5)];
         g.lineStyle({ width: 1, color: col("signal"), alpha: 1, native: true });

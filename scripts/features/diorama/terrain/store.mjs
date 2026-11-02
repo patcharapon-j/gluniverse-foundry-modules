@@ -2,9 +2,11 @@
  * Diorama — the only reader and writer of the terrain scene flag.
  *
  * Stored at `scene.flags[SUITE_ID].dio.terrain.levels[<levelId>]` (the flag key
- * `dio.terrain` resolves to that nested path through getProperty). Keyed by
- * Level from day one so multi-Level scenes are an addition later, not a
- * migration; v1 reads and writes the scene's initial Level only.
+ * `dio.terrain` resolves to that nested path through getProperty), one entry
+ * per v14 Level, heights relative to that Level's base (terrain/levels.mjs).
+ * Every call takes an optional Level; without one it is the Level in question
+ * (`resolveLevelId`: the one viewed on the canvas, else the initial Level), so
+ * a one-Level scene and an old world read exactly the entry they always did.
  *
  * Every write is a FORCED replacement of one Level's entry: a plain nested
  * update merges, so a palette that lost an entry or a wall-material map that
@@ -17,6 +19,7 @@
 import { SUITE_ID } from "../../../core/const.mjs";
 import { FLAG_TERRAIN, FLAG_OFF, SETTINGS } from "../constants.mjs";
 import { Terrain, distToQ } from "./model.mjs";
+import { resolveLevelId } from "./levels.mjs";
 
 const TERRAIN_PATH = `flags.${SUITE_ID}.${FLAG_TERRAIN}`;
 
@@ -38,9 +41,14 @@ function forceDelete(upd, path) {
   return upd;
 }
 
-/** The Level id terrain is keyed on (v1: the scene's initial Level). */
-export function levelIdOf(scene) {
-  return scene?.initialLevel?.id ?? "default";
+/**
+ * The Level id terrain is keyed on: `level` when the scene holds it, else the
+ * Level viewed on the canvas, else the initial Level, else "default".
+ * @param {Scene} scene
+ * @param {string|{id:string}|null} [level]
+ */
+export function levelIdOf(scene, level = null) {
+  return resolveLevelId(scene, level);
 }
 
 /** Grid facts the terrain is laid out on. */
@@ -63,9 +71,15 @@ export function supportsScene(scene) {
   return T ? type === T.SQUARE : type === 1;
 }
 
-function readRaw(scene) {
+function readRaw(scene, level = null) {
   const all = scene?.getFlag?.(SUITE_ID, FLAG_TERRAIN);
-  return all?.levels?.[levelIdOf(scene)] ?? null;
+  return all?.levels?.[levelIdOf(scene, level)] ?? null;
+}
+
+/** The Level ids that have saved terrain. */
+export function savedLevelIds(scene) {
+  const all = scene?.getFlag?.(SUITE_ID, FLAG_TERRAIN)?.levels;
+  return all && typeof all === "object" ? Object.keys(all).filter((k) => all[k]) : [];
 }
 
 function setting(key, fallback) {
@@ -86,15 +100,20 @@ export function blankFor(scene) {
   });
 }
 
+/** The update a write sends: a forced replacement of one Level's entry (exported for the check tool). */
+export function terrainUpdate(scene, terrain, level = null) {
+  return forceSet({}, `${TERRAIN_PATH}.levels.${levelIdOf(scene, level)}`, terrain.toJSON());
+}
+
 export const TerrainStore = {
-  /** Is terrain saved for this scene's Level? */
-  has(scene) {
-    return !!readRaw(scene);
+  /** Is terrain saved for this Level (default: the Level in question)? */
+  has(scene, level = null) {
+    return !!readRaw(scene, level);
   },
 
-  /** The saved terrain, or a flat blank one. Never throws. */
-  read(scene) {
-    const raw = readRaw(scene);
+  /** The saved terrain of a Level, or a flat blank one. Never throws. */
+  read(scene, level = null) {
+    const raw = readRaw(scene, level);
     if (!raw) return blankFor(scene);
     const g = gridOf(scene);
     try {
@@ -105,17 +124,16 @@ export const TerrainStore = {
   },
 
   /** Save a terrain (GM only). Forced replacement of this Level's entry. */
-  async write(scene, terrain) {
+  async write(scene, terrain, level = null) {
     if (!game.user?.isGM || !scene) return false;
-    const upd = forceSet({}, `${TERRAIN_PATH}.levels.${levelIdOf(scene)}`, terrain.toJSON());
-    await scene.update(upd);
+    await scene.update(terrainUpdate(scene, terrain, level));
     return true;
   },
 
-  /** Remove this Level's terrain (back to flat). */
-  async clear(scene) {
+  /** Remove a Level's terrain (back to flat). */
+  async clear(scene, level = null) {
     if (!game.user?.isGM || !scene) return false;
-    await scene.update(forceDelete({}, `${TERRAIN_PATH}.levels.${levelIdOf(scene)}`));
+    await scene.update(forceDelete({}, `${TERRAIN_PATH}.levels.${levelIdOf(scene, level)}`));
     return true;
   },
 

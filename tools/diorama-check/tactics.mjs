@@ -288,4 +288,40 @@ export default async function check(ctx) {
   const osrc = stripComments(readFileSync(join(ctx.root, `${DIO}/view/overlay.mjs`), "utf8"));
   ctx.ok("overlay: areas are read with the board's tokens, and re-read when they change",
     /tokenSeen: \(id\) => S\.tokenIds\.has\(id\)/.test(osrc) && /setAreas\?\.\(areas\)/.test(osrc) && /d\.add\("cells"\)/.test(osrc));
+
+  /* ---------------- marks on the ground never draw over unseen ground ---------------- */
+  // The range, the cell marks and the walked path are ribbons on the ground. Over
+  // unseen ground they would trace its shape (a pit, a terrace) through the mist,
+  // so a masked ribbon discards there and fades under the mist's edge, and the
+  // range draws before the fog bank so the mist lies over it. The ruler is not
+  // masked: it is a measurement, not ground.
+  const G = await import(ctx.url(`${DIO}/render/glsl.mjs`));
+  const rf = G.RIBBON_FRAG ?? "";
+  ctx.ok("ribbons: a masked ribbon discards over unseen ground and fades under the mist's edge",
+    /if \(uMask > 0\.5 && uUseVision > 0\.5\)/.test(rf) && /max\(v\.r, v\.g\) <= 0\.5\) discard;/.test(rf)
+    && /a \*= 1\.0 - smoothstep\(0\.12, 0\.5, max\(1\.0 - f\.g, f\.b\)\)/.test(rf) && /vWorld/.test(G.RIBBON_VERT ?? ""));
+  const ovsrc = stripComments(readFileSync(join(ctx.root, `${DIO}/render/overlays.mjs`), "utf8"));
+  const fogsrc = stripComments(readFileSync(join(ctx.root, `${DIO}/render/fog.mjs`), "utf8"));
+  const reachOrder = Number(/MATERIALS\.ribbon\(this\.shared, \{ mask: true \}\)\);\s*m\.renderOrder = (\d+);\s*$/m.exec(ovsrc.slice(ovsrc.lastIndexOf("MATERIALS.ribbon")))?.[1]);
+  const fogOrder = Number(/this\.mesh\.renderOrder = (\d+);/.exec(fogsrc)?.[1]);
+  ctx.ok("ribbons: the range, the marks and the path are masked, the ruler is not; the range draws under the mist",
+    (ovsrc.match(/MATERIALS\.ribbon\(this\.shared, \{ mask: true \}\)/g) ?? []).length >= 2 && /MATERIALS\.ribbon\(this\.shared, \{ mask: hug \}\)/.test(ovsrc)
+    && reachOrder < fogOrder, `range ${reachOrder}, fog ${fogOrder}`);
+
+  /* ---------------- viewing as the players: nothing of a hidden token ---------------- */
+  const seqsrc = stripComments(readFileSync(join(ctx.root, `${DIO}/integrations/sequencer.mjs`), "utf8"));
+  ctx.ok("players' view: an effect on, from or to a token off their board is not drawn",
+    /states\(tokenSeen = null\)/.test(seqsrc) && /effect\.data\?\.attachTo, effect\.data\?\.source, effect\.data\?\.stretchTo, effect\.data\?\.target/.test(seqsrc)
+    && /S\.seq\?\.states\(\(id\) => S\.tokenIds\.has\(id\)\)/.test(osrc));
+  const Seq = await import(ctx.url(`${DIO}/integrations/sequencer.mjs`)).catch(() => null);
+  if (Seq?.tokenIdOf) {
+    const id = "AbCdEfGhIjKlMnOp";
+    ctx.ok("players' view: a token is named the same from a uuid, a document or a placeable",
+      Seq.tokenIdOf(`Scene.qwertyuiopasdfgh.Token.${id}`) === id && Seq.tokenIdOf({ documentName: "Token", id }) === id
+      && Seq.tokenIdOf({ document: { documentName: "Token", id } }) === id && Seq.tokenIdOf("Actor.qwertyuiopasdfgh") === null);
+  }
+  const bksrc = stripComments(readFileSync(join(ctx.root, `${DIO}/view/bake.mjs`), "utf8"));
+  ctx.ok("players' view: a hidden token's own light is not baked (its pool would outline it)",
+    /this\.lightSources\(env\)\.filter\(\(src\) => mode !== "players" \|\| !hiddenTokenLight\(src\)\)/.test(bksrc)
+    && /doc\?\.documentName === "Token" && !!doc\.hidden/.test(bksrc));
 }

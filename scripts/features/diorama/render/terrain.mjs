@@ -15,7 +15,7 @@ export const SHADOW_LAYER = 1;
 /** How far the table shadow's plane reaches past the board, cells. */
 const TABLE_MARGIN = 6;
 
-function geometryFrom(part) {
+export function geometryFrom(part) {
   const g = new THREE.BufferGeometry();
   for (const [name, size] of Object.entries(part.itemSize)) {
     g.setAttribute(name, new THREE.BufferAttribute(part[name], size));
@@ -26,7 +26,7 @@ function geometryFrom(part) {
   return g;
 }
 
-function fieldTexture(f) {
+export function fieldTexture(f) {
   const t = new THREE.DataTexture(f.data, f.width, f.height, THREE.RGBAFormat);
   t.flipY = false;
   t.generateMipmaps = false;
@@ -54,6 +54,27 @@ export class TerrainLayer {
     this.terrain = null;
     this.blankField = shared.uField.value;
     this.fieldTex = null;
+    /** The lowest floor drawn under this board (a lower Level), world y; null: none. */
+    this.tableFloor = null;
+  }
+
+  /**
+   * Lay the table under a lower floor too: with Levels stacked beneath the
+   * viewed one, its soft shadow sits under the lowest of them, never across
+   * them. null puts it back under this board alone.
+   * @param {number|null} y  world y
+   */
+  setTableFloor(y) {
+    this.tableFloor = Number.isFinite(y) ? y : null;
+    const table = this.meshes.table;
+    if (!table || !this.mesh) return;
+    table.position.y = this.tableY();
+    table.updateMatrix();
+  }
+
+  tableY() {
+    const base = this.mesh ? this.mesh.baseY : 0;
+    return Math.min(base, this.tableFloor ?? Infinity) - 0.01;
   }
 
   /** @param {import("../terrain/model.mjs").Terrain|null} terrain */
@@ -87,7 +108,7 @@ export class TerrainLayer {
     plane.rotateX(-Math.PI / 2);
     const table = new THREE.Mesh(plane, this.materials.table);
     table.name = "dio.terrain.table";
-    table.position.set((b.x0 + b.x1) / 2, m.baseY - 0.01, (b.z0 + b.z1) / 2);
+    table.position.set((b.x0 + b.x1) / 2, this.tableY(), (b.z0 + b.z1) / 2);
     table.updateMatrix();
     table.matrixAutoUpdate = false;
     table.renderOrder = -10;

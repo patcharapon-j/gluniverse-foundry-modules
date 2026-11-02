@@ -24,7 +24,12 @@
  *   halo=<n>    effect-halo mode; the knight wears n effect chips (0..12)
  *   target=knight  the knight targeted (red outline, glow, reticle)
  *   tilt=0|1  cutaway=0|1  door=closed|open|locked  ghosts=0|1
- *   still=1     shed water and sway, so the page goes idle (screenshots)
+ *   still=1     shed water and sway, so the page goes idle (screenshots);
+ *               idle=1 also holds the reticle, the fog's drift and areas still
+ *   probe=perf  frames and shadow-map renders per second after settle=<ms>
+ *               (default 2000), and what kept frames coming; pan=1 pans meanwhile
+ *   probe=shaders  every program's compile and link log (run with
+ *               --use-angle=d3d11 to see D3D's HLSL warnings)
  *   life=walk|fall|drop|fly|land  token life: a walk, a 5 / 10 ft fall, a hovering flyer,
  *               a flyer landing; seek=<ms> freezes the standees that long into
  *               the move (stills mid-hop, mid-fall, at the dust); tokenLife=0 off
@@ -33,13 +38,24 @@
  *   dark=<0..1> scene darkness (default 0.4)
  *   torches=1   the two lights as bake sources: a torch that flickers and burns, a
  *               brazier prop whose warm light becomes a fire; lightFx=off|on
- *   fow=clouds|flat  the fog of war's style; unseen=wide  sight in the middle only
+ *   fow=clouds|flat  the fog of war's style; unseen=wide  sight in the middle only;
+ *               unseen=pillar  a wedge of unseen ground behind a pillar
+ *   tower=1     a 50 ft tower in the far corner (hidden under unseen=wide)
+ *   reach=1     the rogue's movement range, stepping round the other creatures
  *   props=1     the props gallery (every shape, every material, a stack, cards,
  *               a GM-only ghost) instead of the tokens; view=props|mats frames it
+ *   props=2     the newer shapes, slabs, a kit, a path pipe, a JS-built model, a
+ *               failed model and a faded roof (fade=<0..1>); view=props2 frames the
+ *               shapes (in the house), view=slabs the slabs, view=kits the rest
  *   areas=1     spell areas as volumes (a burst on the plateau's corner, a cone, a
  *               line, an emanation), on PF2e's squares; areaVolumes=0 flat only
  *   los=knight-goblin[,rogue-drake]  lines of sight with their readouts
  *   fall=1      a dragged path off the plateau: the drop line and its damage
+ *   levels=1    v14 Levels: the map as an upper floor (base 20 ft) with a hole, a
+ *               cellar drawn below it by setLevels; levels=ghost  the cellar as a
+ *               GM-only ghost (a still)
+ *   buildings=1 Foundry tiles: a roof over the house, a rug, a mirrored banner, a
+ *               GM-only ghost; roof=in|out|cut|radial; view=house; probe=tiles
  *
  * The environment (environment.mjs; a preset first, then fields over it):
  *   preset=<key>  clearDay | goldenHour | dusk | night | rain | storm | snow | …
@@ -208,6 +224,10 @@ function buildTerrain() {
   fillCells(11, 11, 6, 7, extra("Plinth", 3, "edge"));
   // void notch in the far corner
   for (let si = ROWS * SUB - 2; si < ROWS * SUB; si++) for (let sj = 0; sj < 4; sj++) t.set(si, sj, { kind: KIND.VOID });
+  // unseen=pillar: a stone pillar on the grass the party looks past (cell 5, 5, 20 ft)
+  if (Q.get("unseen") === "pillar") fillCells(5, 5, 5, 5, extra("Pillar", 16, "stone"), 16);
+  // tower=1: a 50 ft tower in the far corner, where unseen=wide hides it
+  if (Q.get("tower") === "1") fillCells(10, 10, 14, 14, extra("Tower", 40, "stone"), 40);
   return t;
 }
 
@@ -298,6 +318,19 @@ function visionCanvas() {
     g.fillStyle = "rgb(0,0,0)"; g.fillRect(0, 0, c.width, c.height);
     g.fillStyle = "rgb(0,255,0)"; g.beginPath(); g.ellipse(7 * k, 6.5 * k, 7.2 * k, 5 * k, 0, 0, 7); g.fill();
     g.fillStyle = "rgb(255,255,0)"; g.beginPath(); g.ellipse(7.5 * k, 6.5 * k, 5 * k, 3.6 * k, 0.3, 0, 7); g.fill();
+  }
+  // unseen=pillar: a party at (2.5, 5.5) seeing past a pillar (cell 5, 5): the hard
+  // wedge of sight it casts runs east, never seen, as Foundry's polygon cuts it
+  if (Q.get("unseen") === "pillar") {
+    const V = [2.5, 5.5], C = [5.5, 5.5], rad = 0.5, far = 30;
+    g.fillStyle = "rgb(0,0,0)"; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = "rgb(255,255,0)"; g.beginPath(); g.arc(V[0] * k, V[1] * k, 9 * k, 0, 7); g.fill();
+    const d = Math.hypot(C[0] - V[0], C[1] - V[1]), base = Math.atan2(C[1] - V[1], C[0] - V[0]), half = Math.asin(rad / d);
+    const tan = Math.sqrt(d * d - rad * rad);
+    const pt = (a, r) => [(V[0] + Math.cos(a) * r) * k, (V[1] + Math.sin(a) * r) * k];
+    g.fillStyle = "rgb(0,0,0)"; g.beginPath();
+    g.moveTo(...pt(base - half, tan)); g.lineTo(...pt(base - half, far)); g.lineTo(...pt(base + half, far)); g.lineTo(...pt(base + half, tan));
+    g.closePath(); g.fill();
   }
   return c;
 }
@@ -460,8 +493,29 @@ const path = () => ({ points: [
   { x: 850, y: 450, zQ: 6, color: PALETTE.warn }, { x: 950, y: 450, zQ: 8, color: PALETTE.warn },
 ], color: PALETTE.good });
 let pings = [];
+// reach=1: the rogue's movement range (rules/reach.mjs), stepping round the
+// creatures: the knight (an ally) is passed, never ended on; the goblin's square
+// blocks; the ogre (neutral) is passed; the harpy flies clear over it. With unseen=wide its far
+// squares run into the mist and must not show there.
+const reachOverlay = await (async () => {
+  if (Q.get("reach") !== "1") return null;
+  const RR = await import("/scripts/features/diorama/rules/reach.mjs");
+  const cellOf = (t) => ({ i: Math.round(t.y / SIZE - (t.widthCells || 1) / 2), j: Math.round(t.x / SIZE - (t.widthCells || 1) / 2), w: t.widthCells || 1, h: t.widthCells || 1 });
+  const all = tokens();
+  const me = all.find((t) => t.id === "rogue");
+  const occupied = RR.occupancy?.({
+    mover: { w: 1, h: 1, disposition: me.disposition, alt: 0, height: 5 },
+    others: all.filter((t) => t !== me && t.visible).map((t) => ({ ...cellOf(t), disposition: t.disposition, alt: (t.footQ - (t.groundQ ?? t.footQ)) * 1.25, height: t.heightQ * 1.25 })),
+  });
+  const start = cellOf(me);
+  const budgets = RR.reachBudgets({ systemId: "pf2e", speed: 25, gridDistance: 5 });
+  const solved = RR.solveReach({ start, budget: budgets.at(-1), gridDistance: 5, bounds: { rows: ROWS, cols: COLS }, occupied });
+  const cells = solved.cells.filter((c) => c.i !== start.i || c.j !== start.j).map((c) => ({ ...c, band: RR.reachBand(budgets, c.cost) })).filter((c) => c.band);
+  return { cells, start: { ...start } };
+})();
 const overlays = () => ({
-  path: path(),
+  reach: reachOverlay,
+  path: Q.get("reach") === "1" ? null : path(),
   cells: { cells: [[8, 9], [8, 10], [9, 9], [9, 10], [10, 9], [10, 10]].map(([i, j]) => ({ i, j })), color: PALETTE.hazard },
   ruler: { a: { x: 1150, y: 450, zQ: 8 }, b: { x: 250, y: 150, zQ: 4 }, color: PALETTE.signal },
   pings,
@@ -494,7 +548,8 @@ if (PROPS_ON) {
   const blobUrl = async (dataUrl) => URL.createObjectURL(await (await fetch(dataUrl)).blob());
   const knightUrl = await blobUrl(ART.knight), drakeUrl = await blobUrl(ART.drake);
   const list = [];
-  PM.PROP_SHAPES.forEach((shape, n) => {
+  // the first eighteen shapes; props=2 shows the rest
+  PM.PROP_SHAPES.slice(0, PM.PROP_SHAPES.indexOf("slab")).forEach((shape, n) => {
     const d = PM.SHAPE_DEFAULTS[shape];
     const k = Math.min(1, 0.9 / Math.max(d.w, d.d));              // fit a 0.9-square slot
     const x = 9.5 + (n % 6), y = 7.4 + Math.floor(n / 6) * 1.25;
@@ -537,10 +592,89 @@ if (PROPS_ON) {
   }, 3000);
 }
 
-// torches=1: the brazier the second light burns in (a warm light on a prop named for a fire)
-if (TORCHES_ON && !PROPS_ON) {
+/* ------------------------------------------------------------ props (props=2) */
+// The shapes past the first eighteen in the house on the plateau; on the grass
+// south of it an outlined slab with metal sides and a turned slab with steps;
+// west, a market-stall kit, a path pipe, a model built here in JS (handed to the
+// layer through setModelLoader, as a test would) and a model that fails (the
+// GM's placeholder). The gable roof is faded to 0.4 (fade=<0..1>).
+const PROPS2_ON = Q.get("props") === "2";
+if (PROPS2_ON) {
   const PM = await import("/scripts/features/diorama/terrain/props.mjs");
-  const norm = PM.normalizeProps([{ id: "brazier", shape: "cylinder", x: 5.5, y: 8.6, w: 0.55, d: 0.55, h: 0.45, rot: 0, mat: "metal", label: "Brazier" }]);
+  const MD = await import("/scripts/features/diorama/render/props-models.mjs");
+  const T3 = await import("/scripts/features/diorama/render/three.mjs");
+  MD.setModelLoader(async (src) => {
+    if (src !== "preview/statue.glb") throw new Error("no such file in the preview");
+    const scene = new T3.Group();
+    const mat = (hex) => new T3.MeshStandardMaterial({ color: hex });
+    const add = (g, m, y) => { const o = new T3.Mesh(g, m); o.position.y = y; scene.add(o); };
+    add(new T3.CylinderGeometry(1, 1.15, 0.5, 20), mat(0x8a8478), 0.25);
+    add(new T3.CylinderGeometry(0.42, 0.55, 2.2, 14), mat(0xb9b2a4), 1.6);
+    add(new T3.SphereGeometry(0.62, 16, 12), mat(0xc9a64a), 3.2);
+    add(new T3.TorusGeometry(0.75, 0.08, 8, 24).rotateX(Math.PI / 2), mat(0x6d5a3a), 0.62);
+    return MD.bakeScene(scene);
+  });
+  const shapes = PM.PROP_SHAPES.slice(PM.PROP_SHAPES.indexOf("slab")).filter((s) => !["slab", "kit", "model"].includes(s));
+  const mats = { pipe: "metal", fence: "wood", parapet: "stone", beam: "wood", sign: "wood", cross: "stone", bowl: "stone", lamp: "metal",
+    gable: "wood", hip: "plaster", lean: "wood", spire: "cloth", lathe: "marble", extrude: "earth", platform: "wood", stairs: "stone", hex: "crystal", octagon: "marble" };
+  // the house on the plateau (walls x 10..14, y 2..6): four rows of five, each in a 0.7-square slot
+  const list = shapes.map((shape, n) => {
+    const d = PM.SHAPE_DEFAULTS[shape];
+    const k = Math.min(1, 0.68 / Math.max(d.w, d.d));
+    return { id: "n-" + shape, shape, x: 10.45 + (n % 5) * 0.78, y: 2.5 + Math.floor(n / 5) * 0.95, w: d.w * k, d: d.d * k, h: Math.min(d.h, 1.3) * (shape === "lamp" ? 0.55 : 1),
+      rot: shape === "stairs" || shape === "fence" || shape === "parapet" ? 0 : 20, mat: mats[shape] ?? d.mat, label: shape,
+      ...(shape === "extrude" ? { h: 0.3, bevel: 0.06, points: [[-0.3, -0.24], [0.06, -0.33], [0.33, -0.06], [0.22, 0.3], [-0.26, 0.26]] } : {}) };
+  });
+  // south grass (x 9..15, y 7..10): slabs
+  list.push({ id: "slab-out", shape: "slab", x: 0, y: 0, points: [[9.15, 7.2], [11.4, 7.45], [11.1, 8.9], [9.6, 9.3], [9.05, 8.4]], h: 0.5, cliff: "metal", label: "outlined slab" });
+  list.push({ id: "slab-rot", shape: "slab", x: 13.2, y: 7.9, w: 1.8, d: 1.1, h: 0.75, rot: 25, cliff: "brick", label: "turned slab" });
+  // the steps meet the turned slab's front edge: its centre 0.85 squares down the slab's own axis
+  list.push({ id: "slab-steps", shape: "stairs", x: 12.84, y: 8.67, w: 1, d: 0.6, h: 0.75, rot: 25, label: "steps onto the slab" });
+  // west grass (x 0..7, y 4..8): a kit, a path pipe, a model and a model that failed
+  list.push({ id: "stall", shape: "kit", kit: "stall", x: 1.6, y: 5.4, rot: 0, label: "stall", parts: [
+    { shape: "box", x: 0, y: 0, w: 1.6, d: 0.8, h: 0.8, mat: "wood" },
+    { shape: "cylinder", x: -0.85, y: 0.45, w: 0.1, d: 0.1, h: 1.4, mat: "wood", solid: false },
+    { shape: "cylinder", x: 0.85, y: 0.45, w: 0.1, d: 0.1, h: 1.4, mat: "wood", solid: false },
+    { shape: "gable", x: 0, y: 0, w: 2, d: 1.2, h: 0.5, elev: 1.4, mat: "cloth", tint: "#a33a2a" },
+  ] });
+  list.push({ id: "duct", shape: "pipe", x: 0, y: 0, path: [[0.4, 7.2, 0.15], [2, 7.2, 0.15], [2, 6.6, 0.6], [3, 6.6, 0.6]], thick: 0.22, label: "path pipe" });
+  list.push({ id: "statue", shape: "model", x: 6, y: 4.7, w: 1, d: 1, h: 1.6, src: "preview/statue.glb", label: "model" });
+  list.push({ id: "lost", shape: "model", x: 6.1, y: 6.2, w: 0.8, d: 0.8, h: 1, src: "preview/missing.glb", label: "model that failed" });
+  // a slab's outline is absolute here for readability: make it relative, the way a layout does
+  const o = list.find((p) => p.id === "slab-out");
+  const cx = (Math.min(...o.points.map((q) => q[0])) + Math.max(...o.points.map((q) => q[0]))) / 2;
+  const cy = (Math.min(...o.points.map((q) => q[1])) + Math.max(...o.points.map((q) => q[1]))) / 2;
+  Object.assign(o, { x: cx, y: cy, points: o.points.map(([x, y]) => [x - cx, y - cy]) });
+  const d0 = list.find((p) => p.id === "duct");
+  const px0 = (Math.min(...d0.path.map((q) => q[0])) + Math.max(...d0.path.map((q) => q[0]))) / 2;
+  const py0 = (Math.min(...d0.path.map((q) => q[1])) + Math.max(...d0.path.map((q) => q[1]))) / 2;
+  Object.assign(d0, { x: px0, y: py0, path: d0.path.map(([x, y, z]) => [x - px0, y - py0, z]) });
+  const norm = PM.normalizeProps(list);
+  const states = PM.propStates(PM.resolveProps(terrain, norm).props, { isGM: true });
+  r.setTokens([]);
+  r.setEffects([]);
+  r.setOverlays({});
+  r.setProps(states);
+  const fade = Q.has("fade") ? Number(Q.get("fade")) : 0.4;
+  r.props.setRoofFade(new Map([["n-gable", fade]]));
+  window.__props = { count: states.length, ghosts: states.filter((s) => s.ghost).length, blocks: states.filter((s) => s.blocks).length };
+  if (Q.get("probe") === "props") setTimeout(() => {
+    const L = r.props;
+    const pre = document.createElement("pre");
+    pre.id = "probe";
+    pre.textContent = JSON.stringify({
+      ...window.__props,
+      buckets: [...L.buckets].map(([k, b]) => k + ":" + b.mesh.count),
+      slabs: L.slabs.ranges.map((s) => s.id), lod: L.common.uPropLod.value, animated: L.animated(r.fx),
+    });
+    document.body.append(pre);
+  }, 3000);
+}
+
+// torches=1: the brazier the second light burns in (a warm light on a prop named for a fire)
+if (TORCHES_ON && !PROPS_ON && !PROPS2_ON) {
+  const PM = await import("/scripts/features/diorama/terrain/props.mjs");
+  const norm = PM.normalizeProps([{ id: "brazier", shape: "brazier", x: 5.5, y: 8.6, w: 0.55, d: 0.55, h: 0.5, rot: 0, label: "Brazier" }]);
   r.setProps(PM.propStates(PM.resolveProps(terrain, norm).props, { isGM: true }));
   // probe=torches: the living-light layer's state after a few seconds, in #probe (headless --dump-dom)
   if (Q.get("probe") === "torches") setTimeout(() => {
@@ -567,11 +701,15 @@ let links = Q.get("links") === "1" ? [
 ] : [];
 r.setLinks(links);
 
-if (Q.get("still") === "1" || Q.has("shed")) {
+// idle=1: every ambient loop held too (the reticle's breathe, the fog's drift, an
+// area's glow), so only living light can keep frames coming (probe=perf)
+if (Q.get("still") === "1" || Q.get("idle") === "1" || Q.has("shed")) {
   const n = Q.has("shed") ? Number(Q.get("shed")) : 0;
-  const still = Q.get("still") === "1";
+  const still = Q.get("still") === "1" || Q.get("idle") === "1";
+  const idle = Q.get("idle") === "1";
   r.setShed({ allows: (name) => {
     if (still && (name === "water" || name === "standeeSway")) return false;
+    if (idle && (name === "markerMotion" || name === "fogDrift" || name === "areaMotion")) return false;
     const i = SHED_ORDER.indexOf(name);
     return i < 0 || i >= n;
   } });
@@ -587,12 +725,139 @@ else if (view === "goblin") cam = { ...cam, zoom: 3.2, target: { x: 250, y: 150,
 else if (view === "rogue") cam = { ...cam, zoom: 3.2, target: { x: rogueAt.x, y: rogueAt.y, zQ: 2 } };
 else if (view === "props") cam = { ...cam, zoom: 2.2, target: { x: 1200, y: 880, zQ: 2 } };
 else if (view === "mats") cam = { ...cam, zoom: 2.4, target: { x: 380, y: 560, zQ: 2 } };
+else if (view === "props2") cam = { ...cam, zoom: 2.4, target: { x: 1200, y: 400, zQ: 8 } };
+else if (view === "slabs") cam = { ...cam, zoom: 2.4, target: { x: 1200, y: 830, zQ: 2 } };
+else if (view === "kits") cam = { ...cam, zoom: 2.2, target: { x: 380, y: 580, zQ: 2 } };
 else cam.zoom = 0.82;
 if (Q.has("zoom")) cam.zoom = Number(Q.get("zoom"));
 r.setCamera(cam, { animate: false });
 // grid=1: the square grid on walkable tops, in the scene's colour and alpha
 let grid = { on: Q.get("grid") === "1", color: "#000000", alpha: 0.35 };
 r.setOptions({ tiltShift: Q.get("tilt") === "1", cutaway: Q.get("cutaway") !== "0", grid });
+
+// levels=1: a two-Level scene (v14 Levels), through the shipped pure modules.
+// The painted map is the upper floor ("hall", base 20 ft) with a hole in its
+// south-west corner; a cellar below (base 0) is drawn by setLevels at its own
+// base with its own art, dimmed, and a rat stands on it under the hole.
+// levels=ghost: the hall does not list the cellar as visible, so only a GM sees
+// it, as a dimmer ghost. A still: the actions below re-feed the one-Level scene.
+const LEVELS = Q.get("levels");
+if (LEVELS) {
+  const LV = await import("/scripts/features/diorama/terrain/levels.mjs");
+  const VL = await import("/scripts/features/diorama/view/levels.mjs");
+  const docs = [
+    { id: "cellar", name: "Cellar", elevation: { bottom: null, top: 20 }, visibility: { levels: [] } },
+    { id: "hall", name: "Hall", elevation: { bottom: 20, top: null }, visibility: { levels: LEVELS === "ghost" ? [] : ["cellar"] } },
+  ];
+  const lvScene = { levels: { get: (id) => docs.find((d) => d.id === id), contents: docs }, _view: "hall" };
+  const dq = Math.round(LV.levelBaseQ(lvScene, "hall", 5));
+  const hole = (i, j) => j < 4 && i >= 7;
+  const upper = LV.shiftTerrain(terrain, dq);
+  for (let si = 0; si < ROWS * SUB; si++) for (let sj = 0; sj < COLS * SUB; sj++) {
+    if (hole(Math.floor(si / SUB), Math.floor(sj / SUB))) upper.set(si, sj, { kind: KIND.VOID });
+  }
+  const cellar = Terrain.blank(COLS, ROWS);
+  for (const [i, j] of [[8, 1], [8, 2], [10, 0]]) for (let a = 0; a < SUB; a++) for (let b = 0; b < SUB; b++) cellar.set(i * SUB + a, j * SUB + b, { h: 4 });
+  const cellarArt = (() => {
+    const c = mk(COLS * 32, ROWS * 32), g = c.getContext("2d");
+    g.fillStyle = "#4a4038"; g.fillRect(0, 0, c.width, c.height);
+    g.strokeStyle = "rgba(20,14,10,0.6)"; g.lineWidth = 2;
+    for (let i = 0; i <= ROWS * 2; i++) for (let j = 0; j <= COLS * 2; j++) {
+      g.fillStyle = (i + j) % 3 ? "#564a40" : "#5e5246";
+      g.fillRect(j * 16 + 1, i * 16 + 1, 14, 14);
+    }
+    return c;
+  })();
+  const plan = VL.stackPlan(LV.levelsOf(lvScene), "hall", { gm: true });
+  const rect = { x: 0, y: 0, width: COLS * SIZE, height: ROWS * SIZE };
+  r.setTerrain(upper);
+  r.setLevels(VL.levelInputs(plan, (id) => (id === "cellar" ? cellar : null), () => cellarArt, rect));
+  r.setWalls(walls().map((w) => ({ ...w, baseQ: w.baseQ + dq, topQ: w.topQ + dq })));
+  const lifted = tokens().map((tk) => ({ ...tk, footQ: (tk.footQ ?? 0) + dq, groundQ: (tk.groundQ ?? 0) + dq }));
+  r.setTokens([...lifted, { id: "rat", name: "Rat", x: 250, y: 950, footQ: 0, groundQ: 0, heightQ: 3, widthCells: 1, art: ART.goblin,
+    disposition: -1, visible: true, ghost: false, controlled: false, hovered: false, targets: [], turn: null, conditions: [], bars: [] }]);
+  cam = { ...cam, target: { ...cam.target, zQ: (cam.target?.zQ ?? 0) + dq } };
+  r.setCamera(cam, { animate: false });
+  window.__levels = { plan: { below: plan.below.map((l) => ({ id: l.id, dim: l.dim, ghost: l.ghost })), cut: [...plan.cut] }, dq };
+}
+
+// buildings=1: Foundry tiles in 3D (docs/DIORAMA_BUILDINGS.md), through the
+// shipped pure modules: a FADE roof tile over the house (standing on its walls),
+// a rug decal on the plaza inside it, a turned and mirrored banner decal on the
+// grass, and a GM-only hidden tile drawn as a ghost.
+//   roof=in      the knight is a viewer's figure inside: the roof fades (default)
+//   roof=out     nobody inside: the roof is shut
+//   roof=cut     the GM's cut-away roofs
+//   roof=radial  a RADIAL roof: a hole round the knight
+//   view=house   frames the house; probe=tiles dumps the layer into #probe
+if (Q.get("buildings") === "1") {
+  const TI = await import("/scripts/features/diorama/integrations/tiles.mjs");
+  const VR = await import("/scripts/features/diorama/view/roofs.mjs");
+  const art = (w, h, paint) => { const c = mk(w, h); paint(c.getContext("2d"), w, h); return c.toDataURL(); };
+  const roofArt = art(256, 256, (g, w, h) => {
+    g.fillStyle = "#6e3b2a"; g.fillRect(0, 0, w, h);
+    for (let row = 0; row < 16; row++) for (let k = -1; k < 17; k++) {
+      const x = k * 16 + (row % 2) * 8, y = row * 16;
+      g.fillStyle = ["#7e4632", "#8a4e36", "#73402e"][(row * 7 + k * 3 + 9) % 3];
+      g.fillRect(x + 1, y + 1, 14, 13);
+      g.fillStyle = "rgba(20,10,6,0.35)"; g.fillRect(x + 1, y + 12, 14, 2);
+    }
+    g.fillStyle = "#4a2a1e"; g.fillRect(0, h / 2 - 5, w, 10);   // the ridge
+    g.strokeStyle = "#3a2018"; g.lineWidth = 6; g.strokeRect(3, 3, w - 6, h - 6);
+  });
+  const rugArt = art(200, 120, (g, w, h) => {
+    g.fillStyle = "#7a1f2b"; g.fillRect(0, 0, w, h);
+    g.strokeStyle = "#e2c25a"; g.lineWidth = 6; g.strokeRect(10, 10, w - 20, h - 20);
+    g.fillStyle = "#2b3f78"; g.beginPath(); g.ellipse(w / 2, h / 2, 46, 26, 0, 0, Math.PI * 2); g.fill();
+  });
+  // an arrow pointing right, so a mirror shows
+  const bannerArt = art(200, 100, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = "rgba(226,194,90,0.92)";
+    g.beginPath(); g.moveTo(10, 30); g.lineTo(130, 30); g.lineTo(130, 8); g.lineTo(192, 50); g.lineTo(130, 92); g.lineTo(130, 70); g.lineTo(10, 70); g.closePath(); g.fill();
+  });
+  const secretArt = art(100, 100, (g, w, h) => { g.fillStyle = "#3a3f4a"; g.fillRect(0, 0, w, h); g.fillStyle = "#c0c6d4"; g.fillRect(30, 30, 40, 40); });
+  const roofMode = Q.get("roof") || "in";
+  const mode = roofMode === "radial" ? TI.OCC.RADIAL : TI.OCC.FADE;
+  const tex = (src, o = {}) => ({ src, anchorX: 0.5, anchorY: 0.5, fit: "fill", scaleX: 1, scaleY: 1, tint: "#ffffff", ...o });
+  const tileDocs = [
+    { id: "roof", x: 1200, y: 400, width: 420, height: 420, rotation: 0, elevation: 20, alpha: 1, hidden: false, sort: 3, texture: tex(roofArt), occlusion: { modes: new Set([mode]), alpha: 0.15 } },
+    { id: "rug", x: 1200, y: 400, width: 200, height: 120, rotation: 0, elevation: 10, alpha: 1, hidden: false, sort: 1, texture: tex(rugArt), occlusion: { modes: new Set(), alpha: 0 } },
+    { id: "banner", x: 650, y: 900, width: 200, height: 100, rotation: 30, elevation: 0, alpha: 1, hidden: false, sort: 2, texture: tex(bannerArt, { scaleX: -1 }), occlusion: { modes: new Set(), alpha: 0 } },
+    { id: "secret", x: 250, y: 950, width: 100, height: 100, rotation: 0, elevation: 0, alpha: 1, hidden: true, sort: 0, texture: tex(secretArt), occlusion: { modes: new Set(), alpha: 0 } },
+  ];
+  const groundTopQ = (box) => {
+    let top = 0;
+    for (const [x, y] of box) top = Math.max(top, terrain.groundAt(Math.min(COLS * SIZE - 1, x), Math.min(ROWS * SIZE - 1, y), SIZE));
+    return top;
+  };
+  const tiles = tileDocs.map((d) => TI.tileStateOf(d, { gmView: true, distance: 5, walls: walls(), groundTopQ })).filter(Boolean);
+  r.setTiles(tiles);
+  const roof = tiles.find((t) => t.id === "roof");
+  const poly = roof.box.map(([x, y]) => [x / SIZE, y / SIZE]);
+  const y = roof.roofQ / 4;
+  const knight = { x: knightAt.x / SIZE, z: knightAt.y / SIZE, footY: 2, headY: 3.5 };
+  const inside = roofMode !== "out" && VR.underRoof(knight, poly, y);
+  const tgt = VR.roofTarget({ source: "tile", mask: roof.mask, occludedAlpha: roof.occludedAlpha }, {
+    gmView: roofMode === "cut", cutaway: roofMode === "cut", inside, below: inside,
+    holes: inside ? [{ x: knight.x, z: knight.z, r: 0.9 }] : [], visionMap: false,
+  });
+  r.setRoofs({ roofs: [{ id: "roof", source: "tile", poly, baseY: y, topY: y, ...tgt, open: roof.occludedAlpha, seen: 1 }], focus: inside ? [knight] : [] });
+  window.__buildings = { tiles: tiles.map((t) => ({ id: t.id, kind: t.kind, roofQ: t.roofQ, ghost: t.ghost })), target: tgt };
+  if (view === "house") { cam = { ...cam, zoom: 2.2, target: { x: 1200, y: 450, zQ: 10 } }; r.setCamera(cam, { animate: false }); }
+  if (Q.get("probe") === "tiles") setTimeout(() => {
+    const L = r.tiles;
+    const pre = document.createElement("pre");
+    pre.id = "probe";
+    pre.textContent = JSON.stringify({
+      ...window.__buildings,
+      entries: [...L.entries.values()].map((e) => ({ id: e.state.id, visible: e.mesh.visible, tex: !!e.material.uniforms.uTileTex.value, casting: e.casting,
+        fade: +e.material.uniforms.uRoofFade.value.toFixed(3), holeK: +e.material.uniforms.uRoofHoleK.value.toFixed(3), verts: e.geometry.getAttribute("position")?.count ?? 0 })),
+      maxY: L.maxY,
+    });
+    document.body.append(pre);
+  }, 3000);
+}
 
 function resize() { r.resize(window.innerWidth, window.innerHeight); }
 window.addEventListener("resize", resize);
@@ -825,6 +1090,61 @@ canvas.addEventListener("mousemove", (e) => {
 });
 showState();
 window.__ready = true;
+
+// probe=perf: frames drawn and shadow-map renders per second, counted over 3 s
+// after 2 s to settle, in #probe. pan=1 pans the camera every frame. It counts
+// the renders themselves (the main camera's, the shadow camera's over the
+// scene), so it reads the same before and after a change to the loop.
+if (Q.get("probe") === "perf") {
+  // A headless D3D page with nothing changing on screen stops servicing
+  // requestAnimationFrame; a tiny animated element keeps frames coming, so the
+  // count is the renderer's choice and not the browser's.
+  const tick = document.createElement("div");
+  tick.style.cssText = "position:fixed;left:0;bottom:0;width:2px;height:2px;background:#fff;z-index:9";
+  document.body.append(tick);
+  tick.animate([{ opacity: 0.2 }, { opacity: 1 }], { duration: 500, iterations: Infinity, direction: "alternate" });
+  const W = r.webgl, base = W.render.bind(W);
+  let frames = 0, shadows = 0, counting = false;
+  W.render = (scene, camera) => {
+    if (counting && camera === r.rig.camera) frames++;
+    else if (counting && camera === r.shadow.camera && scene === r.scene) shadows++;
+    return base(scene, camera);
+  };
+  // which layers kept frames coming (each frame() that answered true), while counting
+  const busy = {};
+  for (const name of ["standees", "links", "overlays", "areas", "props", "atmosphere", "torches", "fog", "tiles", "roofs"]) {
+    const L = r[name], fn = L?.frame;
+    if (typeof fn !== "function") continue;
+    L.frame = (...a) => { const v = fn.apply(L, a); if (counting && v) busy[name] = (busy[name] ?? 0) + 1; return v; };
+  }
+  const target = { ...r.getCamera().target };
+  const pan = () => { if (!counting) return; target.x += 3; r.setCamera({ target: { ...target } }, { animate: false }); requestAnimationFrame(pan); };
+  const settle = Q.has("settle") ? Number(Q.get("settle")) : 2000;
+  setTimeout(() => { counting = true; if (Q.get("pan") === "1") pan(); }, settle);
+  setTimeout(() => {
+    counting = false;
+    const pre = document.createElement("pre");
+    pre.id = "probe";
+    pre.textContent = JSON.stringify({ framesPerSec: +(frames / 3).toFixed(1), shadowsPerSec: +(shadows / 3).toFixed(1), motion: !!r._motion,
+      busy, flags: { sway: !!r.fx?.sway && r.standees.count > 0, targeted: !!r.standees.targeted, effects: !!r.effects.animated, water: !!r.terrain.hasWater && !!r.fx?.waterMotion },
+      stats: r.stats, fx: { flicker: r.fx?.flicker, shadows: r.fx?.shadows } });
+    document.body.append(pre);
+  }, settle + 3000);
+}
+
+// probe=shaders: every program's link and compile logs (D3D's HLSL warnings land
+// in the program log), in #probe. Run it on Windows with --use-angle=d3d11.
+if (Q.get("probe") === "shaders") setTimeout(() => {
+  const gl = r.webgl.getContext();
+  const log = (f) => { try { return (f() || "").trim(); } catch { return ""; } };
+  const programs = (r.webgl.info.programs ?? []).map((p) => ({ name: p.name,
+    program: log(() => gl.getProgramInfoLog(p.program)), vertex: log(() => gl.getShaderInfoLog(p.vertexShader)), fragment: log(() => gl.getShaderInfoLog(p.fragmentShader)) }));
+  const pre = document.createElement("pre");
+  pre.id = "probe";
+  pre.textContent = JSON.stringify({ count: programs.length, renderer: log(() => gl.getParameter(gl.getExtension("WEBGL_debug_renderer_info")?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER)),
+    logs: programs.filter((p) => p.program || p.vertex || p.fragment) }, null, 1);
+  document.body.append(pre);
+}, 3000);
 
 // selftest=1: pick what project() says is there, then dispose; results in #selftest.
 if (Q.get("selftest") === "1") {

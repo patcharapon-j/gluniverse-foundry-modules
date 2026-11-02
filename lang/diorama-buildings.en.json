@@ -1,0 +1,6 @@
+{
+  "GLDIO.view.roofs": "Cut away roofs (GM)",
+
+  "GLDIO.keys.roofs": "3D view: cut away roofs (GM)",
+  "GLDIO.keys.roofsHint": "Shows every room under its roof in the GM's own 3D view. Players never see this."
+}

@@ -63,9 +63,10 @@ export class ShadowPass {
    * @param {THREE.Scene|THREE.Scene[]} [casters]  drawn after the scene with
    *   their own (alpha-tested, instanced) materials, into the same depth,
    *   without clearing. The standees' cards and the props each own one.
+   * @returns {boolean} true when the map was drawn (it was dirty)
    */
   render(renderer, scene, casters = null) {
-    if (!this.dirty) return;
+    if (!this.dirty) return false;
     this.dirty = false;
     const target = this.ensureTarget();
     this.fit();
@@ -88,6 +89,7 @@ export class ShadowPass {
     renderer.setRenderTarget(prevTarget);
     scene.overrideMaterial = prevOverride;
     scene.background = prevBg;
+    return true;
   }
 
   dispose() {

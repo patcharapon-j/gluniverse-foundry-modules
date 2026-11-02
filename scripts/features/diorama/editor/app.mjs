@@ -21,7 +21,8 @@ import { SUITE_ID, featurePath, warn } from "../../../core/const.mjs";
 import { PALETTE } from "../../../core/theme.mjs";
 import { FEATURE_ID, SUB, KIND, KIND_KEYS, CLIFF_MATERIALS, WALL_MATERIALS } from "../constants.mjs";
 import { Terrain, qToDist, distToQ } from "../terrain/model.mjs";
-import { TerrainStore, gridOf, levelIdOf, supportsScene } from "../terrain/store.mjs";
+import { TerrainStore, gridOf, levelIdOf, supportsScene, savedLevelIds } from "../terrain/store.mjs";
+import { isMultiLevel, levelDoc, levelsOf } from "../terrain/levels.mjs";
 import { EditorSession, TOOLS, BRUSHED } from "./session.mjs";
 import { blankLike, BRUSH_MAX, H_MIN, H_MAX, PALETTE_MAX } from "./tools.mjs";
 import { planDifficult, readDifficult, writeDifficult } from "./difficult.mjs";
@@ -29,7 +30,8 @@ import { autoSetupDetailed } from "./auto-setup.mjs";
 import { loadAutoOptions, promptAutoOptions, describeAuto } from "./auto-dialog.mjs";
 import { backgroundSrc, sampleColours, wallSegments, sceneInsideFn } from "./sample.mjs";
 import { PropStore } from "../terrain/props-store.mjs";
-import { PROP_SHAPES, PROP_MATERIALS, SIZE_MIN, normalizeProps, propToJSON, resolveProps } from "../terrain/props.mjs";
+import { PROP_MATERIALS, SIZE_MIN, MODEL_RULES, normalizeProps, propToJSON, resolveProps } from "../terrain/props.mjs";
+import { PLACEABLE_SHAPES } from "./props-tool.mjs";
 import { propsBlock } from "../terrain/live.mjs";
 
 /** Shape → icon in the props palette (Font Awesome solid). */
@@ -38,6 +40,11 @@ export const PROP_ICONS = Object.freeze({
   pyramid: "fa-mountain", wedge: "fa-arrow-trend-up", torus: "fa-ring", capsule: "fa-capsules", arch: "fa-archway",
   pillar: "fa-landmark", crate: "fa-box", barrel: "fa-drum", rock: "fa-hill-rockslide", tree: "fa-tree",
   pine: "fa-caret-up", bush: "fa-seedling", card: "fa-image",
+  slab: "fa-layer-group", hex: "fa-dice-d6", octagon: "fa-certificate", pipe: "fa-faucet", stairs: "fa-chart-simple",
+  platform: "fa-table", fence: "fa-grip-lines-vertical", parapet: "fa-road-barrier", beam: "fa-grip-lines", sign: "fa-sign-hanging",
+  cross: "fa-cross", bowl: "fa-bowl-food", brazier: "fa-fire-flame-curved", lamp: "fa-lightbulb", gable: "fa-house",
+  hip: "fa-warehouse", lean: "fa-tent", spire: "fa-place-of-worship", lathe: "fa-wine-bottle", extrude: "fa-draw-polygon",
+  kit: "fa-cubes", model: "fa-shapes",
 });
 
 export const EDITOR_ID = "gldio-editor";
@@ -106,6 +113,7 @@ function EditorApp() {
         propShape: DioramaEditor.#onPropShape,
         propMat: DioramaEditor.#onPropMat,
         propOp: DioramaEditor.#onPropOp,
+        level: DioramaEditor.#onLevel,
       },
     };
 
@@ -116,14 +124,21 @@ function EditorApp() {
       if (_lastPosition) options.position = { ...(options.position ?? {}), ..._lastPosition };
       super(options);
       this.scene = scene;
+      /**
+       * The Level this editor edits, fixed for its life: the one viewed on the
+       * canvas when it opened (painting happens on the canvas). Every read and
+       * write names it, so a GM who switches Level mid-edit never saves one
+       * floor's draft over another's.
+       */
+      this.levelId = levelIdOf(scene);
       const g = gridOf(scene);
       this.grid = g;
       this.session = new EditorSession({
-        terrain: TerrainStore.read(scene).clone(),
+        terrain: TerrainStore.read(scene, this.levelId).clone(),
         grid: g,
         walls: wallSegments(scene),
-        difficult: readDifficult(scene),
-        props: PropStore.read(scene),
+        difficult: readDifficult(scene, this.levelId),
+        props: PropStore.read(scene, this.levelId),
       });
       /** The world's default wall material (walls with no entry in terrain.walls). */
       this.defaultWallMaterial = this.#defaultWallMaterial();
@@ -141,7 +156,29 @@ function EditorApp() {
       this._onKeyUp = (ev) => this.layer?.setModifiers?.({ shift: ev.shiftKey, alt: ev.altKey, ctrl: ev.ctrlKey || ev.metaKey });
     }
 
-    get title() { return L("GLDIO.editor.titleScene", { scene: this.scene?.name ?? "" }); }
+    get title() {
+      const level = isMultiLevel(this.scene) ? levelDoc(this.scene, this.levelId)?.name : null;
+      return level ? L("GLDIO.editor.titleLevel", { scene: this.scene?.name ?? "", level })
+        : L("GLDIO.editor.titleScene", { scene: this.scene?.name ?? "" });
+    }
+
+    /** The Level on the canvas now (it may differ from the one being edited). */
+    get viewedLevelId() { return levelIdOf(this.scene); }
+
+    /**
+     * The canvas moved to another Level: edit that one instead. A dirty draft
+     * asks first (the close dialog); keeping it keeps editing the old Level,
+     * and the panel says the canvas shows another.
+     */
+    async #followLevel() {
+      if (!this.viewing || this.viewedLevelId === this.levelId || this._following) return;
+      this._following = true;
+      try {
+        const closed = await this.close();
+        if (closed?.rendered) { this.#render(); return; }   // the GM kept the draft
+        await openEditor(this.scene);
+      } finally { this._following = false; }
+    }
 
     #defaultWallMaterial() {
       try { const m = game.settings.get(SUITE_ID, "dio.wallMaterial"); if (WALL_MATERIALS.includes(m)) return m; } catch { /* unregistered */ }
@@ -155,7 +192,7 @@ function EditorApp() {
       this.#attachLayer();
       const on = (name, fn) => this._hooks.push([name, Hooks.on(name, fn)]);
       on("canvasTearDown", () => { this.layer?.detach(); this.layer = null; this.#render(); });
-      on("canvasReady", () => { this.#attachLayer(); this.#render(); });
+      on("canvasReady", () => { this.#attachLayer(); this.#render(); this.#followLevel(); });
       const wallsChanged = (doc) => { if (doc?.parent === this.scene) this.session.setWalls(wallSegments(this.scene)); };
       on("createWall", wallsChanged);
       on("updateWall", wallsChanged);
@@ -257,7 +294,8 @@ function EditorApp() {
         canUndo: s.canUndo,
         canRedo: s.canRedo,
         off: TerrainStore.isOff(this.scene),
-        saved: TerrainStore.has(this.scene),
+        saved: TerrainStore.has(this.scene, this.levelId),
+        level: this.#levelContext(),
         previewOpen: !!this._preview?.rendered,
         view: s.view,
         opacityPct: Math.round(s.view.opacity * 100),
@@ -323,6 +361,30 @@ function EditorApp() {
       };
     }
 
+    /**
+     * The Level row: shown only in a multi-Level scene. Each Level is a button
+     * that views it on the canvas (Foundry's own Scene#view), and the editor
+     * follows; the one being edited is marked, with its base and whether it
+     * has saved terrain.
+     */
+    #levelContext() {
+      if (!isMultiLevel(this.scene)) return null;
+      const saved = new Set(savedLevelIds(this.scene));
+      const units = this.grid.units ?? "";
+      const levels = levelsOf(this.scene).slice().reverse().map((l) => ({
+        id: l.id, name: l.name, active: l.id === this.levelId, saved: saved.has(l.id),
+        base: Number.isFinite(l.base) ? `${round(l.base)} ${units}`.trim() : "",
+      }));
+      const editing = levels.find((l) => l.active);
+      const viewed = levelDoc(this.scene, this.viewedLevelId);
+      return {
+        levels,
+        name: editing?.name ?? "",
+        base: editing?.base ?? "",
+        mismatch: this.viewing && this.viewedLevelId !== this.levelId ? L("GLDIO.editor.level.mismatch", { level: editing?.name ?? "", viewed: viewed?.name ?? "" }) : null,
+      };
+    }
+
     /** The props panel: the palette, and the selected prop in the scene's units. */
     #propsContext() {
       const s = this.session, pt = s.propTool, p = s.selectedProp;
@@ -331,13 +393,18 @@ function EditorApp() {
       return {
         count: s.props.length,
         snap: pt.snap,
-        shapes: PROP_SHAPES.map((key) => ({ key, icon: PROP_ICONS[key], label: L(`GLDIO.props.shape.${key}`), active: key === (p?.shape ?? pt.shape) })),
+        shapes: PLACEABLE_SHAPES.map((key) => ({ key, icon: PROP_ICONS[key], label: L(`GLDIO.props.shape.${key}`), active: key === (p?.shape ?? pt.shape) })),
         mats: PROP_MATERIALS.map((key) => ({ key, label: L(`GLDIO.props.mat.${key}`), active: key === (p?.mat ?? pt.mat) })),
         sel: p && {
           id: p.id, label: p.label, icon: PROP_ICONS[p.shape], shapeLabel: L(`GLDIO.props.shape.${p.shape}`),
           x: round(p.x), y: round(p.y), w: d(p.w), d: d(p.d), h: d(p.h), elev: p.elev === null ? "" : d(p.elev),
           rot: round(p.rot), tint: p.tint, tintValue: p.tint ?? "#ffffff", solid: p.solid, hidden: p.hidden,
-          card: p.shape === "card", img: p.img,
+          card: p.shape === "card", img: p.img, roof: !!p.roof,
+          slab: p.shape === "slab",
+          cliffs: p.shape === "slab" ? CLIFF_MATERIALS.map((k) => ({ key: k, label: L(`GLDIO.material.cliff.${k}`), selected: k === p.cliff })) : [],
+          model: p.shape === "model", src: p.src ?? "", scale: p.scale ?? "",
+          rulesList: p.shape === "model" ? MODEL_RULES.map((k) => ({ key: k, label: L(`GLDIO.props.rules.${k}`), selected: k === p.rules })) : [],
+          kit: p.shape === "kit", kitName: p.kit || L("GLDIO.props.shape.kit"), kitParts: p.parts?.length ?? 0,
           sizeMin: round(SIZE_MIN * D), sizeStep: round(D / 4),
           wLabel: L("GLDIO.props.field.w", { units }), dLabel: L("GLDIO.props.field.d", { units }),
           hLabel: L("GLDIO.props.field.h", { units }), elevLabel: L("GLDIO.props.field.elev", { units }),
@@ -420,6 +487,12 @@ function EditorApp() {
         case "solid": s.updateProp(id, { solid: input.checked }); break;
         case "hidden": s.updateProp(id, { hidden: input.checked }); break;
         case "img": if (!live) s.updateProp(id, { img: input.value.trim() }); break;
+        case "roof": s.updateProp(id, { roof: input.checked }); break;
+        case "cliff": s.updateProp(id, { cliff: input.value }); break;
+        case "src": if (!live) s.updateProp(id, { src: input.value.trim() }); break;
+        case "rules": s.updateProp(id, { rules: input.value }); break;
+        // blank: fit inside w × d × h; a number: cells per model unit
+        case "scale": s.updateProp(id, { scale: input.value.trim() === "" || !(n > 0) ? null : n }); break;
       }
     }
 
@@ -468,20 +541,20 @@ function EditorApp() {
       this.#render();
       const s = this.session;
       try {
-        await TerrainStore.write(this.scene, s.terrain);
+        await TerrainStore.write(this.scene, s.terrain, this.levelId);
         // Props are written only when they changed, so an untouched level keeps no empty entry.
-        const stored = JSON.stringify(PropStore.read(this.scene).map(propToJSON));
+        const stored = JSON.stringify(PropStore.read(this.scene, this.levelId).map(propToJSON));
         const draft = JSON.stringify(normalizeProps(s.props).map(propToJSON));
-        if (draft !== stored) await PropStore.write(this.scene, s.props);
+        if (draft !== stored) await PropStore.write(this.scene, s.props, this.levelId);
         if (s.pending.length) {
           const plan = planDifficult(s.existingDifficult, s.pending);
           await writeDifficult(this.scene, plan, {
             name: (d) => L("GLDIO.editor.difficult.regionName", { x: d }),
             color: PALETTE.warn,
-            levelId: levelIdOf(this.scene),
+            levelId: this.levelId,
           });
         }
-        s.saved({ difficult: readDifficult(this.scene) });
+        s.saved({ difficult: readDifficult(this.scene, this.levelId) });
         ui.notifications.info(L("GLDIO.editor.saved", { scene: this.scene.name }));
         // An imported layout's tokens move once its terrain is saved, onto the saved ground.
         if (this._layoutTokens?.length) {
@@ -537,6 +610,12 @@ function EditorApp() {
           const FP = foundry.applications?.apps?.FilePicker?.implementation ?? globalThis.FilePicker;
           if (!FP) return;
           new FP({ type: "image", current: p.img || "", callback: (path) => s.updateProp(p.id, { img: path }) }).render(true);
+          return;
+        }
+        case "pickModel": {
+          const FP = foundry.applications?.apps?.FilePicker?.implementation ?? globalThis.FilePicker;
+          if (!FP) return;
+          new FP({ type: "any", current: p.src || "", callback: (path) => s.updateProp(p.id, { src: path }) }).render(true);
           return;
         }
       }
@@ -729,6 +808,14 @@ function EditorApp() {
 
     static async #onSave() { await this.save(); }
 
+    /** View a Level on the canvas (Foundry's own switch); canvasReady brings the editor along. */
+    static async #onLevel(_ev, target) {
+      const id = target?.dataset?.level;
+      if (!id || !levelDoc(this.scene, id)) return;
+      if (id === this.viewedLevelId) { await this.#followLevel(); return; }
+      await this.scene.view({ level: id });
+    }
+
     static async #onDiscard() {
       if (this.session.dirty) {
         const ok = await DialogV2.confirm({
@@ -762,6 +849,11 @@ export async function openEditor(scene = globalThis.canvas?.scene, { autoSetup =
     if (closed?.rendered) return _current;       // the GM chose to keep editing
   }
   if (canvas?.scene !== scene) await scene.view();
+  // Open on another Level of the same scene: that editor goes first (it asks about a dirty draft).
+  if (_current?.rendered && _current.scene === scene && _current.levelId !== levelIdOf(scene)) {
+    const closed = await _current.close();
+    if (closed?.rendered) return _current;
+  }
   if (_current?.rendered && _current.scene === scene) {
     _current.bringToFront?.();
     if (autoSetup) await _current.runAutoSetup();

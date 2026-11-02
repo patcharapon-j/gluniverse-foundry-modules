@@ -6,11 +6,21 @@
  *
  * The ApplicationV2 subclass is built in a memoised factory: nothing here
  * touches `foundry` at import.
+ *
+ * At the top sits what the view costs right now (view/readout.mjs). The
+ * renderer times its frames only while this panel is open: opening it calls
+ * `setProfiling(true)` on the live renderer, closing it `setProfiling(false)`.
+ * The renderer is asked for afresh on every refresh, because a restored GL
+ * surface or a reopened view is a new one.
  */
 
 import { SUITE_ID } from "../../../core/const.mjs";
 import { OPTIONS } from "../options.mjs";
 import { SETTINGS } from "../constants.mjs";
+import { readoutRows } from "./readout.mjs";
+
+/** How often the open readout refreshes (ms). A UI poll, not an animation. */
+const READOUT_EVERY = 500;
 
 /** The client settings this panel shows, in order: the view's own toggles, then graphics. */
 const VIEW_ROWS = Object.freeze([
@@ -58,6 +68,14 @@ function makeClass() {
       hint.className = "gldio-graphics-hint";
       hint.textContent = T("GLDIO.graphics.hint");
       root.append(hint);
+      const readout = document.createElement("section");
+      readout.className = "gldio-graphics-readout";
+      const head = document.createElement("h3");
+      head.textContent = T("GLDIO.graphics.readout.title");
+      this.#readout = document.createElement("dl");
+      readout.append(head, this.#readout);
+      root.append(readout);
+      this.#refresh();
       for (const o of GRAPHICS_ROWS) {
         let value;
         try { value = game.settings.get(SUITE_ID, o.key); } catch { value = o.default; }
@@ -91,6 +109,49 @@ function makeClass() {
     _onFirstRender(context, options) {
       super._onFirstRender?.(context, options);
       this.element.addEventListener("change", (ev) => this.#onChange(ev));
+    }
+
+    /** The readout's rows (a dl) and the renderer it is profiling. */
+    #readout = null;
+    #renderer = null;
+    #timer = 0;
+    #viewRenderer = null;
+
+    _onRender(context, options) {
+      super._onRender?.(context, options);
+      if (!this.#viewRenderer) {
+        import("./overlay.mjs").then((m) => { this.#viewRenderer = m.viewRenderer; this.#refresh(); }).catch(() => { /* no view */ });
+      }
+      this.#timer ||= setInterval(() => this.#refresh(), READOUT_EVERY);
+    }
+
+    _onClose(options) {
+      clearInterval(this.#timer);
+      this.#timer = 0;
+      this.#renderer?.setProfiling?.(false);
+      this.#renderer = null;
+      super._onClose?.(options);
+    }
+
+    /** Follow the live renderer and print what it costs. */
+    #refresh() {
+      if (!this.#readout) return;
+      const r = this.#viewRenderer?.() ?? null;
+      if (r !== this.#renderer) {
+        this.#renderer?.setProfiling?.(false);
+        r?.setProfiling?.(true);
+        this.#renderer = r;
+      }
+      let p = null;
+      try { p = r?.profile?.() ?? null; } catch { p = null; }
+      const cells = readoutRows(p, T).flatMap(([label, value]) => {
+        const dt = document.createElement("dt");
+        dt.textContent = label;
+        const dd = document.createElement("dd");
+        dd.textContent = value;
+        return [dt, dd];
+      });
+      this.#readout.replaceChildren(...cells);
     }
 
     async #onChange(ev) {

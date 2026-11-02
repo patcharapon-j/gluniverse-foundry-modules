@@ -58,6 +58,49 @@ export default async function check(ctx) {
   const edge = solveReach({ start: { i: 0, j: 0 }, budget: 25, gridDistance: 5, bounds: { rows: 4, cols: 4 } });
   ctx.ok("reach: never off the scene", edge.cells.every((c) => c.i >= 0 && c.j >= 0 && c.i < 4 && c.j < 4));
 
+  /* ---------------- other creatures ---------------- */
+  const { occupancy, occupantClass, OCCUPANCY, DISPOSITION } = R;
+  const F = DISPOSITION.FRIENDLY, H = DISPOSITION.HOSTILE;
+  ctx.ok("occupancy: an ally passes, an enemy blocks, a bystander passes",
+    occupantClass({ disposition: F }, { disposition: F }) === OCCUPANCY.PASS
+    && occupantClass({ disposition: F }, { disposition: H }) === OCCUPANCY.BLOCK
+    && occupantClass({ disposition: H }, { disposition: F }) === OCCUPANCY.BLOCK
+    && occupantClass({ disposition: F }, { disposition: DISPOSITION.NEUTRAL }) === OCCUPANCY.PASS
+    && occupantClass({ disposition: F }, { disposition: DISPOSITION.SECRET }) === OCCUPANCY.BLOCK);
+  ctx.ok("occupancy: a tiny creature shares space, either way round",
+    occupantClass({ disposition: F }, { disposition: H, tiny: true }) === OCCUPANCY.FREE
+    && occupantClass({ disposition: F, tiny: true }, { disposition: H }) === OCCUPANCY.FREE);
+  ctx.ok("occupancy: a flyer well above is not in the way, one at the mover's height is",
+    occupantClass({ disposition: F, alt: 0, height: 1 }, { disposition: H, alt: 3, height: 1 }) === OCCUPANCY.FREE
+    && occupantClass({ disposition: F, alt: 0, height: 1 }, { disposition: H, alt: 0.5, height: 1 }) === OCCUPANCY.BLOCK);
+  ctx.ok("occupancy: nobody around is no occupancy at all", occupancy({ mover: {}, others: [] }) === null);
+  const row = { start: { i: 0, j: 0 }, budget: 25, gridDistance: 5, bounds: { rows: 1, cols: 6 } };
+  const allyRow = solveReach({ ...row, occupied: occupancy({ mover: { disposition: F }, others: [{ i: 0, j: 2, disposition: F }] }) });
+  const allyPath = allyRow.pathTo(0, 3);
+  ctx.ok("occupancy: through an ally, never ending there",
+    allyRow.at(0, 2) === Infinity && allyRow.pathTo(0, 2) === null && near(allyRow.at(0, 3), 15)
+    && !allyRow.cells.some((c) => c.i === 0 && c.j === 2)
+    && !!allyPath && allyPath.some((p) => p.i === 0 && p.j === 2), JSON.stringify(allyPath));
+  ctx.ok("occupancy: the readout says whose square it is", allyRow.occupied(0, 2) === OCCUPANCY.PASS && allyRow.occupied(0, 4) === OCCUPANCY.FREE);
+  const foeRow = solveReach({ ...row, occupied: occupancy({ mover: { disposition: F }, others: [{ i: 0, j: 2, disposition: H }] }) });
+  ctx.ok("occupancy: an enemy's square stops the row", foeRow.at(0, 3) === Infinity && foeRow.occupied(0, 2) === OCCUPANCY.BLOCK);
+  const around = solveReach({ start: { i: 1, j: 0 }, budget: 25, gridDistance: 5, bounds: { rows: 3, cols: 6 },
+    occupied: occupancy({ mover: { disposition: F }, others: [{ i: 1, j: 2, disposition: H }] }) });
+  ctx.ok("occupancy: an enemy is walked around, at the longer route's cost",
+    near(around.at(1, 3), 20) && !around.pathTo(1, 3).some((p) => p.i === 1 && p.j === 2), String(around.at(1, 3)));
+  const tinyRow = solveReach({ ...row, occupied: occupancy({ mover: { disposition: F }, others: [{ i: 0, j: 2, disposition: H, tiny: true }] }) });
+  ctx.ok("occupancy: a tiny enemy's square can be ended on", near(tinyRow.at(0, 2), 10));
+  const bigFoe = solveReach({ start: { i: 0, j: 0 }, budget: 40, gridDistance: 5, bounds: { rows: 2, cols: 8 },
+    occupied: occupancy({ mover: { disposition: F }, others: [{ i: 0, j: 2, w: 2, h: 2, disposition: H }] }) });
+  ctx.ok("occupancy: a large enemy blocks every square it covers",
+    [[0, 2], [0, 3], [1, 2], [1, 3]].every(([i, j]) => bigFoe.occupied(i, j) === OCCUPANCY.BLOCK) && bigFoe.at(0, 4) === Infinity && bigFoe.at(1, 4) === Infinity);
+  const bigMover = solveReach({ start: { i: 0, j: 0 }, budget: 40, gridDistance: 5, bounds: { rows: 1, cols: 8 },
+    occupied: occupancy({ mover: { w: 2, h: 2, disposition: F }, others: [{ i: 1, j: 3, disposition: F }] }) });
+  ctx.ok("occupancy: a large mover cannot end with any part of it on an ally",
+    bigMover.at(0, 2) === Infinity && bigMover.at(0, 3) === Infinity && near(bigMover.at(0, 4), 20));
+  const onStart = solveReach({ ...row, occupied: occupancy({ mover: { disposition: F }, others: [{ i: 0, j: 0, disposition: H }] }) });
+  ctx.ok("occupancy: the square the mover stands on is always its own", onStart.at(0, 0) === 0 && near(onStart.at(0, 1), 5));
+
   /* ---------------- bands ---------------- */
   const b = reachBudgets({ systemId: "pf2e", speed: 25, gridDistance: 5 });
   ctx.ok("reach: PF2e bands are one, two and three Strides", b.length === 3 && b[0] === 25 && b[2] === 75);
@@ -77,6 +120,16 @@ export default async function check(ctx) {
     "a client-scope setting never fires updateSetting");
   ctx.ok("reach: walls, regions and their behaviours refresh the reach",
     /RegionBehavior/.test(overlay) && /"createWall", "updateWall", "deleteWall"[\s\S]{0,80}queueReach/.test(overlay));
+  const vReach = src("scripts/features/diorama/view/reach.mjs");
+  ctx.ok("occupancy: only creatures this viewer can see are in the way (a hidden one would show its square)",
+    /if \(!t\.isVisible \|\| \(seen && !seen\(d\.id\)\)/.test(vReach) && /others: occupantsOf\(tok, size, systemId, seen\)/.test(vReach));
+  ctx.ok("occupancy: tiny is PF2e's rule, not every system's", /const isTiny = \(actor, systemId\) => systemId === PF2E/.test(vReach));
+  ctx.ok("occupancy: viewing as the players, the board's own tokens decide, and the GM's hidden token has no range",
+    /seen: onBoard/.test(overlay) && /if \(tok && onBoard && !onBoard\(tok\.id\)\) tok = null/.test(overlay));
+  ctx.ok("occupancy: a creature arriving, leaving, moving or dying refreshes the range",
+    /\["createToken", "deleteToken"\]\) on\(h, \(doc\) => \{ if \(here\(doc\) && S\.reach\) queueReach/.test(overlay)
+    && /\(S\.reach \|\| doc\.object\?\.controlled\)\) queueReach/.test(overlay)
+    && /\["createActiveEffect", "deleteActiveEffect"\]\) on\(h, \(\) => \{ if \(S\.reach\) queueReach/.test(overlay));
   const input = src("scripts/features/diorama/view/input.mjs");
   ctx.ok("hold: the drag sees through the token in the hand", /exclude: drag\.tok\.id/.test(input));
   ctx.ok("hold: a carried flyer reads the pointer at its altitude", /pickPlane\?\.\(ev\.clientX, ev\.clientY, drag\.elevQ\)/.test(input));

@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { compileLayout } = await import(pathToFileURL(resolve(root, "scripts/features/diorama/terrain/layout.mjs")).href);
 const { SUB, KIND, KIND_KEYS } = await import(pathToFileURL(resolve(root, "scripts/features/diorama/constants.mjs")).href);
-const { resolveProps, footprintCorners } = await import(pathToFileURL(resolve(root, "scripts/features/diorama/terrain/props.mjs")).href);
+const { resolveProps, footprintCorners, footprintOutline, kitParts } = await import(pathToFileURL(resolve(root, "scripts/features/diorama/terrain/props.mjs")).href);
 
 const [cmd, ...rest] = process.argv.slice(2);
 const args = Object.fromEntries(rest.filter((a) => a.startsWith("--")).map((a) => {
@@ -116,7 +116,17 @@ if (cmd === "grid") {
       tokens: res.tokens,
       props: props.map((p) => ({
         shape: p.shape, label: p.label, x: p.x, y: p.y, top: ft(p.topQ), solid: p.solid, hidden: p.hidden,
-        corners: footprintCorners(p),
+        // the outline as the rules see it: a slab's or an extrusion's own corners, else the w × d box
+        corners: footprintOutline(p),
+        // the front edge (a wedge's or a flight's low side); an outline has none
+        front: p.points || p.path ? null : footprintCorners(p).slice(2, 4),
+        // a path pipe: its centre line on the map, turned with the prop
+        line: p.path ? p.path.map(([u, v]) => {
+          const a = (p.rot * Math.PI) / 180;
+          return [p.x + u * Math.cos(a) - v * Math.sin(a), p.y + u * Math.sin(a) + v * Math.cos(a)];
+        }) : null,
+        // a kit: each part's own footprint, inside the kit's box
+        parts: p.shape === "kit" ? kitParts(p).map((q) => ({ corners: footprintOutline(q), solid: q.solid })) : [],
       })),
     });
   }
@@ -187,14 +197,38 @@ img.onload = () => {
     }
     // Props: the footprint (solid amber, scenery dashed, GM-only violet), its front
     // edge doubled, and the top in feet in a tag at the centre.
+    const ring = (cs) => { x.beginPath(); cs.forEach(([cx, cy], i) => (i ? x.lineTo(X(cx), Y(cy)) : x.moveTo(X(cx), Y(cy)))); x.closePath(); };
     for (const p of D.props || []) {
-      const hue = p.hidden ? "#b497ff" : p.solid ? "#ffd24a" : "#5fdb92";
-      x.globalAlpha = 0.22; x.fillStyle = hue; x.beginPath();
-      p.corners.forEach(([cx, cy], i) => (i ? x.lineTo(X(cx), Y(cy)) : x.moveTo(X(cx), Y(cy))));
-      x.closePath(); x.fill();
-      x.globalAlpha = 1; x.strokeStyle = hue; x.lineWidth = 2; x.setLineDash(p.solid && !p.hidden ? [] : [5, 4]); x.stroke();
-      x.setLineDash([]); x.lineWidth = 4; x.beginPath();
-      x.moveTo(X(p.corners[2][0]), Y(p.corners[2][1])); x.lineTo(X(p.corners[3][0]), Y(p.corners[3][1])); x.stroke();
+      // a slab is ground: cyan, with its corners dotted so a painted rim can be checked against them
+      const hue = p.hidden ? "#b497ff" : p.shape === "slab" ? "#59d0ff" : p.solid ? "#ffd24a" : "#5fdb92";
+      if (p.line) {
+        // a path pipe is its centre line, not its bounding box
+        x.globalAlpha = 1; x.strokeStyle = hue; x.lineWidth = 3; x.setLineDash(p.solid && !p.hidden ? [] : [6, 4]);
+        x.beginPath(); p.line.forEach(([lx, ly], i) => (i ? x.lineTo(X(lx), Y(ly)) : x.moveTo(X(lx), Y(ly)))); x.stroke();
+        x.setLineDash([]);
+        const [mx, my] = p.line[Math.floor(p.line.length / 2)];
+        const t = p.shape + " " + p.top;
+        x.font = "600 " + Math.max(9, cell * .24) + "px system-ui"; x.textAlign = "center"; x.textBaseline = "middle";
+        const tw = x.measureText(t).width + 8;
+        x.fillStyle = "#0b0f17e0"; x.fillRect(X(mx) - tw / 2, Y(my) - cell * .17, tw, cell * .34);
+        x.fillStyle = hue; x.fillText(t, X(mx), Y(my));
+        continue;
+      }
+      x.globalAlpha = p.shape === "kit" ? 0.1 : 0.22; x.fillStyle = hue; ring(p.corners); x.fill();
+      x.globalAlpha = 1; x.strokeStyle = hue; x.lineWidth = 2; x.setLineDash(p.solid && !p.hidden && p.shape !== "kit" ? [] : [5, 4]); x.stroke();
+      x.setLineDash([]);
+      for (const q of p.parts || []) {
+        x.globalAlpha = 0.25; x.fillStyle = q.solid ? hue : "#5fdb92"; ring(q.corners); x.fill();
+        x.globalAlpha = 1; x.lineWidth = 1.25; x.strokeStyle = q.solid ? hue : "#5fdb92"; x.stroke();
+      }
+      if (p.shape === "slab") {
+        x.fillStyle = hue;
+        for (const [cx, cy] of p.corners) { x.beginPath(); x.arc(X(cx), Y(cy), 2.5, 0, Math.PI * 2); x.fill(); }
+      }
+      if (p.front) {
+        x.lineWidth = 4; x.beginPath();
+        x.moveTo(X(p.front[0][0]), Y(p.front[0][1])); x.lineTo(X(p.front[1][0]), Y(p.front[1][1])); x.stroke();
+      }
       const s = p.shape + " " + p.top;
       x.font = "600 " + Math.max(9, cell * .24) + "px system-ui"; x.textAlign = "center"; x.textBaseline = "middle";
       const w = x.measureText(s).width + 8;
@@ -208,7 +242,8 @@ img.onload = () => {
     legend.innerHTML = T.palette.map((p) => '<span><i style="background:' + p.color + '"></i>' + p.name + " · " + ft(p.h) + " ft · " + D.kindNames[p.kind] + "</span>").join("")
       + "<span>numbers = top of each square in ft · arrows point down the stairs</span>"
       + ((D.props || []).length ? '<span><i style="background:#ffd24a"></i>solid prop</span><span><i style="background:#5fdb92"></i>scenery</span>'
-        + '<span><i style="background:#b497ff"></i>GM only</span><span>props: shape and top in ft, thick edge = front</span>' : "");
+        + '<span><i style="background:#59d0ff"></i>slab (dots = its corners)</span>'
+        + '<span><i style="background:#b497ff"></i>GM only</span><span>props: shape and top in ft, thick edge = front, a kit shows each part</span>' : "");
   } else {
     legend.innerHTML = "<span>Squares are numbered (row, column) from the map's top-left corner. Every 5th line is brighter.</span>";
   }

@@ -23,6 +23,35 @@
 .gldio-graphics-reset.gl-btn {
   font-size: 12px;
 }
+/* what the view costs, live while this panel is open */
+.gldio-graphics-readout {
+  margin: 0 0 var(--gl-sp-3);
+  padding: var(--gl-sp-2);
+  border: 1px solid var(--gl-hair);
+}
+.gldio-graphics-readout h3 {
+  margin: 0 0 var(--gl-sp-1);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gl-text-dim);
+  border: 0;
+}
+.gldio-graphics-readout dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px var(--gl-sp-3);
+  margin: 0;
+  font-size: 12px;
+}
+.gldio-graphics-readout dt {
+  color: var(--gl-text-dim);
+}
+.gldio-graphics-readout dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--gl-text);
+}
 
 /* ── the scene environment panel ── */
 

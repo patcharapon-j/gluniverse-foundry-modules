@@ -64,7 +64,9 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   and raises a puff of dust; stairs and ramps are hopped down, never fallen. Dust
   also rises at the end of a move and where a lifted miniature is set down
   (`render/dust.mjs`, a fixed pool on the shared unlit program, tinted by the
-  scene's ambient). A flyer breathes and sways on its stand
+  scene's ambient). Each mote has a darker, slightly warm core and a lighter rim
+  (`DUST_RAMP` in `render/art.mjs`), so the puff reads on pale stone by its core
+  and on dark earth by its rim. A flyer breathes and sways on its stand
   (`TIMING.hoverLoop`, whole cycles per loop) while the stand and its foot stay
   put; its contact shadow shrinks and a soft one widens with altitude. A held
   figure does none of this. Plans and curves: `render/life.mjs` (pure). Off: the
@@ -127,6 +129,20 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   token's elevation) and cliffs. Solver: `rules/reach.mjs` (pure Dijkstra with the
   scene's diagonal rule); world adapter: `view/reach.mjs`. Per player
   (`dio.reach`): when selected, only while moving, or never.
+  Other creatures count too. A mover may pass through an ally's squares but not
+  end there, and may not pass through an enemy's, so those squares show as out
+  of reach. Disposition decides: the same side, or a neutral on either side, is
+  an ally. Under PF2e a Tiny creature shares space either way round. A creature
+  wholly above or below the mover (a flyer overhead) is not in the way, a big
+  token fills every square it covers, and a big mover may not end with any part
+  of its footprint on someone. Only creatures the viewer can see count
+  (`token.isVisible`; under "view as players", the tokens on that board), and a
+  dead one is not in the way. This changes the shading and the red warning on a
+  drop, never the drop itself.
+  The range, the cell marks and the walked path are drawn only on seen ground:
+  over unseen ground they discard, they fade under the mist's edge, and the
+  range draws before the fog bank, so none of them traces the shape of what
+  the mist hides.
 - **Pick up and set down.** Dragging a token you own lifts the miniature clear of
   the table (it overshoots a little, stretches as it leaves, bobs in the hand and
   leans into the motion) and drops it onto the square under the hand when you let
@@ -151,6 +167,10 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
 - **Environment and props.** Time of day, weather and air per scene
   (`docs/DIORAMA_ENVIRONMENT.md`); primitive props placed in the editor or a layout
   (`docs/DIORAMA_PROPS.md`).
+- **Tiles and buildings.** Foundry tiles draw in 3D: ground tiles as decals on the
+  terrain, overhead tiles as roofs that fade while a viewer's figure is inside, with
+  the GM's "cut away roofs" for every interior. Bridges and arches walk by the prop
+  rules. See `docs/DIORAMA_BUILDINGS.md`.
 - **Walls.** Camera-facing walls drop to a stub so rooms read. Doors swing.
 - **Light and vision.** Lit from Foundry's own light polygons, hidden by Foundry's
   own vision polygons and explored fog. Unexplored ground is not drawn at all.
@@ -173,7 +193,7 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
 
 ## The terrain
 
-`terrain/model.mjs`. One height field per scene Level (v1: the initial Level),
+`terrain/model.mjs`. One height field per scene Level (see [Levels](#levels)),
 painted at **2×2 sub-cells per grid square**. Per sub-cell: `h` (Int16, quarter
 cells, "q"), `layer` (palette index: cliff material + editor colour), `kind` (floor,
 water, pit, stairs, ramp, void; stairs and ramps carry a direction). The palette is
@@ -188,6 +208,86 @@ dist (scene units, `q / 4 · grid.distance`).
   called from `updateScene` and tells every listener.
 - The flag reaches every client. Hiding unexplored ground is a **display rule, not
   a secrecy boundary**.
+
+## Levels
+
+Foundry v14 scenes can hold several Levels (floors). Each has its own elevation
+range, its own background art, and the walls and regions included in it
+(`common/documents/level.mjs`, `client/documents/level.mjs`). Diorama gives every
+Level its own terrain and its own props.
+
+- **Which Level.** `terrain/levels.mjs` `resolveLevelId` is the only answer. A
+  Level that was asked for wins if the scene holds it. Otherwise it is the Level
+  viewed on the canvas (`scene._view`), then the initial Level, then `"default"`,
+  the key a scene with no Levels was always stored under. Old worlds read exactly
+  what they wrote, so nothing migrates.
+- **Two frames.** Stored heights are relative to their Level's base: the bottom,
+  or min(top, 0) for an open bottom, as `Level#prepareBaseData` computes it.
+  Token elevation stays absolute. The rules work in the Level's own frame and take
+  the base off an absolute elevation (`context.mjs` `localQ`, the eyes in
+  `sight-backend.mjs`, `cover.mjs`). The ground they write back adds it
+  (`movement.mjs` `groundFrom`). The 3D view works in the absolute frame:
+  `liveTerrain(...).absolute()` is the same terrain lifted by its base, rounded to
+  whole q. A base that is not a whole q can leave a figure up to half a q off its
+  floor in the view. The rules use the exact base.
+- **A one-Level scene has base 0** whatever its Level says (`levelBaseDist`), and
+  `absolute()` returns the same objects, so it draws and plays exactly as before.
+  `tools/diorama-check/levels.mjs` holds that regression.
+- **The rules read the token's own Level.** `tokenContext(doc)` uses
+  `TokenDocument#level`. The drag wrapper uses the waypoint's Level, the cost
+  function and the elevation sync use the token's, and a change of Level counts
+  as a move. A repaint re-seats only the tokens on the Levels it touched
+  (`install.mjs` `levelsToResync`, `movement.mjs` `planResync`). The sight and
+  light backends read the polygon's own Level (`PointSourcePolygon#level`).
+  Detection between tokens on different Levels is left to Foundry's own
+  cross-Level test. Terrain cover between two tokens on different Levels is
+  nothing, and the tactics line between them uses walls only.
+- **Caches.** `live.mjs` caches per scene and Level. `createLevel`,
+  `updateLevel` and `deleteLevel` drop the scene's entries.
+
+### Drawing the stack
+
+The 3D view follows Foundry's viewed Level. Changing Level is Foundry's job (the
+scene navigation's Level buttons, a staircase region). It redraws the canvas, and
+the overlay reads the new Level on `canvasReady`.
+
+- `view/levels.mjs` (pure) plans the stack. A Level with a higher base than the
+  viewed one, or the same base, is cut away and never drawn. Levels below are
+  drawn as quieter floors at their own base, each with its own art and props. A
+  player gets the ones the viewed Level lists in `visibility.levels`, which is the
+  rule Foundry uses to draw another Level's art (`Scene#_configureLevelTextures`).
+  The GM's own view also gets the rest, as dimmer ghosts. At most `MAX_BELOW`
+  floors are drawn, the nearest ones.
+- `render/level-stack.mjs` draws those floors. Each gets its own materials on the
+  scene's existing programs, so nothing new compiles. They cast no shadows. The
+  table drops to the lowest floor.
+- Props on the floors below are tagged with their Level (`<level>:<id>`), lifted
+  by its base, and never block, so nothing from another floor stamps into the
+  viewed floor's ground. The props layer itself is unchanged.
+- Tokens keep Foundry's visibility (`token.isVisible`). A token on a cut-away
+  Level is a ghost in the GM's own view and is not drawn for anyone else
+  (`cutTokens`).
+- Only the viewed Level's walls stand in the view (`CanvasDocument#includedInLevel`;
+  a wall with no Levels set is in all of them).
+
+### Editing a Level
+
+The editor edits the Level viewed on the canvas and names it in its title. Its
+Level row lists every Level, highest first, and marks those with saved terrain.
+Picking one views it on the canvas and the editor follows, asking first if the
+draft has changes. It reads and writes only that Level's terrain, props and
+difficult-terrain regions, and a new region is limited to that Level. Auto setup
+and the magic wand read that Level's own art. The 3D preview stacks the floors
+below the edited one.
+
+### Limits
+
+- A click through a hole picks the table plane, not the floor below.
+- A difficult-terrain region written before Levels (no Levels set) is in every
+  Level, so it shows in each Level's editor.
+- A layout import places tokens at the Level's local elevation. The GM's
+  elevation sync corrects them.
+- When a Level's base changes, tokens are re-seated against the new base only.
 
 ## Height is mechanical
 
@@ -253,7 +353,10 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
 
 - Visible: full colour. Explored, not visible: desaturated and dim, no tokens.
   Unexplored: not drawn. GM: everything, hidden tokens ghosted (40%, hatched);
-  a "view as players" toggle applies a player's view.
+  a "view as players" toggle applies a player's view. Under it a hidden token
+  leaves no trace: no standee, no movement range or footprint even while the GM
+  has it selected, no Sequencer effect attached to it or aimed from or at it,
+  and no pool from a light it carries.
 - **A known layout** (scene flag `dio.known`, the GM's Scene environment panel,
   "Players know this map's layout"). The bake starts every square explored, so
   ground nobody has seen yet takes the remembered look instead of the fog:
@@ -273,7 +376,10 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   ground is never drawn at all**: tops, cliff faces, water, props and walls
   there discard, so they write no colour and no outline. The gap is filled by
   a mist backdrop: a box over the board's footprint, from the plinth to above
-  the tallest ground, drawn from inside at the far plane. Its shape is the
+  the highest ground anyone has seen or explored, drawn from inside at the far
+  plane. Its top reads only seen ground (`fogSeenTop`), so the mist never
+  stands exactly as tall as the tallest tower hidden in it; it rises when that
+  tower is first seen. Its shape is the
   board's bounding box, and it reads no terrain: it paints where some point of
   the pixel's ray inside the box is unseen, in the bank floor's colour. The ray
   is tested at 24 taps, which on a big board lie more than a square apart, so
@@ -289,7 +395,13 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   the ground. Lit
   ground falls into the fog's shadow over most of a square at the edge of sight,
   and ground out of sight now fades to its remembered look (dim, grey, a faint
-  mist) rather than switching at a line. Figures are never fogged. The drift is
+  mist) rather than switching at a line. The wide blur alone never reaches full
+  mist over a thin wedge behind a pillar, which left a hard dark cut where the
+  ground stops being drawn. So the soft map's blue channel holds the unseen
+  grown by a quarter square and softened over a fifth (`FOG_EDGE_GROW`,
+  `FOG_EDGE_SOFT`), and every reader takes the larger of the two
+  (`fogUnseenAt` in `glsl.mjs`): the mist reaches its full colour at that line
+  and the edge of sight is soft over a fraction of a square. Figures are never fogged. The drift is
   a straight translation of the noise (`FOG_DRIFT_CELLS` per `TIMING.fogDrift`),
   so it never repeats and never wraps. With no vision bake (the GM) there is no
   fog at all.
@@ -348,15 +460,80 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
 The view renders **on demand**: a frame only when the camera, a token, a light or
 an effect changes; `Budget.claimMotion` is held only while something animates.
 The WebGL context is registered with `Surfaces`. `SHED_ORDER` (cheapest loss
-first): tilt-shift, atmosphere, embers, weather particles, the fog of war's drift
+first): tilt-shift, atmosphere, embers, video tiles (they hold their frame), weather particles, the fog of war's drift
 (the mist holds still), ambient occlusion, soft shadows, torch
 shadows and torch-side shading, prop detail, shadows, torch flicker (lights burn
-steady, flames hold still), water animation, landing dust, standee sway (and a
+steady, flames hold still), water animation, landing dust, roof fades (roofs snap), standee sway (and a
 flyer's hover), marker motion (the
 reticle's breathe and the target lines' glint, `TIMING.reticleBreathe` /
 `linkGlint`), area motion (spell volumes hold still), effect lights, render scale 0.75, 30 fps cap. Each rung only ever
 caps what the player's own Graphics settings asked for; with adaptive shedding off
 nothing is shed. Vision, lighting correctness and fog are never shed.
+
+### A still board draws nothing
+
+A board where nothing moves renders **zero frames** and holds no
+`claimMotion`. Every layer keeps that true, and a new one (tiles, roofs, slabs,
+anything) follows the same four rules:
+
+- `frame(t, dt, …)` returns `true` only while the layer itself is moving: a
+  tween in flight, a fade, a video that is playing. A layer at rest returns
+  `false`, even if it could animate. The renderer keeps requesting frames and
+  holds `claimMotion` only while some layer returns `true`.
+- Never call `requestRender()` from inside a frame or on a timer. Call it from
+  a setter when the state you were handed changed, and only then. No
+  `setTimeout`/`setInterval` under `render/` at all (the check refuses them).
+- The sun's shadow map is cached. It renders again only when a caster or the
+  sun changed: walls and props set `shadow.dirty`, standees raise
+  `castersDirty` from a pose signature that leaves out hover, and the camera
+  never dirties it (the shadow camera is fitted to the board, not the view). A
+  layer with casters of its own lists its caster group in the renderer's
+  `_casters` and raises its `castersDirty` (or calls `markShadowsDirty()`) when
+  they change shape or place, never every frame. Something that casts while it moves (a swinging door, a lifting
+  miniature) marks it dirty on the frames it moves and stops when it stops.
+- Torch light is the one thing that lives on a still board, and it ticks
+  instead of running at the frame rate. A flicker steps every
+  `TIMING.flickerTick` (66 ms, about 15 Hz) and a flame or its embers every
+  `TIMING.fireTick` (33 ms); `flickerTick` is a whole multiple so the two share
+  frames. Animation frames before the next tick return at once, a tick whose
+  lights did not visibly change (`FLICKER_EPS`) draws nothing, and a light whose
+  reach is off screen does not tick at all. Torch figure-shadows rewrite their
+  buffers only when a light or a figure moved. The `torchFlicker` and `embers`
+  rungs still stop them outright.
+
+Measured in the preview (swiftshader, 360×240, settled): a still board without
+torches is 0 frames per second; with a torch and a brazier in view, about 30
+(the fire tick; a flicker alone is at most 15); panning is the full frame rate;
+the shadow map renders 0 times per second both while panning and at rest. Before
+this, any lit torch near the view kept the frame rate at the display's.
+
+Two things keep a board with figures from being still today: standee idle sway
+and a flyer's hover (`tokenLife`), and the target reticle's breathe. Both are
+real motion and both shed (`standeeSway`, `markerMotion`).
+
+### The cost readout
+
+The Graphics panel shows what the view costs right now: GPU and CPU time per
+drawn frame, frames per second, draw calls, triangles, shadow-map renders per
+second and the shed rung in force. The perf overlay shows the same rows under
+"3D view" (`features/perf/readouts.mjs` is how a feature adds a section). GPU
+time is `EXT_disjoint_timer_query_webgl2`: one query per drawn frame, read back
+frames later and never waited on, all results in flight dropped on a disjoint
+event, and "n/a" where the browser does not offer the extension. Nothing is
+timed unless one of the two is open (`setProfiling`, `Budget.profiling`).
+
+### Shaders on Windows
+
+Chrome on Windows runs WebGL through ANGLE's D3D11 backend, which compiles GLSL
+to HLSL. Two patterns warn there and can fail to link on some drivers, which
+leaves the view drawing nothing: an implicit-level `texture()` inside a loop
+D3D cannot unroll (a runtime bound, a `break`, or a loop after an early
+`return`; warning X3595), and an early `return` before a result is set (X4000).
+Sample with `textureLod(…, 0.0)` in loops (the bakes and shadow maps have no
+mipmaps anyway) and give such functions one exit. The check scans every program
+for the first and pins the soft-shadow loop, `shadowTap`, `paintedSide` and the
+blur. To see the real compiler output, `probe=shaders` in the preview prints
+every program's info log; run it in headless Chrome with `--use-angle=d3d11`.
 
 ## Setting up a map (GM)
 
@@ -422,9 +599,14 @@ r.getCamera();
 r.setOptions({ tiltShift, cutaway, ghosts, grid: { on, color, alpha }, graphics });
 r.setEnvironment(env);                       // environment.mjs resolveEnv()
 r.setProps(PropState[]);                     // terrain/props.mjs propStates()
+r.setTiles(TileState[]);                     // integrations/tiles.mjs readTiles()
+r.setRoofs({ roofs: RoofState[], focus });   // view/roofs.mjs readRoofs()
 r.setLinks([{ sourceId, targetId, color:[r,g,b] }]);  // targeting lines, 0..1 rgb
 r.setShed(ladderLike);                       // { allows(name) } from Budget.ladder
 r.requestRender();
+r.markShadowsDirty();                        // a caster moved: the cached sun shadow renders once more
+r.setProfiling(on);                          // time frames (the Graphics panel's readout)
+r.profile();                                 // { gpuMs, gpuSupported, cpuMs, fps, shadowsPerSec, calls, triangles, shed } | null
 r.pick(clientX, clientY, { exclude, doors });  // {type:"token",id,part:"air"|"ground"} | {type:"door",id} | {type:"ground",x,y,zQ,i,j} | null
 r.pickPlane(clientX, clientY, zQ);           // {x, y} px on the level plane at zQ
 r.project(x, y, zQ);        // → {x, y} client px, for DOM labels
@@ -467,14 +649,20 @@ renderer purity, every uniform written, `SHED_ORDER` bound, and every dynamic
 i18n family (`GLDIO.kind.*`, `GLDIO.material.*`,
 `GLDIO.band.*`, `GLDIO.cover.*`). `tools/diorama-check/tactics.mjs` holds the
 3D distance to PF2e's rule, the falling table, the sight line against the cover
-rays, the visibility gates, and every area volume to its covered cells. The preview drives the shipped renderer with a
+rays, the visibility gates, and every area volume to its covered cells.
+`tools/diorama-check/buildings.mjs` holds tile placement, who gets a tile, the
+roof-fade table and the bridge and arch walk rules.
+`tools/diorama-check/levels.mjs` holds Level resolution, bases and both frames,
+the stack plan and cutaway, per-Level stores, caches, resync and eyes, and the
+one-Level regression; `levels=1` (or `levels=ghost`) in the preview draws a
+two-floor stack. The preview drives the shipped renderer with a
 fabricated map; serve it (a `file://` page does not run module scripts). Nothing
 there proves the sight backend, movement or Foundry's own vision; those need a live
 v14 session.
 
 ## Not in v1
 
-JB2A ground-effect placement, multi-Level scenes, hex grids, the pixel-art filter,
+JB2A ground-effect placement, hex grids, the pixel-art filter,
 the depth-model auto setup (spike pending real maps), translations. The movement
 range ignores other creatures' spaces (PF2e lets you pass allies and not end in an
 enemy's square; Foundry decides that on the move itself).

@@ -431,6 +431,21 @@ vec2 fogSoftAt(vec2 xz) {
   return texture2D(uFogMap, uv).rg;
 }
 
+/*
+ * How unseen a point reads, 0..1: the wide blur's never-seen, or the edge of
+ * sight (the soft map's b, render/fog.mjs fogEdge: the unseen grown a little and
+ * softened over a fraction of a square), whichever is more. The edge term is
+ * what carries the mist to its full colour AT the line where the ground stops
+ * being drawn, even beside a thin wedge of unseen behind a pillar, where the wide
+ * blur alone stays faint and the ground ends in a hard dark cut.
+ */
+float fogUnseenAt(vec2 xz) {
+  vec2 uv = xz / uWorldSize;
+  if (!dioInWorld(uv)) return 1.0;
+  vec4 f = texture2D(uFogMap, uv);
+  return max(1.0 - f.g, f.b);
+}
+
 /** Cells the fog drifts down the wind per tick of its clock (render/fog.mjs FOG_DRIFT_CELLS). */
 const float FOG_DRIFT_CELLS = 3.0;
 
@@ -481,7 +496,7 @@ vec3 dioFogOfWar(vec3 c, float vis, vec3 wp) {
   vec3 memory = mix(vec3(dot(c, DIO_LUMA)), c, 0.25) * 0.5;
   memory = mix(memory, dioFogColor(0.0, n), 0.12 + 0.2 * smoothstep(0.3, 0.8, n));
   c = mix(c, memory, away);
-  float unseen = 1.0 - s.y;
+  float unseen = fogUnseenAt(wp.xz);
   float shadow = smoothstep(0.16 * n, 0.5, unseen);
   return mix(c, dioFogColor(0.0, n), shadow);
 }
@@ -628,6 +643,8 @@ const vec3 ICE_DEEP = vec3(0.38, 0.62, 0.80);
 const vec3 WOOD = vec3(0.52, 0.36, 0.22);
 const vec3 BRICK = vec3(0.62, 0.30, 0.22);
 const vec3 MORTAR = vec3(0.74, 0.70, 0.64);
+const vec3 METAL = vec3(0.44, 0.46, 0.49);
+const vec3 RUST = vec3(0.50, 0.30, 0.18);
 
 vec3 sideAlbedo(int m, vec3 lipC, float a, float d, float y) {
   if (m == 2) return lipC * (1.0 - 0.2 * smoothstep(0.0, 2.0, d));
@@ -668,6 +685,18 @@ vec3 sideAlbedo(int m, vec3 lipC, float a, float d, float y) {
     vec3 b = mix(BRICK, lipC, 0.12) * (0.82 + 0.26 * dioHash(vec2(floor(bx), row)));
     return mix(b, MORTAR * mix(vec3(1.0), lipC, 0.2), mortar);
   }
+  if (m == 6) {
+    // metal: riveted plates, a seam every half cell, rust bleeding down from the lip
+    float row = floor(y / 0.5);
+    vec2 f = vec2(fract((a + mod(row, 2.0) * 0.4) / 0.8), fract(y / 0.5));
+    float seam = max(1.0 - smoothstep(0.01, 0.025, f.x), 1.0 - smoothstep(0.02, 0.05, f.y));
+    vec2 rv = vec2(fract((a + mod(row, 2.0) * 0.4) / 0.2), f.y);
+    float rivet = (1.0 - smoothstep(0.08, 0.16, length((rv - vec2(0.5, 0.12)) * vec2(1.0, 2.5)))) * step(0.05, f.y);
+    vec3 c = METAL * (0.88 + 0.16 * dioHash(vec2(floor((a + mod(row, 2.0) * 0.4) / 0.8), row)));
+    c = mix(c, RUST, smoothstep(0.55, 0.85, dioNoise(vec2(a * 3.0, y * 0.8))) * (1.0 - smoothstep(0.0, 1.6, d)) * 0.5);
+    c *= 1.0 + 0.25 * rivet;
+    return mix(c, c * 0.45, seam);
+  }
   // earth: strata tinted from the lip, a grassy overhang, pebbles
   float wob = dioNoise(vec2(a * 1.3, y * 2.0)) * 0.7 + sin(a * 2.1) * 0.12;
   float s = y * 4.2 + wob;
@@ -689,6 +718,7 @@ vec3 sideBase(int m, vec3 lipC) {
   if (m == 3) return mix(ICE, lipC, 0.14);
   if (m == 4) return WOOD * 0.82;
   if (m == 5) return mix(BRICK, lipC, 0.12) * 0.95;
+  if (m == 6) return METAL * 0.95;
   return mix(lipC, EARTH, 0.68) * 0.92;
 }
 
@@ -702,14 +732,19 @@ vec3 sideBase(int m, vec3 lipC) {
  */
 const float RELIEF = 0.42;
 vec3 paintedSide(int m, vec3 lipC, float a, float d, float y) {
-  // fx.detail low: no relief at all, the material's flat colour under the paint
-  if (uEnvFx.x < 0.5) return mix(sideBase(m, lipC), lipC, uSidePaint);
-  vec3 pat = sideAlbedo(m, lipC, a, d, y);
-  float l = dot(pat, vec3(0.299, 0.587, 0.114));
-  float l0 = max(dot(sideBase(m, lipC), vec3(0.299, 0.587, 0.114)), 0.04);
-  float relief = clamp(l / l0, 0.35, 1.7);
-  vec3 paint = lipC * mix(1.0, relief, RELIEF);
-  return mix(pat, paint, uSidePaint);
+  // fx.detail low: no relief at all, the material's flat colour under the paint.
+  // One exit through an initialised result: an early return here is "potentially
+  // uninitialized" to D3D's compiler (warning X4000) once ANGLE has rewritten it.
+  vec3 c = mix(sideBase(m, lipC), lipC, uSidePaint);
+  if (uEnvFx.x >= 0.5) {
+    vec3 pat = sideAlbedo(m, lipC, a, d, y);
+    float l = dot(pat, vec3(0.299, 0.587, 0.114));
+    float l0 = max(dot(sideBase(m, lipC), vec3(0.299, 0.587, 0.114)), 0.04);
+    float relief = clamp(l / l0, 0.35, 1.7);
+    vec3 paint = lipC * mix(1.0, relief, RELIEF);
+    c = mix(pat, paint, uSidePaint);
+  }
+  return c;
 }
 
 /** Cells from the foot of a bank face to the waterline (terrain-mesh bed and surface). */
@@ -1571,17 +1606,45 @@ void main() {
 export const RIBBON_VERT = /* glsl */ `
 attribute vec4 rgba;
 varying vec4 vColor;
+varying vec3 vWorld;
 void main() {
   vColor = rgba;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWorld = wp.xyz;
+  gl_Position = projectionMatrix * viewMatrix * wp;
 }
 `;
 
+/*
+ * uMask 1 (the movement range, the path, highlighted cells): drawn on the ground
+ * only where the ground itself is drawn. Over ground this viewer has never seen
+ * it discards exactly as the ground does (visionAt's threshold), so its squares
+ * cannot trace the shape or the height of what the mist hides; under the mist's
+ * edge it fades as the ground falls into the fog's shadow (dioFogOfWar), so it
+ * lies under the mist like the ground instead of glowing over it.
+ */
 export const RIBBON_FRAG = /* glsl */ `
 uniform float uOpacity;
+uniform float uMask;
+uniform float uUseVision;
+uniform vec2 uWorldSize;
+uniform sampler2D uVisionMap;
+uniform sampler2D uFogMap;
+uniform vec2 uFogStyle;
 varying vec4 vColor;
+varying vec3 vWorld;
 void main() {
-  gl_FragColor = vec4(vColor.rgb, vColor.a * uOpacity);
+  vec2 uv = vWorld.xz / uWorldSize;
+  vec4 v = texture2D(uVisionMap, uv);
+  vec4 f = texture2D(uFogMap, uv);
+  float a = vColor.a * uOpacity;
+  if (uMask > 0.5 && uUseVision > 0.5) {
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0 || max(v.r, v.g) <= 0.5) discard;
+    // as the ground's own shadow at the edge of sight (glsl LIT fogUnseenAt, dioFogOfWar)
+    if (uFogStyle.x > 0.5) a *= 1.0 - smoothstep(0.12, 0.5, max(1.0 - f.g, f.b));
+  }
+  if (a <= 0.003) discard;
+  gl_FragColor = vec4(vColor.rgb, a);
 }
 `;
 
@@ -1666,7 +1729,9 @@ void main() {
 
 /**
  * One direction of the tilt-shift gaussian. The blur radius grows with the
- * distance from a horizontal focus band.
+ * distance from a horizontal focus band. The targets have no mips, so every
+ * tap reads level 0 explicitly: an implicit-LOD read after the early exit is a
+ * gradient in divergent flow, which D3D warns about (X3595).
  */
 export const BLUR_FRAG = /* glsl */ `
 uniform sampler2D uTex;
@@ -1678,13 +1743,13 @@ varying vec2 vUv;
 void main() {
   float off = abs(vUv.y - uFocus.x);
   float k = smoothstep(uFocus.y, uFocus.y + 0.32, off) * uStrength;
-  if (k < 0.01) { gl_FragColor = texture2D(uTex, vUv); return; }
+  if (k < 0.01) { gl_FragColor = textureLod(uTex, vUv, 0.0); return; }
   vec4 sum = vec4(0.0);
   float wsum = 0.0;
   for (int i = -6; i <= 6; i++) {
     float x = float(i);
     float w = exp(-x * x / 18.0);
-    sum += texture2D(uTex, vUv + uDir * uTexel * x * k * 1.25) * w;
+    sum += textureLod(uTex, vUv + uDir * uTexel * x * k * 1.25, 0.0) * w;
     wsum += w;
   }
   gl_FragColor = sum / wsum;
@@ -2013,7 +2078,7 @@ void main() {
   if (!dioInWorld(uv)) discard;
   float k = vLayer / max(uFogLayers - 1.0, 1.0);
   float n = dioFogNoise(vWorld.xz, k);
-  float unseen = 1.0 - fogSoftAt(vWorld.xz).y;
+  float unseen = fogUnseenAt(vWorld.xz);
   // where the bank turns edge-on to the camera (the flank of a mound of mist):
   // a fog has no hard outline, so there it thins
   vec3 fwd = vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]);
@@ -2051,7 +2116,9 @@ void main() {
  * The mist behind the bank (render/fog.mjs FogLayer.backdrop). Ground nobody
  * has seen draws nothing at all (TOP/SIDE/WATER discard it), so what fills the
  * gap must not depend on it: this is a box over the board's whole footprint,
- * from the plinth's top to above the tallest ground, drawn from inside (its
+ * from the plinth's top to above the tallest ground the party has SEEN (uFogTop,
+ * render/fog.mjs fogSeenTop: never the tallest ground of all, or its height
+ * would give away the tallest thing hidden in the mist), drawn from inside (its
  * back faces, one fragment per ray) at the far plane, so anything seen anywhere
  * on the ray draws over it. Its only shape is the board's bounding box, which
  * is no secret. It reads no terrain: whether to paint is decided by the vision
@@ -2073,13 +2140,15 @@ export const FOG_RAY_TAPS = 24;
 export const FOG_BACKDROP_VERT = /* glsl */ `
 uniform vec2 uWorldSize;
 uniform vec2 uHeightRange;
+/** The highest ground the party has seen (cells; render/fog.mjs). */
+uniform float uFogTop;
 varying vec3 vWorld;
-/** How far the box reaches over the tallest ground: past the bank's top sheet. */
+/** How far the box reaches over the tallest seen ground: past the bank's top sheet. */
 const float FOG_BOX_OVER = ${FOG_BOX_OVER.toFixed(2)};
 void main() {
   // a unit box (render/fog.mjs) stretched over the board
   vec3 p = vec3(position.x * uWorldSize.x,
-    mix(uHeightRange.x - 0.05, uHeightRange.y + FOG_BOX_OVER, position.y),
+    mix(uHeightRange.x - 0.05, uFogTop + FOG_BOX_OVER, position.y),
     position.z * uWorldSize.y);
   vWorld = p;
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
@@ -2094,6 +2163,7 @@ const int FOG_RAY_TAPS = ${FOG_RAY_TAPS};
 const float FOG_SHEET0 = 0.06;
 /** r > 0.5: unseen, or close enough to it that a tap may stand for it (nearest filtered). */
 uniform sampler2D uFogCover;
+uniform float uFogTop;
 varying vec3 vWorld;
 void main() {
   gl_FragDepthEXT = 1.0;
@@ -2103,7 +2173,7 @@ void main() {
   fwd = mix(fwd, vec3(1e-4), vec3(lessThan(abs(fwd), vec3(1e-4))));
   // this pixel's ray, from here back to where it entered the box
   vec3 lo = vec3(0.0, uHeightRange.x - 0.05, 0.0);
-  vec3 hi = vec3(uWorldSize.x, uHeightRange.y + FOG_BOX_OVER, uWorldSize.y);
+  vec3 hi = vec3(uWorldSize.x, uFogTop + FOG_BOX_OVER, uWorldSize.y);
   vec3 ta = (lo - vWorld) / fwd, tb = (hi - vWorld) / fwd;
   vec3 tf = max(ta, tb);
   float len = max(min(min(tf.x, tf.y), tf.z), 0.0);

@@ -2,7 +2,7 @@
  * Diorama view — a token's reach this turn, read off the world.
  *
  *   reachOf({ tok, scene, grid, terrain }) → Reach | null
- *     Reach = { budgets, cells:[{i,j,band,cost}], start:{i,j}, pathTo(i,j), at(i,j), action }
+ *     Reach = { budgets, cells:[{i,j,band,cost}], start:{i,j}, pathTo(i,j), at(i,j), occupied(i,j), action }
  *
  * The solver is rules/reach.mjs (pure); this file only builds its closures:
  *   walls       canvas.edges that block movement (an open door has no edge;
@@ -11,16 +11,50 @@
  *               the square's centre and the token's elevation (null = impassable)
  *   cliffs      the Diorama terrain: a ground-bound creature cannot step up a
  *               rise above the step height without stairs (foundry/movement.mjs)
+ *   creatures   every other token THIS viewer can see (`token.isVisible`; a hidden
+ *               one must not show by the hole it would leave): an ally's squares
+ *               are crossed but never ended on, an enemy's are not entered
+ *               (rules/reach.mjs occupancy). Display only: the drop still decides.
  *
  * It is a picture of Foundry's rules, not a second set of them: the move itself
  * still goes through TokenDocument#move, which decides.
  */
 
-import { DIAGONALS, reachBand, reachBudgets, solveReach, wallIndex } from "../rules/reach.mjs";
-import { DAGGERHEART } from "../rules/systems.mjs";
-import { seams, speed as speedOf } from "./seams.mjs";
+import { DIAGONALS, occupancy, reachBand, reachBudgets, solveReach, wallIndex } from "../rules/reach.mjs";
+import { DAGGERHEART, PF2E } from "../rules/systems.mjs";
+import { altitude, heightDist, seams, speed as speedOf } from "./seams.mjs";
 
 const MOVEMENT_COST = "modifyMovementCost";
+
+const isDead = (token) => {
+  try { return !!(token.actor?.statuses?.has?.("dead") || token.document?.hasStatusEffect?.("dead")); } catch { return false; }
+};
+const isTiny = (actor, systemId) => systemId === PF2E && String(actor?.size ?? actor?.system?.traits?.size?.value ?? "") === "tiny";
+
+/**
+ * The other creatures on the board as the solver's occupants: only tokens this
+ * viewer sees (`token.isVisible`, and `seen(id)` for a GM viewing as the players),
+ * never the mover, never the dead (a body is no creature's space).
+ * @returns {object[]}
+ */
+export function occupantsOf(tok, size, systemId, seen = null) {
+  const out = [];
+  const self = tok?.document?.id;
+  for (const t of globalThis.canvas?.tokens?.placeables ?? []) {
+    const d = t?.document;
+    if (!d || d.id === self || d.parent !== tok.document.parent) continue;
+    if (!t.isVisible || (seen && !seen(d.id)) || isDead(t)) continue;
+    const s = d._source ?? d;
+    let height = 0;
+    try { height = Number(heightDist(t.actor ?? null, d)) || 0; } catch { height = 0; }
+    out.push({
+      i: Math.round(Number(s.y) / size), j: Math.round(Number(s.x) / size),
+      w: Math.max(1, Math.round(Number(s.width) || 1)), h: Math.max(1, Math.round(Number(s.height) || 1)),
+      disposition: d.disposition, tiny: isTiny(t.actor, systemId), alt: altitude(d), height,
+    });
+  }
+  return out;
+}
 
 function blockingWalls() {
   const out = [];
@@ -90,8 +124,9 @@ function difficultyFn(scene, action, elevation, size, wCells, hCells) {
  * @param {{size:number, distance:number, rows?:number, cols?:number}} o.grid
  * @param {object|null} o.terrain   the rules terrain (cliffs), or null
  * @param {string} [o.action]
+ * @param {((id:string) => boolean)|null} [o.seen]  a GM viewing as the players: the tokens on that board
  */
-export function reachOf({ tok, scene, grid, terrain, action }) {
+export function reachOf({ tok, scene, grid, terrain, action, seen = null }) {
   const doc = tok?.document;
   if (!doc || !grid?.size) return null;
   const systemId = globalThis.game?.system?.id ?? "";
@@ -122,9 +157,15 @@ export function reachOf({ tok, scene, grid, terrain, action }) {
   const rows = Number(grid.rows) || Math.ceil((globalThis.canvas?.dimensions?.height ?? Infinity) / size);
   const cols = Number(grid.cols) || Math.ceil((globalThis.canvas?.dimensions?.width ?? Infinity) / size);
   const bounds = Number.isFinite(rows) && Number.isFinite(cols) ? { rows: rows - h + 1, cols: cols - w + 1 } : null;
+  let height = 0;
+  try { height = Number(heightDist(tok.actor ?? null, doc)) || 0; } catch { height = 0; }
+  const occupied = occupancy({
+    mover: { w, h, disposition: doc.disposition, tiny: isTiny(tok.actor, systemId), alt: altitude(doc), height },
+    others: occupantsOf(tok, size, systemId, seen),
+  });
   const solved = solveReach({
     start, budget: budgets.at(-1), gridDistance: grid.distance, diagonals, bounds,
-    enter: difficultyFn(scene, act, Number(src.elevation) || 0, size, w, h), blocked,
+    enter: difficultyFn(scene, act, Number(src.elevation) || 0, size, w, h), blocked, occupied,
   });
   const cells = [];
   for (const c of solved.cells) {
@@ -132,5 +173,5 @@ export function reachOf({ tok, scene, grid, terrain, action }) {
     const band = reachBand(budgets, c.cost);
     if (band) cells.push({ i: c.i, j: c.j, band, cost: c.cost });
   }
-  return { budgets, cells, start, w, h, action: act, at: solved.at, pathTo: solved.pathTo, tokenId: doc.id };
+  return { budgets, cells, start, w, h, action: act, at: solved.at, pathTo: solved.pathTo, occupied: solved.occupied, tokenId: doc.id };
 }

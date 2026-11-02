@@ -6,7 +6,10 @@
  *       Dijkstra over grid squares. Diagonals follow the scene's rule
  *       (PF2e: alternating 5 / 10). A step's distance is multiplied by
  *       `enter(i, j)` (difficult terrain: 2, greater: 3, Infinity = never) and
- *       refused when `blocked(from, to)` (walls, cliffs) says so.
+ *       refused when `blocked(from, to)` (walls, cliffs) says so. `occupied(i, j)`
+ *       says whose space a square is (OCCUPANCY): a square it may only pass
+ *       through is crossed but never ends a move, a blocking one is never entered.
+ *   occupancy({ mover, others }) → (i, j) → OCCUPANCY   other creatures' squares
  *   reachBands(budgets, cost) → 1-based band, 0 when out of reach
  *   segmentsCross(px,py,qx,qy, ax,ay,bx,by) → bool   touching counts
  *
@@ -18,6 +21,60 @@
 export const DIAGONALS = Object.freeze({
   EQUIDISTANT: 0, EXACT: 1, APPROXIMATE: 2, RECTILINEAR: 3, ALTERNATING_1: 4, ALTERNATING_2: 5, ILLEGAL: 6,
 });
+
+/** CONST.TOKEN_DISPOSITIONS, restated. */
+export const DISPOSITION = Object.freeze({ SECRET: -2, HOSTILE: -1, NEUTRAL: 0, FRIENDLY: 1 });
+
+/** Whose space a square is, for a creature moving through it. */
+export const OCCUPANCY = Object.freeze({ FREE: 0, PASS: 1, BLOCK: 2 });
+
+/**
+ * How a mover treats another creature: an ally (the same side, or a bystander
+ * on neither) lets it pass but not stop; an enemy blocks it (PF2e's Tumble
+ * Through is a check, not a route, so the range shows the square blocked).
+ * Tiny creatures share space under PF2e, either way round, and a creature far
+ * enough above or below the mover is not in its way at all.
+ */
+export function occupantClass(mover, other) {
+  if (!other) return OCCUPANCY.FREE;
+  if (mover?.tiny || other.tiny) return OCCUPANCY.FREE;
+  const ma = Number(mover?.alt) || 0, mh = Math.max(0, Number(mover?.height) || 0);
+  const oa = Number(other.alt) || 0, oh = Math.max(0, Number(other.height) || 0);
+  if (mh > 0 && oh > 0 && (ma >= oa + oh - 1e-6 || oa >= ma + mh - 1e-6)) return OCCUPANCY.FREE;
+  const a = Number(mover?.disposition ?? DISPOSITION.FRIENDLY), b = Number(other.disposition ?? DISPOSITION.NEUTRAL);
+  const ally = a === b || a === DISPOSITION.NEUTRAL || b === DISPOSITION.NEUTRAL;
+  return ally ? OCCUPANCY.PASS : OCCUPANCY.BLOCK;
+}
+
+/**
+ * Other creatures' squares, as the solver's `occupied(i, j)` for a mover `w` × `h`
+ * squares whose top-left would stand on (i, j): the worst square its footprint covers.
+ * @param {{mover:{w?:number,h?:number,disposition?:number,tiny?:boolean,alt?:number,height?:number},
+ *   others:{i:number,j:number,w?:number,h?:number,disposition?:number,tiny?:boolean,alt?:number,height?:number}[]}} o
+ * @returns {((i:number, j:number) => number) | null}  null when nothing is in the way
+ */
+export function occupancy({ mover = {}, others = [] } = {}) {
+  const at = new Map();
+  for (const o of others ?? []) {
+    const cls = occupantClass(mover, o);
+    if (!cls) continue;
+    const ow = Math.max(1, Math.round(Number(o.w) || 1)), oh = Math.max(1, Math.round(Number(o.h) || 1));
+    for (let di = 0; di < oh; di++) for (let dj = 0; dj < ow; dj++) {
+      const k = `${Math.round(o.i) + di},${Math.round(o.j) + dj}`;
+      if ((at.get(k) ?? 0) < cls) at.set(k, cls);
+    }
+  }
+  if (!at.size) return null;
+  const w = Math.max(1, Math.round(Number(mover.w) || 1)), h = Math.max(1, Math.round(Number(mover.h) || 1));
+  return (i, j) => {
+    let c = OCCUPANCY.FREE;
+    for (let di = 0; di < h; di++) for (let dj = 0; dj < w; dj++) {
+      const v = at.get(`${i + di},${j + dj}`) ?? 0;
+      if (v > c) c = v;
+    }
+    return c;
+  };
+}
 
 const ORTHO = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 const DIAG = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
@@ -84,10 +141,14 @@ class Heap {
  * @param {{rows:number, cols:number}} [o.bounds]  squares outside are never entered
  * @param {(i:number, j:number) => number} [o.enter]  multiplier for stepping INTO (i, j)
  * @param {(fi:number, fj:number, ti:number, tj:number) => boolean} [o.blocked]
- * @returns {{cells: {i:number,j:number,cost:number}[], at:(i:number,j:number)=>number, pathTo:(i:number,j:number)=>{i:number,j:number}[]|null}}
+ * @param {((i:number, j:number) => number)|null} [o.occupied]  OCCUPANCY of a top-left square (occupancy())
+ * @returns {{cells: {i:number,j:number,cost:number}[], at:(i:number,j:number)=>number,
+ *   pathTo:(i:number,j:number)=>{i:number,j:number}[]|null, occupied:(i:number,j:number)=>number}}
+ *   `cells`, `at` and `pathTo` hold only squares a move may END on; a square it
+ *   can only pass through is crossed on the way and has no path of its own.
  */
 export function solveReach({ start, budget, gridDistance = 5, diagonals = DIAGONALS.ALTERNATING_1, bounds = null,
-  enter = () => 1, blocked = () => false }) {
+  enter = () => 1, blocked = () => false, occupied = null }) {
   const gd = Number(gridDistance) > 0 ? Number(gridDistance) : 5;
   const B = Math.max(0, Number(budget) || 0);
   const R = Math.ceil(B / gd) + 1;
@@ -110,6 +171,19 @@ export function solveReach({ start, budget, gridDistance = 5, diagonals = DIAGON
     }
     return v;
   };
+  // whose space each square is; the start is the mover's own
+  const occCache = new Int8Array(N).fill(-1);
+  const occ = (i, j) => {
+    if (!occupied || (i === si && j === sj)) return OCCUPANCY.FREE;
+    const k = idxOf(i, j);
+    let v = occCache[k];
+    if (v < 0) {
+      v = Math.round(Number(occupied(i, j)) || 0);
+      v = v >= OCCUPANCY.BLOCK ? OCCUPANCY.BLOCK : v >= OCCUPANCY.PASS ? OCCUPANCY.PASS : OCCUPANCY.FREE;
+      occCache[k] = v;
+    }
+    return v;
+  };
   const heap = new Heap();
   const s0 = idxOf(si, sj) * 2;
   best[s0] = 0;
@@ -124,7 +198,7 @@ export function solveReach({ start, budget, gridDistance = 5, diagonals = DIAGON
       const ti = ci + di, tj = cj + dj;
       if (!inside(ti, tj)) continue;
       const m = mult(ti, tj);
-      if (m === Infinity) continue;
+      if (m === Infinity || occ(ti, tj) === OCCUPANCY.BLOCK) continue;
       const c = cost + gd * m;
       if (c > B + eps) continue;
       const ns = idxOf(ti, tj) * 2 + parity;
@@ -139,7 +213,7 @@ export function solveReach({ start, budget, gridDistance = 5, diagonals = DIAGON
       const ti = ci + di, tj = cj + dj;
       if (!inside(ti, tj)) continue;
       const m = mult(ti, tj);
-      if (m === Infinity) continue;
+      if (m === Infinity || occ(ti, tj) === OCCUPANCY.BLOCK) continue;
       const c = cost + gd * step.len * m;
       if (c > B + eps) continue;
       const ns = idxOf(ti, tj) * 2 + step.parity;
@@ -153,10 +227,12 @@ export function solveReach({ start, budget, gridDistance = 5, diagonals = DIAGON
   for (let k = 0; k < N; k++) {
     const c = Math.min(best[k * 2], best[k * 2 + 1]);
     if (c === Infinity) continue;
-    cells.push({ i: Math.floor(k / W) - R + si, j: (k % W) - R + sj, cost: Math.round(c * 1e6) / 1e6 });
+    const ci = Math.floor(k / W) - R + si, cj = (k % W) - R + sj;
+    if (occ(ci, cj) !== OCCUPANCY.FREE) continue; // crossed, never ended on
+    cells.push({ i: ci, j: cj, cost: Math.round(c * 1e6) / 1e6 });
   }
   const bestState = (i, j) => {
-    if (!inside(i, j)) return -1;
+    if (!inside(i, j) || occ(i, j) !== OCCUPANCY.FREE) return -1;
     const k = idxOf(i, j) * 2;
     if (best[k] === Infinity && best[k + 1] === Infinity) return -1;
     return best[k] <= best[k + 1] ? k : k + 1;
@@ -175,6 +251,8 @@ export function solveReach({ start, budget, gridDistance = 5, diagonals = DIAGON
       }
       return out.reverse();
     },
+    /** Whose space a top-left square is (OCCUPANCY), for the readout of a drop there. */
+    occupied(i, j) { return inside(i, j) ? occ(i, j) : (occupied ? Math.round(Number(occupied(i, j)) || 0) : OCCUPANCY.FREE); },
   };
 }
 

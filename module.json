@@ -272,6 +272,11 @@
     {
       "lang": "en",
       "name": "English",
+      "path": "lang/diorama-buildings.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
       "path": "lang/perf.en.json"
     },
     {
