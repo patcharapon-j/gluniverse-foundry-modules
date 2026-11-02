@@ -252,10 +252,12 @@ export class TimeEngine {
     switch (e.scope) {
       case "month": return e.month === curMonth;
       case "range": {
-        if (e.month === e.endMonth) return curMonth === e.month && curDay >= e.day && curDay <= e.endDay;
-        if (curMonth === e.month) return curDay >= e.day;
-        if (curMonth === e.endMonth) return curDay <= e.endDay;
-        return curMonth > e.month && curMonth < e.endMonth;
+        // A range whose end comes before its start in the year wraps past the
+        // year's end (a midwinter festival from the last month into the first).
+        // Compared as (month, day) pairs so both shapes read the same way.
+        const at = (m, d) => m * 1000 + d;
+        const cur = at(curMonth, curDay), from = at(e.month, e.day), to = at(e.endMonth, e.endDay);
+        return from <= to ? (cur >= from && cur <= to) : (cur >= from || cur <= to);
       }
       case "day":
       default: return e.month === curMonth && e.day === curDay;
