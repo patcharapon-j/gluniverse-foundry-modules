@@ -468,6 +468,19 @@ vec3 dioFinish(vec3 c, float vis, vec3 wp) {
   return dioFogOfWar(finish(dioAtmosphere(c, wp), vis), vis, wp);
 }
 
+/*
+ * Ground nobody has seen, under clouds: painted flat in the bank's own colour
+ * instead of discarded. The bank floats above the ground it covers, so at the
+ * edge of sight the camera looks under its lifted rim; a discarded surface
+ * there is a black hole, a cloud-coloured one reads as more cloud. Flat and
+ * unlit, so it tells nothing about what is there. True when it wrote the pixel.
+ */
+bool dioUnseenCloud(float vis, vec2 xz) {
+  if (vis > 0.0 || uUseVision < 0.5 || uFogStyle.x < 0.5) return false;
+  gl_FragColor = vec4(dioCloudColor(0.0, dioCloudNoise(xz, 0.0)), 1.0);
+  return true;
+}
+
 /**
  * dioFinish for a figure: no fog of war. A standee is drawn only when Foundry
  * says this viewer sees it, and a figure at the edge of sight must still read.
@@ -524,6 +537,7 @@ const float LIP_RANGE = 0.5;
 
 void main() {
   float vis = visionAt(vWorld.xz);
+  if (dioUnseenCloud(vis, vWorld.xz)) return;
   if (vis <= 0.0) discard;
   vec4 f = fieldAt(vWorld.xz);
   vec3 albedo = mapAt(vWorld.xz) * vTint;
@@ -720,6 +734,7 @@ void main() {
   // and the bank sits on it instead of floating over the room.
   bool plinthOnly = vis <= 0.0 && uFogStyle.x > 0.5 && mod(vFlag + 0.25, 2.0) < 1.0
     && vWorld.y < uHeightRange.x - 0.05;
+  if (!plinthOnly && dioUnseenCloud(vis, vLip)) return;
   if (vis <= 0.0 && !plinthOnly) discard;
   vec3 n = normalize(vNormal);
   if (plinthOnly) {
@@ -868,6 +883,7 @@ float ripples(vec2 p, float t, float amount) {
  */
 void main() {
   float vis = visionAt(vWorld.xz);
+  if (dioUnseenCloud(vis, vWorld.xz)) return;
   if (vis <= 0.0) discard;
   vec2 p = vWorld.xz;
   float t = uTime;

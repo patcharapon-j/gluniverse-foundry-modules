@@ -191,7 +191,11 @@ export default async function check(ctx) {
   const discardRule = /if \(v\.r > 0\.5\) return 1\.0;\s*if \(v\.g > 0\.5\) return 0\.5;\s*return 0\.0;/.test(LITSRC);
   const opaque = Array.from({ length: 51 }, (_, i) => i / 100).every((s) => 1 - smoothstep(0.5, 0.8, s) === 1);
   ctx.ok("the fog floor is opaque on every never-seen point (the same threshold the ground discards by)", floor && seenExpr && discardRule && opaque);
-  ctx.ok("the ground is still not drawn where nobody has seen", /float vis = visionAt\(vWorld\.xz\);\s*if \(vis <= 0\.0\) discard;/.test(G.TOP_FRAG));
+  // Where nobody has seen, the ground is discarded, or under clouds painted flat
+  // in the bank's colour (dioUnseenCloud), never with the map or its light.
+  const unseenCloud = /bool dioUnseenCloud\(float vis, vec2 xz\) \{\s*if \(vis > 0\.0 \|\| uUseVision < 0\.5 \|\| uFogStyle\.x < 0\.5\) return false;\s*gl_FragColor = vec4\(dioCloudColor\(0\.0, dioCloudNoise\(xz, 0\.0\)\), 1\.0\);\s*return true;\s*\}/.test(LITSRC);
+  ctx.ok("the ground is still not drawn where nobody has seen (flat cloud or nothing)",
+    unseenCloud && /float vis = visionAt\(vWorld\.xz\);\s*if \(dioUnseenCloud\(vis, vWorld\.xz\)\) return;\s*if \(vis <= 0\.0\) discard;/.test(G.TOP_FRAG));
   ctx.ok("the GM (no vision bake) and the flat style get no clouds",
     /if \(uUseVision < 0\.5 \|\| uFogStyle\.x < 0\.5\) discard;/.test(G.FOG_FRAG) && /if \(uUseVision < 0\.5 \|\| uFogStyle\.x < 0\.5\) return c;/.test(LITSRC));
   ctx.ok("the shoulder reaches full cloud where the floor begins", /smoothstep\(0\.06 \+ 0\.3 \* n, 0\.5, unseen\)/.test(LITSRC) && /return mix\(c, dioCloudColor\(0\.0, n\), shoulder\)/.test(LITSRC)

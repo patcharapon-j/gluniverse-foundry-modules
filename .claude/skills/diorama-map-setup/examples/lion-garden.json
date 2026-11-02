@@ -89,13 +89,24 @@
     { "op": "rect", "layer": "Masonry", "h": 52, "rows": [0, 4], "cols": [0, 3.5], "mirror": true }
   ],
   "props": [
-    { "shape": "tree", "label": "Stair garden tree", "at": [41, 4], "w": 1.6, "d": 1.6, "h": 12, "mirror": true },
-    { "shape": "tree", "label": "Stair garden tree", "at": [40.5, 7.5], "w": 1.4, "d": 1.4, "h": 10, "mirror": true },
+    { "shape": "pine", "label": "Stair cypress", "at": [40.6, 3.2], "w": 0.9, "d": 0.9, "h": 13, "mirror": true },
+    { "shape": "pine", "label": "Stair cypress", "at": [40.6, 4.9], "w": 0.9, "d": 0.9, "h": 12, "mirror": true },
+    { "shape": "pine", "label": "Stair cypress", "at": [40.6, 6.7], "w": 0.9, "d": 0.9, "h": 13, "mirror": true },
+    { "shape": "pine", "label": "Stair cypress", "at": [40.6, 8.4], "w": 0.9, "d": 0.9, "h": 12, "mirror": true },
+    { "shape": "pine", "label": "Plaza cypress", "at": [46.9, 0.9], "w": 0.9, "d": 0.9, "h": 11, "mirror": true },
+    { "shape": "pine", "label": "Plaza cypress", "at": [46.9, 2.5], "w": 0.9, "d": 0.9, "h": 12, "mirror": true },
+    { "shape": "pine", "label": "Plaza cypress", "at": [46.9, 4.2], "w": 0.9, "d": 0.9, "h": 11, "mirror": true },
     { "shape": "pine", "label": "Garden pine", "at": [21.2, 6], "w": 1.2, "d": 1.2, "h": 14, "mirror": true },
-    { "shape": "bush", "label": "Plaza shrub", "at": [47.5, 2], "w": 1.2, "d": 1.2, "h": 3, "mirror": true },
-    { "shape": "bush", "label": "Plaza shrub", "at": [47.5, 4.5], "w": 1, "d": 1, "h": 3, "mirror": true },
+    { "shape": "tree", "label": "Garden palm", "at": [25.6, 6.3], "w": 1.6, "d": 1.6, "h": 12, "mirror": true },
+    { "shape": "bush", "label": "Garden shrub", "at": [27, 5.2], "w": 1.2, "d": 1.2, "h": 3, "mirror": true },
+    { "shape": "pillar", "label": "Lamp post", "at": [21.6, 3.8], "w": 0.3, "d": 0.3, "h": 6, "mat": "marble", "solid": false, "mirror": true },
+    { "shape": "sphere", "label": "Lamp globe", "at": [21.6, 3.8], "w": 0.6, "d": 0.6, "h": 2, "elev": 33, "mat": "crystal", "tint": "#bff6ff", "solid": false, "mirror": true },
+    { "shape": "cylinder", "label": "Stair brazier", "at": [37.7, 12.75], "w": 0.45, "d": 0.45, "h": 3, "mat": "metal", "tint": "#4a3a30", "mirror": true },
+    { "shape": "cylinder", "label": "Dock brazier", "at": [52.75, 10.5], "w": 0.5, "d": 0.5, "h": 3, "mat": "metal", "tint": "#4a3a30", "mirror": true },
     { "shape": "crate", "label": "Dock crate", "at": [53, 3], "w": 1, "d": 1, "h": 4, "rot": 10, "mirror": true },
     { "shape": "barrel", "label": "Dock barrel", "at": [52.8, 4.3], "h": 4, "mirror": true },
+    { "shape": "box", "label": "Rowboat", "at": [29.4, 1.8], "w": 0.8, "d": 2.2, "h": 1.5, "rot": 32, "mat": "wood", "solid": false, "mirror": true },
+    { "shape": "box", "label": "Harbour boat", "at": [55.8, 12.4], "w": 0.9, "d": 2.4, "h": 1.5, "rot": -20, "mat": "wood", "solid": false, "mirror": true },
     { "shape": "pyramid", "label": "Dais crystal", "at": [12, 14.5], "w": 1, "d": 1, "h": 8, "rot": 45, "mat": "crystal", "solid": false }
   ],
   "tokens": [
