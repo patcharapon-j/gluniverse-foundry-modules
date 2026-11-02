@@ -355,8 +355,11 @@ export class LineBadges {
       const a = tokenById(v.sourceId);
       const b = tokenById(v.targetId);
       s.push(a?.center?.x, a?.center?.y, a?.w, a?.h, a?.visible ? 1 : 0, b?.center?.x, b?.center?.y, b?.w, b?.h, b?.visible ? 1 : 0, v.full ? 1 : 0, v.tagBox ? 1 : 0, v.plateBox ? 1 : 0);
-      const head = dioramaAnchor(v.targetId);
-      if (head) s.push(head.x, head.y);
+      // Both standees: the straight run under Diorama moves with either end.
+      for (const id of [v.sourceId, v.targetId]) {
+        const anchor = dioramaAnchor(id);
+        s.push(anchor ? 1 : 0, anchor?.x, anchor?.y);
+      }
     }
     const prev = this.#sig;
     const same = prev.length === s.length && s.every((n, i) => Object.is(n, prev[i]));
@@ -376,9 +379,11 @@ export class LineBadges {
 
     // Measure everything that needs it first, then write: interleaving a read
     // with the previous element's write forces a layout per line per frame.
+    // Layout sizes, not getBoundingClientRect: a tag measured mid-entry carries
+    // its `scale(0.86)` and would be placed and collided too small for good.
     for (const v of this.views.values()) {
-      if (!v.tagBox) v.tagBox = v.el.querySelector(".glod-tag")?.getBoundingClientRect() ?? null;
-      if (v.full && !v.plateBox) v.plateBox = v.el.querySelector(".glod-badge")?.getBoundingClientRect() ?? null;
+      if (!v.tagBox) v.tagBox = layoutSize(v.el.querySelector(".glod-tag"));
+      if (v.full && !v.plateBox) v.plateBox = layoutSize(v.el.querySelector(".glod-badge"));
     }
 
     const items = [];
@@ -517,6 +522,12 @@ export class LineBadges {
   badgesFor(actorId) {
     return [...this.views.values()].filter((v) => tokenById(v.sourceId)?.actor?.id === actorId).map((v) => v.el.querySelector(".glod-badge"));
   }
+}
+
+/** An element's untransformed size; null while it is not laid out. */
+function layoutSize(el) {
+  if (!el || !el.offsetWidth) return null;
+  return { width: el.offsetWidth, height: el.offsetHeight };
 }
 
 /** A token's square on screen, which an open plate keeps off. */

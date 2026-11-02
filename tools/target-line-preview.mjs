@@ -255,8 +255,9 @@ try {
       const items = views.map((v) => {
         const a = T[v.s], b = T[v.tg];
         const path = P.linePath({ from: a.center, to: b.center, sourceSize: Math.max(a.w, a.h), targetSize: Math.max(b.w, b.h), gridSize: GRID });
-        const tag = v.el.querySelector(".glod-tag").getBoundingClientRect();
-        const plate = v.full ? v.el.querySelector(".glod-badge").getBoundingClientRect() : null;
+        const size = (el) => ({ width: el.offsetWidth, height: el.offsetHeight });
+        const tag = size(v.el.querySelector(".glod-tag"));
+        const plate = v.full ? size(v.el.querySelector(".glod-badge")) : null;
         const at = (share) => { const p = P.tagAnchor(path, share, GRID); const sc = toScreen(p); return { x: sc.x, y: sc.y, nx: p.nx, ny: p.ny }; };
         return { v, at, w: tag.width, h: tag.height, plate: plate ? { w: plate.width, h: plate.height } : null };
       });
