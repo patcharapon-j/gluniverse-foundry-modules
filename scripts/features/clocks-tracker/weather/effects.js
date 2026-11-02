@@ -146,6 +146,10 @@ function kick() {
   rafId = requestAnimationFrame(loop);
 }
 
+/** One frame of every live effect. `Budget.measure` RETURNS a timed wrapper;
+ *  it does not run anything, so this is built once and called each frame. */
+const stepAll = Budget.measure(LADDER_ID, (dt, moving) => { for (const fx of LIVE) fx._frame(dt, moving); });
+
 function loop(now) {
   rafId = 0;
   if (!LIVE.size) { lastNow = null; return; }
@@ -157,7 +161,7 @@ function loop(now) {
     lastNow = now;
     const moving = motionOn() && !held;
     if (moving) clockT = (clockT + dt) % (LOOP_SECONDS * 1024);
-    Budget.measure(LADDER_ID, () => { for (const fx of LIVE) fx._frame(moving ? dt : 0, moving); });
+    stepAll(moving ? dt : 0, moving);
   }
   rafId = requestAnimationFrame(loop);
 }
@@ -258,7 +262,10 @@ export class WeatherEffect {
   /* ------------------------------ frame ------------------------------ */
 
   _frame(dt, moving) {
-    if (moving && hasBolts(this.model?.look)) this._tickStorm(dt);
+    // A held field is the frame already on screen (setSpec, resize and every
+    // budget change redraw it themselves), so a still tick draws nothing.
+    if (!moving) return;
+    if (hasBolts(this.model?.look)) this._tickStorm(dt);
     this._draw();
   }
 

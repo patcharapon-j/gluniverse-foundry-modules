@@ -161,9 +161,47 @@ try {
   }
 } catch (err) { fail(`engine.js did not import under Node: ${err.message}`); }
 
+/* ---- 11. the frame loop actually draws ----
+   Driven, not read: `Budget.measure` RETURNS a wrapper, and a loop that passed
+   its work to it without calling the result drew one frame and then held it
+   forever, with every still still looking right. */
+{
+  const frames = [];
+  const fakeCanvas = () => ({
+    width: 2, height: 2, style: {}, classList: { add() {} }, addEventListener() {}, removeEventListener() {},
+    remove() {}, getContext: (k) => (k === "2d" ? { clearRect() {}, drawImage() {} } : { getExtension: () => null })
+  });
+  globalThis.document ??= { createElement: () => fakeCanvas(), hidden: false, addEventListener() {} };
+  globalThis.requestAnimationFrame = (cb) => { frames.push(cb); return frames.length; };
+  globalThis.cancelAnimationFrame = () => {};
+  globalThis.getComputedStyle ??= () => ({ maskImage: "none" });
+  const { WeatherEffect } = await imp("scripts/features/clocks-tracker/weather/effects.js");
+  const { FxRenderer } = await imp(FX + "renderer.mjs");
+  let draws = 0;
+  FxRenderer.supported = () => true;
+  FxRenderer.prototype.draw = function () { draws++; return null; };
+  const host = { clientWidth: 300, clientHeight: 54, appendChild() {}, isConnected: true };
+  const fx = WeatherEffect.create(host, effectFromKind("storm"));
+  if (!fx) fail("WeatherEffect.create returned null with WebGL2 stubbed in");
+  else {
+    fx.resume();
+    const before = draws;
+    let t = 0;
+    // One browser frame runs every callback queued for it at the same time
+    // (the budget's own interval loop rides this stub too).
+    for (let i = 0; i < 180 && frames.length; i++) { t += 1000 / 60; for (const cb of frames.splice(0)) cb(t); }
+    const drawn = draws - before;
+    if (drawn < 60) fail(`three seconds of animation frames drew ${drawn} time(s): the loop is not stepping the effects`);
+    fx.pause();
+    fx.destroy?.();
+  }
+}
+
 if (problems.length) {
   console.log(problems.map((p) => "  ✗ " + p).join("\n"));
   console.log(`\n${problems.length} problem(s).`);
   process.exit(1);
 }
 console.log(`weather-fx-check: ${LOOKS.length} looks, ${WEATHER_ARCHETYPES.length} archetypes, ${Object.keys(KIND_LOOK).length} kind looks, ${specs.length} specs, 0 problems.`);
+// The core surface registry keeps an idle timer alive under Node.
+process.exit(0);
