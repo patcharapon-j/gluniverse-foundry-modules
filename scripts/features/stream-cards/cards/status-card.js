@@ -4,7 +4,8 @@
  * Deliberately the *damage row's* size rather than the roll card's. A condition is a consequence, and
  * on a stream a consequence that arrives at the same weight as the roll that caused it reads as a
  * second roll. It sits in the same stack, under the same lifetime, with the same fading top rule and the
- * same framed art (struck round here), so it is plainly the same feature speaking more quietly.
+ * same chamfered plate and framed art (struck square here), so it is plainly the same feature speaking
+ * more quietly.
  *
  * A chip names its direction with a mark and, for a value, the value itself. The direction word is
  * printed only for a status that ended: "gained", "raised" and "eased" restate the mark, and the room
@@ -19,7 +20,21 @@
 
 import { remove } from "../../stream/motion/engine.js";
 import { isFocus, placement, squareFocus } from "../framing/focus-math.js";
-import { CSS_SNAP, EASE_EXIT, EASE_OUT, EASE_POP, EASE_SNAP, el, tween, waapi } from "./card-motion.js";
+import {
+  CSS_UNFOLD,
+  EASE_EXIT,
+  EASE_OUT,
+  EASE_POP,
+  EASE_SNAP,
+  PLATE_CLIP,
+  PLATE_CLIP_FOLDED,
+  collapse,
+  el,
+  sideOf,
+  timing,
+  tween,
+  waapi
+} from "./card-motion.js";
 import { statusTone } from "../pf2e/read-status.js";
 
 const DEFAULT_LABELS = {
@@ -35,8 +50,12 @@ const DIRECTION_MARKS = {
   lost: "−"
 };
 
-/** The strip's radius (`.glus-sc-strip` in stream-cards.css), carried by the unfold so it never squares the corners. */
-const STRIP_RADIUS = "calc(.3*var(--u))";
+/**
+ * The strip's resting shape (`.glus-sc-strip` in stream-cards.css): the roll card's chamfered plate.
+ * The unfold starts on the folded copy and ends on this one, so the strip never changes shape as it lands.
+ */
+const STRIP_CLIP = PLATE_CLIP;
+const STRIP_CLIP_FOLDED = PLATE_CLIP_FOLDED;
 
 export class StatusCard {
   /**
@@ -158,22 +177,25 @@ export class StatusCard {
   /** Entrance: the top rule draws, the strip unfolds downwards, then each chip lands in turn. */
   async enter() {
     const u = this.unit();
-    tween(this.element, { opacity: [0, 1], translateX: [-0.8 * u, 0], duration: 380, ease: EASE_OUT });
-    tween(this.q(".glus-sc-hair"), { scaleX: [0, 1], duration: 300, ease: EASE_SNAP });
-    tween(this.q(".glus-sc-art-frame"), { opacity: [0, 1], scale: [1.18, 1], duration: 520, delay: 60, ease: EASE_OUT });
-    tween(this.q(".glus-sc-name"), { opacity: [0, 1], translateX: [-0.4 * u, 0], duration: 320, delay: 80, ease: EASE_OUT });
+    const d = timing(this.element);
+    const side = sideOf(this.element);
+    tween(this.element, { opacity: [0, 1], translateX: [side * 0.8 * u, 0], duration: d("statusIn"), ease: EASE_OUT });
+    tween(this.q(".glus-sc-hair"), { scaleX: [0, 1], duration: d("statusRuleIn"), ease: EASE_SNAP });
+    tween(this.q(".glus-sc-art-frame"), { opacity: [0, 1], scale: [1.12, 1], duration: d("statusArtIn"), delay: d("statusArtDelay"), ease: EASE_OUT });
+    tween(this.q(".glus-sc-name"), { opacity: [0, 1], translateX: [-0.3 * u, 0], duration: d("statusNameIn"), delay: d("statusNameDelay"), ease: EASE_OUT });
     await waapi(
       this.strip,
       [
-        { clipPath: `inset(0 0 100% 0 round ${STRIP_RADIUS})`, transform: `translateY(${-0.6 * u}px)` },
-        { clipPath: `inset(0 0 0% 0 round ${STRIP_RADIUS})`, transform: "none" }
+        { clipPath: STRIP_CLIP_FOLDED, transform: `translateY(${-0.5 * u}px)` },
+        { clipPath: STRIP_CLIP, transform: "none" }
       ],
-      { duration: 340, easing: CSS_SNAP }
+      { duration: d("statusUnfold"), easing: CSS_UNFOLD }
     );
     if (this.destroyed) return;
     this.strip.getAnimations?.().forEach((a) => a.cancel());
     this.strip.style.clipPath = "";
-    [...this.element.querySelectorAll(".glus-sc-chip")].forEach((chip, index) => this.popChip(chip, index * 80));
+    const stagger = d("statusChipStagger");
+    [...this.element.querySelectorAll(".glus-sc-chip")].forEach((chip, index) => this.popChip(chip, index * stagger, d));
   }
 
   /**
@@ -187,32 +209,33 @@ export class StatusCard {
     if (this.destroyed) return;
     const before = new Set([...this.element.querySelectorAll(".glus-sc-chip")].map(chipKey));
     this.render({ ...this.model, changes });
+    const d = timing(this.element);
+    const stagger = d("statusFoldStagger");
     let index = 0;
     for (const chip of this.element.querySelectorAll(".glus-sc-chip")) {
       if (before.has(chipKey(chip))) continue;
-      this.popChip(chip, index++ * 60);
+      this.popChip(chip, index++ * stagger, d);
     }
   }
 
-  popChip(chip, delay = 0) {
+  popChip(chip, delay = 0, d = timing(this.element)) {
     tween(chip, {
       opacity: [0, 1],
-      translateY: [0.5 * this.unit(), 0],
-      scale: [{ from: 0.86, to: 1.06, duration: 200 }, { to: 1, duration: 160 }],
+      translateY: [0.4 * this.unit(), 0],
+      scale: [{ from: 0.9, to: 1.04, duration: d("statusChipUp") }, { to: 1, duration: d("statusChipDown") }],
       delay,
       ease: EASE_POP
     });
   }
 
-  /** Slides out and collapses its height so the stack closes up. Resolves once it is gone. */
+  /** Slides out toward the stack's edge and closes the gap it leaves. Resolves once it is gone. */
   async exit() {
     const root = this.element;
     if (!root.isConnected) return this.destroy();
     const u = this.unit();
-    await tween(root, { opacity: [1, 0], translateX: [0, -1.4 * u], duration: 260, ease: EASE_EXIT });
-    const height = root.getBoundingClientRect().height;
-    root.style.overflow = "hidden";
-    await tween(root, { height: [`${height}px`, "0px"], duration: 220, ease: EASE_OUT });
+    const d = timing(root);
+    await tween(root, { opacity: [1, 0], translateX: [0, sideOf(root) * 1.2 * u], duration: d("statusExitSlide"), ease: EASE_EXIT });
+    await collapse(root, d("statusExitCollapse"));
     this.destroy();
   }
 

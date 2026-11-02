@@ -34,12 +34,35 @@ it is a sibling with its own prefix, its own settings and its own editor.
 
 1. Enable **Stream Client** in the GLUniverse Suite control centre.
 2. Open the suite's scene-control group and launch **Stream Control Room**.
-3. Pick the dedicated stream user under **Stream user** (GM only).
+3. Pick the dedicated stream user on the **Access** tab (GM only).
 4. Log in as that user in the capture browser or OBS.
-5. Accept the startup prompt, or choose **Always Enter Stream Mode**.
+5. Accept the startup prompt, or choose **Always enter stream mode**.
 
 `Ctrl+Alt+S` restores normal Foundry UI on the stream client — the panic button
 for a capture login whose interface is hidden.
+
+## The Control Room
+
+One strip sits on top whatever tab is open: what the audience is getting right
+now. `room-model.mjs` decides the state (`onAirState`): **On air**, **On air ·
+Foundry UI showing** (live, with the capture login's own interface visible,
+which is the one a director must not miss), **Off air**, **No report yet**,
+**Stream login offline** and **No stream login**. Beside it are the three things
+a director does mid-session: go live or end the stream, show or hide Foundry's
+UI on the capture, and reframe.
+
+Below it, four tabs. **Shot** is the camera, padding, zoom, Spotlight and the
+tracked tokens. **Overlay** is the chat corner, card limits, card size and the
+chat filter, plus the sections sibling features contribute (targeting lines,
+roll cards). **Screen** is presentations and which Foundry windows may appear on
+the capture. **Access** is the stream login, auto-start and trusted directors.
+Tabs switch in place without a render, so a field being typed into is never
+lost, and the room reopens on the tab it was left on.
+
+A sibling feature puts its section on a tab with `registerPanelSection({ tab })`
+in `extensions.mjs`. A section that names no tab, or a tab that does not exist,
+lands on **Overlay**. The header stays outside the read-only fieldset, so a
+director who cannot save still sees whether the stream is live.
 
 ## Directors
 
@@ -148,17 +171,19 @@ button. A GM roll with no art of its own can show a chosen picture, framed the
 same way.
 
 The look is setting-neutral, because the stream sits over whatever world the
-table plays in. The strip is rounded glass with a 1px inner rule and a soft drop
-shadow. Tone is a top rule that fades out to the right plus a quiet wash behind
-the result, and a crit's light is a stronger wash rather than a glow. Everything
-the card says, and every number on it, is set in Google Sans Flex; Cormorant
-Garamond italic is kept for narrated text only (the emote, thought and narration
-quote styles). Both roles (`--glus-sans`, `--glus-serif`) are declared on the
-cards, never on `:root`. There are no cut corners, no monospace labels, no scan
-line, sheen or text decode; things fade and rise into place, and the strip
-unfolds inside its own rounded clip. The crit crack stays, since it is shared
-with core. The wrapper a cloned chat card gets on any other world takes the same
-radius and inner rule and nothing else; what is inside it is Foundry's.
+table plays in. The strip is a black plate with one chamfered corner and a 1px
+inner rule (`PLATE_CLIP` in `card-motion.js`, which the roll strip, the damage
+row and the status strip all clip to exactly). Tone is a top rule that fades out
+to the right plus a quiet wash behind the result, and a crit's light is a
+stronger wash rather than a glow. Everything the card says, and every number on
+it, is set in Google Sans Flex; Cormorant Garamond italic is kept for narrated
+text only (the emote, thought and narration quote styles). Both roles
+(`--glus-sans`, `--glus-serif`) are declared on the cards, never on `:root`.
+There are no monospace labels, no scan line, sheen or text decode. The crit
+crack stays, since it is shared with core. The wrapper a cloned chat card gets
+on any other world takes the same plate and inner rule and nothing else; what
+is inside it is Foundry's. The skin and why it is scoped are in
+[ADR 0007](adr/0007-stream-view-skin.md).
 
 Card size follows the stream's width and the **Roll card size** slider (default
 50%). That slider lives in the stream client's `chatSettings`, not here: it
@@ -365,6 +390,17 @@ the initiative tracker, the resource bars and the rest of the suite. Canvas work
 that must land in the canvas's own frame is driven from a PIXI ticker callback
 instead.
 
+Every duration is a named row in a table, read through a lookup that applies the
+motion tier once: `CARD_MOTION` (`card-motion.js`, read with `timing(el)`) for
+the cards, `OVERLAY_MOTION` (`constants.js`, read with `overlayTiming(el)`) for
+cloned cards and presentations. A card enters from the side of the screen its
+corner is on (the chat root carries `data-side`) and leaves the same way, then
+its height and margins close together, so the stack below it slides up instead
+of jumping. Nothing overshoots except the degree chip's small pop, and nothing
+is blurred: a filter on every card was the most expensive thing the overlay
+drew. Every animation the overlay waits on also has a timer behind it, so a
+background tab that never fires its finish still removes the card.
+
 The suite deliberately ignores the OS `prefers-reduced-motion` preference, so
 the standalone module's check for it is gone. Foundry's own photosensitive mode
 is a setting somebody turned on deliberately, and is honoured: overlays and
@@ -401,6 +437,14 @@ tests read) put through the shipped reader. `?still` shows the settled state,
 `?scale=0.5` the shipped default size, `?bg=bright` a pale floor, `?only=dh` the
 Daggerheart columns alone.
 
+To see the overlay and the rooms, `node tools/stream-preview.mjs && node
+tools/preview-server.mjs`, then `/.preview/stream.html`. `?view=overlay` puts
+the shipped cards in two stacks (top left and bottom right) over a stand-in map
+at capture size; `?view=room` renders the shipped `director.hbs` and the
+contributed sections through the shipped lang files (`tab`, `state`,
+`readonly`); `?view=filter` the Chat Filter page. Run it with `--before` once
+and add `rev=before` to see origin/main's room beside it.
+
 `stream-check` covers what a diff cannot show: import bindings across the
 feature boundary, `stream` never importing a child, hook names that would
 silently disconnect an emitter from its listener, the card feed registering one
@@ -408,6 +452,15 @@ phase too late, the crack re-forking from core, shader uniforms declared and
 never written, legacy remaps pointing at unregistered keys, the two settings
 that must never be delegable, raw socket use, the engine takeover, OS
 reduced-motion creeping back, runtime-built i18n keys, and the usual CSS drift.
+
+For the view it pins the skin staying off `:root` with `glus-` keyframes, no
+raw durations, easings or white veils, and blurs written against the glass tier;
+no literal duration in the cards or the overlay, and every motion name they read
+existing in its table; the cloned-card path refusing every whisper and blind
+roll through `audience.mjs`; the chat settings sanitizer falling back on a 0 or
+blank lifetime; every Control Room tab having a panel and a sections slot; and
+every runtime-built room key (state, tab, camera mode, scene view, corner)
+existing in the lang file.
 
 For the cards it additionally pins the things above that a diff cannot show: the
 three restated labels staying gone, the degree of success never being re-gated on
@@ -426,7 +479,8 @@ cloned-card path filing by the same kind, the rest summary staying a non-card,
 and the Daggerheart stylesheet loading after the base card and staying inside
 the card's look.
 
-Neither tool can show you how any of this **looks**. The camera flights, the
-targeting arcs and the roll cards need a real session.
+Neither tool can show you how any of this **moves** in a real capture. The
+camera flights, the targeting arcs, Foundry's own chat cards inside the cloned
+wrapper and the Control Room under Foundry's own stylesheet need a real session.
 
 See also: `docs/FEATURE_CONTRACT.md`, `docs/DESIGN_SYSTEM.md`.

@@ -1,19 +1,25 @@
-import { CLASSES, HOOKS, MODULE_ID } from "./constants.js";
-import { animate, prefersCalmMotion, remove } from "./motion/engine.js";
+import { CHAT_POSITIONS, CLASSES, DEFAULT_CHAT_SETTINGS, HOOKS, MODULE_ID } from "./constants.js";
+import { OVERLAY_EASE, OVERLAY_EASE_EXIT, animate, overlayTiming, prefersCalmMotion, remove } from "./motion/engine.js";
 import { waitForDiceAnimation } from "./dice-wait.js";
 import { createCardFeed, hasCardFeed } from "./extensions.mjs";
 import { getChatFilter, getChatSettings } from "./settings.js";
 import { DAGGERHEART_SYSTEM, allows, authorColumn, classifyMessage } from "./chat-filter.mjs";
+import { isAudienceVisible } from "./audience.mjs";
 import { frameImage } from "../../core/face-frame.mjs";
 import { rpModeOf } from "../../core/rp-mode.mjs";
 
-/** Where cards slide in from and out to, per overlay corner, in pixels. */
-const CARD_OFFSETS = {
-  "top-left": { enterX: -56, enterY: -4, exitX: -42, exitY: -2 },
-  "top-right": { enterX: 56, enterY: -4, exitX: 42, exitY: -2 },
-  "bottom-left": { enterX: -56, enterY: 4, exitX: -42, exitY: 2 },
-  "bottom-right": { enterX: 56, enterY: 4, exitX: 42, exitY: 2 }
-};
+/** How far, in px, a cloned card slides in from and out to the edge its stack hugs. */
+const CARD_SLIDE_PX = 40;
+
+/** The corner the overlay sits in, from the settings; an unknown value falls back to the default. */
+function chatPosition(settings) {
+  return CHAT_POSITIONS.includes(settings?.position) ? settings.position : DEFAULT_CHAT_SETTINGS.position;
+}
+
+/** -1 for a stack hugging the left edge, 1 for the right. */
+function sideSign(position) {
+  return position.endsWith("right") ? 1 : -1;
+}
 
 export class ChatOverlay {
   constructor(streamMode) {
@@ -177,24 +183,25 @@ export class ChatOverlay {
     if (messageId) this.cardsByMessageId.set(messageId, record);
     this.mirrorLiveSource(record, latest, message);
 
-    window.requestAnimationFrame(() => this.animateCardIn(record, settings.position));
+    window.requestAnimationFrame(() => this.animateCardIn(record, chatPosition(settings)));
     this.enforceMaxVisible();
   }
 
   /** When more cards are up than `maxVisible` allows, the oldest leave. */
   enforceMaxVisible() {
-    const max = Math.max(1, Number(getChatSettings().maxVisible) || 5);
+    const max = Math.max(1, Number(getChatSettings().maxVisible) || DEFAULT_CHAT_SETTINGS.maxVisible);
     while (this.cards.length > max) this.removeCard(this.cards[0].element);
   }
 
   /**
-   * The card unfolds to its content height while it slides in from its corner, scales up with a slight
-   * overshoot and comes into focus. No sweep crosses it: the wrapper is a quiet frame around Foundry's
-   * own card, and a light passing over that card is the HUD look the stream cards gave up.
+   * The card opens to its content height while it slides in from the edge its stack hugs. No overshoot,
+   * no blur and no sweep: the wrapper is a quiet frame around Foundry's own card, and the stack below it
+   * moves once, by exactly the room the new card takes.
    */
   animateCardIn(record, position) {
     const card = record.element;
     if (!card?.isConnected || record.phase !== "entering") return;
+    const d = overlayTiming(card);
     const height = `${card.scrollHeight}px`;
     const settle = () => {
       if (record.phase !== "entering") return;
@@ -204,27 +211,14 @@ export class ChatOverlay {
     };
 
     if (prefersCalmMotion()) {
-      animate(card, { opacity: [0, 1], duration: 180, ease: "linear" });
-      animate(card, { maxHeight: ["0px", height], duration: 220, ease: "linear", onComplete: settle });
+      animate(card, { opacity: [0, 1], duration: d("calmFade"), ease: "linear" });
+      animate(card, { maxHeight: ["0px", height], duration: d("calmResize"), ease: "linear", onComplete: settle });
       return;
     }
 
-    const offsets = CARD_OFFSETS[position] ?? CARD_OFFSETS["top-left"];
-    animate(card, { maxHeight: ["0px", height], duration: 520, ease: "outQuint", onComplete: settle });
-    animate(card, { opacity: [0, 1], duration: 360, ease: "outQuint" });
-    animate(card, {
-      translateX: [`${offsets.enterX}px`, "0px"],
-      translateY: [`${offsets.enterY}px`, "0px"],
-      scale: [0.92, 1],
-      duration: 620,
-      ease: "outBack(1.2)"
-    });
-    animate(card, {
-      "--stream-chat-blur": ["3px", "0px"],
-      "--stream-chat-shadow": [0.35, 1],
-      duration: 420,
-      ease: "outQuint"
-    });
+    animate(card, { maxHeight: ["0px", height], duration: d("cardIn"), ease: OVERLAY_EASE, onComplete: settle });
+    animate(card, { opacity: [0, 1], duration: d("cardFade"), ease: OVERLAY_EASE });
+    animate(card, { translateX: [`${sideSign(position) * CARD_SLIDE_PX}px`, "0px"], duration: d("cardSlide"), ease: OVERLAY_EASE });
   }
 
   refreshCardContents(record, message, source) {
@@ -277,7 +271,7 @@ export class ChatOverlay {
       card.style.maxHeight = `${height}px`;
       return;
     }
-    animate(card, { maxHeight: `${height}px`, duration: 320, ease: "outQuint" });
+    animate(card, { maxHeight: `${height}px`, duration: overlayTiming(card)("cardResize"), ease: OVERLAY_EASE });
   }
 
   // Mirror the live chat card for the stream card's whole life. RSReforged (and
@@ -328,8 +322,10 @@ export class ChatOverlay {
     if (!this.streamMode.active) return;
     const root = this.streamMode.getChatRoot();
     const settings = getChatSettings();
-    const position = settings.position;
+    const position = chatPosition(settings);
     root.className = `${CLASSES.chatRoot} position-${position}`;
+    // Cards read the edge their stack hugs off this, to slide in from and out to it.
+    root.dataset.side = sideSign(position) > 0 ? "right" : "left";
     root.style.setProperty("--stream-chat-offset-x", `${numberOrZero(settings.offsetX)}px`);
     root.style.setProperty("--stream-chat-offset-y", `${numberOrZero(settings.offsetY)}px`);
     // Roll cards are designed on a 1920px frame; scale them with the stream's actual width, then by the
@@ -338,7 +334,10 @@ export class ChatOverlay {
     root.style.setProperty("--glus-rc-scale", String(frameScale * settings.cardScale));
   }
 
-  /** Collapse the card toward its corner while it fades and blurs out, then remove it. */
+  /**
+   * Slide the card out toward the edge its stack hugs, then close the room it held (its height and its
+   * share of the stack's spacing together, so the cards behind it move once), then remove it.
+   */
   removeCard(card) {
     const index = this.cards.findIndex(record => record.element === card);
     const record = index >= 0 ? this.cards[index] : null;
@@ -364,25 +363,40 @@ export class ChatOverlay {
     if (!card?.isConnected) return;
 
     remove(card);
+    const d = overlayTiming(card);
+    const style = getComputedStyle(card);
     const height = `${card.getBoundingClientRect().height}px`;
-    const done = () => card.remove();
+    const close = {
+      maxHeight: [height, "0px"],
+      marginTop: [style.marginTop, "0px"],
+      marginBottom: [style.marginBottom, "0px"]
+    };
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      card.remove();
+    };
+    // The card is gone on a timer as well: a background tab runs no frames, and a card that never
+    // reported back would hold its slot in the stack.
     if (prefersCalmMotion()) {
-      animate(card, { opacity: 0, duration: 180, ease: "linear" });
-      animate(card, { maxHeight: [height, "0px"], duration: 220, ease: "linear", onComplete: done });
+      animate(card, { opacity: 0, duration: d("calmFade"), ease: "linear" });
+      animate(card, { ...close, duration: d("calmResize"), ease: "linear", onComplete: finish });
+      window.setTimeout(finish, d("calmResize") + d("calmFade"));
       return;
     }
-    const offsets = CARD_OFFSETS[getChatSettings().position] ?? CARD_OFFSETS["top-left"];
-    animate(card, { maxHeight: [height, "0px"], duration: 380, ease: "inCubic" });
-    animate(card, { opacity: 0, duration: 280, ease: "inCubic" });
-    animate(card, { "--stream-chat-blur": "3px", "--stream-chat-shadow": 0.35, duration: 300, ease: "inQuad" });
+    const side = sideSign(chatPosition(getChatSettings()));
     animate(card, {
-      translateX: `${offsets.exitX}px`,
-      translateY: `${offsets.exitY}px`,
-      scale: 0.96,
-      duration: 420,
-      ease: "inQuart",
-      onComplete: done
+      opacity: 0,
+      translateX: `${side * CARD_SLIDE_PX}px`,
+      duration: d("cardOut"),
+      ease: OVERLAY_EASE_EXIT,
+      onComplete: () => {
+        if (!card.isConnected) return finish();
+        animate(card, { ...close, duration: d("cardCollapse"), ease: OVERLAY_EASE, onComplete: finish });
+      }
     });
+    window.setTimeout(finish, d("cardOut") + d("cardCollapse") + d("cardResize"));
   }
 
   clear() {
@@ -433,22 +447,6 @@ const CHAT_CONTEXT_CLASS = "chat-popout";
 function isPersistedMessage(message, source) {
   const id = message?.id ?? source?.dataset?.messageId;
   return Boolean(id && game.messages?.get?.(id));
-}
-
-// A message that a regular player would never see (GM-only whispers, blind rolls)
-// must not leak onto the stream just because the streamer is logged in as a GM.
-function isAudienceVisible(message) {
-  if (!message) return false;
-  if (message.blind) return false;
-  const whisper = Array.isArray(message.whisper) ? message.whisper : [];
-  if (whisper.length === 0) return true;
-  // A Roleplay Chat line whispered to anyone, a player included, is a private line: only its
-  // recipients see it, and the stream is not one of them.
-  if (rpModeOf(message.flags)) return false;
-  return whisper.some(id => {
-    const user = game.users?.get?.(id);
-    return user ? !user.isGM : false;
-  });
 }
 
 /**

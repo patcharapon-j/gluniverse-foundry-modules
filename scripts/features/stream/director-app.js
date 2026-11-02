@@ -22,7 +22,9 @@ import {
   setSetting
 } from "./settings.js";
 import { delegationUnavailable, requestCommand } from "./director-auth.mjs";
-import { offerPanelAction, offerPanelChange, renderPanelSections } from "./extensions.mjs";
+import { PANEL_TABS, offerPanelAction, offerPanelChange, renderPanelSectionsByTab } from "./extensions.mjs";
+import { CHAT_LIMITS } from "./chat-settings.mjs";
+import { OUT_OF_COMBAT_MODES, TAB_ICONS, onAirState } from "./room-model.mjs";
 import { getStreamClientStatus, requestStreamClientStatus } from "./socket.js";
 import { openChatFilterApp, summarizeChatFilter } from "./chat-filter-app.js";
 
@@ -87,6 +89,8 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
   restoreScroll = null;
+  /** The tab the room is open on; survives re-renders, which a status report triggers every few seconds. */
+  activeTab = PANEL_TABS[0];
 
   static DEFAULT_OPTIONS = {
     id: `${MODULE_ID}-stream-control-room`,
@@ -96,10 +100,11 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
       // Not "Stream Director": `features/stage/` already ships a "GLUniverse
       // Stage Director" in the same scene-control group, and two Directors side
       // by side is the one thing a new GM is guaranteed to misread.
-      title: "GLUniverse Stream Control Room",
-      icon: "fas fa-video"
+      // Localised by ApplicationV2 itself.
+      title: "GLUNIVERSE_STREAM.controls.director",
+      icon: "fas fa-broadcast-tower"
     },
-    position: { width: 720, height: 760 },
+    position: { width: 680, height: 720 },
     actions: {}
   };
 
@@ -123,22 +128,36 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
     // whose delegated channel Foundry refused, or who is alone in the world,
     // still sees the live shot.
     const canEdit = canEditDirectorSettings();
+    const t = (key) => game.i18n.localize(`GLUNIVERSE_STREAM.room.${key}`);
+    const state = onAirState({ streamUserId, connected: streamConnected, status });
+    const streamUser = streamUserId ? game.users?.get(streamUserId) : null;
+    const sections = await renderPanelSectionsByTab();
+    const activeTab = PANEL_TABS.includes(this.activeTab) ? this.activeTab : PANEL_TABS[0];
     return {
       ...(await super._prepareContext(options)),
+      onAir: {
+        state,
+        label: t(`state.${state}`),
+        live: streamActive,
+        uiShowing: Boolean(streamActive && status?.restoreVisible),
+        login: streamUser
+          ? `${streamUser.name} · ${t(streamConnected ? "access.connected" : "access.offline")}`
+          : t("access.noLogin")
+      },
       status: {
-        stream: status ? (status.active ? "Active" : "Inactive") : "No report yet",
-        restore: status ? (status.restoreVisible ? "Temporarily visible" : "Hidden") : "No report yet",
         connected: streamConnected,
-        stopDisabled: streamActive ? "" : "disabled",
         restoreDisabled: streamActive ? "" : "disabled",
         reframeDisabled: streamActive ? "" : "disabled",
-        autoStart: streamUserId && autoStartIds.includes(streamUserId) ? "Enabled" : "Disabled",
         autoStartEnabled: Boolean(streamUserId && autoStartIds.includes(streamUserId)),
         autoStartCanEnable: Boolean(streamUserId && !autoStartIds.includes(streamUserId)),
         scene: canvas?.scene?.name ?? game.i18n.localize("GLUNIVERSE_STREAM.common.none"),
         mode: cameraModeLabel(activeMode),
-        combat: getRunningSceneCombat() ? "Yes" : (getActiveSceneCombat() ? "Prepared, not started" : "No")
+        combat: t(getRunningSceneCombat() ? "combat.running" : (getActiveSceneCombat() ? "combat.prepared" : "combat.none"))
       },
+      tab: { active: activeTab, ...Object.fromEntries(PANEL_TABS.map(id => [id, id === activeTab])) },
+      tabs: PANEL_TABS.map(id => ({ id, label: t(`tabs.${id}`), icon: TAB_ICONS[id], active: id === activeTab })),
+      labels: { connected: t("access.connected"), gm: t("access.gm") },
+      chatLimits: CHAT_LIMITS,
       users: game.users?.map(user => ({
         id: user.id,
         name: user.name,
@@ -155,10 +174,10 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
       chatFilterSummary: summarizeChatFilter(),
       cardScale: { ...CARD_SCALE_RANGE, percent: Math.round(chat.cardScale * 100) },
       dialog,
-      // Sections contributed by sibling features (targeting arcs, roll cards).
-      // Empty when neither is enabled, which is what makes this panel work with
-      // `stream` alone installed.
-      extraSections: await renderPanelSections(),
+      // Sections contributed by sibling features (targeting arcs, roll cards,
+      // roleplay chat), grouped by the tab each one asked for. Empty when none is
+      // enabled, which is what makes this panel work with `stream` alone installed.
+      sections,
       canEdit,
       canEditAdmin: canEditStreamAdmin(),
       // `canEdit` used to be computed here and used nowhere, so a director who
@@ -172,27 +191,29 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
       combatRows: getCombatRows(),
       detectedUi: services.uiDetector?.getEntries() ?? [],
       selectorRules: uiRules.selectorRules,
-      outOfCombatModeOptions: optionsFor({
-        [CAMERA_MODES.manual]: "Manual/free camera",
-        [CAMERA_MODES.scene]: "Scene/full background",
-        [CAMERA_MODES.trackedToken]: "Tracked token(s)",
-        [CAMERA_MODES.party]: "Party only (visible PCs)"
-      }, camera.outOfCombatMode),
-      combatModeOptions: optionsFor({
-        [CAMERA_MODES.manual]: "Manual/free camera",
-        [CAMERA_MODES.scene]: "Scene/full background",
-        [CAMERA_MODES.trackedToken]: "Tracked token(s)",
-        [CAMERA_MODES.party]: "Party only (visible PCs)",
-        [CAMERA_MODES.combatants]: "Visible combatants",
-        [CAMERA_MODES.activeTurn]: "Active turn only",
-        [CAMERA_MODES.spotlight]: "Spotlight active token"
-      }, camera.combatMode),
-      sceneViewOptions: optionsFor({
-        [SCENE_VIEW_MODES.fitBackground]: "Fit background",
-        [SCENE_VIEW_MODES.fillBackground]: "Fill background"
-      }, camera.sceneViewMode),
-      chatPositionOptions: optionsFor(Object.fromEntries(CHAT_POSITIONS.map(position => [position, labelize(position)])), chat.position)
+      outOfCombatModeOptions: modeOptions(OUT_OF_COMBAT_MODES, camera.outOfCombatMode),
+      combatModeOptions: modeOptions(Object.values(CAMERA_MODES), camera.combatMode),
+      sceneViewOptions: optionsFor(Object.fromEntries(Object.values(SCENE_VIEW_MODES).map(view => [view, t(`view.${view}`)])), camera.sceneViewMode),
+      chatPositionOptions: optionsFor(Object.fromEntries(CHAT_POSITIONS.map(position => [position, t(`corner.${position}`)])), chat.position)
     };
+  }
+
+  /**
+   * Tabs switch in place, without a render: every panel is already in the form, so a tab change costs
+   * nothing and leaves an input being typed into exactly as it was. The choice is kept on the instance
+   * so the next render (a setting saved, a status report) opens on the same tab.
+   */
+  #showTab(id) {
+    if (!PANEL_TABS.includes(id)) return;
+    this.activeTab = id;
+    const body = this.element?.querySelector(".gluniverse-stream-director-body");
+    if (body) body.dataset.roomTab = id;
+    for (const button of this.element?.querySelectorAll(".gluniverse-stream-tab") ?? []) {
+      button.setAttribute("aria-selected", String(button.dataset.tab === id));
+    }
+    for (const panel of this.element?.querySelectorAll(".gluniverse-stream-tabpanel") ?? []) {
+      panel.hidden = panel.dataset.tab !== id;
+    }
   }
 
   async _onFirstRender(context, options) {
@@ -224,18 +245,30 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const content = this.#windowContentElement();
     const next = {
       body: this.element?.querySelector(".gluniverse-stream-director-body")?.scrollTop ?? 0,
-      content: content?.scrollTop ?? 0
+      content: content?.scrollTop ?? 0,
+      // Each tab scrolls on its own; the render reopens the same tab, so its offset is the one to keep.
+      panel: this.#activePanel()?.scrollTop ?? 0
     };
     this.restoreScroll = this.restoreScroll
-      ? { body: Math.max(this.restoreScroll.body, next.body), content: Math.max(this.restoreScroll.content, next.content) }
+      ? {
+        body: Math.max(this.restoreScroll.body, next.body),
+        content: Math.max(this.restoreScroll.content, next.content),
+        panel: Math.max(this.restoreScroll.panel, next.panel)
+      }
       : next;
   }
 
   #restoreScroll(scroll) {
     const body = this.element?.querySelector(".gluniverse-stream-director-body");
     const content = this.#windowContentElement();
+    const panel = this.#activePanel();
     if (body) body.scrollTop = scroll.body;
     if (content) content.scrollTop = scroll.content;
+    if (panel) panel.scrollTop = scroll.panel;
+  }
+
+  #activePanel() {
+    return this.element?.querySelector(".gluniverse-stream-tabpanel:not([hidden])");
   }
 
   #windowContentElement() {
@@ -281,6 +314,8 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     const action = button.dataset.action;
     switch (action) {
+      case "room-tab":
+        return this.#showTab(button.dataset.tab);
       case "start":
         return requestCommand(STREAM_COMMANDS.start);
       case "stop":
@@ -377,24 +412,15 @@ function getActiveCameraMode(camera) {
 }
 
 function cameraModeLabel(mode) {
-  const labels = {
-    [CAMERA_MODES.manual]: "Manual/free camera",
-    [CAMERA_MODES.scene]: "Scene/full background",
-    [CAMERA_MODES.trackedToken]: "Tracked token(s)",
-    [CAMERA_MODES.party]: "Party only",
-    [CAMERA_MODES.combatants]: "Visible combatants",
-    [CAMERA_MODES.activeTurn]: "Active turn only",
-    [CAMERA_MODES.spotlight]: "Spotlight active token"
-  };
-  return labels[mode] ?? mode;
+  return Object.values(CAMERA_MODES).includes(mode) ? game.i18n.localize(`GLUNIVERSE_STREAM.room.mode.${mode}`) : String(mode ?? "");
+}
+
+function modeOptions(modes, selected) {
+  return optionsFor(Object.fromEntries(modes.map(mode => [mode, cameraModeLabel(mode)])), selected);
 }
 
 function optionsFor(labels, selected) {
   return Object.entries(labels).map(([value, label]) => ({ value, label, selected: value === selected ? "selected" : "" }));
-}
-
-function labelize(value) {
-  return value.split("-").map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
 }
 
 function updateRangeOutput(target) {

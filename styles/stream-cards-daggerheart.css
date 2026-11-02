@@ -14,39 +14,39 @@
  *   the Fear chip     "+1 Fear" beside the player name once the GM has taken the Fear.
  *   magic damage      the damage part's icon in the magic hue.
  *
- * Setting-neutral like the card it extends: no cut corners, no monospace, one sans for every word and
- * every number.
+ * In the stream view's skin like the card it extends (docs/adr/0007-stream-view-skin.md): the skin's ink,
+ * no monospace, one sans for every word and every number.
  */
 
 /* ── Tones ── */
 .glus-rc[data-tone="hope"] { --glus-rc-tone: var(--gl-signal); }
 .glus-rc[data-tone="fear"] { --glus-rc-tone: var(--gl-tyrant-hot); }
-.glus-rc[data-tone="hit"] { --glus-rc-tone: var(--gl-hazard); }
-.glus-rc[data-tone="miss"] { --glus-rc-tone: var(--gl-text-dim); }
+.glus-rc[data-tone="hit"] { --glus-rc-tone: var(--glus-red); }
+.glus-rc[data-tone="miss"] { --glus-rc-tone: var(--glus-steel); }
 /* Fear darkens the whole strip a little towards violet: the roll went the GM's way. */
 .glus-rc[data-tone="fear"]:not([data-pending]):not([data-blind]) .glus-rc-main {
-  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.04), rgb(var(--gl-tint-light) / 0) 46%),
-    color-mix(in srgb, var(--gl-tyrant-deep) 42%, color-mix(in srgb, var(--gl-ink-1) 86%, transparent));
+  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.04), transparent 60%),
+    color-mix(in oklab, var(--gl-tyrant-deep) 42%, color-mix(in oklab, var(--glus-ink-1) 94%, transparent));
 }
 
 /* ── The duality die ── */
 .glus-rc-duality {
-  width: calc(3.3 * var(--u));
-  height: calc(3.3 * var(--u));
+  width: calc(3.1 * var(--u));
+  height: calc(3.1 * var(--u));
 }
 /* The outline only: the halves underneath carry the fill. */
 .glus-rc-duality .glus-rc-dd-edge {
   fill: none;
-  stroke: color-mix(in srgb, var(--gl-text-dim) 70%, transparent);
+  stroke: var(--glus-steel);
 }
 .glus-rc-dd-half {
   stroke: none;
   transition: fill var(--gl-d-swift) var(--gl-ease);
 }
-.glus-rc-dd-half[data-side="hope"] { fill: color-mix(in srgb, var(--gl-signal) 8%, var(--gl-ink-0)); }
-.glus-rc-dd-half[data-side="fear"] { fill: color-mix(in srgb, var(--gl-tyrant) 12%, var(--gl-ink-0)); }
+.glus-rc-dd-half[data-side="hope"] { fill: color-mix(in oklab, var(--gl-signal) 8%, var(--glus-ink-0)); }
+.glus-rc-dd-half[data-side="fear"] { fill: color-mix(in oklab, var(--gl-tyrant) 12%, var(--glus-ink-0)); }
 .glus-rc-dd-split {
-  stroke: var(--gl-text-dim);
+  stroke: var(--glus-steel);
   stroke-width: 1.5;
   opacity: 0.45;
 }
@@ -73,11 +73,11 @@
 /* The half that won is lit; both on a critical. The settled outcome waits for the total, like the tone. */
 .glus-rc:not([data-pending]) .glus-rc-duality[data-out="hope"] .glus-rc-dd-half[data-side="hope"],
 .glus-rc:not([data-pending]) .glus-rc-duality[data-out="crit"] .glus-rc-dd-half[data-side="hope"] {
-  fill: color-mix(in srgb, var(--gl-signal) 30%, var(--gl-ink-0));
+  fill: color-mix(in oklab, var(--gl-signal) 30%, var(--glus-ink-0));
 }
 .glus-rc:not([data-pending]) .glus-rc-duality[data-out="fear"] .glus-rc-dd-half[data-side="fear"],
 .glus-rc:not([data-pending]) .glus-rc-duality[data-out="crit"] .glus-rc-dd-half[data-side="fear"] {
-  fill: color-mix(in srgb, var(--gl-tyrant) 50%, var(--gl-ink-0));
+  fill: color-mix(in oklab, var(--gl-tyrant) 50%, var(--glus-ink-0));
 }
 .glus-rc:not([data-pending]) .glus-rc-duality[data-out="hope"] .glus-rc-dd-edge { stroke: var(--gl-signal); }
 .glus-rc:not([data-pending]) .glus-rc-duality[data-out="fear"] .glus-rc-dd-edge { stroke: var(--gl-tyrant-hot); }
@@ -86,11 +86,11 @@
 .glus-rc:not([data-pending]) .glus-rc-duality[data-out="hope"] .glus-rc-dd-value[data-side="fear"],
 .glus-rc:not([data-pending]) .glus-rc-duality[data-out="fear"] .glus-rc-dd-value[data-side="hope"] { opacity: 0.42; }
 /* A reaction throws the duality away: two plain faces, neither one a colour. */
-.glus-rc-duality[data-out="none"] .glus-rc-dd-half { fill: color-mix(in srgb, var(--gl-ink-0) 55%, transparent); }
-.glus-rc-duality[data-out="none"] .glus-rc-dd-value { color: var(--gl-text-bright); }
+.glus-rc-duality[data-out="none"] .glus-rc-dd-half { fill: color-mix(in oklab, var(--glus-ink-0) 70%, transparent); }
+.glus-rc-duality[data-out="none"] .glus-rc-dd-value { color: var(--glus-text); }
 
 /* ── Chips ── */
-.glus-rc-chip[data-chip="fear"] { color: var(--gl-ink-0); background: var(--gl-tyrant-hot); }
+.glus-rc-chip[data-chip="fear"] { color: var(--glus-ink-0); background: var(--gl-tyrant-hot); }
 
 /* ── Damage ── */
 .glus-rc-damage-part[data-type="magic"] i { color: var(--gl-orchid); }

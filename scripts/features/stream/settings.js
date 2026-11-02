@@ -1,6 +1,5 @@
 import {
   CAMERA_MODES,
-  CARD_SCALE_RANGE,
   DEFAULT_CAMERA_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_DIALOG_SETTINGS,
@@ -11,6 +10,7 @@ import {
 } from "./constants.js";
 import { canDelegate, isDirectorUser, requestWrite } from "./director-auth.mjs";
 import { DEFAULT_CHAT_FILTER, sanitizeChatFilter } from "./chat-filter.mjs";
+import { sanitizeChatSettings } from "./chat-settings.mjs";
 
 /**
  * GLUniverse Stream — settings.
@@ -196,16 +196,6 @@ function sanitizeCameraSettings(value) {
   const panSpeed = Number(migrated.panSpeed);
   migrated.panSpeed = Number.isFinite(panSpeed) && panSpeed > 0 ? panSpeed : DEFAULT_CAMERA_SETTINGS.panSpeed;
   return pickDefaults(migrated, DEFAULT_CAMERA_SETTINGS);
-}
-
-/** Roll card scale is clamped to the range the panel offers, so a stray value can't blank the overlay. */
-function sanitizeChatSettings(value) {
-  const settings = sanitizeObject(value, DEFAULT_CHAT_SETTINGS);
-  const scale = Number(settings.cardScale);
-  // A blank, missing or zero scale means "unset", not "invisible", so it falls back to the default.
-  const wanted = Number.isFinite(scale) && scale > 0 ? scale : DEFAULT_CHAT_SETTINGS.cardScale;
-  settings.cardScale = Math.min(CARD_SCALE_RANGE.max, Math.max(CARD_SCALE_RANGE.min, wanted));
-  return settings;
 }
 
 function migrateSidePadding(migrated, source, uniformKey, uniformDefault, sideKeys) {

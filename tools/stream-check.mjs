@@ -596,17 +596,41 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
 }
 
 /* ------------------------------------------- the cards stay setting-neutral -- */
-// The stream sits over whatever world the table plays in, so the cards read as a
-// lit page, not a sci-fi HUD. Every piece of the old look comes back without an
-// error and renders perfectly: a chamfer is one polygon, a decode is one helper
-// call, a monospace label is one token. And the entrance clip is the quiet one —
-// left as a polygon it re-cuts the chamfer for as long as the card is arriving,
-// and the card visibly changes shape when the clip is cleared.
+// The stream sits over whatever world the table plays in, so the cards are a
+// quiet black plate, not a sci-fi HUD (docs/adr/0007-stream-view-skin.md). Every
+// piece of the old look comes back without an error and renders perfectly: a
+// decode is one helper call, a monospace label is one token. The cut is the
+// suite's motif and the plate keeps it, which makes the entrance clip the quiet
+// one: a clip that animates a plate has to start and end on that plate's own
+// polygon, or the card visibly changes shape the moment the clip is cleared.
 {
   const css = read("styles/stream-cards.css");
   const cssBody = strip(css);
-  if (/polygon\(/.test(cssBody)) {
-    fail("styles/stream-cards.css: a clip-path polygon is back — the cards are rounded, and a polygon cuts a chamfer into them");
+  const motionSrc = strip(read("scripts/features/stream-cards/cards/card-motion.js"));
+  const plate = motionSrc.match(/export const PLATE_CLIP = "([^"]+)";/)?.[1] ?? null;
+  const folded = motionSrc.match(/export const PLATE_CLIP_FOLDED = "([^"]+)";/)?.[1] ?? null;
+  const norm = (s) => String(s).replace(/\s+/g, " ").trim();
+  const points = (s) => (norm(s).match(/^polygon\((.*)\)$/)?.[1] ?? "").split(/,(?![^(]*\))/).length;
+  if (!plate || !folded) fail("stream-cards/cards/card-motion.js: could not find PLATE_CLIP / PLATE_CLIP_FOLDED");
+  else {
+    // The browser interpolates two polygons only point for point; a folded copy
+    // with a different count snaps instead of unfolding.
+    if (points(plate) !== points(folded)) {
+      fail(`card-motion.js: PLATE_CLIP has ${points(plate)} points and PLATE_CLIP_FOLDED ${points(folded)} — the unfold snaps instead of interpolating`);
+    }
+    // Each plate the motion unfolds rests on exactly that polygon.
+    for (const sel of [".glus-rc-main", ".glus-rc-damage", ".glus-sc-strip"]) {
+      const rule = cssBody.match(new RegExp(`(?:^|\\n)${sel.replace(/\./g, "\\.")} \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? "";
+      const clip = rule.match(/clip-path:\s*([^;]+);/)?.[1] ?? null;
+      if (!clip || norm(clip) !== norm(plate)) {
+        fail(`styles/stream-cards.css: ${sel} does not clip to PLATE_CLIP — the unfold ends on a different shape and the card jumps when the clip clears`);
+      }
+    }
+  }
+  // Every other polygon is a chamfer or a wedge cut from the skin's own tokens,
+  // never a raw length: a raw one does not follow --u and drifts off the scale.
+  for (const m of cssBody.matchAll(/polygon\(([^;]*)\)\s*;/g)) {
+    if (!/var\(--glus-(cut|cut-sm|wedge)\)/.test(m[1])) fail(`styles/stream-cards.css: a polygon cut from a raw length (${norm(m[0]).slice(0, 60)}…) — cut it from --glus-cut / --glus-wedge`);
   }
   if (/var\(--gl-tech\)/.test(cssBody)) {
     fail("styles/stream-cards.css: a label uses --gl-tech — the cards carry no monospace; labels are the sans at a wide track");
@@ -653,13 +677,13 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   const motion = strip(read("scripts/features/stream-cards/cards/card-motion.js"));
   for (const [file, src] of [["roll-card.js", card], ["status-card.js", status], ["card-motion.js", motion]]) {
     if (/\bscramble\b/.test(src)) fail(`stream-cards/cards/${file}: a text scramble is back — names and degrees fade and rise into place`);
-    if (/polygon\(/.test(src)) fail(`stream-cards/cards/${file}: a clip-path polygon in the motion re-cuts a chamfer into a rounded card while it animates`);
+    if (file !== "card-motion.js" && /polygon\(/.test(src)) fail(`stream-cards/cards/${file}: writes its own clip polygon — a card unfolds on PLATE_CLIP from card-motion.js, the one statement of the plate's shape`);
+    if (/inset\([^)]*\bround\b/.test(src)) fail(`stream-cards/cards/${file}: a rounded inset clip is back — the plate is chamfered, and a round clip squares then rounds it while the card arrives`);
     if (/glus-rc-(scan|sheen)/.test(src)) fail(`stream-cards/cards/${file}: builds or animates the scan line or the sheen, which no longer exist`);
   }
-  for (const name of ["STRIP_CLIP", "STRIP_CLIP_FOLDED"]) {
-    const m = card.match(new RegExp(`const ${name} = (["'\`])(.*?)\\1;`));
-    if (!m || !/^inset\(.*\bround\b/.test(m[2])) {
-      fail(`roll-card.js: ${name} is not a rounded inset — the unfold must carry the strip's radius or it squares the corners while the card arrives`);
+  for (const [file, src] of [["roll-card.js", card], ["status-card.js", status]]) {
+    if (!/const STRIP_CLIP = PLATE_CLIP;/.test(src) || !/const STRIP_CLIP_FOLDED = PLATE_CLIP_FOLDED;/.test(src)) {
+      fail(`${file}: STRIP_CLIP / STRIP_CLIP_FOLDED are not PLATE_CLIP / PLATE_CLIP_FOLDED — the unfold must start and end on the plate's own polygon`);
     }
   }
   // A direction word restates the mark beside it, and the room it took pushed a
@@ -910,6 +934,107 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   const controller = strip(read("scripts/features/stream/camera/controller.js"));
   if (/getActiveSceneCombat\(/.test(controller)) {
     fail("camera/controller.js: uses getActiveSceneCombat — a prepared, unstarted encounter would put the camera on its combat mode");
+  }
+}
+
+/* ------------------------------------------------- the stream view's skin --- */
+// The skin is scoped (docs/adr/0007-stream-view-skin.md). Everything here renders perfectly when it
+// is wrong: a token on :root repaints other features, a bare keyframe name overrides somebody else's,
+// a literal duration ignores the motion tier, a fixed blur ignores the player's glass level.
+for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-cards-daggerheart.css"]) {
+  const s = strip(read(f));
+  if (/(^|[\s,}])::?root\b/m.test(s)) fail(`${f}: a rule on :root — the stream skin lives under the feature's own roots only`);
+  for (const m of s.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)) {
+    if (!/^glus-/.test(m[1])) fail(`${f}: @keyframes ${m[1]} is not glus- prefixed — keyframe names are global`);
+  }
+  if (/rgba?\(\s*255\s*,\s*255\s*,\s*255/.test(s)) fail(`${f}: a raw white veil — use a tint channel or a --glus-* token`);
+  for (const m of s.matchAll(/(?:^|[;{\s])(transition|animation)(?:-duration|-delay)?\s*:([^;}]*)/g)) {
+    if (/(^|[\s,(])\d*\.?\d+m?s\b/.test(m[2])) fail(`${f}: raw duration in ${m[1]} (${m[2].trim()}) — use the --gl-d-* tokens so the motion tier applies`);
+    if (/cubic-bezier\(/.test(m[2])) fail(`${f}: raw easing in ${m[1]} — use the --gl-ease* tokens`);
+  }
+  for (const m of s.matchAll(/backdrop-filter\s*:([^;}]*)/g)) {
+    if (/blur\(/.test(m[1]) && !/--gl-(glass-k|blur)/.test(m[1])) fail(`${f}: backdrop blur not written against --gl-glass-k / --gl-blur — it ignores the player's glass tier`);
+  }
+}
+
+/* --------------------------------------------------------- named motion ---- */
+// Every duration the cards and the overlay play is a row in a motion table, read through a
+// tier-scaled lookup. A literal one ignores motion "none"; a name missing from its table throws
+// inside an animation, which drops the card on the stream with nothing on the GM's screen.
+{
+  const tableKeys = (src, name) => {
+    const body = src.match(new RegExp(`export const ${name} = Object\\.freeze\\(\\{([\\s\\S]*?)\\}\\);`))?.[1];
+    if (!body) { fail(`could not find ${name}`); return new Set(); }
+    return new Set([...strip(body).matchAll(/^\s*(\w+):/gm)].map((m) => m[1]));
+  };
+  const card = tableKeys(read("scripts/features/stream-cards/cards/card-motion.js"), "CARD_MOTION");
+  const overlay = tableKeys(read("scripts/features/stream/constants.js"), "OVERLAY_MOTION");
+  for (const [f, table, tableName] of [
+    ["scripts/features/stream-cards/cards/roll-card.js", card, "CARD_MOTION"],
+    ["scripts/features/stream-cards/cards/status-card.js", card, "CARD_MOTION"],
+    ["scripts/features/stream/chat-overlay.js", overlay, "OVERLAY_MOTION"],
+    ["scripts/features/stream/dialog-overlay.js", overlay, "OVERLAY_MOTION"]
+  ]) {
+    const s = strip(read(f));
+    for (const m of s.matchAll(/\b(duration|delay)\s*:\s*\d/g)) fail(`${f}: a literal ${m[1]} — read it from ${tableName} so the motion tier applies`);
+    for (const m of s.matchAll(/\bd\(\s*"(\w+)"\s*\)/g)) {
+      if (!table.has(m[1])) fail(`${f}: motion "${m[1]}" is not a row of ${tableName} — the lookup throws mid-animation`);
+    }
+  }
+}
+
+/* ------------------------------------------- audience, settings, the room ---- */
+{
+  // A whisper is never the audience's, whoever it was sent to. The cloned-card path asks this one
+  // function; a local copy that only checks "whispered to the GM" put player whispers on the stream.
+  const { isAudienceVisible } = await import(new URL("../scripts/features/stream/audience.mjs", import.meta.url));
+  const cases = [
+    [{ whisper: ["player"] }, false, "a whisper to a player"],
+    [{ whisper: new Set(["gm"]) }, false, "a whisper held in a Set"],
+    [{ blind: true, whisper: [] }, false, "a blind roll"],
+    [null, false, "no message"],
+    [{ whisper: [] }, true, "a public message"]
+  ];
+  for (const [msg, want, label] of cases) {
+    if (isAudienceVisible(msg) !== want) fail(`stream/audience.mjs: ${label} ${want ? "is refused" : "reaches the stream"}`);
+  }
+  const overlaySrc = strip(read("scripts/features/stream/chat-overlay.js"));
+  if (!/import\s*\{[^}]*\bisAudienceVisible\b[^}]*\}\s*from\s*"\.\/audience\.mjs"/.test(overlaySrc) || /function\s+isAudienceVisible\b/.test(overlaySrc)) {
+    fail("stream/chat-overlay.js: the audience test is not audience.mjs's — a local copy is how whispers reached the stream");
+  }
+
+  // A stored 0 or blank lifetime used to remove every card the frame it landed.
+  const { sanitizeChatSettings, CHAT_LIMITS } = await import(new URL("../scripts/features/stream/chat-settings.mjs", import.meta.url));
+  const { DEFAULT_CHAT_SETTINGS } = await import(new URL("../scripts/features/stream/constants.js", import.meta.url));
+  for (const lifetimeMs of [0, "", null, -5, "abc"]) {
+    if (sanitizeChatSettings({ lifetimeMs }).lifetimeMs !== DEFAULT_CHAT_SETTINGS.lifetimeMs) fail(`chat-settings.mjs: lifetime ${JSON.stringify(lifetimeMs)} does not fall back to the default`);
+  }
+  if (sanitizeChatSettings({ lifetimeMs: 1e9 }).lifetimeMs !== CHAT_LIMITS.lifetimeMs.max) fail("chat-settings.mjs: a huge lifetime is not clamped");
+  if (sanitizeChatSettings({ maxVisible: 0 }).maxVisible !== DEFAULT_CHAT_SETTINGS.maxVisible) fail("chat-settings.mjs: maxVisible 0 does not fall back — the overlay would show nothing");
+  if (sanitizeChatSettings({ position: "middle" }).position !== DEFAULT_CHAT_SETTINGS.position) fail("chat-settings.mjs: an unknown corner is kept — the stack would have no side to slide from");
+  if (sanitizeChatSettings({ offsetX: "" }).offsetX !== DEFAULT_CHAT_SETTINGS.offsetX) fail("chat-settings.mjs: a blank offset is not the default");
+
+  // Every tab a section may ask for is drawn, and every runtime-built room key resolves.
+  const { PANEL_TABS, DEFAULT_PANEL_TAB } = await import(new URL("../scripts/features/stream/extensions.mjs", import.meta.url));
+  const { ON_AIR_STATES, TAB_ICONS } = await import(new URL("../scripts/features/stream/room-model.mjs", import.meta.url));
+  const { CAMERA_MODES, SCENE_VIEW_MODES, CHAT_POSITIONS } = await import(new URL("../scripts/features/stream/constants.js", import.meta.url));
+  const director = read("templates/stream/director.hbs");
+  if (!PANEL_TABS.includes(DEFAULT_PANEL_TAB)) fail("extensions.mjs: DEFAULT_PANEL_TAB is not a tab — a section without one would render nowhere");
+  for (const tab of PANEL_TABS) {
+    if (!director.includes(`{{{sections.${tab}}}}`)) fail(`templates/stream/director.hbs: no {{{sections.${tab}}}} — a section on the ${tab} tab renders nowhere`);
+    if (!director.includes(`data-tab="${tab}"`)) fail(`templates/stream/director.hbs: no panel for the ${tab} tab`);
+    if (!TAB_ICONS[tab]) fail(`room-model.mjs: TAB_ICONS has no icon for ${tab}`);
+  }
+  const room = JSON.parse(read("lang/stream.en.json"));
+  const families = [
+    ["state", ON_AIR_STATES], ["tabs", PANEL_TABS], ["mode", Object.values(CAMERA_MODES)],
+    ["view", Object.values(SCENE_VIEW_MODES)], ["corner", CHAT_POSITIONS]
+  ];
+  for (const [family, values] of families) {
+    for (const v of values) {
+      const key = `GLUNIVERSE_STREAM.room.${family}.${v}`;
+      if (!(key in room)) fail(`lang/stream.en.json: runtime-built key ${key} is not defined`);
+    }
   }
 }
 

@@ -80,6 +80,8 @@ Suite.register({
     registerPanelSection({
       id: CARDS_FEATURE_ID,
       order: 20,
+      // Beside the chat overlay the cards are drawn in.
+      tab: "overlay",
       render: renderSection,
       change: claimChange,
       action: claimAction,

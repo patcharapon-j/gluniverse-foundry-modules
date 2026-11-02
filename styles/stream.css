@@ -1,9 +1,48 @@
 /*
- * GLUniverse Suite — stream.
+ * GLUniverse Suite — stream: the capture client's overlay and the Control Room.
  *
- * Tokens and utilities come from styles/gl-tokens.css; keyframes from
- * styles/gl-motion.css. Class prefix: .gluniverse-stream-*
+ * A scoped black skin (docs/adr/0007-stream-view-skin.md), the same one Stream Pacer carries (ADR 0003):
+ * the design system's neutral ramp and status hues mirrored as `--glus-*` tokens under the stream's own
+ * roots, never on :root. Motion and timing come from the suite (`--gl-d-*`, `--gl-ease*`); motion the JS
+ * plays reads OVERLAY_MOTION (constants.js) and CARD_MOTION (stream-cards/cards/card-motion.js).
+ * Class prefix: .gluniverse-stream-* (and .glus-framing-* for the portrait framer).
  */
+
+/* ═══ The skin's tokens, on every stream root ═══════════════════════════════ */
+
+:is(.glus-rc, .glus-sc, .gluniverse-stream-overlay-root, .gluniverse-stream-chat-card,
+  .gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) {
+  /* the neutral ramp (design system: color.neutral) */
+  --glus-ink-0: #05060a;
+  --glus-ink-1: #0a0b11;
+  --glus-ink-2: #0f1017;
+  --glus-ink-3: #15171f;
+  --glus-ink-4: #1c1e28;
+  --glus-ink-5: #272a36;
+  --glus-ink-6: #353846;
+  --glus-text: #f4f4f7;
+  --glus-dim: #b3b5c2;
+  --glus-faint: #6a6d7c;
+  --glus-line: rgb(var(--gl-tint-light) / 0.08);
+  --glus-line-strong: rgb(var(--gl-tint-light) / 0.16);
+  --glus-hover: rgb(var(--gl-tint-light) / 0.05);
+  --glus-shade: rgb(var(--gl-tint-dark) / 0.55);
+
+  /* paper and the status hues (design system: color.status) */
+  --glus-paper: #ecedf2;
+  --glus-amber: #ffb020;
+  --glus-red: #ff4d5a;
+  --glus-red-deep: #d6184a;
+  --glus-green: #2fb672;
+  --glus-steel: #8e91a0;
+
+  --glus-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
+  /* the chamfer on a window-sized plate's lower right */
+  --glus-plate-cut: 10px;
+}
+
+/* ═══ Hiding Foundry's UI on the capture ═════════════════════════════════════ */
+
 body.gluniverse-stream-active:not(.gluniverse-stream-restore) #sidebar:not(.gluniverse-stream-ui-allowed),
 body.gluniverse-stream-active:not(.gluniverse-stream-restore) #sidebar-tabs:not(.gluniverse-stream-ui-allowed),
 body.gluniverse-stream-active:not(.gluniverse-stream-restore) #chat:not(.gluniverse-stream-ui-allowed),
@@ -51,6 +90,8 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   display: none !important;
 }
 
+/* ═══ The overlay ════════════════════════════════════════════════════════════ */
+
 .gluniverse-stream-overlay-root {
   position: fixed;
   inset: 0;
@@ -59,79 +100,57 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   overflow: hidden;
 }
 
+/*
+ * The card stack. Cards are spaced with their own block margin rather than `gap`: a leaving card closes
+ * its height and its margin together, so the cards behind it move once. A `gap` cannot be animated per
+ * child, and the stack jumped by one gap the moment the card was removed.
+ */
 .gluniverse-stream-chat-root {
+  --glus-gap: 0.5rem;
   position: absolute;
   display: flex;
-  gap: 0.5rem;
+  gap: 0;
   width: 320px;
   max-width: calc(100vw - 2rem);
   pointer-events: none;
   transform: translate3d(var(--stream-chat-offset-x, 0px), var(--stream-chat-offset-y, 0px), 0);
 }
 
-.gluniverse-stream-chat-root.position-top-left {
-  top: 1rem;
-  left: 1rem;
-  flex-direction: column;
-  align-items: flex-start;
-}
+.gluniverse-stream-chat-root.position-top-left { top: 1rem; left: 1rem; flex-direction: column; align-items: flex-start; }
+.gluniverse-stream-chat-root.position-top-right { top: 1rem; right: 1rem; flex-direction: column; align-items: flex-end; }
+.gluniverse-stream-chat-root.position-bottom-left { bottom: 1rem; left: 1rem; flex-direction: column-reverse; align-items: flex-start; }
+.gluniverse-stream-chat-root.position-bottom-right { right: 1rem; bottom: 1rem; flex-direction: column-reverse; align-items: flex-end; }
 
-.gluniverse-stream-chat-root.position-top-right {
-  top: 1rem;
-  right: 1rem;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.gluniverse-stream-chat-root.position-bottom-left {
-  bottom: 1rem;
-  left: 1rem;
-  flex-direction: column-reverse;
-  align-items: flex-start;
-}
-
-.gluniverse-stream-chat-root.position-bottom-right {
-  right: 1rem;
-  bottom: 1rem;
-  flex-direction: column-reverse;
-  align-items: flex-end;
-}
+.gluniverse-stream-chat-root:is(.position-top-left, .position-top-right) > * { margin-bottom: var(--glus-gap); }
+.gluniverse-stream-chat-root:is(.position-bottom-left, .position-bottom-right) > * { margin-top: var(--glus-gap); }
 
 /*
-  Card motion (height, slide, scale, opacity) is driven by anime.js from
-  chat-overlay.js. Blur and shadow strength are CSS variables so they can be
-  animated without rewriting the whole filter chain.
-*/
+ * A cloned chat card (a world with no roll-card reader): Foundry's own card inside a quiet black plate.
+ * Motion (height, slide, opacity) is anime.js in chat-overlay.js. No filter: a filter on the wrapper
+ * re-rasterises the whole card each frame its contents change, which a mirrored card does constantly.
+ */
 .gluniverse-stream-chat-card {
-  --stream-chat-blur: 0px;
-  --stream-chat-shadow: 1;
   width: 320px;
   max-width: calc(100vw - 2rem);
   overflow: hidden;
   pointer-events: none;
   position: relative;
   isolation: isolate;
-  border-radius: var(--gl-r-sm);
-  transform-origin: top left;
-  filter:
-    blur(var(--stream-chat-blur))
-    drop-shadow(0 0.45rem 1rem rgb(var(--gl-tint-dark) / calc(0.42 * var(--stream-chat-shadow))))
-    drop-shadow(0 0.12rem 0.3rem rgb(var(--gl-tint-dark) / calc(0.3 * var(--stream-chat-shadow))));
-  will-change: opacity, transform, filter, max-height;
+  background: color-mix(in oklab, var(--glus-ink-1) 92%, transparent);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glus-plate-cut)), calc(100% - var(--glus-plate-cut)) 100%, 0 100%);
+  will-change: opacity, transform, max-height;
 }
 
 /*
-  The wrapper's 1px inner rule, the same one the stream cards draw. It is an
-  overlay rather than an inset box-shadow on the wrapper because the clone's own
-  background (Foundry's or the system's chat card) would paint over that.
-*/
+ * The plate's rule along its top edge, the same one the roll cards draw. An overlay rather than a shadow
+ * on the wrapper, because the clone's own background (Foundry's or the system's card) would paint over it.
+ */
 .gluniverse-stream-chat-card::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 2;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.08);
+  box-shadow: inset 0 1px 0 var(--glus-line-strong), inset 0 0 0 1px var(--glus-line);
   pointer-events: none;
 }
 
@@ -144,12 +163,10 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 }
 
 /*
-  The card carries `.chat-popout` purely so core/system chat styles that are
-  scoped to a chat container ancestor (e.g. dnd5e's
-  `:is(.chat-popout, #chat-log, .chat-log) .message`) resolve on the clone. It is
-  never an actual popout window, so neutralize any window-frame layout that a bare
-  `.chat-popout` selector might otherwise apply, while keeping our own card sizing.
-*/
+ * The card carries `.chat-popout` purely so core/system chat styles scoped to a chat container ancestor
+ * (e.g. dnd5e's `:is(.chat-popout, #chat-log, .chat-log) .message`) resolve on the clone. It is never an
+ * actual popout window, so any window-frame layout a bare `.chat-popout` selector applies is neutralised.
+ */
 .gluniverse-stream-chat-card.chat-popout {
   display: block;
   position: relative;
@@ -158,17 +175,14 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   padding: 0;
   min-width: 0;
   min-height: 0;
-  background: none;
-  box-shadow: none;
   border: none;
+  box-shadow: none;
 }
 
 /*
-  Default header layout for unthemed chat. Themed modules (Dorako UI etc.)
-  apply their own grid/flex via .with-image/.no-image markers — defer to those
-  by scoping our flex fallback to headers without those classes, and by
-  avoiding !important on layout properties.
-*/
+ * Default header layout for unthemed chat. Themed modules (Dorako UI etc.) apply their own grid or flex
+ * via .with-image/.no-image markers, so the flex fallback is scoped to headers without those classes.
+ */
 .gluniverse-stream-chat-card .message-header {
   align-items: center;
   line-height: normal;
@@ -205,15 +219,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   min-width: 0;
 }
 
-.position-top-right .gluniverse-stream-chat-card,
-.position-bottom-right .gluniverse-stream-chat-card {
-  transform-origin: top right;
-}
-
-.position-bottom-left .gluniverse-stream-chat-card,
-.position-bottom-right .gluniverse-stream-chat-card {
-  transform-origin: bottom center;
-}
+/* ═══ Presentations: dialogs, images and journals shown to the table ═════════ */
 
 .gluniverse-stream-dialog-root {
   position: absolute;
@@ -234,10 +240,9 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 }
 
 /*
-  Foundry positions windows with `transform`, which the overlay pins to none.
-  The enter/exit motion uses the independent `scale` and `translate` properties,
-  animated through CSS variables by dialog-overlay.js.
-*/
+ * Foundry positions windows with `transform`, which the overlay pins to none. The enter/exit motion uses
+ * the independent `scale` and `translate` properties, animated through CSS variables by dialog-overlay.js.
+ */
 .gluniverse-stream-centered-dialog {
   position: static !important;
   inset: auto !important;
@@ -320,31 +325,169 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   object-fit: contain;
 }
 
+/* The token HUD's tracking button sits in Foundry's HUD, outside every stream root: suite tokens only. */
 .gluniverse-stream-track-token.active,
 .gluniverse-stream-track-token:hover {
-  color: #f5d76e;
+  color: var(--gl-signal);
 }
 
-.gluniverse-stream-director {
-  --stream-border: rgb(var(--gl-tint-light) / 0.16);
+/* ═══ The windows: Control Room, Chat Filter, portrait framer ═══════════════ */
+
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) {
+  --glus-field-h: 30px;
+  font-family: var(--glus-font);
+  color: var(--glus-text);
 }
 
-.gluniverse-stream-director .window-content {
-  padding: 0.75rem;
-  overflow-y: auto;
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) .window-header {
+  background: var(--glus-ink-0);
+  border-bottom: 1px solid var(--glus-line);
+  color: var(--glus-text);
 }
+
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) .window-content {
+  background: var(--glus-ink-1);
+  color: var(--glus-text);
+}
+
+.gluniverse-stream-director .window-content { padding: 0; overflow: hidden; }
+.gluniverse-stream-filter .window-content { padding: 14px 16px; }
+.gluniverse-stream-framing .window-content { padding: 0; }
+
+/* Foundry styles every control at element level; under these roots they all take the skin. */
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select) {
+  box-sizing: border-box;
+  height: var(--glus-field-h);
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--glus-line-strong);
+  border-radius: 0;
+  background: var(--glus-ink-0);
+  color: var(--glus-text);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: none;
+  transition: border-color var(--gl-d-quick) var(--gl-ease), background-color var(--gl-d-quick) var(--gl-ease);
+}
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) :is(input, select):hover:not(:disabled) {
+  border-color: rgb(var(--gl-tint-light) / 0.28);
+}
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) :is(input, select, button, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--glus-paper);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) :is(input, select):disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--glus-paper);
+}
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) input[type="range"] {
+  accent-color: var(--glus-paper);
+}
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) code {
+  font-family: var(--gl-tech);
+  font-size: 11px;
+  color: var(--glus-dim);
+  background: none;
+  border: 0;
+  padding: 0;
+  user-select: text;
+  white-space: nowrap;
+}
+
+/* Buttons: an ink slab with a hairline, paper type. Reset first; Foundry's own button rules are loud. */
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: auto;
+  height: var(--glus-field-h);
+  min-height: 0;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--glus-line-strong);
+  border-radius: 0;
+  background: var(--glus-ink-3);
+  box-shadow: none;
+  color: var(--glus-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease),
+    color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease);
+}
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button i { font-size: 11px; color: var(--glus-dim); }
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button:hover:not(:disabled) {
+  background: var(--glus-ink-4);
+  border-color: rgb(var(--gl-tint-light) / 0.28);
+}
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button:active:not(:disabled) { scale: 0.97; }
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button:disabled { opacity: 0.35; cursor: default; }
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button[aria-pressed="true"] {
+  background: var(--glus-paper);
+  border-color: var(--glus-paper);
+  color: var(--glus-ink-0);
+}
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button[aria-pressed="true"] i { color: inherit; }
+
+.gluniverse-stream-director .gluniverse-stream-btn--small { height: 26px; padding: 0 9px; font-size: 12px; }
+/* The one loud button: going live. Broadcast red, as on every desk that has one. */
+.gluniverse-stream-director .gluniverse-stream-btn--primary {
+  background: var(--glus-red-deep);
+  border-color: var(--glus-red-deep);
+  color: var(--glus-text);
+}
+.gluniverse-stream-director .gluniverse-stream-btn--primary i { color: inherit; }
+.gluniverse-stream-director .gluniverse-stream-btn--primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--glus-red-deep) 85%, var(--glus-text));
+  border-color: transparent;
+}
+
+:is(.gluniverse-stream-director, .gluniverse-stream-filter) a[data-action] {
+  color: var(--glus-text);
+  text-decoration: underline;
+  text-decoration-color: var(--glus-line-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+:is(.gluniverse-stream-director, .gluniverse-stream-filter) a[data-action]:hover { text-decoration-color: var(--glus-paper); }
+
+.gluniverse-stream-director .gluniverse-stream-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ═══ The Control Room ══════════════════════════════════════════════════════ */
 
 .gluniverse-stream-director-body {
-  max-height: calc(100vh - 8rem);
-  overflow-y: auto;
-  padding-inline-end: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
-/* Read-only for a director who cannot save: one `disabled` on the wrapper
-   disables every control inside it, including the sections sibling features
-   contribute. `display: contents` keeps the fieldset out of the layout — a
-   fieldset is a block box with its own default border, padding and min-width,
-   none of which the panel is drawn for. */
+/*
+ * Read-only for a director who cannot save: one `disabled` on the wrapper disables every control inside
+ * it, including the sections sibling features contribute. `display: contents` keeps the fieldset out of
+ * the layout: a fieldset is a block box with its own border, padding and min-width.
+ */
 .gluniverse-stream-director .gluniverse-stream-controls {
   display: contents;
   border: 0;
@@ -353,258 +496,537 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   min-width: 0;
 }
 
-/* Specificity beats the generic form-hint rule further down, which dims to
-   0.75 — the one hint in this panel that must not read as an aside. */
-.gluniverse-stream-director .gluniverse-stream-form-hint.gluniverse-stream-readonly {
-  color: var(--gl-warn);
-  opacity: 1;
-}
-
-.gluniverse-stream-director section.gluniverse-stream-panel {
-  border: 1px solid var(--stream-border);
-  border-radius: 6px;
-  padding: 0.75rem;
-  margin-block-end: 0.75rem;
-  background: rgb(var(--gl-tint-dark) / 0.12);
-}
-
-.gluniverse-stream-director h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.05rem;
-}
-
-.gluniverse-stream-director h3 {
-  margin: 0.65rem 0 0.25rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.gluniverse-stream-status-grid,
-.gluniverse-stream-number-grid {
+/* ── The on-air strip: always in view, whatever tab is open ── */
+.gluniverse-stream-onair {
+  --glus-onair-tone: var(--glus-steel);
+  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.5rem;
-  margin-block: 0.5rem;
-}
-
-.gluniverse-stream-actions,
-.gluniverse-stream-default-art,
-.gluniverse-stream-selector-rule {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "lamp head actions" ". meta actions";
   align-items: center;
+  column-gap: 14px;
+  row-gap: 6px;
+  padding: 14px 16px;
+  background: var(--glus-ink-0);
+  border-bottom: 1px solid var(--glus-line);
+  box-shadow: inset 3px 0 0 var(--glus-onair-tone);
+  transition: box-shadow var(--gl-d-swift) var(--gl-ease);
+}
+.gluniverse-stream-onair[data-state="live"] { --glus-onair-tone: var(--glus-red); }
+.gluniverse-stream-onair[data-state="exposed"] { --glus-onair-tone: var(--glus-amber); }
+.gluniverse-stream-onair:is([data-state="offline"], [data-state="unset"]) { --glus-onair-tone: var(--glus-faint); }
+
+.gluniverse-stream-onair-lamp {
+  grid-area: lamp;
+  position: relative;
+  width: 12px;
+  height: 12px;
+  background: var(--glus-onair-tone);
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 70% 100%, 0 100%);
+  transition: background-color var(--gl-d-swift) var(--gl-ease);
+}
+/* Live breathes, slowly; it is the one thing on the window that moves on its own. */
+.gluniverse-stream-onair:is([data-state="live"], [data-state="exposed"]) .gluniverse-stream-onair-lamp {
+  animation: glus-room-onair var(--gl-dread) var(--gl-ease-inout) infinite alternate;
 }
 
-/* The picture GM rolls with no art of their own fall back to: path, browse, frame. */
-.gluniverse-stream-default-art input[type="text"] {
-  flex: 1;
-  min-width: 12rem;
+/* Wraps rather than clips: a long state ("Stream login offline") pushes the login under it, never off it. */
+.gluniverse-stream-onair-head { grid-area: head; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
+.gluniverse-stream-onair-state {
+  font-size: 15px;
+  font-weight: 750;
+  font-stretch: 116%;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--glus-text);
+  white-space: nowrap;
 }
-
-.gluniverse-stream-user-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.35rem 0.75rem;
-}
-
-.gluniverse-stream-director label.gluniverse-stream-color {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.gluniverse-stream-director label.gluniverse-stream-range {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.gluniverse-stream-director label.gluniverse-stream-range input[type="range"] {
-  flex: 1;
-  min-width: 4rem;
-}
-
-.gluniverse-stream-director label.gluniverse-stream-range output {
-  min-width: 2.75rem;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.gluniverse-stream-director label.gluniverse-stream-color input[type="color"] {
-  flex: 0 0 2.25rem;
-  width: 2.25rem;
-  height: 1.5rem;
-  padding: 0;
-  border: none;
-  background: none;
-}
-
-.gluniverse-stream-director table {
-  width: 100%;
-}
-
-.gluniverse-stream-director th,
-.gluniverse-stream-director td {
-  vertical-align: top;
-}
-
-.gluniverse-stream-director code {
-  user-select: text;
+.gluniverse-stream-onair[data-state="live"] .gluniverse-stream-onair-state { color: var(--glus-red); }
+.gluniverse-stream-onair[data-state="exposed"] .gluniverse-stream-onair-state { color: var(--glus-amber); }
+.gluniverse-stream-onair-login {
+  font-size: 12.5px;
+  color: var(--glus-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.gluniverse-stream-selector-rules {
-  margin-block: 0.5rem 0;
-  padding-inline-start: 1.25rem;
+.gluniverse-stream-onair-meta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 0;
+  min-width: 0;
 }
+.gluniverse-stream-onair-meta > div { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.gluniverse-stream-onair-meta dt {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--glus-faint);
+}
+.gluniverse-stream-onair-meta dd {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--glus-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.gluniverse-stream-onair-actions { grid-area: actions; display: flex; gap: 6px; align-items: center; }
+
+/* ── Read-only notice ── */
+.gluniverse-stream-director .gluniverse-stream-form-hint.gluniverse-stream-readonly {
+  flex: 0 0 auto;
+  max-width: none;
+  margin: 0;
+  padding: 10px 16px;
+  border-left: 3px solid var(--glus-amber);
+  background: color-mix(in oklab, var(--glus-amber) 8%, var(--glus-ink-1));
+  color: var(--glus-text);
+  opacity: 1;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.gluniverse-stream-director .gluniverse-stream-readonly strong { font-weight: 550; }
+
+/* ── Tabs ── */
+.gluniverse-stream-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  background: var(--glus-ink-0);
+  border-bottom: 1px solid var(--glus-line);
+}
+.gluniverse-stream-director .gluniverse-stream-tab {
+  position: relative;
+  height: 38px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--glus-faint);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.gluniverse-stream-director .gluniverse-stream-tab i { color: inherit; font-size: 11px; }
+.gluniverse-stream-director .gluniverse-stream-tab:hover:not(:disabled) { background: none; color: var(--glus-dim); }
+.gluniverse-stream-director .gluniverse-stream-tab::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--glus-paper);
+  transform: scaleX(0);
+  transition: transform var(--gl-d-brisk) var(--gl-ease);
+}
+.gluniverse-stream-director .gluniverse-stream-tab[aria-selected="true"] { color: var(--glus-text); }
+.gluniverse-stream-director .gluniverse-stream-tab[aria-selected="true"]::after { transform: scaleX(1); }
+
+/* ── Tab panels ── */
+.gluniverse-stream-tabpanel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 16px 18px;
+  scrollbar-gutter: stable;
+}
+.gluniverse-stream-tabpanel[hidden] { display: none; }
+.gluniverse-stream-tabpanel:not([hidden]) { animation: glus-room-panel var(--gl-d-brisk) var(--gl-ease); }
+
+/*
+ * A section is a run of controls under a small heading and a hairline, not a boxed card: the room is one
+ * surface, and boxes inside boxes were most of the old panel's noise.
+ */
+.gluniverse-stream-director section.gluniverse-stream-panel {
+  margin: 0;
+  padding: 14px 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--glus-line);
+  border-radius: 0;
+  background: none;
+}
+.gluniverse-stream-director section.gluniverse-stream-panel:last-child { border-bottom: 0; }
+.gluniverse-stream-director section.gluniverse-stream-panel[data-quiet] > :not(h2) { opacity: 0.6; }
+
+.gluniverse-stream-director h2 {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+  font-family: var(--glus-font);
+  font-size: 11px;
+  font-weight: 700;
+  font-stretch: 116%;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--glus-dim);
+}
+.gluniverse-stream-director h2 small {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 450;
+  font-stretch: 100%;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--glus-faint);
+}
+.gluniverse-stream-director h3 {
+  margin: 14px 0 8px;
+  padding: 0;
+  border: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--glus-dim);
+}
+
+.gluniverse-stream-label {
+  font-size: 11.5px;
+  color: var(--glus-faint);
+}
+
+/* A field: its label above it, small and quiet; the value is what the eye lands on. */
+.gluniverse-stream-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px 12px;
+  margin-bottom: 10px;
+}
+.gluniverse-stream-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+}
+.gluniverse-stream-field > span {
+  font-size: 11.5px;
+  color: var(--glus-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gluniverse-stream-field > :is(input, select) { width: 100%; }
+.gluniverse-stream-field--wide { flex: 1 1 260px; }
+
+.gluniverse-stream-checks,
+.gluniverse-stream-user-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 4px 0 2px;
+}
+.gluniverse-stream-checks label,
+.gluniverse-stream-user-list label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--glus-text);
+  cursor: pointer;
+}
+.gluniverse-stream-user-list small { font-size: 11px; color: var(--glus-faint); }
+.gluniverse-stream-user-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+
+/* Padding: four sides by two units, one compact grid. */
+.gluniverse-stream-sides {
+  display: grid;
+  grid-template-columns: 88px repeat(4, minmax(0, 1fr));
+  gap: 6px 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 11.5px;
+  color: var(--glus-faint);
+}
+.gluniverse-stream-sides > span:nth-child(-n + 5) { text-align: center; }
+.gluniverse-stream-sides > span:first-child { text-align: left; }
+.gluniverse-stream-sides input { width: 100%; text-align: center; }
+
+/* The range: label, slider, readout on one line. */
+.gluniverse-stream-director label.gluniverse-stream-range {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 48px;
+  gap: 12px;
+  align-items: center;
+  margin: 6px 0 0;
+}
+.gluniverse-stream-director label.gluniverse-stream-range > span { font-size: 11.5px; color: var(--glus-faint); }
+.gluniverse-stream-director label.gluniverse-stream-range input[type="range"] { width: 100%; min-width: 4rem; margin: 0; }
+.gluniverse-stream-director label.gluniverse-stream-range output {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--glus-text);
+}
+
+/* The chat corner: a small screen with four corners to pick. */
+.gluniverse-stream-corners { display: flex; align-items: center; gap: 14px; margin: 2px 0 14px; }
+.gluniverse-stream-corner-pad {
+  position: relative;
+  width: 96px;
+  height: 54px;
+  border: 1px solid var(--glus-line-strong);
+  background: var(--glus-ink-0);
+}
+.gluniverse-stream-corner {
+  position: absolute;
+  width: 26px;
+  height: 14px;
+  margin: 0;
+  background: var(--glus-ink-5);
+  cursor: pointer;
+  transition: background-color var(--gl-d-quick) var(--gl-ease);
+}
+.gluniverse-stream-corner:hover { background: var(--glus-ink-6); }
+.gluniverse-stream-corner[data-corner="top-left"] { top: 5px; left: 5px; }
+.gluniverse-stream-corner[data-corner="top-right"] { top: 5px; right: 5px; }
+.gluniverse-stream-corner[data-corner="bottom-left"] { bottom: 5px; left: 5px; }
+.gluniverse-stream-corner[data-corner="bottom-right"] { bottom: 5px; right: 5px; }
+/* Specific enough to beat the skin's `:disabled` dimming, which would otherwise show the radio through. */
+.gluniverse-stream-corner-pad .gluniverse-stream-corner input[type="radio"] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.gluniverse-stream-corner:has(input:checked) { background: var(--glus-paper); }
+.gluniverse-stream-corner:has(input:focus-visible) { outline: 2px solid var(--glus-paper); outline-offset: 2px; }
+.gluniverse-stream-corner:has(input:disabled) { cursor: default; opacity: 0.5; }
+
+.gluniverse-stream-filter-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: var(--glus-ink-2);
+  border: 1px solid var(--glus-line);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.gluniverse-stream-filter-entry .gluniverse-stream-label { margin-right: 8px; }
+
+.gluniverse-stream-actions,
+.gluniverse-stream-default-art,
+.gluniverse-stream-selector-rule,
+.gluniverse-stream-autostart {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+.gluniverse-stream-actions { margin-top: 10px; }
+.gluniverse-stream-autostart { align-items: center; margin-top: 12px; font-size: 12.5px; color: var(--glus-dim); }
+.gluniverse-stream-autostart > span { flex: 1 1 200px; }
+.gluniverse-stream-selector-rule input[type="text"] { flex: 1 1 200px; }
+.gluniverse-stream-selector-rule .gluniverse-stream-layer { width: 90px; }
 
 .gluniverse-stream-director .gluniverse-stream-form-hint {
-  margin: 0.35rem 0 0;
-  opacity: 0.75;
+  margin: 10px 0 0;
+  max-width: 62ch;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--glus-faint);
+  opacity: 1;
+}
+.gluniverse-stream-director .gluniverse-stream-form-hint small { font-size: inherit; }
+
+.gluniverse-stream-empty {
+  margin: 0;
+  padding: 14px 12px;
+  border: 1px dashed var(--glus-line-strong);
+  font-size: 12.5px;
+  color: var(--glus-faint);
 }
 
-/* Chat Filter page: one table, content types down, author columns across. */
-.gluniverse-stream-filter .window-content {
-  padding: 0.75rem;
+/* Tables: rows on hairlines, no zebra, no boxes. */
+.gluniverse-stream-director table {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-collapse: collapse;
+  background: none;
 }
+.gluniverse-stream-director thead { background: none; border: 0; }
+.gluniverse-stream-director th {
+  padding: 0 8px 7px;
+  border-bottom: 1px solid var(--glus-line);
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--glus-faint);
+  background: none;
+}
+.gluniverse-stream-director td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--glus-line);
+  vertical-align: middle;
+  font-size: 13px;
+  background: none;
+}
+.gluniverse-stream-director tbody tr { background: none; }
+.gluniverse-stream-director tbody tr:hover { background: var(--glus-hover); }
+.gluniverse-stream-director tr[data-tracked] td:first-child { box-shadow: inset 2px 0 0 var(--glus-paper); }
+.gluniverse-stream-director td small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--glus-faint); }
+.gluniverse-stream-cell-main { display: block; color: var(--glus-text); }
+.gluniverse-stream-cell-end { text-align: right; white-space: nowrap; width: 1%; }
+.gluniverse-stream-director td .gluniverse-stream-layer { width: 72px; height: 26px; }
+
+.gluniverse-stream-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.gluniverse-stream-tags > span {
+  padding: 2px 6px;
+  border: 1px solid var(--glus-line-strong);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--glus-dim);
+}
+
+/* Allow / Block / Default: one control, three faces. */
+.gluniverse-stream-segmented { display: inline-flex; }
+.gluniverse-stream-director .gluniverse-stream-segmented button { height: 26px; padding: 0 9px; font-size: 12px; }
+.gluniverse-stream-director .gluniverse-stream-segmented button + button { margin-left: -1px; }
+
+.gluniverse-stream-selector-rules { margin: 10px 0 0; padding: 0; list-style: none; }
+.gluniverse-stream-selector-rules li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--glus-line);
+}
+.gluniverse-stream-selector-rules li code { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+
+/* Colour swatches contributed by the targeting section. */
+.gluniverse-stream-director label.gluniverse-stream-color { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.gluniverse-stream-director label.gluniverse-stream-color input[type="color"] {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--glus-line-strong);
+  background: none;
+}
+
+/*
+ * A contributed section still uses the panel's older grid classes (the targeting lines, roleplay chat).
+ * They keep working in the new room: a grid of labelled controls.
+ */
+.gluniverse-stream-status-grid,
+.gluniverse-stream-number-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px 14px;
+  margin-block: 4px 10px;
+  font-size: 13px;
+}
+.gluniverse-stream-number-grid > label { display: flex; align-items: center; gap: 8px; margin: 0; }
+.gluniverse-stream-director .form-group { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
+.gluniverse-stream-director .form-group > label { flex: 0 0 140px; font-size: 12px; color: var(--glus-faint); }
+
+/* ═══ The Chat Filter page: content types down, author columns across ═══════ */
 
 .gluniverse-stream-filter-body {
   height: 100%;
   overflow-y: auto;
-  padding-inline-end: 0.25rem;
+  padding-inline-end: 4px;
+  font-size: 13px;
 }
-
-.gluniverse-stream-filter-intro {
-  margin: 0 0 0.35rem;
-}
-
-.gluniverse-stream-filter-presets,
-.gluniverse-stream-filter-entry {
-  justify-content: space-between;
-}
+.gluniverse-stream-filter-intro { margin: 0 0 6px; line-height: 1.5; color: var(--glus-dim); }
+.gluniverse-stream-filter .gluniverse-stream-form-hint { margin: 0 0 8px; color: var(--glus-faint); font-size: 12px; }
 
 .gluniverse-stream-filter-presets {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
-  margin-block: 0.6rem;
+  gap: 6px;
+  margin-block: 12px;
 }
-
-.gluniverse-stream-filter-presets button {
-  flex: 0 0 auto;
-  width: auto;
-  font-size: 0.85rem;
-  line-height: 1.6;
-}
-
 .gluniverse-stream-filter-summary {
   flex: 1 1 100%;
-  color: var(--gl-text-dim);
+  margin-top: 2px;
+  color: var(--glus-faint);
   font-variant-numeric: tabular-nums;
-}
-
-.gluniverse-stream-filter-entry button {
-  flex: 0 0 auto;
-  width: auto;
 }
 
 .gluniverse-stream-filter-table {
   width: 100%;
+  border: 0;
   border-collapse: collapse;
   margin: 0;
+  background: none;
 }
-
 .gluniverse-stream-filter-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--gl-surface-raised, rgb(var(--gl-tint-dark) / 0.9));
-  border-block-end: 1px solid var(--stream-border);
-  padding: 0.35rem 0.5rem;
+  padding: 8px;
+  background: var(--glus-ink-1);
+  border-bottom: 1px solid var(--glus-line-strong);
   text-align: left;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--glus-faint);
 }
-
 .gluniverse-stream-filter-table th.gluniverse-stream-filter-col,
 .gluniverse-stream-filter-cell {
   width: 6.5rem;
   text-align: center;
 }
-
-.gluniverse-stream-filter-col > span {
-  display: block;
-}
-
+.gluniverse-stream-filter-col > span { display: block; }
 .gluniverse-stream-filter-bulk {
   display: flex !important;
   justify-content: center;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  font-weight: normal;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 450;
+  letter-spacing: 0;
+  text-transform: none;
 }
-
-.gluniverse-stream-filter-bulk a {
-  color: var(--gl-accent);
-  cursor: pointer;
-}
-
 .gluniverse-stream-filter-group-head th {
-  padding: 0.7rem 0.5rem 0.3rem;
+  padding: 16px 8px 6px;
   text-align: left;
-  font-size: 0.95rem;
-  border-block-end: 1px solid var(--stream-border);
+  font-size: 11px;
+  font-weight: 700;
+  font-stretch: 116%;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--glus-dim);
+  border-bottom: 1px solid var(--glus-line);
+  background: none;
 }
-
 .gluniverse-stream-filter-group-head small,
 .gluniverse-stream-filter-content small {
   display: block;
-  font-weight: normal;
-  color: var(--gl-text-dim);
-  font-size: 0.78rem;
-  line-height: 1.3;
+  margin-top: 2px;
+  font-weight: 450;
+  font-stretch: 100%;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--glus-faint);
+  font-size: 11.5px;
+  line-height: 1.35;
 }
+.gluniverse-stream-filter-table tbody tr { background: none; }
+.gluniverse-stream-filter-table tbody tr:not(.gluniverse-stream-filter-group-head):hover { background: var(--glus-hover); }
+.gluniverse-stream-filter-table td { border-bottom: 1px solid var(--glus-line); }
+.gluniverse-stream-filter-content { padding: 7px 8px; color: var(--glus-text); }
+.gluniverse-stream-filter-cell { vertical-align: middle !important; }
+.gluniverse-stream-filter-cell input[type="checkbox"] { margin: 0; }
+.gluniverse-stream-filter-na { color: var(--glus-faint); }
 
-.gluniverse-stream-filter-table tbody tr:not(.gluniverse-stream-filter-group-head):hover {
-  background: rgb(var(--gl-tint-light) / 0.04);
-}
+/* ═══ The portrait framer ═══════════════════════════════════════════════════ */
 
-.gluniverse-stream-filter-content {
-  padding: 0.3rem 0.5rem;
-}
-
-.gluniverse-stream-filter-cell {
-  vertical-align: middle !important;
-}
-
-.gluniverse-stream-filter-cell input[type="checkbox"] {
-  margin: 0;
-}
-
-.gluniverse-stream-filter-na {
-  color: var(--gl-text-faint);
-}
-
-.gluniverse-stream-filter a[data-action="open-chat-filter"],
-.gluniverse-stream-director a[data-action="open-chat-filter"] {
-  color: var(--gl-accent);
-  cursor: pointer;
-}
-
-@media (max-width: 720px) {
-  .gluniverse-stream-chat-root {
-    max-width: calc(100vw - 2rem);
-  }
-
-  .gluniverse-stream-director .window-content {
-    padding: 0.5rem;
-  }
-}
-
-/* Roll card portrait framing editor */
-.gluniverse-stream-framing .window-content {
-  padding: 0;
-}
 .glus-framing {
   display: grid;
   grid-template-columns: 220px 1fr;
@@ -616,62 +1038,47 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   padding: 6px;
   list-style: none;
   overflow-y: auto;
-  border-right: 1px solid var(--color-border, #444);
+  background: var(--glus-ink-0);
+  border-right: 1px solid var(--glus-line);
 }
 .glus-framing-list li {
   display: grid;
   grid-template-columns: 40px 1fr;
   gap: 8px;
   align-items: center;
-  padding: 4px 6px;
-  border-radius: 4px;
+  padding: 5px 6px;
   cursor: pointer;
+  transition: background-color var(--gl-d-quick) var(--gl-ease);
 }
-.glus-framing-list li.active {
-  background: color-mix(in srgb, var(--color-warm-2, #ff6400) 25%, transparent);
-}
-.glus-framing-list li.empty {
-  display: block;
-  cursor: default;
-  opacity: 0.7;
-}
+.glus-framing-list li:hover { background: var(--glus-hover); }
+.glus-framing-list li.active { background: var(--glus-ink-4); box-shadow: inset 2px 0 0 var(--glus-paper); }
+.glus-framing-list li.empty { display: block; cursor: default; color: var(--glus-faint); }
 .glus-framing-list img {
   width: 40px;
   height: 40px;
   object-fit: cover;
   object-position: 50% 15%;
   border: 0;
-  border-radius: 3px;
 }
-.glus-framing-list span {
-  display: grid;
-  line-height: 1.2;
-}
-.glus-framing-list small {
-  opacity: 0.65;
-}
+.glus-framing-list span { display: grid; line-height: 1.25; font-size: 13px; }
+.glus-framing-list small { color: var(--glus-faint); }
 .glus-framing-editor {
   display: grid;
   align-content: start;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 12px;
+  padding: 12px 16px;
   overflow-y: auto;
 }
-.glus-framing-editor .hint {
-  margin: 0;
-  opacity: 0.8;
-}
+.glus-framing-editor .hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--glus-faint); }
 .glus-framing-view {
   position: relative;
   overflow: hidden;
-  background: #111;
+  background: var(--glus-ink-0);
   cursor: grab;
   touch-action: none;
-  outline: 1px solid var(--color-border, #444);
+  outline: 1px solid var(--glus-line-strong);
 }
-.glus-framing-view:active {
-  cursor: grabbing;
-}
+.glus-framing-view:active { cursor: grabbing; }
 .glus-framing-view img {
   position: absolute;
   max-width: none;
@@ -680,22 +1087,35 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   user-select: none;
   pointer-events: none;
 }
-.glus-framing-zoom {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  max-width: 410px;
-}
-.glus-framing-zoom input {
-  flex: 1;
-}
+.glus-framing-zoom { display: flex; gap: 8px; align-items: center; max-width: 410px; font-size: 12px; color: var(--glus-faint); }
+.glus-framing-zoom input { flex: 1; }
+/* The live preview sits on a stand-in for a dark map, which is what the card is drawn over. */
 .glus-framing-preview {
   --glus-rc-scale: 0.78;
   padding: 10px;
-  background: #1c2230;
+  background: var(--glus-ink-3);
   min-height: 90px;
 }
-.glus-framing-buttons {
-  display: flex;
-  gap: 6px;
+.glus-framing-buttons { display: flex; gap: 6px; }
+
+/* ═══ Narrow windows ════════════════════════════════════════════════════════ */
+
+@media (max-width: 720px) {
+  .gluniverse-stream-chat-root { max-width: calc(100vw - 2rem); }
+}
+
+.gluniverse-stream-director .window-content { container-type: inline-size; }
+@container (max-width: 560px) {
+  .gluniverse-stream-onair { grid-template-areas: "lamp head" "lamp meta" "actions actions"; grid-template-columns: auto minmax(0, 1fr); }
+}
+
+/* ═══ Keyframes (prefixed: keyframe names are global) ══════════════════════ */
+
+@keyframes glus-room-onair {
+  from { opacity: 1; }
+  to { opacity: 0.45; }
+}
+@keyframes glus-room-panel {
+  from { opacity: 0; translate: 0 4px; }
+  to { opacity: 1; translate: 0 0; }
 }

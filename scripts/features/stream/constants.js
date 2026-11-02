@@ -113,6 +113,28 @@ export const SCENE_VIEW_MODES = {
 
 export const CHAT_POSITIONS = ["top-left", "top-right", "bottom-left", "bottom-right"];
 
+/**
+ * Every animation length the overlay itself plays, in ms at motion scale 1: the cloned chat card's frame,
+ * the presentations (dialogs, images, journals) and their backdrop. Read through `overlayTiming()` in
+ * `motion/engine.js`, which applies the suite's motion scale; the cards' own table is `CARD_MOTION` in
+ * `stream-cards/cards/card-motion.js`. A length written inline instead ignores the motion tier.
+ */
+export const OVERLAY_MOTION = Object.freeze({
+  cardIn: 460,
+  cardFade: 300,
+  cardSlide: 480,
+  cardResize: 300,
+  cardOut: 300,
+  cardCollapse: 260,
+  calmFade: 180,
+  calmResize: 220,
+  dialogIn: 420,
+  dialogFade: 240,
+  dialogOut: 240,
+  backdropIn: 260,
+  backdropOut: 220
+});
+
 export const DEFAULT_CAMERA_SETTINGS = {
   outOfCombatMode: CAMERA_MODES.scene,
   combatMode: CAMERA_MODES.combatants,
