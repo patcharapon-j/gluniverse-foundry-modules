@@ -1619,7 +1619,7 @@ own focus — that focus is struck for an 8.2:4.4 art box, and in a square it sh
 a face pushed left and a lot of shoulder, which reads as the framing being broken
 rather than as the wrong box.
 
-The view has a scoped black skin (docs/adr/0006-stream-view-skin.md): `--glus-*`
+The view has a scoped black skin (docs/adr/0007-stream-view-skin.md): `--glus-*`
 tokens on the stream's own roots, `glus-` keyframes, and every duration a row of
 `CARD_MOTION` or `OVERLAY_MOTION` read through the tier-scaled lookup, never a
 literal. `audience.mjs`, `chat-settings.mjs` and `room-model.mjs` are pure so the

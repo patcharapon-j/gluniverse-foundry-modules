@@ -183,7 +183,7 @@ There are no monospace labels, no scan line, sheen or text decode. The crit
 crack stays, since it is shared with core. The wrapper a cloned chat card gets
 on any other world takes the same plate and inner rule and nothing else; what
 is inside it is Foundry's. The skin and why it is scoped are in
-[ADR 0006](adr/0006-stream-view-skin.md).
+[ADR 0007](adr/0007-stream-view-skin.md).
 
 Card size follows the stream's width and the **Roll card size** slider (default
 50%). That slider lives in the stream client's `chatSettings`, not here: it
