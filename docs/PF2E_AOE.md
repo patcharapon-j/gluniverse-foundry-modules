@@ -51,13 +51,21 @@ colour.
 
 An area is two containers, so nothing that sits over a token can veil it:
 
-- **Ground**, under tokens (`canvas.regions` highlights): outer glow (additive),
-  the fill, the pattern tiles masked to the coverage, blocked squares, the
-  seams between squares, and direction chevrons on cones and lines.
+- **Ground**, under tokens (`canvas.regions` highlights): an ink halo just
+  outside the edge, an ink veil and the body tint, the pattern tiles masked to
+  the coverage, a soft edge light inside the rim, blocked squares, the seams
+  between squares, and direction chevrons on cones and lines.
 - **Overlay**, over tokens (`canvas.interface`): the rim, the entrance pen,
-  corner brackets, the echo ring, the flare, and the marks on affected tokens.
+  the accent cuts on convex corners, the echo ring, the flare, and the marks on
+  affected tokens.
 
-Patterns are 128px seamless tiles baked once per id on a Canvas2D in white
+Nothing blends additively. The look is ink under light in normal blending: the
+veil and halo darken whatever map is underneath, so a pale parchment floor and
+a dark dungeon floor both give the colour something to sit on, and the bright
+parts (rim, edge light, flare) never clip to white on a bright map. The edge
+light is masked by the coverage, so it never spills past the rules edge.
+
+Patterns are 256px seamless tiles baked once per id on a Canvas2D in white
 (`render/patterns.mjs`) and tinted per area, repeating in hardware with
 mipmaps on. Each pattern sits on an ink shadow of itself, offset a fraction of
 a square, so it still reads on a bright map. A secondary function, where an
@@ -81,8 +89,15 @@ hairline that vanishes.
 `anim.mjs` holds the clocks: `alertLevel()` (heartbeat, breathe, throb,
 strobe) modulates rim, glow and fill; `echoPhase()` sends a ring off the
 boundary on the beat. The entrance is either a flash or a pen drawing the rim
-on with a bright nib, per behaviour. A trigger beat (`pulse()` in the API)
-flares the area and sends an echo.
+on with a bright nib, per behaviour, followed by a short landing (`settle`)
+where the edge light eases down and the corner cuts stamp in. A trigger beat
+(`pulse()` in the API) flares the area and sends an echo.
+
+Deleting a Region dissipates it. Foundry destroys the placeable before
+`deleteRegion` fires, so the release starts at `destroyRegion`; a second release
+does not cut it short, a destroyed Region is never rebuilt, and a redraw of an
+area that is still fading (an undo) revives it. With motion off an area leaves
+at once.
 
 The host ticks only while something needs frames — an entrance, a beat, a
 dissipation, or an area whose look actually moves — and claims motion from the
@@ -157,6 +172,13 @@ data. They appear contextually while a Region is inspected, hovered, or edited:
 Unsupported shapes receive identity only; Spellglass never invents dimensions.
 Labels use screen-space scaling and bounded collision avoidance.
 
+The label is a plate (`render/plate.mjs`): an ink slab with one chamfered
+corner and a bar in the area's hot colour, standing on the top edge of the
+outline. The title is always shown; the measurement row appears while the area
+is inspected. Both faces are bundled (`Google Sans Flex`, `JetBrains Mono`), and
+the host rebuilds labels once the fonts load, so the first frame's fallback
+metrics never stick.
+
 ## Profiles and authoring
 
 The suite ships 24 immutable built-in profiles covering all twelve functions.
@@ -167,10 +189,15 @@ GMs can manage reusable world profiles from Module Settings:
 - keep Regions linked so edits propagate;
 - detach a Region to materialize the profile into custom semantic overrides.
 
+The manager edits a draft: Add, Duplicate, Remove and Import change the page,
+and only Save writes the world setting, so nothing typed is lost. Each profile
+card carries a swatch painted with the real look tables and pattern tiles
+(`render/swatch.mjs`), repainted as its fields change.
+
 The Region configuration sheet is preset-first and includes automatic evidence,
 confidence, advanced semantic axes, optional intensity/treatment/body-palette
-overrides, label mode, and native opt-out. The dedicated creator uses the same
-built-in profiles.
+overrides, label mode, and native opt-out, with a live swatch of the result.
+The dedicated creator uses the same built-in profiles and swatch.
 
 ## Geometry and fallback
 
@@ -235,9 +262,12 @@ Serve the preview from the repository root (`/.preview/aoe.html`); a
 `file://` page does not run its module. It imports the shipped renderer, look
 tables and data adapter and builds its areas from fixture Regions through the
 real `regionGeometry()` / `regionCells()`. Query parameters for headless
-stills: `sheet=functions|profiles|materials|shapes`, `floor=dark|bright`,
-`zoom`, `shed=0..5`, `motion=0`, `seek=<ms>`; `window.__aoeSeek(ms)`
-advances a paused clock. Judge on both floors — a pattern that reads on a dark
+stills: `sheet=functions|profiles|materials|shapes|ui`, `floor=dark|bright`,
+`zoom` (0 fits the sheet), `shed=0..5`, `motion=0`, `inspect=1`, `seek=<ms>`,
+`pulse=<ms>` and `release=<ms>` (a beat or a dissipate, seeked);
+`window.__aoeSeek(ms)` advances a paused clock. `sheet=ui` renders the shipped
+profile manager template, Region config section and creator form with
+`styles/pf2e-aoe.css`. Judge on both floors: a pattern that reads on a dark
 map can vanish on a bright one.
 
 The check tool covers controlled vocabulary, every semantic axis, deterministic
