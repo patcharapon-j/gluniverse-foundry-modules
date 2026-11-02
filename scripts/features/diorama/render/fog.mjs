@@ -106,11 +106,30 @@ export function fogCoverage(rgba, vw, vh, cols, rows, taps = FOG_RAY_TAPS) {
     return [lo, hi];
   };
   const [x0, x1] = span(vw, vw, w), [y0, y1] = span(vh, vh, h);
-  const mark = new Uint8Array(w * h);
+  // Unseen runs along each bake row as texel columns, then runs down each texel
+  // column as texel rows. Neighbouring pixels' spans overlap end to end, so a run
+  // marks exactly what its pixels would one by one, and each texel is written once
+  // per run rather than once per bake pixel over it (a bake holds many per texel).
+  const across = new Uint8Array(vh * w);
   for (let y = 0; y < vh; y++) {
+    const row = y * vw, out = y * w;
     for (let x = 0; x < vw; x++) {
-      if (rgba[(y * vw + x) * 4 + 1] > 127) continue;
-      for (let ty = y0[y]; ty <= y1[y]; ty++) mark.fill(255, ty * w + x0[x], ty * w + x1[x] + 1);
+      if (rgba[(row + x) * 4 + 1] > 127) continue;
+      const a = x;
+      while (x + 1 < vw && rgba[(row + x + 1) * 4 + 1] <= 127) x++;
+      across.fill(255, out + x0[a], out + x1[x] + 1);
+    }
+  }
+  // the column runs are walked row by row (a run opens where the row above is clear)
+  const mark = new Uint8Array(w * h);
+  const start = new Int32Array(w);
+  for (let y = 0; y < vh; y++) {
+    const at = y * w;
+    for (let tx = 0; tx < w; tx++) {
+      if (!across[at + tx]) continue;
+      if (y === 0 || !across[at - w + tx]) start[tx] = y;
+      if (y + 1 < vh && across[at + w + tx]) continue;
+      for (let ty = y0[start[tx]]; ty <= y1[y]; ty++) mark[ty * w + tx] = 255;
     }
   }
   const reach = fogCoverReach(cols, rows, w, h, taps);
