@@ -60,8 +60,9 @@ export class ShadowPass {
   }
 
   /**
-   * @param {THREE.Scene} [casters]  drawn after the scene with their own
-   *   (alpha-tested) materials, into the same depth, without clearing
+   * @param {THREE.Scene|THREE.Scene[]} [casters]  drawn after the scene with
+   *   their own (alpha-tested, instanced) materials, into the same depth,
+   *   without clearing. The standees' cards and the props each own one.
    */
   render(renderer, scene, casters = null) {
     if (!this.dirty) return;
@@ -75,11 +76,12 @@ export class ShadowPass {
     renderer.setRenderTarget(target);
     renderer.clear(true, true, false);
     renderer.render(scene, this.camera);
-    if (casters?.children.length) {
+    const extra = Array.isArray(casters) ? casters : [casters];
+    if (extra.some((c) => c?.children.length)) {
       const prevAuto = renderer.autoClear;
       renderer.autoClear = false;
       this.camera.layers.enableAll();
-      renderer.render(casters, this.camera);
+      for (const c of extra) if (c?.children.length) renderer.render(c, this.camera);
       this.camera.layers.set(SHADOW_LAYER);
       renderer.autoClear = prevAuto;
     }

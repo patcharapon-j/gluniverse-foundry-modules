@@ -28,6 +28,17 @@
  *   shed=<n>    shed the first n SHED_ORDER entries
  *   novision=1  no vision bake (everything visible)
  *   dark=<0..1> scene darkness (default 0.4)
+ *   props=1     the props gallery (every shape, every material, a stack, cards,
+ *               a GM-only ghost) instead of the tokens; view=props|mats frames it
+ *
+ * The environment (environment.mjs; a preset first, then fields over it):
+ *   preset=<key>  clearDay | goldenHour | dusk | night | rain | storm | snow | …
+ *   time=<0..24>|table   weather=<kind>  intensity=<0..1>
+ *   fog=<0..1>  fogh=<0..1>  wind=<0..1>  winddir=<deg>  clouds=<0..1>
+ *   wet=<0..1>  snow=<0..1>  flow=<0..1>  flowdir=<deg>
+ * Graphics (options.mjs): q=low|medium|high|ultra, water=simple|full,
+ *   detail=low|high, weatherFx=off|reduced|full, atmosphere=off|on,
+ *   shadows=off|hard|soft, dayNight=0, grade=0
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -88,6 +99,8 @@ import { DioramaRenderer } from "/scripts/features/diorama/render/renderer.mjs";
 import { Terrain } from "/scripts/features/diorama/terrain/model.mjs";
 import { KIND, DIR, SUB, SHED_ORDER, BAKE_PX_PER_CELL } from "/scripts/features/diorama/constants.mjs";
 import { PALETTE } from "/scripts/core/theme.mjs";
+import { resolveEnv, applyPreset, normalizeEnv } from "/scripts/features/diorama/environment.mjs";
+import { resolveGraphics } from "/scripts/features/diorama/options.mjs";
 
 const Q = new URLSearchParams(location.search);
 const COLS = 16, ROWS = 12, SIZE = 100;
@@ -168,6 +181,7 @@ function buildTerrain() {
   fillCells(0, 2, 0, 4, P("Ledge 5"));                   // earth ledge
   fillCells(8, 10, 1, 3, P("Pit"), -8, KIND.PIT);        // pit
   fillCells(8, 10, 6, 8, P("Water"), -4, KIND.WATER);    // sunken pond
+  fillCells(6, 7, 7, 7, P("Water"), -1, KIND.WATER);     // a stream spilling into it: a waterfall
   // stairs: cells (3..4, 7..8), descending west from the plateau (8 → 0)
   const st = P("Stairs");
   for (let si = 3 * SUB; si < 5 * SUB; si++) {
@@ -369,6 +383,51 @@ r.setOptions({ ghosts });
 
 r.setLighting({ darkness: Q.has("dark") ? Number(Q.get("dark")) : 0.4, light: lightCanvas(), vision: Q.get("novision") === "1" ? null : visionCanvas() });
 
+// The environment (environment.mjs), from the URL: a preset, then any field over it.
+const envFlag = (() => {
+  const e = Q.has("preset") ? applyPreset(Q.get("preset")) : normalizeEnv(null);
+  const n = (k) => Number(Q.get(k));
+  if (Q.has("time")) e.hour = Q.get("time") === "table" ? null : n("time");
+  if (Q.has("weather")) e.weather = { kind: Q.get("weather"), intensity: Q.has("intensity") ? n("intensity") : 0.7 };
+  else if (Q.has("intensity")) e.weather.intensity = n("intensity");
+  if (Q.has("fog")) e.fog.density = n("fog");
+  if (Q.has("fogh")) e.fog.height = n("fogh");
+  if (Q.has("wind")) e.wind.strength = n("wind");
+  if (Q.has("winddir")) e.wind.dir = n("winddir");
+  if (Q.has("clouds")) e.clouds = n("clouds");
+  if (Q.has("wet")) e.wetness = n("wet");
+  if (Q.has("snow")) e.snow = n("snow");
+  if (Q.has("flow")) e.water.speed = n("flow");
+  if (Q.has("flowdir")) e.water.dir = n("flowdir");
+  return normalizeEnv(e);
+})();
+// graphics: q=low|medium|high|ultra, and any option by name (water=simple, weatherFx=reduced, grade=0, …)
+// adaptive=0 keeps the budget from shedding weather and air (a software GL sheds everything)
+const gRaw = { quality: Q.get("q") || "high", adaptive: Q.get("adaptive") !== "0" };
+for (const k of ["shadows", "ao", "water", "detail", "weatherFx", "atmosphere"]) if (Q.has(k)) gRaw[k] = Q.get(k);
+for (const k of ["dayNight", "grade"]) if (Q.has(k)) gRaw[k] = Q.get(k) !== "0";
+r.setOptions({ graphics: resolveGraphics(gRaw) });
+r.setEnvironment(resolveEnv(envFlag, { dayNight: Q.get("dayNight") !== "0" }));
+window.__env = envFlag;
+// ppx=<cells>: pin the weather's device-pixel floor (debugging the particle pass)
+if (Q.has("ppx")) Object.defineProperty(r.atmosphere, "pxWorld", { get: () => Number(Q.get("ppx")), set() {} });
+// probe=1: the weather layer's state after a few seconds, in #probe (headless --dump-dom)
+if (Q.get("probe") === "1") setTimeout(() => {
+  const a = r.atmosphere, u = r.shared;
+  const v = (x) => (x?.toArray ? x.toArray().map((n) => +n.toFixed(3)) : x);
+  const pre = document.createElement("pre");
+  pre.id = "probe";
+  pre.textContent = JSON.stringify({
+    particles: a.pGeo.instanceCount, splashes: a.sGeo.instanceCount, kind: a.pMat.uniforms.uKind.value,
+    boxMin: v(a.box.min.value), boxSize: v(a.box.size.value), scale: a.box.scale.value, heightInfo: v(a.heightInfo.value),
+    time: u.uEnvTime.value, fx: r.fx, inScene: !!a.particles.parent?.parent, visible: a.particles.visible && a.group.visible,
+    seed0: v(a.pGeo.attributes.aSeed.array.slice(0, 4)), opacity: a.pMat.uniforms.uPOpacity.value,
+    ndc: (() => { const s = a.pGeo.attributes.aSeed.array; const p = a.box.min.value.clone().add(a.box.size.value.clone().multiply({ x: s[0], y: s[1], z: s[2] })); return v(p.clone().project(r.rig.camera)); })(),
+    programs: r.webgl.info.programs?.map((p) => p.name), flash: u.uEnvFlash.value, ambient: u.uAmbient.value, key: v(u.uEnvKey.value), keyDir: v(u.uKeyDir.value),
+  });
+  document.body.append(pre);
+}, 3000);
+
 const path = () => ({ points: [
   { x: rogueAt.x, y: rogueAt.y, zQ: 0 }, { x: 650, y: 450, zQ: 0, color: PALETTE.good }, { x: 750, y: 450, zQ: 2, color: PALETTE.good },
   { x: 850, y: 450, zQ: 6, color: PALETTE.warn }, { x: 950, y: 450, zQ: 8, color: PALETTE.warn },
@@ -389,6 +448,67 @@ const effects = [
   { id: "rune", kind: "flat", source: runeCanvas(), x: 1150, y: 950, zQ: 0, widthPx: 260, heightPx: 260, rotation: 15, alpha: 0.9, light: { color: PALETTE.violet, radius: 260 } },
 ];
 r.setEffects(effects);
+
+/* ------------------------------------------------------------ props (props=1) */
+// Every shape (south-east grass, three rows of six), every material (west
+// grass, as capsules and boxes), a crate stacked on a crate, an image card and
+// a GM-only ghost, all built the way the feature builds them: normalised,
+// resolved against the terrain, then turned into the GM's states. The tokens,
+// effects and overlays step aside so the props read on their own.
+// props=1&view=props frames the shapes; props=1&view=mats frames the materials.
+const PROPS_ON = Q.get("props") === "1";
+if (PROPS_ON) {
+  const PM = await import("/scripts/features/diorama/terrain/props.mjs");
+  const shapeMat = { box: "stone", cylinder: "metal", cone: "plaster", sphere: "marble", dome: "stone", pyramid: "crystal",
+    wedge: "earth", torus: "metal", capsule: "cloth", arch: "stone", pillar: "marble", crate: "wood", barrel: "wood",
+    rock: "stone", tree: "foliage", pine: "foliage", bush: "foliage", card: "map" };
+  // Card art by a short URL, the way a prop stores a path: a data URL is longer
+  // than a stored path may be, and the normaliser drops it.
+  const blobUrl = async (dataUrl) => URL.createObjectURL(await (await fetch(dataUrl)).blob());
+  const knightUrl = await blobUrl(ART.knight), drakeUrl = await blobUrl(ART.drake);
+  const list = [];
+  PM.PROP_SHAPES.forEach((shape, n) => {
+    const d = PM.SHAPE_DEFAULTS[shape];
+    const k = Math.min(1, 0.9 / Math.max(d.w, d.d));              // fit a 0.9-square slot
+    const x = 9.5 + (n % 6), y = 7.4 + Math.floor(n / 6) * 1.25;
+    list.push({ id: "s-" + shape, shape, x, y, w: d.w * k, d: d.d * k, h: Math.min(d.h, 2.2) * (shape === "tree" || shape === "pine" ? 0.75 : 1),
+      rot: shape === "wedge" ? 90 : shape === "arch" ? 0 : 20, mat: shapeMat[shape], label: shape,
+      img: shape === "card" ? knightUrl : undefined });
+  });
+  list.push({ id: "stack", shape: "crate", x: 14.5, y: 8.65, w: 0.55, d: 0.55, h: 0.5, rot: 35, label: "stacked crate" });
+  PM.PROP_MATERIALS.forEach((mat, n) => {
+    const x = 0.5 + (n % 6), y = n < 6 ? 4.5 : 6.5;
+    list.push({ id: "m-" + mat, shape: n % 2 ? "box" : "capsule", x, y, w: 0.6, d: 0.6, h: n % 2 ? 0.7 : 1.1, rot: 15, mat, label: mat });
+  });
+  list.push({ id: "tinted", shape: "pillar", x: 8.5, y: 6.5, h: 2, mat: "marble", tint: "#e0a8ff", label: "tinted pillar" });
+  list.push({ id: "ghost", shape: "box", x: 15.5, y: 8.5, w: 0.8, d: 0.8, h: 1.2, hidden: true, label: "GM only" });
+  list.push({ id: "card2", shape: "card", x: 6.5, y: 4.5, h: 1.4, img: drakeUrl, label: "drake card" });
+  const norm = PM.normalizeProps(list);
+  const resolved = PM.resolveProps(terrain, norm).props;
+  const states = PM.propStates(resolved, { isGM: true });
+  r.setTokens([]);
+  r.setEffects([]);
+  r.setOverlays({});
+  r.setProps(states);
+  window.__props = { count: states.length, ghosts: states.filter((s) => s.ghost).length, blocks: states.filter((s) => s.blocks).length };
+  // probe=props: the layer's state after the art lands, in #probe (headless --dump-dom)
+  if (Q.get("probe") === "props") setTimeout(() => {
+    const L = r.props, v = (x) => x.toArray().map((n) => +n.toFixed(3));
+    const pre = document.createElement("pre");
+    pre.id = "probe";
+    pre.textContent = JSON.stringify({
+      ...window.__props,
+      buckets: [...L.buckets].map(([k, b]) => k + ":" + b.mesh.count + "/" + b.caster.count),
+      contact: L.contact?.count,
+      cards: [...L.cards.values()].map((c) => ({ at: v(c.mesh.position), size: v(c.material.uniforms.uCardSize.value), tex: !!c.texture,
+        inScene: !!c.mesh.parent?.parent, casts: !!c.caster.parent,
+        art: c.texture ? [...c.texture.image.getContext("2d").getImageData(c.texture.image.width >> 1, c.texture.image.height >> 2, 1, 1).data] : null,
+        screen: (({ x, y }) => [Math.round(x), Math.round(y)])(r.project(c.state.x * SIZE, c.state.y * SIZE, (c.state.base + c.state.h / 2) * 4)) })),
+      animated: L.animated(r.fx), rules: !!L.rules,
+    });
+    document.body.append(pre);
+  }, 3000);
+}
 
 // links=1: target lines (the 3D form of stream-targets' 2D lines)
 const rgbOf = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
@@ -417,6 +537,8 @@ else if (view === "fly") cam = { ...cam, zoom: 1.7, target: { x: 900, y: 750, zQ
 else if (view === "knight") cam = { ...cam, zoom: 3.2, target: { x: knightAt.x, y: knightAt.y, zQ: 10 } };
 else if (view === "goblin") cam = { ...cam, zoom: 3.2, target: { x: 250, y: 150, zQ: 6 } };
 else if (view === "rogue") cam = { ...cam, zoom: 3.2, target: { x: rogueAt.x, y: rogueAt.y, zQ: 2 } };
+else if (view === "props") cam = { ...cam, zoom: 2.2, target: { x: 1200, y: 880, zQ: 2 } };
+else if (view === "mats") cam = { ...cam, zoom: 2.4, target: { x: 380, y: 560, zQ: 2 } };
 else cam.zoom = 0.82;
 if (Q.has("zoom")) cam.zoom = Number(Q.get("zoom"));
 r.setCamera(cam, { animate: false });

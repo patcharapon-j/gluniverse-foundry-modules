@@ -32,6 +32,15 @@ export default async function check(ctx) {
     ctx.ok("a mirrored layout is symmetric to the sub-cell", asym === 0, `${asym} sub-cells differ`);
     const harpy = L.tokens.find((p) => p.name === "Harpy");
     ctx.ok("a q-unit altitude comes back in feet", harpy?.altitude === 20 && harpy.elevation === null, JSON.stringify(harpy));
+    // Props: every mirrored prop has its twin, and every one stands clear of a token.
+    const want = lion.props.reduce((n, p) => n + (p.mirror ? 2 : 1), 0);
+    ctx.ok("the example's props all come back, mirrored ones twice", L.props?.length === want, `${L.props?.length} of ${want}`);
+    const unpaired = (L.props ?? []).filter((p) => !L.props.some((q) => q.shape === p.shape && Math.abs(q.x - (29 - p.x)) < 1e-6 && q.y === p.y));
+    ctx.ok("the example's props are symmetric", unpaired.length === 0, unpaired.map((p) => p.id).join());
+    const onToken = (L.props ?? []).filter((p) => L.tokens.some((t) => Math.abs(t.j + 0.5 - p.x) < (p.w + 1) / 2 && Math.abs(t.i + 0.5 - p.y) < (p.d + 1) / 2));
+    ctx.ok("no example prop stands on a token's square", onToken.length === 0, onToken.map((p) => p.label).join());
+    const tree = L.props?.find((p) => p.shape === "tree");
+    ctx.ok("a layout prop's q heights come back in cells", tree?.h === 3 && tree.elev === null, JSON.stringify(tree));
   }
   ctx.ok("the skill documents every op", (() => {
     const skill = readFileSync(new URL(ctx.url(".claude/skills/diorama-map-setup/SKILL.md")), "utf8");
@@ -79,6 +88,30 @@ export default async function check(ctx) {
     ctx.ok("token cells are offset to the canvas", O.tokens[0].i === 2 && O.tokens[0].j === 3);
   } else ctx.ok("offset layout compiles", false, JSON.stringify(O.errors));
 
+  // ── props ──
+  const PL = compileLayout({ palette: pal, mirror: { cols: 12, rows: 10 }, ops: [], props: [
+    { shape: "wedge", at: [2.5, 3.5], h: 5, rot: 90, mirror: "both", id: "ramp" },
+    { shape: "pillar", at: [5, 1], h: 15, elev: 10, label: "Column" },
+    { shape: "box", at: [1, 6], w: 2 },
+  ] }, { cols: 14, rows: 12, offset: { i: 1, j: 2 }, map: { cols: 12, rows: 10 }, distance: 5 });
+  if (PL.props) {
+    const by = (id) => PL.props.find((p) => p.id === id);
+    const a = by("ramp"), m = by("rampm"), r = by("rampr"), b = by("rampb");
+    ctx.ok("layout props sit at the scene rect, centre on [row, col]", a?.x === 5.5 && a.y === 3.5, JSON.stringify(a));
+    const col = PL.props.find((p) => p.label === "Column"), box = PL.props.find((p) => p.shape === "box");
+    ctx.ok("feet heights come back in cells", a?.h === 1 && col?.elev === 2 && col.h === 3, JSON.stringify(col));
+    ctx.ok("a mirrored prop reflects across each axis with its turn",
+      m?.x === 2 + 12 - 3.5 && m.y === a.y && m.rot === 270 && r?.y === 1 + 10 - 2.5 && r.rot === 90 && b?.x === m.x && b.y === r.y && b.rot === 270,
+      JSON.stringify([m, r, b].map((p) => p && [p.x, p.y, p.rot])));
+    ctx.ok("a prop's own size wins, the shape's default fills the rest", box?.w === 2 && box.d === 1 && box.solid === true, JSON.stringify(box));
+    ctx.ok("a layout prop with no id gets a minted one", /^p[0-9a-z]+$/.test(box?.id ?? ""));
+  } else ctx.ok("props layout compiles", false, JSON.stringify(PL.errors));
+  ctx.ok("a layout without props leaves the scene's props alone (null)", compileLayout({ palette: pal, ops: [] }, grid).props === null);
+  const offMap = compileLayout({ palette: pal, ops: [], props: [{ shape: "rock", at: [40, 1] }] }, grid);
+  ctx.ok("a prop off the map is a warning that names it", offMap.props?.length === 0 && offMap.warnings.some((w) => /props\[0\] \(rock\) stands outside the map/.test(w)));
+  const onAxis = compileLayout({ palette: pal, mirror: { cols: 12 }, ops: [], props: [{ shape: "rock", at: [2, 6], mirror: true }] }, grid);
+  ctx.ok("a prop on its own mirror axis is not doubled", onAxis.props?.length === 1 && onAxis.warnings.some((w) => /own mirror axis/.test(w)));
+
   // ── every mistake is a sentence, and nothing is half painted ──
   const bad = [
     [null, /not a JSON object/],
@@ -93,6 +126,15 @@ export default async function check(ctx) {
     [{ palette: [...pal, { name: "ledge", kind: "floor" }], ops: [] }, /used twice/],
     [{ palette: pal, ops: [], tokens: [{ name: "A" }] }, /"cell" must be/],
     [{ format: "something-else", palette: pal, ops: [] }, /"format"/],
+    [{ palette: pal, ops: [], props: {} }, /"props" must be an array/],
+    [{ palette: pal, ops: [], props: [{ shape: "statue", at: [1, 1] }] }, /props\[0\] \(statue\): "shape" must be one of/],
+    [{ palette: pal, ops: [], props: [{ shape: "box", label: "Altar" }] }, /props\[0\] \(box "Altar"\): "at" must be/],
+    [{ palette: pal, ops: [], props: [{ shape: "box", at: [1, 1], mat: "gold" }] }, /"mat" must be one of/],
+    [{ palette: pal, ops: [], props: [{ shape: "box", at: [1, 1], tint: "red" }] }, /"tint" must be "#rrggbb"/],
+    [{ palette: pal, ops: [], props: [{ shape: "box", at: [1, 1], w: 0 }] }, /"w" must be/],
+    [{ palette: pal, ops: [], props: [{ shape: "box", at: [1, 1], solid: "yes" }] }, /"solid" must be true or false/],
+    [{ palette: pal, ops: [], props: [{ shape: "box", at: [1, 1], mirror: true }] }, /props\[0\] \(box\): "mirror" needs/],
+    [{ palette: pal, ops: [], props: [{ shape: "box", at: [1, 1], id: "a" }, { shape: "box", at: [2, 2], id: "a" }] }, /props\[1\].*used twice/],
   ];
   for (const [layout, re] of bad) {
     const r = compileLayout(layout, grid);

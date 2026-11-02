@@ -12,6 +12,9 @@ import { FLAG_ALTITUDE } from "../constants.mjs";
 import { compileLayout } from "../terrain/layout.mjs";
 import { qToDist } from "../terrain/model.mjs";
 import { TerrainStore, gridOf, supportsScene } from "../terrain/store.mjs";
+import { PropStore } from "../terrain/props-store.mjs";
+import { resolveProps } from "../terrain/props.mjs";
+import { propsBlock } from "../terrain/live.mjs";
 
 /**
  * The grid a layout compiles against on this scene.
@@ -80,6 +83,10 @@ export async function importLayout(layout, { scene = globalThis.canvas?.scene, t
   const res = compileForScene(scene, data);
   if (!res.terrain) return { ok: false, errors: res.errors, warnings: res.warnings };
   await TerrainStore.write(scene, res.terrain);
-  const placed = tokens ? await placeTokens(scene, res.terrain, res.tokens) : { moved: 0, missing: [] };
-  return { ok: true, errors: [], warnings: res.warnings, ...placed };
+  // A layout with no "props" key leaves the scene's props alone.
+  if (Array.isArray(res.props)) await PropStore.write(scene, res.props);
+  const props = Array.isArray(res.props) ? res.props : PropStore.read(scene);
+  const rules = resolveProps(res.terrain, props, { stamp: propsBlock() }).terrain;
+  const placed = tokens ? await placeTokens(scene, rules, res.tokens) : { moved: 0, missing: [] };
+  return { ok: true, errors: [], warnings: res.warnings, props: Array.isArray(res.props) ? res.props.length : null, ...placed };
 }

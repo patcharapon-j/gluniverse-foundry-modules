@@ -88,6 +88,16 @@
     { "note": "giant lions", "op": "rect", "layer": "Masonry", "h": 64, "rows": [4, 13], "cols": [0, 3.5], "mirror": true },
     { "op": "rect", "layer": "Masonry", "h": 52, "rows": [0, 4], "cols": [0, 3.5], "mirror": true }
   ],
+  "props": [
+    { "shape": "tree", "label": "Stair garden tree", "at": [41, 4], "w": 1.6, "d": 1.6, "h": 12, "mirror": true },
+    { "shape": "tree", "label": "Stair garden tree", "at": [40.5, 7.5], "w": 1.4, "d": 1.4, "h": 10, "mirror": true },
+    { "shape": "pine", "label": "Garden pine", "at": [21.2, 6], "w": 1.2, "d": 1.2, "h": 14, "mirror": true },
+    { "shape": "bush", "label": "Plaza shrub", "at": [47.5, 2], "w": 1.2, "d": 1.2, "h": 3, "mirror": true },
+    { "shape": "bush", "label": "Plaza shrub", "at": [47.5, 4.5], "w": 1, "d": 1, "h": 3, "mirror": true },
+    { "shape": "crate", "label": "Dock crate", "at": [53, 3], "w": 1, "d": 1, "h": 4, "rot": 10, "mirror": true },
+    { "shape": "barrel", "label": "Dock barrel", "at": [52.8, 4.3], "h": 4, "mirror": true },
+    { "shape": "pyramid", "label": "Dais crystal", "at": [12, 14.5], "w": 1, "d": 1, "h": 8, "rot": 45, "mat": "crystal", "solid": false }
+  ],
   "tokens": [
     { "name": "Valeros", "cell": [31, 13] },
     { "name": "Seelah", "cell": [31, 15] },

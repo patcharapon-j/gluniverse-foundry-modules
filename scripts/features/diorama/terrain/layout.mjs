@@ -26,8 +26,11 @@
  * Heights are feet unless `heightUnit` is "q" (quarter squares).
  */
 
-import { SUB, KIND, KIND_KEYS, CLIFF_MATERIALS } from "../constants.mjs";
+import { SUB, KIND, KIND_KEYS, CLIFF_MATERIALS, Q_PER_CELL } from "../constants.mjs";
 import { Terrain, sanitizePaletteEntry, distToQ } from "./model.mjs";
+import {
+  PROP_SHAPES, PROP_MATERIALS, SHAPE_DEFAULTS, PROP_LIMIT, SIZE_MIN, SIZE_MAX, H_MIN, ELEV_LIMIT, IMG_MAX, normalizeProps,
+} from "./props.mjs";
 
 export const LAYOUT_FORMAT = "gluniverse-diorama-layout";
 export const LAYOUT_VERSION = 1;
@@ -61,7 +64,7 @@ const isRange = (v) => isPair(v) && v[1] > v[0];
  */
 export function compileLayout(layout, grid) {
   const errors = [], warnings = [];
-  const fail = () => ({ terrain: null, tokens: [], errors, warnings });
+  const fail = () => ({ terrain: null, tokens: [], props: null, errors, warnings });
   const L = layout && typeof layout === "object" && !Array.isArray(layout) ? layout : null;
   if (!L) { errors.push("The layout is not a JSON object."); return fail(); }
   if (L.format !== undefined && L.format !== LAYOUT_FORMAT) errors.push(`"format" must be "${LAYOUT_FORMAT}".`);
@@ -142,6 +145,10 @@ export function compileLayout(layout, grid) {
   });
 
   const tokens = tokenPlacements(L.tokens, { errors, toFt: (v) => (unit === "q" ? (v / 4) * distance : v), off });
+  const props = propPlacements(L.props, {
+    errors, warnings, off, map, mirror,
+    toCells: (v) => (unit === "q" ? v / Q_PER_CELL : v / distance),
+  });
   if (errors.length) return fail();
 
   // ── paint ──
@@ -176,7 +183,7 @@ export function compileLayout(layout, grid) {
     if (!hit) warnings.push(`${p.where} covers no square of the map.`);
   }
   if (dropped) warnings.push(`${dropped} sub-squares fell outside the map and were dropped.`);
-  return { terrain: t, tokens, errors, warnings };
+  return { terrain: t, tokens, props, errors, warnings };
 }
 
 /* ── painters ── */
@@ -354,6 +361,99 @@ function tokenPlacements(list, { errors, toFt, off }) {
     });
   });
   return out;
+}
+
+/* ── props ── */
+
+const PROP_KEYS = new Set(["id", "shape", "at", "w", "d", "h", "elev", "rot", "mat", "tint", "solid", "hidden", "label", "img", "mirror"]);
+
+/**
+ * A layout's props as stored props (canvas cells), or null when the layout has
+ * no `props` key, which leaves the scene's own props alone. `at` is the
+ * footprint's centre in map squares, [row, col]; `w`/`d` are squares; `h` and
+ * `elev` are heights in the layout's height unit. A mirrored prop is reflected
+ * with its turn: across a column axis rot → −rot, across a row axis
+ * rot → 180 − rot, so a wedge still climbs toward the reflected side.
+ */
+function propPlacements(list, { errors, warnings, off, map, mirror, toCells }) {
+  if (list === undefined) return null;
+  if (!Array.isArray(list)) { errors.push(`"props" must be an array.`); return null; }
+  if (list.length > PROP_LIMIT) errors.push(`"props" has ${list.length} entries; the most is ${PROP_LIMIT}.`);
+  const out = [];
+  const ids = new Set();
+  list.slice(0, PROP_LIMIT).forEach((p, n) => {
+    if (!p || typeof p !== "object" || Array.isArray(p)) { errors.push(`props[${n}] is not an object.`); return; }
+    const named = typeof p.label === "string" && p.label.trim() ? ` "${p.label.trim()}"` : "";
+    const where = `props[${n}] (${typeof p.shape === "string" ? p.shape : "?"}${named})`;
+    const bad = (msg) => { errors.push(`${where}: ${msg}`); return true; };
+    for (const k of Object.keys(p)) if (!PROP_KEYS.has(k)) warnings.push(`${where}: "${k}" is not a prop field and was ignored.`);
+    if (!PROP_SHAPES.includes(p.shape)) { bad(`"shape" must be one of ${PROP_SHAPES.join(", ")}.`); return; }
+    const def = SHAPE_DEFAULTS[p.shape];
+    let failed = false;
+    if (!isPair(p.at)) failed = bad(`"at" must be [row, col], the middle of its footprint in map squares.`);
+    for (const k of ["w", "d"]) {
+      if (p[k] !== undefined && (!isNum(p[k]) || p[k] < SIZE_MIN || p[k] > SIZE_MAX)) failed = bad(`"${k}" must be ${SIZE_MIN} to ${SIZE_MAX} squares.`);
+    }
+    if (p.h !== undefined && (!isNum(p.h) || toCells(p.h) < H_MIN || toCells(p.h) > SIZE_MAX)) failed = bad(`"h" must be a positive height in the layout's height unit.`);
+    if (p.elev !== undefined && p.elev !== null && (!isNum(p.elev) || Math.abs(toCells(p.elev)) > ELEV_LIMIT)) failed = bad(`"elev" must be a height (or null to stand on the ground).`);
+    if (p.rot !== undefined && !isNum(p.rot)) failed = bad(`"rot" must be degrees clockwise.`);
+    if (p.mat !== undefined && !PROP_MATERIALS.includes(p.mat)) failed = bad(`"mat" must be one of ${PROP_MATERIALS.join(", ")}.`);
+    if (p.tint !== undefined && p.tint !== null && !(typeof p.tint === "string" && /^#[0-9a-f]{6}$/i.test(p.tint))) failed = bad(`"tint" must be "#rrggbb" or null.`);
+    for (const k of ["solid", "hidden"]) if (p[k] !== undefined && typeof p[k] !== "boolean") failed = bad(`"${k}" must be true or false.`);
+    for (const k of ["label", "img", "id"]) if (p[k] !== undefined && typeof p[k] !== "string") failed = bad(`"${k}" must be a string.`);
+    if (p.id !== undefined && typeof p.id === "string") {
+      if (!/^[A-Za-z0-9_-]{1,28}$/.test(p.id)) failed = bad(`"id" must be 1 to 28 letters, digits, "_" or "-".`);
+      else if (ids.has(p.id)) failed = bad(`the id "${p.id}" is used twice.`);
+      else ids.add(p.id);
+    }
+    if (typeof p.img === "string" && p.img.length > IMG_MAX) failed = bad(`"img" is longer than ${IMG_MAX} characters; use a file path, not a data URL.`);
+    if (p.img !== undefined && p.shape !== "card") warnings.push(`${where}: only a card shows "img"; it was ignored.`);
+    if (p.shape === "card" && !p.img) warnings.push(`${where}: a card with no "img" draws as a blank panel.`);
+    let axes = [];
+    if (p.mirror) {
+      const which = p.mirror === true ? (isNum(mirror.cols) ? "cols" : isNum(mirror.rows) ? "rows" : null) : p.mirror;
+      if (!which || !["cols", "rows", "both"].includes(which)) failed = bad(`"mirror" needs a "mirror": {"cols": …} or {"rows": …} axis on the layout.`);
+      else if ((which === "cols" || which === "both") && !isNum(mirror.cols)) failed = bad(`there is no "mirror.cols" axis.`);
+      else if ((which === "rows" || which === "both") && !isNum(mirror.rows)) failed = bad(`there is no "mirror.rows" axis.`);
+      else axes = which === "both" ? ["cols", "rows", "both"] : [which];
+    }
+    if (failed) return;
+
+    const [r, c] = p.at;
+    const rot = isNum(p.rot) ? p.rot : 0;
+    const one = (rr, cc, turn, suffix) => {
+      if (suffix && Math.abs(rr - r) < 1e-6 && Math.abs(cc - c) < 1e-6) {
+        warnings.push(`${where} sits on its own mirror axis, so its mirrored copy was not added.`);
+        return;
+      }
+      if (!(rr >= 0 && cc >= 0 && rr < map.rows && cc < map.cols)) {
+        warnings.push(`${where}${suffix ? " (mirrored)" : ""} stands outside the map at [${rr}, ${cc}] and was dropped.`);
+        return;
+      }
+      out.push({
+        id: p.id !== undefined ? p.id + suffix : undefined,
+        shape: p.shape,
+        x: cc + off.j, y: rr + off.i,
+        w: p.w ?? def.w, d: p.d ?? def.d,
+        h: p.h !== undefined ? toCells(p.h) : def.h,
+        elev: p.elev === undefined || p.elev === null ? null : toCells(p.elev),
+        rot: turn,
+        mat: p.mat ?? def.mat,
+        tint: p.tint ?? null,
+        solid: p.solid ?? def.solid,
+        hidden: p.hidden ?? false,
+        label: p.label ?? "",
+        img: p.shape === "card" ? p.img ?? "" : undefined,
+      });
+    };
+    one(r, c, rot, "");
+    for (const a of axes) {
+      if (a === "cols") one(r, mirror.cols - c, -rot, "m");
+      else if (a === "rows") one(mirror.rows - r, c, 180 - rot, "r");
+      else one(mirror.rows - r, mirror.cols - c, 180 + rot, "b");
+    }
+  });
+  return normalizeProps(out);
 }
 
 /** The direction names a layout's `down` accepts, for docs and the check. */

@@ -180,7 +180,9 @@ export default async function check(ctx) {
   ctx.ok("auto: dark outside rooms is void", cellKind(at, 2, 2) === KIND.VOID && cellKind(at, 13, 17) === KIND.VOID);
   ctx.ok("auto: the pool is water just below 0", cellKind(at, 7, 9) === KIND.WATER && at.topAt(7 * SUB, 9 * SUB) < 0 && at.topAt(7 * SUB, 9 * SUB) > -4);
   ctx.ok("auto: outside the scene is void", cellKind(at, 0, 0) === KIND.VOID && cellKind(at, rows - 1, 5) === KIND.VOID);
-  ctx.ok("auto: heights are left to the GM", at.distinctTops().every((q) => q <= 0));
+  ctx.ok("auto: flat art drafts no heights", at.distinctTops().every((q) => q <= 0), String(at.distinctTops()));
+  const off = autoSetup({ ...input, options: { heights: false } });
+  ctx.ok("auto: heights off keeps every top at or below 0", off.distinctTops().every((q) => q <= 0));
   ctx.ok("auto: deterministic across runs", at.h.every((v, k) => v === a2.h[k]) && at.kind.every((v, k) => v === a2.kind[k]) && at.layer.every((v, k) => v === a2.layer[k]));
   ctx.ok("auto: counts the enclosed room", a1.stats.roomCells === 8 * 10, String(a1.stats.roomCells));
   const open = autoSetup({ ...input, walls: [] });
@@ -191,6 +193,26 @@ export default async function check(ctx) {
   ctx.ok("auto: keeps the draft palette and adds what it needs", kept.palette[0].name === "Ground"
     && kept.palette.some((p) => p.kind === KIND.VOID) && kept.palette.some((p) => p.kind === KIND.WATER));
   ctx.ok("auto: no colours still drafts walls and void", autoSetup({ ...input, colours: null }).kindAt(0, 0) === KIND.VOID);
+
+  /* ── auto setup options dialog ─────────────────────────────────────── */
+  const AD = await import(E("auto-dialog.mjs"));
+  const AS = await import(E("auto-setup.mjs"));
+  const html = AD.autoDialogContent({ light: "SW", faces: "S", heightScale: 1.5, step: 5, heights: true }, { units: "ft", t: (k) => k });
+  const names = [...html.matchAll(/name="([^"]+)"/g)].map((m) => m[1]).sort();
+  ctx.ok("auto dialog: one field per option", JSON.stringify(names) === JSON.stringify(Object.keys(AS.AUTO_DEFAULTS).sort()), names.join(", "));
+  // Read the rendered form back the way the dialog does: selected options, checked box, values.
+  const field = (name) => {
+    const sel = new RegExp(`<select name="${name}"[^>]*>([\\s\\S]*?)</select>`).exec(html);
+    if (sel) return { value: /<option value="([^"]*)" selected/.exec(sel[1])?.[1] };
+    const inp = new RegExp(`<input[^>]*name="${name}"[^>]*>`).exec(html)?.[0] ?? "";
+    return { value: /value="([^"]*)"/.exec(inp)?.[1], checked: / checked/.test(inp) };
+  };
+  const back = AD.readAutoForm(Object.fromEntries(names.map((n) => [n, field(n)])));
+  ctx.ok("auto dialog: the form reads back as the options it showed", JSON.stringify(back)
+    === JSON.stringify(AS.autoOptions({ light: "SW", faces: "S", heightScale: 1.5, step: 5, heights: true })), JSON.stringify(back));
+  ctx.ok("auto dialog: every light and face choice is offered", AS.LIGHT_DIRS.every((d) => html.includes(`value="${d}"`)) && AS.FACE_SIDES.every((d) => html.includes(`value="${d}"`)));
+  ctx.ok("auto dialog: options without storage are the defaults", JSON.stringify(AD.loadAutoOptions()) === JSON.stringify(AS.autoOptions({})));
+  ctx.ok("auto dialog: the done sentence names the light", AD.describeAuto({ sampled: true, light: "NW" }, {}, (k, d) => `${k}${d ? JSON.stringify(d) : ""}`).includes("GLDIO.editor.auto.dir.NW"));
 
   /* ── difficult terrain ─────────────────────────────────────────────── */
   const cells = ["0.0", "0.1", "0.2", "1.0", "1.1", "1.2", "2.0", "3.5"];
@@ -261,6 +283,8 @@ export default async function check(ctx) {
   // Dynamic families built at runtime.
   for (const id of TOOLS) { used.add(`GLDIO.editor.tool.${id}`); used.add(`GLDIO.editor.hint.${id}`); }
   for (const e of ["none", "load", "tainted"]) used.add(`GLDIO.editor.colours.${e}`);
+  for (const d of AS.LIGHT_DIRS) used.add(`GLDIO.editor.auto.dir.${d}`);
+  for (const f of AS.FACE_SIDES) used.add(`GLDIO.editor.auto.face.${f}`);
   const missing = [...used].filter((k) => !(k in lang));
   ctx.ok("every GLDIO.editor key used exists", !missing.length, missing.join(", "));
   // The shared families the editor reads (owned by the feature's main lang file).

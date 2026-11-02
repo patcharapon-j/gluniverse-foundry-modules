@@ -23,6 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { compileLayout } = await import(pathToFileURL(resolve(root, "scripts/features/diorama/terrain/layout.mjs")).href);
 const { SUB, KIND, KIND_KEYS } = await import(pathToFileURL(resolve(root, "scripts/features/diorama/constants.mjs")).href);
+const { resolveProps, footprintCorners } = await import(pathToFileURL(resolve(root, "scripts/features/diorama/terrain/props.mjs")).href);
 
 const [cmd, ...rest] = process.argv.slice(2);
 const args = Object.fromEntries(rest.filter((a) => a.startsWith("--")).map((a) => {
@@ -98,13 +99,25 @@ if (cmd === "grid") {
     }
     console.log(`${String(i).padStart(4)} ${line}`);
   }
-  console.log(`\n✓ compiled: ${t.cols}×${t.rows} squares, ${t.palette.length} palette entries, ${res.tokens.length} tokens, ${res.warnings.length} warnings.`);
+  // Props stand on the compiled ground (no offset here: map squares are canvas squares).
+  const props = res.props ? resolveProps(t, res.props).props : [];
+  if (props.length) {
+    console.log(`\nProps (centre [row, col], base and top in ft; * solid, ? GM only):`);
+    for (const p of props) {
+      console.log(`  ${p.solid && !p.hidden ? "*" : p.hidden ? "?" : " "} ${p.shape.padEnd(8)} [${p.y}, ${p.x}]  ${ft(p.baseQ)} → ${ft(p.topQ)} ft  ${p.label || p.id}`);
+    }
+  }
+  console.log(`\n✓ compiled: ${t.cols}×${t.rows} squares, ${t.palette.length} palette entries, ${props.length} props, ${res.tokens.length} tokens, ${res.warnings.length} warnings.`);
   if (args.image) {
     writePage(args.out || ".preview/dio-layout.html", `Diorama layout: ${layout.name ?? file}`, {
       mode: "layout", image: imageData(resolve(String(args.image))), grid: Number(args.grid) || 0, cols, crop: crop(),
       distance: Number(args.distance) || 5, sub: SUB, kinds: KIND, kindNames: KIND_KEYS,
       terrain: { cols: t.cols, rows: t.rows, h: [...t.h], layer: [...t.layer], kind: [...t.kind], palette: t.palette },
       tokens: res.tokens,
+      props: props.map((p) => ({
+        shape: p.shape, label: p.label, x: p.x, y: p.y, top: ft(p.topQ), solid: p.solid, hidden: p.hidden,
+        corners: footprintCorners(p),
+      })),
     });
   }
 } else {
@@ -172,12 +185,30 @@ img.onload = () => {
       x.lineWidth = 3; x.strokeStyle = "#000c"; x.strokeText(s, X(c + .5), Y(r + .5));
       x.fillStyle = "#fff"; x.fillText(s, X(c + .5), Y(r + .5));
     }
+    // Props: the footprint (solid amber, scenery dashed, GM-only violet), its front
+    // edge doubled, and the top in feet in a tag at the centre.
+    for (const p of D.props || []) {
+      const hue = p.hidden ? "#b497ff" : p.solid ? "#ffd24a" : "#5fdb92";
+      x.globalAlpha = 0.22; x.fillStyle = hue; x.beginPath();
+      p.corners.forEach(([cx, cy], i) => (i ? x.lineTo(X(cx), Y(cy)) : x.moveTo(X(cx), Y(cy))));
+      x.closePath(); x.fill();
+      x.globalAlpha = 1; x.strokeStyle = hue; x.lineWidth = 2; x.setLineDash(p.solid && !p.hidden ? [] : [5, 4]); x.stroke();
+      x.setLineDash([]); x.lineWidth = 4; x.beginPath();
+      x.moveTo(X(p.corners[2][0]), Y(p.corners[2][1])); x.lineTo(X(p.corners[3][0]), Y(p.corners[3][1])); x.stroke();
+      const s = p.shape + " " + p.top;
+      x.font = "600 " + Math.max(9, cell * .24) + "px system-ui"; x.textAlign = "center"; x.textBaseline = "middle";
+      const w = x.measureText(s).width + 8;
+      x.fillStyle = "#0b0f17e0"; x.fillRect(X(p.x) - w / 2, Y(p.y) - cell * .17, w, cell * .34);
+      x.fillStyle = hue; x.fillText(s, X(p.x), Y(p.y));
+    }
     for (const t of D.tokens || []) {
       x.strokeStyle = "#ff4fd8"; x.lineWidth = 2; x.strokeRect(X(t.j) + 2, Y(t.i) + 2, cell - 4, cell - 4);
       x.fillStyle = "#ff4fd8"; x.font = "600 " + Math.max(9, cell * .24) + "px system-ui"; x.fillText(t.name || t.id, X(t.j + .5), Y(t.i) - 6 + cell);
     }
     legend.innerHTML = T.palette.map((p) => '<span><i style="background:' + p.color + '"></i>' + p.name + " · " + ft(p.h) + " ft · " + D.kindNames[p.kind] + "</span>").join("")
-      + "<span>numbers = top of each square in ft · arrows point down the stairs</span>";
+      + "<span>numbers = top of each square in ft · arrows point down the stairs</span>"
+      + ((D.props || []).length ? '<span><i style="background:#ffd24a"></i>solid prop</span><span><i style="background:#5fdb92"></i>scenery</span>'
+        + '<span><i style="background:#b497ff"></i>GM only</span><span>props: shape and top in ft, thick edge = front</span>' : "");
   } else {
     legend.innerHTML = "<span>Squares are numbered (row, column) from the map's top-left corner. Every 5th line is brighter.</span>";
   }

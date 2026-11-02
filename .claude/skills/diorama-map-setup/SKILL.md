@@ -79,6 +79,33 @@ areas such as cave walls or broken ground, where rectangles would take
 dozens of ops. Give big ops a `"note"` naming what they are; the importer
 ignores it and the next person reading the file will thank you.
 
+## 3b. Props or terrain?
+
+A layout can also place `props`: primitive objects that stand on the terrain
+(trees, pillars, crates, barrels, rocks, arches, statues built from boxes and
+cylinders). The reference is the Props section of `docs/DIORAMA_LAYOUT.md`.
+Choose by what the thing is, not by how it looks:
+
+- **Terrain** is ground: anything you walk on as a level, anything with a
+  cliff face, anything wider than about two squares, water, pits, stairs.
+  A plinth, a terrace, a dais, a planter bed and a building's footprint are
+  terrain. Terrain stores half squares, so a shape finer than that is lost.
+- **A prop** is a thing standing on the ground: round or turned or thin
+  (a column 0.7 squares across, a crate at 10 degrees, a lone tree, a
+  statue), or something you would move between sessions. A prop has its own
+  shape and material, so a column reads as a column instead of a stepped
+  block.
+- A prop is `solid` by default (bushes, rings and cards are scenery). Solid
+  props block movement and sight like raised ground, so the same rules as
+  terrain apply: do not wall off a route the map leaves open. Make
+  decoration that the party can walk through `"solid": false`.
+- Put props on the level they stand on and leave `elev` out; they find the
+  ground themselves. Stack by listing the lower prop first.
+- Be sparing. A few props that pick out what the art shows (the trees it
+  paints, the columns, the cargo on a dock) read better than a scatter.
+  Never put a solid prop on a square a token starts on.
+- `"mirror": true` works as it does on ops, and turns the copy with it.
+
 ## 4. Check, look, fix, repeat
 
 ```bash
@@ -88,7 +115,9 @@ node tools/diorama-layout.mjs check <layout.json> --cols=<N> --rows=<M> --image=
 It compiles exactly as Foundry will, prints every problem as a sentence naming
 the op, prints a per-square height map, and writes `.preview/dio-layout.html`:
 the compiled terrain over the art, with each square's top in feet and arrows
-down every flight. Screenshot it crop by crop and compare with the art. Look
+down every flight. Props are outlined on it (amber solid, green scenery, violet
+GM only) with their shape and top in feet, and listed in the console with their
+base and top. Screenshot it crop by crop and compare with the art. Look
 for: a level edge that misses the painted edge by a square, stairs whose arrow
 points up, water that is not below its bank, a route between levels with no
 stairs, and void where there is map. Fix and re-run until it compiles with no
@@ -102,7 +131,10 @@ Give the user the JSON file. They import it in Foundry one of two ways:
   Paste the JSON or pick the file, check the draft on the canvas, then Save.
   Undo works until they close the editor.
 - **Macro**: `await game.modules.get("gluniverse-foundry-modules").api.features.diorama.importLayout(layout)`.
-  This writes at once and returns `{ ok, errors, warnings, moved, missing }`.
+  This writes at once and returns `{ ok, errors, warnings, props, moved, missing }`.
+
+A layout with a `props` key replaces the scene's props; without one it leaves
+them alone.
 
 `tokens` in the layout moves named tokens onto their squares and stands them
 on the ground there; add `altitude` for flyers. Leave `tokens` out unless the

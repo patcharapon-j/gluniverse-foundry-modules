@@ -14,7 +14,8 @@
 import { SUITE_ID, warn, err } from "../../core/const.mjs";
 import { ensureSuiteGroup, bindSuiteToolClicks } from "../../core/scene-controls.mjs";
 import { TerrainStore, supportsScene } from "./terrain/store.mjs";
-import { invalidate } from "./terrain/live.mjs";
+import { invalidate, PROPS_BLOCK } from "./terrain/live.mjs";
+import { PropStore } from "./terrain/props-store.mjs";
 import { installRules, readyRules } from "./foundry/install.mjs";
 import { wireSocket } from "./view/sync.mjs";
 import { watchTargetLines } from "./integrations/target-lines.mjs";
@@ -143,7 +144,9 @@ function registerKeybindings() {
 }
 
 function onUpdateScene(scene, changes) {
-  if (!TerrainStore.touched(changes)) return;
+  // Props are part of the rules terrain (stamped while dio.propsBlock is on),
+  // so a props save drops the same cache a terrain save does.
+  if (!TerrainStore.touched(changes) && !PropStore.touched(changes)) return;
   invalidate(scene);
   if (scene !== globalThis.canvas?.scene) return;
   // "3D off" toggled: re-gate the button, and close a player's open view.
@@ -152,6 +155,11 @@ function onUpdateScene(scene, changes) {
     _view.closeView();
     ui.notifications?.info(game.i18n.localize("GLDIO.view.off"));
   }
+}
+
+/** Switching dio.propsBlock re-stamps (or un-stamps) every scene's rules terrain. */
+function onUpdateSetting(setting) {
+  if (setting?.key === `${SUITE_ID}.${PROPS_BLOCK}`) invalidate();
 }
 
 function onCanvasReady() {
@@ -171,6 +179,7 @@ export function onInit() {
   Hooks.on("getSceneControlButtons", onGetSceneControlButtons);
   Hooks.on("renderSceneControls", onRenderSceneControls);
   Hooks.on("updateScene", onUpdateScene);
+  Hooks.on("updateSetting", onUpdateSetting);
   Hooks.on("canvasReady", onCanvasReady);
 }
 
