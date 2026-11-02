@@ -45,7 +45,8 @@ const orderOf = (meta) => sectionKeys(kindOf(meta)).filter((k) => (meta?.availab
 export function resolveOwner({ isGM, party, characters = [], ownerId = null }) {
   const pool = characters.filter((c) => c?.id);
   if (isGM) {
-    const one = !party && ownerId && ownerId !== PARTY_KEY ? pool.find((c) => c.id === ownerId) : null;
+    // The GM's pick is who a WRITE lands on, so Party Knowledge never widens it.
+    const one = ownerId && ownerId !== PARTY_KEY ? pool.find((c) => c.id === ownerId) : null;
     return { everyone: !one, owner: one ?? null, readKey: one ? one.id : PARTY_KEY };
   }
   const one = pool.find((c) => c.id === ownerId) ?? pool[0] ?? null;
@@ -102,7 +103,7 @@ export function dexModel({
   const { readKey, everyone, owner } = who;
 
   const ownerRows = isGM
-    ? [{ id: PARTY_KEY, everyone: true, on: everyone }, ...(party ? [] : characters.map((c) => ({ id: c.id, name: c.name, on: !everyone && c.id === owner?.id })))]
+    ? [{ id: PARTY_KEY, everyone: true, on: everyone }, ...characters.map((c) => ({ id: c.id, name: c.name, on: !everyone && c.id === owner?.id }))]
     : party
       ? []
       : characters.map((c) => ({ id: c.id, name: c.name, on: c.id === owner?.id }));

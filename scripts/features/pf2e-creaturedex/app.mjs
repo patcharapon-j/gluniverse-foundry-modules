@@ -138,9 +138,13 @@ export class CreaturedexApp extends ApplicationV2 {
     this.#pending = options.pending ?? null;
   }
 
-  /** True when the GM has the whole party selected rather than one character. */
+  /**
+   * True when the GM has the whole party selected rather than one character.
+   * The pick alone decides it: Party Knowledge is a read rule, and letting it
+   * widen a write would hand every character a section only one of them earned.
+   */
   get everyone() {
-    return game.user.isGM && (partyMode() || this.#ownerId === PARTY_KEY || !this.owner);
+    return game.user.isGM && (this.#ownerId === PARTY_KEY || !this.owner);
   }
 
   get owner() {
