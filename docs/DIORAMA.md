@@ -177,20 +177,25 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   keeps the flat look). Unexplored ground lies under a bank of slowly drifting
   mist (`render/fog.mjs`): a cool dark slate lit by the sky alone, well below
   the lit board so what the party sees stands out. It lies along the ground
-  blurred over a few squares, so it follows the terraces and keeps no shape of
-  anything standing in it; its floor is dense over the unseen, thins where it
-  turns edge-on to the camera and fades out across the blurred bake as a ragged
-  veil over the edge of sight, and translucent wisps streak above it down the
-  wind. **Unseen ground is never drawn as itself, nor where it stands**: tops,
-  cliff faces and water there are a backdrop at the far plane painted as the
-  mist (the bank's colour and wisps, each sheet sampled where the camera's ray
-  crosses it, so the noise runs on across an outline). An unseen tower beside
-  the party is therefore no prism and no silhouette: whatever the party can see
-  behind it draws over it, and the camera never finds a hole under the bank's
-  rim. Nothing unseen throws a sun shadow either (the receiver finds the caster
-  along the key from the shadow map's depth and drops it if nobody has seen it),
-  so a hidden tower cannot lay its outline across the ground. Unseen props and
-  walls are discarded. Lit
+  the party has seen, averaged over a few squares, so it meets each known
+  terrace at its height; over ground nobody has seen it settles flat on the
+  lowest ground, so it never rises into the shape of a hill or tower hidden in
+  it. Its floor is dense over the unseen, thins where it turns edge-on to the
+  camera and fades out across the blurred bake as a ragged veil over the edge
+  of sight, and translucent wisps streak above it down the wind. **Unseen
+  ground is never drawn at all**: tops, cliff faces, water, props and walls
+  there discard, so they write no colour and no outline. The gap is filled by
+  a mist backdrop: a box over the board's footprint, from the plinth to above
+  the tallest ground, drawn from inside at the far plane. Its shape is the
+  board's bounding box, and it reads no terrain: it paints where some point of
+  the pixel's ray inside the box is unseen (the vision bake alone), in the bank
+  floor's colour, so whatever the party can see draws over it, the camera
+  finds no hole under the bank's rim or down the board's side, and an unseen
+  tower is no prism and no silhouette, even where it would stand past the
+  board's edge against the room. Nothing unseen throws a sun shadow either (the
+  receiver finds the caster along the key from the shadow map's depth and drops
+  it if nobody has seen it), so a hidden tower cannot lay its outline across
+  the ground. Lit
   ground falls into the fog's shadow over most of a square at the edge of sight,
   and ground out of sight now fades to its remembered look (dim, grey, a faint
   mist) rather than switching at a line. Figures are never fogged. The drift is

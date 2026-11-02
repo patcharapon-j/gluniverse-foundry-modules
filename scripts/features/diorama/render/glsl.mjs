@@ -509,51 +509,6 @@ vec3 dioFinishFigure(vec3 c, vec3 wp) {
 /** Noise, the map and the lit chunk: what a lit program outside this file includes. */
 export const HEAD = NOISE + MAP + LIT;
 
-/*
- * The ground's own surfaces (tops, cliff faces, water) under fog. Each of these
- * programs writes its depth itself, starting every fragment at its own depth
- * (dioGroundDepth). Ground nobody has seen is not drawn as itself, and it is
- * not drawn where it stands: it is a BACKDROP at the far plane, painted as the
- * mist. At the far plane it hides nothing, so an unseen tower beside the party
- * is neither a prism nor a silhouette (whatever the party can see behind it
- * draws over it), and its shape cannot be read off an outline; and it leaves no
- * hole, since every ray that finds no seen ground finds the backdrop (where the
- * camera looks under the bank's rim it finds more fog, not the clear colour).
- * The paint is the mist as the bank would have drawn it over that pixel:
- * unlit, the bank floor's colour with the bank's wisps over it, each sheet
- * sampled where the camera's ray through the pixel crosses it, so the noise
- * runs on across an outline instead of breaking at it and an unseen wall never
- * reads as a flat panel. True when it wrote the pixel. Only these programs
- * include it: a program that assigns gl_FragDepth anywhere must assign it on
- * every path.
- */
-const UNSEEN = /* glsl */ `
-/** The bank's sheets (render/fog.mjs FOG_FLOOR, FOG_STEP, FOG_LAYERS), over the lowest ground. */
-const float FOG_SHEET0 = 0.06;
-const float FOG_SHEET_STEP = 0.26;
-void dioGroundDepth() { gl_FragDepthEXT = gl_FragCoord.z; }
-vec3 dioUnseenMist(vec3 wp) {
-  vec3 fwd = vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]);
-  vec2 slide = fwd.xz / max(fwd.y, 0.2);
-  float y0 = uHeightRange.x + FOG_SHEET0;
-  vec3 c = dioFogColor(0.0, dioFogNoise(wp.xz - slide * (wp.y - y0), 0.0));
-  for (int i = 1; i < 4; i++) {
-    float k = float(i) / 3.0;
-    float y = y0 + float(i) * FOG_SHEET_STEP;
-    float nk = dioFogNoise(wp.xz - slide * (wp.y - y), k);
-    float w = smoothstep(0.28 + 0.1 * k, 0.75, nk) * mix(0.6, 0.34, k) * 0.85;
-    c = mix(c, dioFogColor(k, nk) * (1.0 + 0.5 * k), w * smoothstep(y - 0.1, y + 0.1, wp.y));
-  }
-  return c;
-}
-bool dioUnseenFog(float vis, vec3 wp) {
-  if (vis > 0.0 || uUseVision < 0.5 || uFogStyle.x < 0.5) return false;
-  gl_FragColor = vec4(dioUnseenMist(wp), 1.0);
-  gl_FragDepthEXT = 1.0;
-  return true;
-}
-`;
-
 /* ---------------------------------------------------------------- terrain */
 
 export const TOP_VERT = /* glsl */ `
@@ -573,7 +528,7 @@ void main() {
 }
 `;
 
-export const TOP_FRAG = HEAD + UNSEEN + /* glsl */ `
+export const TOP_FRAG = HEAD +/* glsl */ `
 uniform vec4 uGrid;   // rgb = line colour, a = strength (0 = grid off)
 varying vec3 vWorld;
 varying vec3 vNormal;
@@ -597,9 +552,8 @@ float gridLine(vec2 xz) {
 const float LIP_RANGE = 0.5;
 
 void main() {
-  dioGroundDepth();
+  // never seen: nothing at all, mist or not (the fog's backdrop fills the gap)
   float vis = visionAt(vWorld.xz);
-  if (dioUnseenFog(vis, vWorld)) return;
   if (vis <= 0.0) discard;
   vec4 f = fieldAt(vWorld.xz);
   vec3 albedo = mapAt(vWorld.xz) * vTint;
@@ -652,7 +606,7 @@ void main() {
 }
 `;
 
-export const SIDE_FRAG = HEAD + UNSEEN + /* glsl */ `
+export const SIDE_FRAG = HEAD +/* glsl */ `
 uniform float uSidePaint;
 uniform float uTime;
 uniform vec3 uPlinth;
@@ -790,14 +744,12 @@ vec3 fallSheet(vec3 lipC, float a, float d, float up, bool intoWater) {
 }
 
 void main() {
-  dioGroundDepth();
   float vis = visionAt(vLip);
   // Under cloud (fogStyle clouds), the board keeps its plinth where nobody has
   // seen: it is dark, unpainted and the same everywhere, so it tells nothing,
   // and the bank sits on it instead of floating over the room.
   bool plinthOnly = vis <= 0.0 && uFogStyle.x > 0.5 && mod(vFlag + 0.25, 2.0) < 1.0
     && vWorld.y < uHeightRange.x - 0.05;
-  if (!plinthOnly && dioUnseenFog(vis, vWorld)) return;
   if (vis <= 0.0 && !plinthOnly) discard;
   vec3 n = normalize(vNormal);
   if (plinthOnly) {
@@ -903,7 +855,7 @@ void main() {
  * bends the bed, throws sun glints and a little sky, and foam laces the bank
  * with soft lines rolling in toward it.
  */
-export const WATER_FRAG = HEAD + UNSEEN + /* glsl */ `
+export const WATER_FRAG = HEAD +/* glsl */ `
 uniform float uTime;
 varying vec3 vWorld;
 varying float vShore;
@@ -945,9 +897,7 @@ float ripples(vec2 p, float t, float amount) {
  * Simple water: the map's own colour, flat and tinted, a still foam line.
  */
 void main() {
-  dioGroundDepth();
   float vis = visionAt(vWorld.xz);
-  if (dioUnseenFog(vis, vWorld)) return;
   if (vis <= 0.0) discard;
   vec2 p = vWorld.xz;
   float t = uTime;
@@ -1928,10 +1878,11 @@ void main() {
 /*
  * The fog of war as a bank of dark mist (render/fog.mjs): FOG_LAYERS sheets over
  * the board, one geometry, drawn floor first. The sheets lie along the ground
- * blurred over a few squares (the atmosphere layer's height texture), so the mist
- * follows the terraces and keeps no shape of anything standing in it. What is
- * under it was never drawn as itself: unseen ground is mist painted as a backdrop
- * at the far plane (UNSEEN), unseen props and walls are discarded, and nothing
+ * the party HAS seen, blurred over a few squares, so the mist meets each known
+ * terrace at its own height, and over ground nobody has seen they settle flat
+ * on the lowest ground: the bank keeps no shape of anything hidden in it. What
+ * is under it is never drawn: unseen ground, props and walls discard, the
+ * backdrop box behind (FOG_BACKDROP_FRAG) fills the gap with mist, and nothing
  * unseen throws a shadow (shadowTap). The floor is a dark matte slate lit by the
  * sky alone, dense over the unseen, thinning where it turns edge-on to the
  * camera and fading out across the soft map's blur as a ragged veil over the
@@ -1947,24 +1898,36 @@ attribute float skirt;    // 1 on the foot of the curtain down the board's side
 uniform vec2 uFogLevel;   // x the floor's height over the ground it covers (cells), y the step between sheets
 uniform vec2 uHeightRange;
 uniform float uFogCell;   // cells between two vertices of the bank
+uniform sampler2D uVisionMap;
+uniform vec2 uWorldSize;
 varying vec3 vWorld;
 varying float vLayer;
 varying float vSkirt;
+/** Whether the party has ever seen a point (the vision bake's own threshold, visionAt). */
+float fogKnown(vec2 xz) {
+  vec2 uv = xz / uWorldSize;
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
+  vec4 v = texture2D(uVisionMap, uv);
+  return step(0.5, max(v.r, v.g));
+}
 /*
- * The ground around a vertex, blurred over about four squares: the bank lies
- * along the lie of the land, a terrace's worth of mist on a terrace, and never
- * stands up into the shape of a single tower. It does not have to cover what it
- * lies over: unseen ground is a backdrop of mist that hides nothing (UNSEEN).
+ * The ground around a vertex, over about four squares, counting only ground the
+ * party has seen: the bank lies along the land they know, a terrace's worth of
+ * mist on a terrace, and where they know none of it, flat on the lowest ground.
+ * Unseen ground is never read, so the bank cannot rise into the shape of a hill
+ * or a tower nobody has seen.
  */
 float fogGround(vec2 xz) {
-  float h = 0.0;
+  float h = 0.0, w = 0.0;
   for (int i = 0; i < 8; i++) {
     for (int j = 0; j < 8; j++) {
       vec2 o = (vec2(float(i), float(j)) - 3.5) * 0.5 * uFogCell;
-      h += max(groundAt(xz + o), uHeightRange.x);
+      float s = fogKnown(xz + o);
+      h += s * max(groundAt(xz + o), uHeightRange.x);
+      w += s;
     }
   }
-  return h / 64.0;
+  return mix(uHeightRange.x, h / max(w, 1.0), smoothstep(0.0, 12.0, w));
 }
 void main() {
   float top = fogGround(position.xz) + uFogLevel.x + layer * uFogLevel.y;
@@ -2004,7 +1967,7 @@ void main() {
     // ragged noise edge, so its rim is a fading veil and never a cut edge (the
     // hard vision bake would cut one, and where the bank lies above the ground
     // that cut floats off its footprint as a dark slab). What it lets through
-    // over the unseen is the unseen ground, which is mist itself (UNSEEN).
+    // over the unseen is the mist backdrop (FOG_BACKDROP_FRAG), never the ground.
     float veil = 0.6 * smoothstep(0.04, 0.5, unseen + 0.2 * (n - 0.5));
     float dense = 1.0 - smoothstep(0.3, 0.65, 1.0 - unseen + 0.2 * (n - 0.5));
     a = max(dense * (1.0 - (1.0 - FOG_FLANK) * flank), veil);
@@ -2023,6 +1986,72 @@ void main() {
   col *= 1.0 - 0.3 * vSkirt;
   col += (dioHash(gl_FragCoord.xy + vLayer * 7.0) - 0.5) / 255.0;
   gl_FragColor = vec4(col, a);
+}
+`;
+
+/*
+ * The mist behind the bank (render/fog.mjs FogLayer.backdrop). Ground nobody
+ * has seen draws nothing at all (TOP/SIDE/WATER discard it), so what fills the
+ * gap must not depend on it: this is a box over the board's whole footprint,
+ * from the plinth's top to above the tallest ground, drawn from inside (its
+ * back faces, one fragment per ray) at the far plane, so anything seen anywhere
+ * on the ray draws over it. Its only shape is the board's bounding box, which
+ * is no secret. It reads no terrain: whether to paint is decided by the vision
+ * bake alone (some point of this pixel's ray inside the box is unseen; a ray
+ * that crosses only seen ground has nothing hidden on it, and painting there
+ * would stand a wall of mist over an explored edge), and the colour is the bank
+ * floor's, sampled where the ray crosses the floor sheet, so every point on one
+ * ray paints the same mist and the noise runs on across any outline in front.
+ */
+export const FOG_BOX_OVER = 0.9;
+export const FOG_BACKDROP_VERT = /* glsl */ `
+uniform vec2 uWorldSize;
+uniform vec2 uHeightRange;
+varying vec3 vWorld;
+/** How far the box reaches over the tallest ground: past the bank's top sheet. */
+const float FOG_BOX_OVER = ${FOG_BOX_OVER.toFixed(2)};
+void main() {
+  // a unit box (render/fog.mjs) stretched over the board
+  vec3 p = vec3(position.x * uWorldSize.x,
+    mix(uHeightRange.x - 0.05, uHeightRange.y + FOG_BOX_OVER, position.y),
+    position.z * uWorldSize.y);
+  vWorld = p;
+  gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+}
+`;
+
+export const FOG_BACKDROP_FRAG = HEAD + /* glsl */ `
+const float FOG_BOX_OVER = ${FOG_BOX_OVER.toFixed(2)};
+/** Points of the ray tested against the vision bake (one every half square or so). */
+const int FOG_RAY_TAPS = 24;
+/** The bank floor's sheet (render/fog.mjs FOG_FLOOR) over the lowest ground. */
+const float FOG_SHEET0 = 0.06;
+varying vec3 vWorld;
+void main() {
+  gl_FragDepthEXT = 1.0;
+  if (uUseVision < 0.5 || uFogStyle.x < 0.5) discard;
+  // the camera's way (towards it), never exactly 0 on an axis
+  vec3 fwd = vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]);
+  fwd = mix(fwd, vec3(1e-4), vec3(lessThan(abs(fwd), vec3(1e-4))));
+  // this pixel's ray, from here back to where it entered the box
+  vec3 lo = vec3(0.0, uHeightRange.x - 0.05, 0.0);
+  vec3 hi = vec3(uWorldSize.x, uHeightRange.y + FOG_BOX_OVER, uWorldSize.y);
+  vec3 ta = (lo - vWorld) / fwd, tb = (hi - vWorld) / fwd;
+  vec3 tf = max(ta, tb);
+  float len = max(min(min(tf.x, tf.y), tf.z), 0.0);
+  bool hidden = false;
+  for (int i = 0; i < FOG_RAY_TAPS; i++) {
+    vec3 q = vWorld + fwd * (len * (float(i) + 0.5) / float(FOG_RAY_TAPS));
+    // an explicit level: an implicit one in this loop is a gradient in divergent flow
+    vec4 v = textureLod(uVisionMap, clamp(q.xz / uWorldSize, 0.0, 1.0), 0.0);
+    if (max(v.r, v.g) <= 0.5) { hidden = true; break; }
+  }
+  if (!hidden) discard;
+  vec2 slide = fwd.xz / fwd.y;
+  float y0 = uHeightRange.x + FOG_SHEET0;
+  vec3 col = dioFogColor(0.0, dioFogNoise(vWorld.xz - slide * (vWorld.y - y0), 0.0));
+  col += (dioHash(gl_FragCoord.xy) - 0.5) / 255.0;
+  gl_FragColor = vec4(col, 1.0);
 }
 `;
 
@@ -2241,6 +2270,7 @@ export const PROGRAMS = Object.freeze({
   particles: { vertex: PARTICLE_VERT, fragment: PARTICLE_FRAG },
   splash: { vertex: SPLASH_VERT, fragment: SPLASH_FRAG },
   fog: { vertex: FOG_VERT, fragment: FOG_FRAG },
+  fogBackdrop: { vertex: FOG_BACKDROP_VERT, fragment: FOG_BACKDROP_FRAG },
   flame: { vertex: FLAME_VERT, fragment: FLAME_FRAG },
   ember: { vertex: EMBER_VERT, fragment: EMBER_FRAG },
   torchShadow: { vertex: TORCH_SHADOW_VERT, fragment: TORCH_SHADOW_FRAG },

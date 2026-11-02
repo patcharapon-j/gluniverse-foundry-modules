@@ -482,6 +482,20 @@ export const MATERIALS = {
     });
   },
 
+  /**
+   * The mist behind the fog of war's bank (FOG_BACKDROP_FRAG): a unit box drawn
+   * from inside, at the far plane, so whatever is seen draws over it.
+   */
+  fogBackdrop(shared) {
+    return new THREE.ShaderMaterial({
+      name: "dio.fog.backdrop",
+      vertexShader: PROGRAMS.fogBackdrop.vertex,
+      fragmentShader: PROGRAMS.fogBackdrop.fragment,
+      uniforms: uniformsFor(shared),
+      side: THREE.BackSide,
+    });
+  },
+
   /** Flames on fire-like lights (FLAME_VERT). `clock` is shared by reference with the embers. */
   flame(shared, { clock } = {}) {
     return new THREE.ShaderMaterial({
@@ -579,7 +593,7 @@ export const MATERIAL_PROGRAM = Object.freeze({
   top: "top", side: "side", water: "water", wall: "wall", card: "card", solid: "solid",
   unlit: "unlit", ring: "ring", glass: "glass", footprint: "footprint", reticle: "reticle", link: "link", ribbon: "ribbon", backdrop: "backdrop", table: "table", depth: "depth", blur: "blur",
   particles: "particles", splash: "splash",
-  fog: "fog", flame: "flame", ember: "ember", torchShadow: "torchShadow",
+  fog: "fog", fogBackdrop: "fogBackdrop", flame: "flame", ember: "ember", torchShadow: "torchShadow",
 });
 
 /** "#rrggbb" / any CSS colour → THREE.Color, total. */

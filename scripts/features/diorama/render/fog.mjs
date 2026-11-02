@@ -2,14 +2,19 @@
  * Diorama — the fog of war as dark drifting mist. Pure (no game/canvas/foundry):
  * it draws from the vision bake the renderer is handed (setLighting `vision`).
  *
- * Two parts, one look (glsl.mjs FOG_FRAG and LIT dioFogOfWar):
- *   • The bank: FOG_LAYERS sheets over the board, draped over the highest
- *     ground around each vertex (the atmosphere layer's height texture) and
- *     slumping away from tall tops, the floor with a curtain down the board's
- *     sides to the plinth. The floor is a dark slate, opaque on every point the
- *     bake says nobody has seen (the same threshold the surfaces discard by), so
- *     nothing under it is drawn or shows through; the sheets above are thin
- *     translucent wisps along the wind that reach a little past the edge.
+ * Three parts, one look (glsl.mjs FOG_FRAG, FOG_BACKDROP_FRAG and LIT
+ * dioFogOfWar):
+ *   • The bank: FOG_LAYERS sheets over the board, lying along the ground
+ *     blurred over a few squares (the atmosphere layer's height texture), the
+ *     floor with a curtain down the board's sides to the plinth. The floor is a
+ *     dark slate, dense over the unseen and fading out across the soft map; the
+ *     sheets above are thin translucent wisps along the wind that reach a little
+ *     past the edge.
+ *   • The backdrop: ground nobody has seen draws nothing at all, so behind the
+ *     bank a box over the board's whole footprint is drawn from inside at the
+ *     far plane in the floor's mist (`backdrop`). It reads no terrain, so the
+ *     only shape it can show is the board's bounding box; whatever is seen draws
+ *     over it, and no ray into the board finds a hole.
  *   • The reveal: every lit surface near unseen ground falls into shadow in the
  *     fog's colour, reaching it exactly where the floor begins, and ground out of
  *     sight now fades to its remembered look under a faint mist. Both read the
@@ -116,6 +121,16 @@ export class FogLayer {
     // after the board and the water, before effects, flames and weather
     this.mesh.renderOrder = 18;
     this.group.add(this.mesh);
+    // a unit box the vertex shader stretches over the board (FOG_BACKDROP_VERT)
+    const box = new THREE.BoxGeometry(1, 1, 1);
+    box.translate(0.5, 0.5, 0.5);
+    this.backdrop = new THREE.Mesh(box, MATERIALS.fogBackdrop(shared));
+    this.backdrop.name = "dio.fog.backdrop";
+    this.backdrop.frustumCulled = false;
+    this.backdrop.raycast = () => {};
+    this.backdrop.renderOrder = -900;   // after the room's own backdrop, which draws over everything it follows
+    this.backdrop.visible = false;
+    this.group.add(this.backdrop);
     this._blank = shared.uFogMap.value;
     this.soft = null;
     this.texture = null;
@@ -196,6 +211,7 @@ export class FogLayer {
     this.fitBoard();
     const on = this.on(fx);
     this.mesh.visible = on;
+    this.backdrop.visible = on;
     const s = this.shared.uFogStyle.value;
     s.x = on ? 1 : 0;
     // the clock ticks once per TIMING.fogDrift; the shader moves FOG_DRIFT_CELLS per tick
@@ -211,9 +227,11 @@ export class FogLayer {
   }
 
   dispose() {
-    this.group.remove(this.mesh);
+    this.group.remove(this.mesh, this.backdrop);
     this.mesh.geometry.dispose();
     this.material.dispose();
+    this.backdrop.geometry.dispose();
+    this.backdrop.material.dispose();
     this.texture?.dispose();
     this.shared.uFogMap.value = this._blank;
     this._blank.dispose();
