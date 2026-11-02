@@ -384,6 +384,14 @@ const {
   const scrubbed = scrubDeferred(legacy);
   if (!scrubbed || scrubbed[S].meta.deferred.length) fail("ledger: scrubDeferred leaves unearned abilities in an old world");
   if (scrubDeferred(done) !== null) fail("ledger: scrubDeferred drops abilities somebody earned");
+  // Earned only through the union: kept while Party Knowledge is on, dropped once it is off.
+  let split = applyReveal({}, S, "a", ["characteristics", "defense"], fx.snapshots, fx.meta, true);
+  split = applyReveal(split, S, "b", ["offense"], fx.snapshots, fx.meta, true);
+  if (!split[S].meta.deferred?.length) fail("ledger: a completion by the party's union did not store the held-back abilities");
+  if (scrubDeferred(split, true) !== null) fail("ledger: scrubDeferred drops abilities the party earned with Party Knowledge on");
+  if (scrubDeferred(split, false)?.[S]?.meta?.deferred?.length !== 0) {
+    fail("ledger: with Party Knowledge off, abilities nobody earned alone stay in a store every client reads");
+  }
 
   // Refresh re-takes only what is held, and never a lie.
   const fresh = { ...fx.snapshots, defense: { ...fx.snapshots.defense, rows: [{ key: "ac", value: "99" }] }, offense: { key: "offense", rows: [] } };
@@ -465,6 +473,12 @@ const meta = { ...fx.meta, deferred: [] };
   const other = applyReveal({}, "subject.other", ["b"], ["characteristics"], fx.snapshots, meta, false);
   const shelf = model.dexModel({ data: other, isGM: false, party: false, characters: [PCS[0]] });
   if (shelf.shelf.entries.length) fail("model: a player's shelf shows a creature their character never learned");
+  // Party Knowledge is a READ rule: it never widens who a GM's write lands on.
+  const pick = model.resolveOwner({ isGM: true, party: true, characters: PCS, ownerId: "a" });
+  if (pick.everyone || pick.readKey !== "a") fail("model: under Party Knowledge the GM's one-character pick became Everyone, so a reveal writes to the whole party");
+  if (!model.dexModel({ data: {}, isGM: true, party: true, characters: PCS }).owners.some((o) => o.id === "a")) {
+    fail("model: under Party Knowledge the GM cannot pick one character to reveal to");
+  }
   // A player never reads for the party key.
   const own = model.resolveOwner({ isGM: false, party: true, characters: PCS, ownerId: PARTY_KEY });
   if (own.readKey === PARTY_KEY) fail("model: a player can read for the party key");
@@ -664,6 +678,7 @@ const bodyOf = (name, text = appSrc) => {
 };
 const writeKeys = bodyOf("get writeKeys()");
 if (!/partyCharacters\(\)/.test(writeKeys)) fail("app: writeKeys does not fan out to partyCharacters()");
+if (/partyMode/.test(bodyOf("get everyone()"))) fail("app: `everyone` follows Party Knowledge, so a read rule widens a write to the whole party");
 if (/PARTY_KEY/.test(writeKeys)) fail("app: writeKeys names PARTY_KEY, which only reads back while Party Knowledge is on");
 if (!/PARTY_KEY/.test(bodyOf("get readKey()"))) fail("app: readKey no longer resolves the whole-party view");
 
