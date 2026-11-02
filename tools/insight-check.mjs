@@ -1,265 +1,312 @@
 /**
- * tools/insight-check.mjs — consistency checks for the Insight arrival.
+ * tools/insight-check.mjs — consistency checks for Insight.
  *
  *   node tools/insight-check.mjs
  *
- * Everything here fails SILENTLY, which is the only reason any of it is worth
- * a tool. The arrival is a sequence of classes applied to elements by a clock,
- * over CSS that is mostly one-shot keyframes — so a name that stops matching
- * does not error, it just makes a beat of the reveal never happen, on somebody
- * else's screen, once.
+ * An arrival is a sequence of beats on one anime.js timeline over a stylesheet
+ * that hides every node until its beat. Nothing there throws when it breaks: a
+ * beat simply never happens, on a player's screen, once, while the GM's own
+ * screen looks right. So each check below is something that fails silently.
  *
- * What it pins, and why each one is invisible:
- *
- *  1. Every element the renderer reaches for exists in the template. A renamed
- *     node makes `querySelector` return null; the optional-chained ones drop a
- *     beat with no trace, and the two that are not optional throw halfway
- *     through an arrival the player has already been alerted to.
- *
- *  2. The stage clock in tools/insight-preview.mjs equals the one in
- *     notification.mjs. The preview is where this feature is judged, and a
- *     preview running its own timings flatters a reveal nobody ships.
- *
- *  3. Every setting the renderer reads is registered. `game.settings.get` on an
- *     unregistered key throws, and it throws inside the render — so the whole
- *     notification is lost rather than degrading.
- *
- *  4. Every intensity tier names a class that insight.css defines. A tier whose
- *     class does not exist silently renders as "full", which is the one outcome
- *     a player who turned the edge down did not consent to.
- *
- *  5. Every sound profile carries all three stages. A missing stage is a no-op
- *     by design (`if (!fn) return`), so a profile that lost its `impact` is a
- *     silent alert on exactly the beat the alert exists for.
- *
- *  6. A preset only touches the accent channel and this feature's own tokens.
- *     Presets are NOT themes — Etched Glass is the suite's one theme — and a
- *     preset that repaints a surface forks it while looking fine in its own
- *     file.
- *
+ *  1. Every element the renderer reaches for exists in the template.
+ *  2. The preview plays the SHIPPED renderer and prints the SHIPPED clock, so
+ *     its stage clock cannot drift from notification.mjs; the clock itself has
+ *     all three tiers, in beat order, and "instant" is all zero.
+ *  3. Every setting the renderer reads is registered.
+ *  4. Every edge-intensity tier names a class insight.css defines, and every
+ *     choice the setting offers is mapped.
+ *  5. Every sound profile carries all three stages, and every cue the renderer
+ *     plays is one of them.
+ *  6. A preset only remaps --gl-accent and this feature's own --insight-* tokens.
  *  7. insight.css never reads --gl-glow / --gl-bloom / --gl-accent-soft /
- *     --gl-accent-faint. Those are declared at :root against the :root accent,
- *     so they do NOT follow this feature's scoped `--gl-accent` remap: using
- *     one renders the suite's default blue inside a violet card, and only on
- *     the elements that happen to use it.
- *
- *  8. Every `animation:` in insight.css names a @keyframes that exists
- *     somewhere in styles/, and every @keyframes insight.css declares is
- *     prefixed. Keyframe names are global across the suite, so an unprefixed
- *     one silently overrides another feature's animation, and a typo'd
- *     reference silently animates nothing.
+ *     --gl-accent-faint (struck at :root, they ignore a scoped accent).
+ *  8. Keyframes: every reference resolves, every declaration is prefixed.
+ *  9. The template and the stylesheet describe the same nodes, both ways.
+ * 10. The nodes CSS hides until their beat are exactly the nodes the timeline
+ *     reveals: one hidden and never revealed never appears; one revealed and
+ *     not hidden flashes in before its beat.
+ * 11. What a card may print: the body allow-list refuses markup with
+ *     attributes, keeps well-formed entities, and passes Recall Knowledge's
+ *     hand-off through byte for byte.
+ * 12. Who may put a card on a screen: only a server-attested GM, only to the
+ *     users it names, and the send rides `recipients` so nobody else's client
+ *     receives it at all.
+ * 13. Every i18n key the templates and scripts use exists.
+ * 14. The stylesheet keeps the suite's rules: no :root, no foundation token
+ *     declared, no raw duration or easing, no white veil, blur written against
+ *     --gl-glass-k; and every duration the renderer passes is tier-scaled.
  */
-import { readFile } from "node:fs/promises";
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const read = (rel) => readFile(resolve(ROOT, rel), "utf8");
+const load = (rel) => import(pathToFileURL(resolve(ROOT, rel)).href);
 
 const problems = [];
+let passed = 0;
 const fail = (what) => problems.push(what);
+const ok = (cond, what) => (cond ? passed++ : fail(what));
 
-const notification = await read("scripts/features/insight/module/notification.mjs");
-const settings = await read("scripts/features/insight/module/settings.mjs");
-const sound = await read("scripts/features/insight/module/sound.mjs");
-const themes = await read("scripts/features/insight/module/themes.mjs");
+const FEATURE = "scripts/features/insight/module/";
+const notification = await read(FEATURE + "notification.mjs");
+const settings = await read(FEATURE + "settings.mjs");
+const sound = await read(FEATURE + "sound.mjs");
+const themes = await read(FEATURE + "themes.mjs");
+const socketSrc = await read(FEATURE + "socket.mjs");
+const composeSrc = await read(FEATURE + "compose-dialog.mjs");
 const preview = await read("tools/insight-preview.mjs");
 const template = await read("templates/insight/notification.hbs");
+const composeTpl = await read("templates/insight/compose-dialog.hbs");
 const css = await read("styles/insight.css");
+const lang = JSON.parse(await read("lang/insight.en.json"));
+
+const runtime = await load(FEATURE + "notification.mjs");
+const body = await load(FEATURE + "body.mjs");
+const socket = await load(FEATURE + "socket.mjs");
+
+const classTokens = (markup) => {
+  const out = new Set();
+  for (const m of markup.matchAll(/class="([^"]*)"/g)) {
+    for (const t of m[1].split(/\s+/)) if (t && !t.includes("{{")) out.add(t);
+  }
+  return out;
+};
+const rendered = classTokens(template);
 
 /* ── 1. every queried element exists in the template ───────────────────── */
 {
-  // Compare CLASS TOKENS, not substrings. The {{#if}} guards are irrelevant
-  // here — the question is whether the node is spelled the same in both files,
-  // not whether every optional one is always rendered. Substring matching
-  // would let ".insight-edge-scan" go on finding itself inside a renamed
-  // "insight-edge-scanline", which is the exact rename this exists to catch.
-  const rendered = new Set();
-  for (const m of template.matchAll(/class="([^"]*)"/g)) {
-    for (const token of m[1].split(/\s+/)) {
-      if (token && !token.includes("{{")) rendered.add(token);
-    }
-  }
-  const queried = [...notification.matchAll(/querySelector\("\.([a-z0-9-]+)"\)/g)].map((m) => m[1]);
-  for (const cls of new Set(queried)) {
-    if (!rendered.has(cls)) fail(`notification.mjs queries .${cls}, which notification.hbs does not render`);
-  }
-  if (!queried.length) fail("no querySelector calls found in notification.mjs — the scan is broken, not the code");
-  if (rendered.size < 10) fail(`only ${rendered.size} class tokens parsed out of notification.hbs — the scan is broken, not the template`);
+  const queried = [
+    ...[...notification.matchAll(/querySelector\(\s*"\.([a-z0-9-]+)"\s*\)/g)].map((m) => m[1]),
+    ...runtime.CONTENT_ORDER.map((s) => s.replace(/^\./, "")),
+  ];
+  ok(queried.length > 5, "no querySelector calls found in notification.mjs (the scan is broken, not the code)");
+  for (const cls of new Set(queried)) ok(rendered.has(cls), `notification.mjs reaches for .${cls}, which notification.hbs does not render`);
+  ok(rendered.size >= 15, `only ${rendered.size} class tokens parsed out of notification.hbs (the scan is broken)`);
 }
 
-/* ── 2. the preview's stage clock is the runtime's stage clock ─────────── */
+/* ── 2. the preview's clock is the runtime's clock ─────────────────────── */
 {
-  const TIERS = ["normal", "fast", "instant"];
+  ok(/import\s*\{[^}]*renderNotification[^}]*\}\s*from\s*"\/scripts\/features\/insight\/module\/notification\.mjs"/.test(preview),
+    "insight-preview.mjs no longer plays the shipped renderNotification; a preview on its own clock flatters a reveal nobody ships");
+  ok(/\{[^}]*TIMINGS[^}]*\}\s*=\s*await import\("\.\.\/scripts\/features\/insight\/module\/notification\.mjs"\)/.test(preview),
+    "insight-preview.mjs does not read TIMINGS from notification.mjs for its beat list");
+  ok(!/\b(?:const|let|var)\s+TIMINGS\b/.test(preview) && !/\bcontentStagger\s*:\s*\d/.test(preview),
+    "insight-preview.mjs declares a stage clock of its own");
+  ok(!/<b>\d+\s*ms<\/b>/.test(preview), "insight-preview.mjs prints a hand-written beat time");
+
   const KEYS = ["edge", "line", "card", "contentStart", "contentStagger"];
-  const clocks = (src) => {
-    const out = {};
-    for (const tier of TIERS) {
-      const m = src.match(new RegExp(`${tier}\\s*:\\s*\\{([^}]*)\\}`));
-      if (!m) continue;
-      out[tier] = Object.fromEntries(
-        KEYS.map((k) => [k, Number((m[1].match(new RegExp(`\\b${k}\\s*:\\s*(-?\\d+)`)) ?? [])[1])])
-      );
-    }
-    return out;
-  };
-  const rt = clocks(notification);
-  const pv = clocks(preview);
-  for (const tier of TIERS) {
-    if (!rt[tier]) { fail(`notification.mjs has no "${tier}" timing tier`); continue; }
-    if (!pv[tier]) { fail(`insight-preview.mjs has no "${tier}" timing tier`); continue; }
-    for (const k of KEYS) {
-      if (rt[tier][k] !== pv[tier][k]) {
-        fail(`stage clock drift — ${tier}.${k} is ${rt[tier][k]} in notification.mjs, ${pv[tier][k]} in insight-preview.mjs`);
-      }
-    }
+  for (const tier of ["normal", "fast", "instant"]) {
+    const t = runtime.TIMINGS[tier];
+    if (!t) { fail(`notification.mjs has no "${tier}" timing tier`); continue; }
+    for (const k of KEYS) ok(Number.isFinite(t[k]) && t[k] >= 0, `TIMINGS.${tier}.${k} is not a non-negative number`);
+    ok(t.edge <= t.line && t.line <= t.card && t.card <= t.contentStart,
+      `TIMINGS.${tier} is out of beat order: the edge must land first and alone, then the cut, the card, the words`);
   }
+  ok(KEYS.every((k) => runtime.TIMINGS.instant?.[k] === 0), "the instant tier is not all zero");
+  ok(runtime.TIMINGS.normal.edge < runtime.TIMINGS.normal.line, "the edge does not land alone before the cut");
 }
 
 /* ── 3. every setting the renderer reads is registered ─────────────────── */
 {
-  const readKeys = new Set([...notification.matchAll(/setting\("(insight\.[A-Za-z]+)"/g)].map((m) => m[1]));
-  for (const key of readKeys) {
-    if (!settings.includes(`"${key}"`)) fail(`notification.mjs reads ${key}, which settings.mjs does not register`);
+  const keys = new Set([...notification.matchAll(/setting\("(insight\.[A-Za-z]+)"/g)].map((m) => m[1]));
+  ok(keys.size >= 3, "no settings reads found in notification.mjs (the scan is broken)");
+  for (const key of keys) ok(settings.includes(`"${key}"`), `notification.mjs reads ${key}, which settings.mjs does not register`);
+  for (const key of new Set([...sound.matchAll(/"(insight\.[A-Za-z]+)"/g)].map((m) => m[1]))) {
+    ok(settings.includes(`"${key}"`), `sound.mjs reads ${key}, which settings.mjs does not register`);
   }
-  if (!readKeys.size) fail("no settings reads found in notification.mjs — the scan is broken, not the code");
 }
 
 /* ── 4. every intensity tier names a class insight.css defines ─────────── */
 {
-  const block = notification.match(/INTENSITY_CLASS\s*=\s*\{([^}]*)\}/);
-  if (!block) fail("INTENSITY_CLASS not found in notification.mjs");
-  else {
-    const tiers = [...block[1].matchAll(/(\w+)\s*:\s*(null|"([^"]+)")/g)];
-    if (!tiers.length) fail("INTENSITY_CLASS is empty");
-    for (const [, tier, raw, cls] of tiers) {
-      if (raw === "null") continue;
-      if (!css.includes(`.${cls}`)) fail(`intensity "${tier}" applies .${cls}, which insight.css does not define`);
-    }
-    // The setting's own choices and the class table must be the same set, or a
-    // choice the GM can pick resolves to no class at all.
-    const choices = [...(settings.match(/insight\.edgeIntensity[\s\S]*?choices:\s*\{([^}]*)\}/) ?? [, ""])[1]
-      .matchAll(/(\w+)\s*:/g)].map((m) => m[1]);
-    for (const c of choices) {
-      if (!tiers.some(([, t]) => t === c)) fail(`edgeIntensity offers "${c}", which INTENSITY_CLASS does not map`);
-    }
+  const table = runtime.INTENSITY_CLASS;
+  for (const [tier, cls] of Object.entries(table)) {
+    if (cls === null) continue;
+    ok(new RegExp(`\\.${cls}\\b`).test(css), `intensity "${tier}" applies .${cls}, which insight.css does not define; it would render as "full"`);
   }
+  const choices = [...(settings.match(/insight\.edgeIntensity[\s\S]*?choices:\s*\{([^}]*)\}/) ?? [, ""])[1].matchAll(/(\w+)\s*:/g)].map((m) => m[1]);
+  ok(choices.length === 3, "could not read the edgeIntensity choices (the scan is broken)");
+  for (const c of choices) ok(Object.hasOwn(table, c), `edgeIntensity offers "${c}", which INTENSITY_CLASS does not map`);
 }
 
 /* ── 5. every sound profile carries every stage ────────────────────────── */
 {
   const STAGES = ["impact", "line", "reveal"];
   const profiles = [...sound.matchAll(/^ {2}(\w+):\s*\{$/gm)].map((m) => m[1]);
-  if (profiles.length < 2) fail(`expected at least two sound profiles, found ${profiles.length}`);
+  ok(profiles.length >= 2, `expected at least two sound profiles, found ${profiles.length}`);
   for (const p of profiles) {
-    const body = sound.slice(sound.indexOf(`  ${p}: {`));
-    const end = body.indexOf("\n  },");
-    const scoped = body.slice(0, end < 0 ? body.length : end);
-    for (const stage of STAGES) {
-      if (!new RegExp(`\\b${stage}\\(ctx, gain\\)`).test(scoped)) {
-        fail(`sound profile "${p}" has no ${stage}() — that beat plays silently`);
-      }
-    }
+    const from = sound.slice(sound.indexOf(`  ${p}: {`));
+    const end = from.indexOf("\n  },");
+    const scoped = from.slice(0, end < 0 ? from.length : end);
+    for (const stage of STAGES) ok(new RegExp(`\\b${stage}\\(ctx, gain\\)`).test(scoped), `sound profile "${p}" has no ${stage}(): that beat plays silently`);
   }
-  // And every stage the renderer asks for must be one the profiles define.
-  for (const m of notification.matchAll(/playSound\("(\w+)"/g)) {
-    if (!STAGES.includes(m[1])) fail(`notification.mjs plays sound stage "${m[1]}", which no profile defines`);
+  for (const id of Object.keys((await load(FEATURE + "themes.mjs")).getPresets())) {
+    ok(profiles.includes(id), `preset "${id}" has no sound profile; it plays the default's`);
   }
+  const cues = [...notification.matchAll(/cue\("(\w+)"\)/g)].map((m) => m[1]);
+  ok(new Set(cues).size === 3, `the renderer plays ${new Set(cues).size} distinct sound cues, not three`);
+  for (const c of cues) ok(STAGES.includes(c), `notification.mjs plays sound stage "${c}", which no profile defines`);
 }
 
 /* ── 6. a preset only remaps the accent channel + feature-local tokens ─── */
 {
   const vars = [...themes.matchAll(/"(--[a-z0-9-]+)"\s*:/g)].map((m) => m[1]);
-  const allowed = (v) => v === "--gl-accent" || v.startsWith("--insight-");
-  for (const v of [...new Set(vars)]) {
-    if (!allowed(v)) {
-      fail(`themes.mjs preset sets ${v} — a preset may only remap --gl-accent and this feature's own --insight-* tokens, or it forks the theme`);
-    }
+  for (const v of new Set(vars)) {
+    ok(v === "--gl-accent" || v.startsWith("--insight-"), `themes.mjs preset sets ${v}; a preset may only remap --gl-accent and --insight-* tokens, or it forks the theme`);
   }
-  if (!vars.includes("--gl-accent")) fail("no preset sets --gl-accent — presets exist to route identity through that one channel");
+  ok(vars.includes("--gl-accent"), "no preset sets --gl-accent");
+  // The edge is the one place a hue is spread over a whole screen, so the
+  // per-hue correction must stay reachable: a preset sets it, the CSS reads it.
+  for (const t of ["--insight-burn", "--insight-reach-y", "--insight-reach-x"]) {
+    ok(css.includes(`var(${t})`), `insight.css no longer reads ${t}; a preset's per-hue edge correction would do nothing`);
+  }
 }
 
 /* ── 7. no :root accent derivative, which would not follow the remap ───── */
-{
-  const trap = ["--gl-glow", "--gl-bloom", "--gl-accent-soft", "--gl-accent-faint"];
-  for (const t of trap) {
-    if (new RegExp(`var\\(${t}\\)`).test(css)) {
-      fail(`insight.css reads var(${t}) — that is computed at :root against the :root accent and does NOT follow this feature's scoped --gl-accent remap; strike the value inline with color-mix() instead`);
-    }
-  }
+for (const t of ["--gl-glow", "--gl-bloom", "--gl-accent-soft", "--gl-accent-faint"]) {
+  ok(!new RegExp(`var\\(${t}\\)`).test(css), `insight.css reads var(${t}); it is struck at :root and ignores the scoped accent. Mix it inline with color-mix()`);
 }
 
 /* ── 8. keyframes: every reference resolves, every declaration is scoped ─ */
 {
-  const styleDir = resolve(ROOT, "styles");
   const declared = new Set();
-  for (const f of await readdir(styleDir)) {
+  for (const f of await readdir(resolve(ROOT, "styles"))) {
     if (!f.endsWith(".css")) continue;
     for (const m of (await read(`styles/${f}`)).matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)) declared.add(m[1]);
   }
-
-  const referenced = new Set();
-  for (const m of css.matchAll(/animation:\s*([A-Za-z][A-Za-z0-9_-]*)/g)) {
-    if (m[1] !== "none") referenced.add(m[1]);
+  for (const m of css.matchAll(/animation(?:-name)?:\s*([A-Za-z][A-Za-z0-9_-]*)/g)) {
+    if (m[1] !== "none") ok(declared.has(m[1]), `insight.css animates "${m[1]}", which no @keyframes declares`);
   }
-  for (const name of referenced) {
-    if (!declared.has(name)) fail(`insight.css animates "${name}", which no @keyframes in styles/ declares`);
-  }
-
   for (const m of css.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)) {
-    if (!m[1].startsWith("insight-")) {
-      fail(`insight.css declares @keyframes ${m[1]} — keyframe names are global across the suite, so it must carry the feature prefix`);
-    }
+    ok(m[1].startsWith("insight-"), `insight.css declares @keyframes ${m[1]} without the feature prefix`);
   }
 }
 
 /* ── 9. the template and the stylesheet describe the same thing ────────── */
 {
-  // Checks 1–8 only reach the nodes JS touches. Most of the arrival is nodes
-  // it never touches — the flash, the scan, the four corner marks, the frame —
-  // which exist purely so CSS can animate them. Rename one of those in either
-  // file and that beat simply stops happening, with nothing to notice it.
-  //
-  // So: every `insight-*` class the stylesheet targets must be either rendered
-  // by the template or applied at runtime, and every one the template renders
-  // must be styled. A class on exactly one side of that is dead on the other.
-  // insight.css dresses two surfaces, so both markup sources count: the
-  // arrival template and the GM's compose dialog.
-  const markup = template + (await read("templates/insight/compose-dialog.hbs"));
-  const script = notification + (await read("scripts/features/insight/module/compose-dialog.mjs"));
-
-  const rendered = new Set();
-  for (const m of markup.matchAll(/class="([^"]*)"/g)) {
-    for (const t of m[1].split(/\s+/)) if (t.startsWith("insight-")) rendered.add(t);
-  }
-
-  // State and tier classes are applied at runtime, never written in markup.
-  const runtime = new Set(["insight-dismissing"]);
-  for (const m of script.matchAll(/classList\.add\("([a-z0-9-]+)"\)/g)) runtime.add(m[1]);
-  // ApplicationV2 puts its `classes:` array on the window frame.
-  for (const m of script.matchAll(/classes:\s*\[([^\]]*)\]/g)) {
-    for (const c of m[1].matchAll(/"(insight-[a-z0-9-]+)"/g)) runtime.add(c[1]);
-  }
-  // The intensity table, and the speed tiers, which are built by interpolation.
-  for (const m of script.matchAll(/"(insight-intensity-[a-z]+)"/g)) runtime.add(m[1]);
-  if (/`insight-speed-\$\{/.test(script)) {
-    for (const m of css.matchAll(/\.(insight-speed-[a-z]+)/g)) runtime.add(m[1]);
-  }
+  const markup = classTokens(template + composeTpl);
+  const scripts = notification + composeSrc;
+  const applied = new Set();
+  for (const m of scripts.matchAll(/classList\.add\("([a-z0-9-]+)"\)/g)) applied.add(m[1]);
+  for (const m of scripts.matchAll(/classes:\s*\[([^\]]*)\]/g)) for (const c of m[1].matchAll(/"(insight-[a-z0-9-]+)"/g)) applied.add(c[1]);
+  for (const cls of Object.values(runtime.INTENSITY_CLASS)) if (cls) applied.add(cls);
 
   const styled = new Set([...css.matchAll(/\.(insight-[a-z0-9-]+)/g)].map((m) => m[1]));
+  for (const cls of styled) ok(markup.has(cls) || applied.has(cls), `insight.css styles .${cls}, which no template renders and no script applies; that rule is dead`);
+  for (const cls of markup) if (cls.startsWith("insight-")) ok(styled.has(cls), `a template renders .${cls}, which insight.css never styles`);
+  ok(styled.size > 20, "the template/stylesheet scan found nothing (the scan is broken)");
+}
 
-  for (const cls of styled) {
-    if (!rendered.has(cls) && !runtime.has(cls)) {
-      fail(`insight.css styles .${cls}, which notification.hbs never renders and notification.mjs never applies — that rule is dead`);
+/* ── 10. hidden-until-beat == revealed-by-the-timeline ─────────────────── */
+{
+  const block = css.match(/\.insight-stage:not\(\.insight-settled\)\s*:is\(([^)]*)\)\s*\{\s*opacity:\s*0;?\s*\}/);
+  if (!block) fail("insight.css has no `.insight-stage:not(.insight-settled) :is(...) { opacity: 0 }` rule; every node would show before its beat");
+  else {
+    const hidden = new Set([...block[1].matchAll(/\.([a-z0-9-]+)/g)].map((m) => m[1]));
+    const vars = Object.fromEntries([...notification.matchAll(/const (\w+) = el\.querySelector\("\.([a-z0-9-]+)"\)/g)].map((m) => [m[1], m[2]]));
+    const revealed = new Set();
+    for (const m of notification.matchAll(/reveal\.add\((\w+),\s*\{([^}]*)/g)) {
+      if (!/opacity:\s*\[\s*0\s*,\s*1\s*\]/.test(m[2])) continue;
+      if (m[1] === "content") runtime.CONTENT_ORDER.forEach((s) => revealed.add(s.slice(1)));
+      else if (vars[m[1]]) revealed.add(vars[m[1]]);
+      else fail(`reveal.add(${m[1]}, …) animates a node the check cannot name`);
     }
+    for (const cls of hidden) ok(revealed.has(cls), `insight.css hides .${cls} until its beat, and no beat reveals it: it never appears`);
+    for (const cls of revealed) ok(hidden.has(cls), `the timeline reveals .${cls}, which insight.css does not hide first: it flashes in before its beat`);
   }
-  for (const cls of rendered) {
-    if (!styled.has(cls)) {
-      fail(`notification.hbs renders .${cls}, which insight.css never styles — that node draws nothing`);
-    }
+  ok(/\.insight-sweep\s*\{[^}]*opacity:\s*0/.test(css), ".insight-sweep is not at rest at opacity 0; the light would sit on the card");
+  ok(/@property --insight-open[\s\S]*?inherits:\s*false[\s\S]*?initial-value:\s*1;/.test(css),
+    "--insight-open is not registered (non-inherited, resting at 1); the card would open with no chamfer, or never");
+  ok(notification.includes('"--insight-open": [0, 1]'), "the timeline no longer opens the card through --insight-open");
+}
+
+/* ── 11. what a card may print ─────────────────────────────────────────── */
+{
+  const { safeBody, composeBody, isBlankBody, BODY_TAGS } = body;
+  const hostile = [
+    ['<img src=x onerror="alert(1)">', "<img"],
+    ["<script>alert(1)</script>", "<script"],
+    ['<b onclick="x()">hi</b>', "onclick"],
+    ['<p style="position:fixed">x</p>', "style="],
+    ['<a href="javascript:alert(1)">x</a>', "<a "],
+    ["<svg/onload=alert(1)>", "<svg"],
+    ['<iframe src="//evil">', "<iframe"],
+  ];
+  // Any `<` left in the output must open a bare, allowed tag.
+  const stray = new RegExp(`<(?!/?(?:${BODY_TAGS.join("|")})>)`, "i");
+  for (const [input] of hostile) {
+    const out = safeBody(input);
+    ok(!stray.test(out), `safeBody let ${JSON.stringify(input)} through as ${JSON.stringify(out)}`);
   }
-  if (!styled.size || !rendered.size) fail("the template/stylesheet scan found nothing — the scan is broken, not the files");
+  ok(safeBody("<b>a</b> <i>b</i> <p>c</p><br/>") === "<b>a</b> <i>b</i> <p>c</p><br>", "safeBody mangles the inline tags it allows");
+  ok(safeBody("Tom &amp; Jerry &#39;s &lt;") === "Tom &amp; Jerry &#39;s &lt;", "safeBody escapes an entity a second time");
+  ok(safeBody("a & b < c") === "a &amp; b &lt; c", "safeBody leaves a bare & or < unescaped");
+  ok(safeBody("x".repeat(9000)).length === body.BODY_MAX, "safeBody does not cap the body");
+  ok(BODY_TAGS.every((t) => /^[a-z]+$/.test(t)), "BODY_TAGS holds something that is not a bare tag name");
+  ok(composeBody("one\ntwo\n\nthree") === "<p>one<br>two</p><p>three</p>", "composeBody no longer keeps the GM's line breaks and paragraphs");
+  ok(composeBody("<img src=x onerror=y>").includes("&lt;img"), "composeBody lets markup through");
+  ok(isBlankBody("<p> </p><br>") && !isBlankBody("<p>x</p>"), "isBlankBody misjudges an empty body");
+
+  // Recall Knowledge's hand-off must arrive exactly as it was built.
+  const { buildInsightMessage } = await load("scripts/features/pf2e-recall/share.mjs");
+  for (const text of ["The troll's **hide** regrows & *burns*.", 'Quotes "here" and `code` <b>x</b>', "***both*** ~~gone~~ _soft_"]) {
+    const msg = buildInsightMessage({ text });
+    ok(!!msg && safeBody(msg.body) === msg.body, `Recall Knowledge's body changes on the way through Insight: ${JSON.stringify(msg?.body)} became ${JSON.stringify(msg && safeBody(msg.body))}`);
+  }
+  // The card has no title of its own beyond the payload's; a Recall card arrives without one.
+  const recall = socket.cardData({ id: "x", targets: ["p"], body: "<p>x</p>", ...buildInsightMessage({ text: "x" }) });
+  ok(recall.title === null, "a Recall Knowledge card gained a title on the way through Insight");
+}
+
+/* ── 12. who may put a card on a screen ────────────────────────────────── */
+{
+  const { accepts, validPayload, cardData, MESSAGE_TYPE } = socket;
+  const users = new Map([["gm", { isGM: true }], ["p1", { isGM: false }], ["p2", { isGM: false }]]);
+  const payload = { type: MESSAGE_TYPE, id: "insight-1", targets: ["p1"], body: "<p>x</p>", title: null, sense: null, image: null, theme: null };
+  ok(validPayload(payload), "a well-formed payload fails validation");
+  ok(accepts(payload, "gm", users, "p1"), "a GM's card to p1 is refused on p1");
+  ok(!accepts(payload, "gm", users, "p2"), "a card for p1 is shown on p2");
+  ok(!accepts(payload, "p2", users, "p1"), "a PLAYER can put a card on another player's screen");
+  ok(!accepts(payload, null, users, "p1"), "a card nobody the server vouched for is shown");
+  ok(!accepts({ ...payload, targets: ["gm"] }, "p1", users, "gm"), "a player can put a card on the GM's screen");
+  for (const bad of [
+    { ...payload, type: "other" }, { ...payload, targets: [] }, { ...payload, targets: "p1" },
+    { ...payload, body: 3 }, { ...payload, title: {} }, { ...payload, id: "" }, null,
+  ]) ok(!validPayload(bad), `validPayload accepts ${JSON.stringify(bad)}`);
+  ok(cardData({ ...payload, body: '<img src=x onerror="y">' }).body.startsWith("&lt;img"), "cardData does not reduce the body on arrival");
+  ok(/emitSocket\(FEATURE_ID,\s*payload,\s*\{\s*recipients:/.test(socketSrc),
+    "sendNotification no longer emits with `recipients`; every client would receive every private whisper");
+  ok(!/emitSocket\(FEATURE_ID,\s*payload\s*\)/.test(socketSrc), "sendNotification broadcasts a payload without recipients");
+  ok(/registerSocket[\s\S]*?accepts\(payload, meta\?\.attested/.test(socketSrc), "registerSocket does not gate on the server-attested sender");
+  ok(/sendNotification[\s\S]*?if \(!game\.user\?\.isGM\) return false;/.test(socketSrc), "sendNotification can be called by a player");
+}
+
+/* ── 13. every i18n key exists ─────────────────────────────────────────── */
+{
+  const used = new Set();
+  for (const src of [template, composeTpl]) for (const m of src.matchAll(/localize "([A-Z][\w.]+)"/g)) used.add(m[1]);
+  for (const src of [notification, composeSrc, await read("scripts/features/insight/insight.mjs"), settings]) {
+    for (const m of src.matchAll(/"(INSIGHT\.[A-Za-z]+)"/g)) used.add(m[1]);
+  }
+  ok(used.size > 20, "the i18n scan found too few keys (the scan is broken)");
+  for (const k of used) ok(Object.hasOwn(lang, k), `${k} is used and missing from lang/insight.en.json`);
+  ok(/\{count\}/.test(lang["INSIGHT.Queued"] ?? ""), "INSIGHT.Queued lost its {count}");
+  ok(/\{count\}/.test(lang["INSIGHT.ComposeSentCount"] ?? ""), "INSIGHT.ComposeSentCount lost its {count}");
+}
+
+/* ── 14. the suite's CSS rules, and tier-scaled durations ──────────────── */
+{
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  ok(!/(^|\})\s*:root\b/.test(bare), "insight.css writes on :root");
+  for (const m of bare.matchAll(/(--gl-[a-z0-9-]+)\s*:/g)) fail(`insight.css declares the foundation token ${m[1]}`);
+  for (const m of bare.matchAll(/(?:transition|animation)[^;{]*?\b(\d+(?:\.\d+)?m?s)\b/g)) fail(`insight.css has a raw duration (${m[1]}); use a --gl-d-* token`);
+  ok(!/cubic-bezier\(/.test(bare), "insight.css has a raw easing; use a --gl-ease* token");
+  ok(!/rgba?\(\s*255\s*,\s*255\s*,\s*255/.test(bare), "insight.css has a raw white veil; use rgb(var(--gl-tint-light) / a)");
+  for (const m of bare.matchAll(/blur\(([^;]*?)\)\s*;/g)) ok(/--gl-glass-k|--gl-blur/.test(m[1]), `a blur not written against --gl-glass-k: blur(${m[1]})`);
+  for (const m of notification.matchAll(/duration:\s*([^,}]+)/g)) {
+    ok(/^(?:ms\(|breathe\b)/.test(m[1].trim()), `notification.mjs passes an unscaled duration (${m[1].trim()}); it would ignore the speed setting and the motion tier`);
+  }
 }
 
 /* ── report ───────────────────────────────────────────────────────────── */
@@ -268,4 +315,4 @@ if (problems.length) {
   for (const p of problems) console.error("  • " + p);
   process.exit(1);
 }
-console.log("insight-check: no problems");
+console.log(`insight-check: no problems (${passed} assertions)`);
