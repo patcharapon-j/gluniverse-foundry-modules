@@ -167,7 +167,31 @@ export default async function check(ctx) {
   ctx.ok("a figure standing above the roof is not hidden by it", g.shown("n").alpha === 1);
   g.set([shut, { ...shut, id: "p", source: "prop", alpha: 0.4 }], []);
   ctx.ok("propAlphas carries the prop roofs only", [...g.propAlphas().keys()].join() === "p");
-  ctx.ok("render/roofs.mjs allocates nothing per frame in its ray test", !/frame\([^)]*\)\s*\{[^}]*\bnew\s+[A-Z]/.test(read(`${DIO}/render/roofs.mjs`)));
+  // RADIAL holes follow the figure on screen: feet and head carried up the view ray
+  ctx.ok("roofTarget keeps a RADIAL figure's feet and head", (() => {
+    const h = T(tile(4), { holes: [{ x: 1, z: 1, r: 0.5, footY: 0, headY: 1.5 }] }).holes[0];
+    return h.footY === 0 && h.headY === 1.5;
+  })());
+  const ST = await import(ctx.url(`${DIO}/render/standees.mjs`));
+  ctx.ok("projectHole draws the card as standees.mjs does (FIGURE_SCALE, MAX_LEAN)", RF.CARD_SCALE === ST.FIGURE_SCALE && RF.CARD_MAX_LEAN === ST.MAX_LEAN);
+  const PH = RF.projectHole;
+  const ph = PH({ x: 2.6, z: 1, r: 0.5, footY: 0, headY: 1.5 }, 3, dir);
+  // the card's top: its drawn height, leaned back (away from the camera, +x here) to the camera's pitch
+  const lean = Math.min(ST.MAX_LEAN, Math.asin(dir.y)), H = 1.5 * ST.FIGURE_SCALE;
+  const top = { x: 2.6 + Math.sin(lean) * H, y: Math.cos(lean) * H };
+  ctx.ok("projectHole: the feet land where the view ray through them meets the roof", near(ph.x, 2.6 - 3, 1e-9) && near(ph.z, 1) && ph.r === 0.5, JSON.stringify(ph));
+  ctx.ok("projectHole: the far end is the card's top, seen along the view ray", near((ph.x2 - top.x) / dir.x, (3 - top.y) / dir.y, 1e-9) && near(ph.z2, 1), JSON.stringify(ph));
+  const above = PH({ x: 2, z: 1, r: 0.5, footY: 0, headY: 1.5 }, 3, C_DIR);
+  ctx.ok("projectHole: seen from straight above, the hole is the figure's own circle", above.x === 2 && above.x2 === 2 && above.z === 1 && above.z2 === 1);
+  const flatH = PH({ x: 2, z: 1, r: 0.5 }, 3, dir);
+  ctx.ok("projectHole: a hole with no height stays a circle over the feet", flatH.x === 2 && flatH.x2 === 2);
+  const hf = new RF.RoofFader();
+  hf.set([{ ...shut, id: "h", holes: [{ x: 2.6, z: 1, r: 0.5, footY: 0, headY: 1.5 }] }], []);
+  hf.frame(1, C_DIR, true); hf.changed = false;
+  hf.frame(1 / 60, dir, true);
+  ctx.ok("turning the camera redraws a roof's RADIAL holes", hf.changed && near(hf.shown("h").holes[0].x, 2.6 - 3, 1e-9));
+  ctx.ok("the tile shader opens a capsule from feet to head", /uniform vec2 uRoofHoleEnds\[4\]/.test(RT.TILE_FRAG) && /uRoofHoleEnds\[i\] - h\.xy/.test(RT.TILE_FRAG));
+  ctx.ok("render/roofs.mjs allocates nothing per frame in its ray test",!/frame\([^)]*\)\s*\{[^}]*\bnew\s+[A-Z]/.test(read(`${DIO}/render/roofs.mjs`)));
 
   // ── the drape ──
   const flat = new Terrain({ cols: 4, rows: 4 });

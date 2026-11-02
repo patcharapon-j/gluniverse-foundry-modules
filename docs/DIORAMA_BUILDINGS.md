@@ -84,7 +84,7 @@ The table (`roofTarget`):
 | --- | --- | --- |
 | any | GM cut-away on, GM's own view | 12% (`ROOF_CUTAWAY_ALPHA`) |
 | tile, FADE | a viewer's figure inside | the tile's occluded alpha |
-| tile, RADIAL | a viewer's figure under it | a soft hole round each (up to 4) |
+| tile, RADIAL | a viewer's figure under it | a soft hole over each, feet to head as the camera sees it (up to 4) |
 | tile, VISION, with a sight bake | a viewer's figure under it | open where the viewer sees now |
 | tile, VISION, no bake (the GM) | a viewer's figure inside | as FADE |
 | tile, no mode | always | shut |
@@ -97,7 +97,11 @@ below the roof. On top of the table, the renderer adds one rule that needs the
 camera: a roof between the camera and one of the viewer's figures (tested at
 the feet and at the chest) thins to 25% (`ROOF_CAMERA_ALPHA`), so a figure is
 never lost under the eaves of the house next door. A figure standing on a roof
-is never hidden by it.
+is never hidden by it. A RADIAL hole needs the camera too: the figure's feet
+and the top of its card (drawn taller and leaned back, as `render/standees.mjs`
+draws it) are carried up the view ray onto the roof (`render/roofs.mjs`
+`projectHole`), so the hole is a capsule over the whole figure on screen, not a
+circle straight above its feet, and it moves when the camera turns.
 
 The GM's **cut away roofs** is a toggle in the view (keybinding
 `GLDIO.keys.roofs`, no default key). It acts in the GM's own view only, never
@@ -136,7 +140,7 @@ walks each token on its own Level's ground.
 ## Not done
 
 - A decal over a ramp lies flat at the ramp's top.
-- A RADIAL hole is round in the roof's plane, not Foundry's screen-space circle.
+- A RADIAL hole is a capsule in the roof's plane, not Foundry's screen-space circle.
 - `SURFACE` tiles are drawn as roofs that never open (a surface is walked on in
   Foundry; the 3D view has no walkable tiles).
 - Tiles on the floors drawn below the viewed Level are not drawn.

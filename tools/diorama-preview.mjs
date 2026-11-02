@@ -840,7 +840,7 @@ if (Q.get("buildings") === "1") {
   const inside = roofMode !== "out" && VR.underRoof(knight, poly, y);
   const tgt = VR.roofTarget({ source: "tile", mask: roof.mask, occludedAlpha: roof.occludedAlpha }, {
     gmView: roofMode === "cut", cutaway: roofMode === "cut", inside, below: inside,
-    holes: inside ? [{ x: knight.x, z: knight.z, r: 0.9 }] : [], visionMap: false,
+    holes: inside ? [{ x: knight.x, z: knight.z, r: 0.9, footY: knight.footY, headY: knight.headY }] : [], visionMap: false,
   });
   r.setRoofs({ roofs: [{ id: "roof", source: "tile", poly, baseY: y, topY: y, ...tgt, open: roof.occludedAlpha, seen: 1 }], focus: inside ? [knight] : [] });
   window.__buildings = { tiles: tiles.map((t) => ({ id: t.id, kind: t.kind, roofQ: t.roofQ, ghost: t.ghost })), target: tgt };

@@ -70,6 +70,7 @@ uniform float uRoofSeen;      // 0..1: how much of the roof the viewer has seen 
 uniform float uRoofFade;      // the whole roof's alpha now (cutaway, FADE, the camera rule)
 uniform float uRoofOpen;      // the tile's occluded alpha: what an opened part shows
 uniform vec4 uRoofHoles[4];   // RADIAL: x, z, radius (cells); radius 0 = none
+uniform vec2 uRoofHoleEnds[4]; // the capsule's other end, x, z: the head as the camera sees it
 uniform float uRoofHoleK;     // 0..1 the holes fading in
 uniform float uRoofVisionK;   // 0..1 VISION: open where the viewer sees right now
 varying vec2 vUv;
@@ -83,14 +84,17 @@ void main() {
   float a = tex.a * uTileAlpha;
   if (uTileRoof > 0.5) {
     float f = uRoofFade;
-    // RADIAL: a soft circle round each of the viewer's figures under it; the
-    // edge is a couple of device px (fwidth taken outside the loop's branches)
+    // RADIAL: a soft capsule over each of the viewer's figures under it, from
+    // its feet to its head as the camera sees them (render/roofs.mjs projectHole);
+    // the edge is a couple of device px (fwidth taken outside the loop's branches)
     float soft = max(length(fwidth(vWorld.xz)) * 1.5, 0.04);
     float hole = 0.0;
     for (int i = 0; i < 4; i++) {
       vec4 h = uRoofHoles[i];
       if (h.z <= 0.0) continue;
-      float d = length(vWorld.xz - h.xy);
+      vec2 ab = uRoofHoleEnds[i] - h.xy;
+      float s = clamp(dot(vWorld.xz - h.xy, ab) / max(dot(ab, ab), 1.0e-6), 0.0, 1.0);
+      float d = length(vWorld.xz - (h.xy + ab * s));
       hole = max(hole, 1.0 - smoothstep(h.z - soft, h.z, d));
     }
     f = mix(f, min(f, uRoofOpen), hole * uRoofHoleK);
@@ -288,6 +292,7 @@ export function tileMaterial(shared, { roof = false, ghostColor = null } = {}) {
       uRoofFade: { value: 1 },
       uRoofOpen: { value: 0 },
       uRoofHoles: { value: Array.from({ length: ROOF_HOLES }, () => new THREE.Vector4(0, 0, 0, 0)) },
+      uRoofHoleEnds: { value: Array.from({ length: ROOF_HOLES }, () => new THREE.Vector2(0, 0)) },
       uRoofHoleK: { value: 0 },
       uRoofVisionK: { value: 0 },
     },
@@ -535,6 +540,7 @@ export class TilesLayer {
     for (let i = 0; i < ROOF_HOLES; i++) {
       const h = holes[i];
       u.uRoofHoles.value[i].set(h ? h.x : 0, h ? h.z : 0, h ? h.r : 0, 0);
+      u.uRoofHoleEnds.value[i].set(h ? num(h.x2, h.x) : 0, h ? num(h.z2, h.z) : 0);
     }
     const opaque = sh ? sh.opaque : true;
     e.material.depthWrite = opaque;
