@@ -38,10 +38,10 @@ export function heightDist(actor, doc) {
   try { return typeof f === "function" ? f(actor, doc) : 6; } catch { return 6; }
 }
 
-/** Ground under a footprint (top-left px), distance units. */
-export function groundDist(scene, x, y, w = 1, h = 1) {
+/** Ground under a footprint (top-left px), absolute distance units; `level` defaults to the viewed one. */
+export function groundDist(scene, x, y, w = 1, h = 1, level = null) {
   const f = seams.movement?.groundDistAt;
-  try { return typeof f === "function" ? f(scene, x, y, w, h) : 0; } catch { return 0; }
+  try { return typeof f === "function" ? f(scene, x, y, w, h, level) : 0; } catch { return 0; }
 }
 
 export function altitude(doc) {

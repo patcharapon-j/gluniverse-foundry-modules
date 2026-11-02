@@ -52,44 +52,46 @@ function forceDelete(upd, path) {
   return upd;
 }
 
-function readRaw(scene) {
+// `level` (every call, optional): the Level whose entry is meant; without one,
+// the Level in question (terrain/store.mjs levelIdOf: viewed, else initial).
+function readRaw(scene, level = null) {
   const all = scene?.getFlag?.(SUITE_ID, FLAG_PROPS);
-  const e = all?.levels?.[levelIdOf(scene)];
+  const e = all?.levels?.[levelIdOf(scene, level)];
   return e && typeof e === "object" ? e : null;
 }
 
 /** The update object a write sends (exported for the check tool). */
-export function propsUpdate(scene, props) {
+export function propsUpdate(scene, props, level = null) {
   const list = normalizeProps(props).map(propToJSON);
-  return forceSet({}, `${PROPS_PATH}.levels.${levelIdOf(scene)}`, { v: PROP_FORMAT, props: list });
+  return forceSet({}, `${PROPS_PATH}.levels.${levelIdOf(scene, level)}`, { v: PROP_FORMAT, props: list });
 }
 
 export const PropStore = {
   /** Is anything stored for this scene's Level? */
-  has(scene) {
-    return (readRaw(scene)?.props?.length ?? 0) > 0;
+  has(scene, level = null) {
+    return (readRaw(scene, level)?.props?.length ?? 0) > 0;
   },
 
   /** The saved props, normalised. Never throws. */
-  read(scene) {
+  read(scene, level = null) {
     try {
-      return normalizeProps(readRaw(scene)?.props);
+      return normalizeProps(readRaw(scene, level)?.props);
     } catch {
       return [];
     }
   },
 
   /** Save a Level's props (GM only). Forced replacement of its entry. */
-  async write(scene, props) {
+  async write(scene, props, level = null) {
     if (!game.user?.isGM || !scene) return false;
-    await scene.update(propsUpdate(scene, props));
+    await scene.update(propsUpdate(scene, props, level));
     return true;
   },
 
   /** Remove this Level's props. */
-  async clear(scene) {
+  async clear(scene, level = null) {
     if (!game.user?.isGM || !scene) return false;
-    await scene.update(forceDelete({}, `${PROPS_PATH}.levels.${levelIdOf(scene)}`));
+    await scene.update(forceDelete({}, `${PROPS_PATH}.levels.${levelIdOf(scene, level)}`));
     return true;
   },
 
@@ -113,8 +115,8 @@ export const PropStore = {
    * (bases stand on the ground or on solid props placed earlier). A player
    * never receives a hidden prop.
    */
-  states(scene, { isGM = false } = {}) {
-    const live = liveTerrain(scene);
+  states(scene, { isGM = false, level = null } = {}) {
+    const live = liveTerrain(scene, level);
     if (!live) return [];
     return propStates(live.props, { isGM });
   },

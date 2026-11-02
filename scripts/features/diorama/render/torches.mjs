@@ -32,19 +32,29 @@
  *   .setSources(sources, { size, distance }) the bake's light sources (px, distance units)
  *   .setProps(PropState[])                   fire-like props (braziers)
  *   .relayout()                              the ground moved: re-seat the flames
- *   .frame(t, dt, fx, view, standees, pxWorld) → bool   true while anything here moves
+ *   .frame(t, dt, fx, view, standees, pxWorld, inView) → bool   true while a light fades in or out
+ *   .changed                                 this frame moved something on screen (a flicker, a flame)
+ *   .nextAt                                  clock ms of the next tick worth waking for (Infinity: none)
  *   .dispose()
  *
+ * Ticks, not frames. Living light never asks for the full frame rate: a
+ * flicker holds for TIMING.flickerTick (~15 Hz) and a flame's lick and its
+ * embers step every TIMING.fireTick (~30 Hz), with nothing interpolated in
+ * between. The renderer sleeps until `nextAt` and draws a tick only when
+ * `changed` says a light visibly moved: a flicker below FLICKER_EPS holds its
+ * old value, and a light or a fire outside the camera's frustum (`inView`)
+ * asks for no tick at all. The noise underneath is the same smooth,
+ * non-periodic value noise, sampled at the tick.
+ *
  * Cost: three instanced draws (flames, embers, figure shadows), each instance a
- * handful of floats written only when something changed; embers are placed in
- * the vertex shader from a seed and the clock. With lightFx off, or no lights,
- * the uniforms say "the bake alone" and nothing draws.
+ * handful of floats uploaded only when they changed; embers are placed in the
+ * vertex shader from a seed and the clock. With lightFx off, or no lights, the
+ * uniforms say "the bake alone" and nothing draws.
  */
 
 import * as THREE from "./three.mjs";
 import { MATERIALS, MAX_TORCHES } from "./materials.mjs";
 import { TIMING } from "../constants.mjs";
-import { VIEW_CELLS } from "./camera.mjs";
 
 export { MAX_TORCHES };
 /** Most flames drawn (a hall of braziers is a dozen). */
@@ -56,6 +66,8 @@ export const MAX_TORCH_SHADOWS = 48;
 export const SHADOW_MAX = 0.78;
 /** The most a flicker moves a light from steady, either way. */
 export const FLICKER_MAX = 0.22;
+/** The smallest change in a light's flicker (times its strength) worth a frame: half an 8-bit step. */
+export const FLICKER_EPS = 0.002;
 
 /** Foundry light animation types that are fire. */
 export const FIRE_ANIMATIONS = Object.freeze(["torch", "flame", "fire", "candle", "campfire", "fireplace"]);
@@ -142,7 +154,8 @@ export function lightKind(src, props = []) {
 /** The fire-named prop a light stands on or in, if any. */
 export function fireProp(src, props = []) {
   for (const p of props ?? []) {
-    if (!p || p.ghost || !FIRE_PROP.test(String(p.label ?? ""))) continue;
+    // a brazier shape burns whatever it is called (props.mjs SHAPE_PARTS: its coals glow)
+    if (!p || p.ghost || !(p.shape === "brazier" || FIRE_PROP.test(String(p.label ?? "")))) continue;
     const reach = Math.max(0.5, Math.max(Number(p.w) || 1, Number(p.d) || 1) * 0.6);
     if (Math.hypot(src.x - p.x, src.z - p.y) <= reach) return p;
   }
@@ -248,6 +261,11 @@ export class TorchesLayer {
     this._focus = { x: 0, z: 0 };
     this._picked = [];
     this._pickedAt = null;
+    /** The last fireTick boundary seen (floor(t / fireTick)); flames and embers step once per boundary crossed. */
+    this._fireK = null;
+    /** This frame moved something on screen; the next tick worth a frame (clock ms). */
+    this.changed = false;
+    this.nextAt = Infinity;
 
     const f = instanced(MAX_FLAMES, { quad: quad(-1, 1, -0.25, 1), per: { aFlame: 4, aFire: 4, aSeed: 2 } });
     this.flameGeo = f.g; this.flameAttr = f.a;
@@ -358,11 +376,16 @@ export class TorchesLayer {
    * @param {{tx:number, tz:number, zoom:number}|null} view
    * @param {{entries?:Map<string, any>}|null} standees
    * @param {number} [pxWorld]  one device pixel in cells
-   * @returns {boolean} true while something here moves
+   * @param {((x:number, y:number, z:number, r:number) => boolean)|null} [inView]  does a sphere (cells) reach the screen?
+   *   Omitted: everything counts as on screen.
+   * @returns {boolean} true while a light fades in or out of the tracked set (a full-rate transient);
+   *   the steady state ticks instead, through `changed` and `nextAt`
    */
-  frame(t, dt, fx, view, standees, pxWorld) {
+  frame(t, dt, fx, view, standees, pxWorld, inView = null) {
     const u = this.shared;
     if (pxWorld > 0) this.px.value = pxWorld;
+    this.changed = false;
+    this.nextAt = Infinity;
     const on = !!fx?.lightFx && this.lights.length > 0;
     if (!on) {
       u.uTorchCount.value = 0;
@@ -398,43 +421,69 @@ export class TorchesLayer {
       .filter(Boolean).slice(0, MAX_TORCHES);
     this.slots = slots;
 
-    // ---- uniforms
+    // ---- uniforms: the flicker holds for a whole tick, and a step too small to see holds too
     const flick = fx.flicker !== false;
-    const near = (l) => {
-      const R = VIEW_CELLS / Math.max(0.05, view?.zoom ?? 1);
-      return Math.hypot(l.x - fz.x, l.z - fz.z) < R + l.dim;
-    };
+    const seen = (x, y, z, r) => !inView || inView(x, y, z, r);
+    const tick = TIMING.flickerTick;
+    const tf = Math.floor(t / tick) * tick;
+    let ticking = false;
     slots.forEach((l, i) => {
       const p = this.presence.get(l.id) ?? 0;
-      const f = flick ? flicker(l.kind, t, l.seed, l.anim.speed, l.anim.intensity) : 1;
-      l.f = f;
+      const f = flick ? flicker(l.kind, tf, l.seed, l.anim.speed, l.anim.intensity) : 1;
+      const a = 1 + p * (f - 1);
+      const col = u.uTorchCol.value[i];
+      const lit = seen(l.x, l.y ?? LIGHT_LIFT, l.z, l.dim + 1);
+      const moved = Math.abs(a - col.w) * luma(l.tint) >= FLICKER_EPS;
+      // fading (active), held steady (flicker shed) or a new light in this slot: always written;
+      // otherwise only a visible step
+      if (active || !flick || moved || col.x !== l.tint[0] || col.y !== l.tint[1] || col.z !== l.tint[2] || l.f === undefined) {
+        col.set(l.tint[0], l.tint[1], l.tint[2], a);
+        l.f = f;
+        if (moved && lit) this.changed = true;
+      }
       u.uTorchPos.value[i].set(l.x, l.y ?? LIGHT_LIFT, l.z, l.dim);
-      u.uTorchCol.value[i].set(l.tint[0], l.tint[1], l.tint[2], 1 + p * (f - 1));
       u.uTorchInfo.value[i].set(l.brightFrac, p);
-      if (flick && l.kind !== "steady" && near(l)) active = true;
+      if (flick && l.kind !== "steady" && lit) ticking = true;
     });
     u.uTorchCount.value = slots.length;
     u.uTorchDir.value = fx.torchShadows !== false ? 1 : 0;
+    if (ticking) this.nextAt = tf + tick;
 
-    // ---- flames and embers
+    // ---- flames and embers: one fire clock, stepped on its fireTick boundaries
     const F = this.flameAttr;
+    let fireSeen = false;
+    let fireLit = false;
     this.fires.forEach((fire, i) => {
-      const f = flick ? flicker("fire", t, fire.l.seed, fire.l.anim.speed, fire.l.anim.intensity) : 1;
-      F.aFire.array.set([fire.l.tint[0], fire.l.tint[1], fire.l.tint[2], f], i * 4);
-      if (flick && near(fire.l)) active = true;
+      const f = flick ? flicker("fire", tf, fire.l.seed, fire.l.anim.speed, fire.l.anim.intensity) : 1;
+      if (writeIf(F.aFire.array, i * 4, fire.l.tint[0], fire.l.tint[1], fire.l.tint[2], f)) { F.aFire.needsUpdate = true; fireLit = true; }
+      if (!fireSeen && seen(fire.l.x, fire.foot + fire.size * 2.5, fire.l.z, fire.size * 3 + 0.5)) fireSeen = true;
     });
-    F.aFire.needsUpdate = true;
+    if (fireLit && fireSeen) this.changed = true;
     this.flameGeo.instanceCount = this.fires.length;
-    if (flick) this.flameClock.value += (dt * 1000) / TIMING.flameLick;
     const embers = fx.embers !== false && this.fires.length > 0;
     this.emberGeo.instanceCount = embers ? this.fires.length * EMBERS_PER_FLAME : 0;
-    if (embers) {
-      this.embers.material.uniforms.uEmberT.value += (dt * 1000) / TIMING.emberRise;
-      if (this.fires.some(near)) active = true;
+    // The fire's steps sit on the clock's own fireTick boundaries, which the
+    // flicker's ticks are a subset of: a fire in view redraws at ~30 Hz, not at
+    // the union of two cadences. Each rung's clock holds while it is shed.
+    const burning = this.fires.length > 0 && (flick || embers);
+    const fireTick = TIMING.fireTick;
+    const k = Math.floor(t / fireTick);
+    if (burning) {
+      // at most a few steps after a long sleep (as MAX_DT caps the frame's dt)
+      const steps = this._fireK === null ? 0 : Math.min(3, Math.max(0, k - this._fireK));
+      if (steps > 0) {
+        if (flick) this.flameClock.value += (steps * fireTick) / TIMING.flameLick;
+        if (embers) this.embers.material.uniforms.uEmberT.value += (steps * fireTick) / TIMING.emberRise;
+        if (fireSeen) this.changed = true;
+      }
+      if (fireSeen) this.nextAt = Math.min(this.nextAt, (k + 1) * fireTick);
     }
+    this._fireK = k;
 
-    // ---- figure shadows
-    this.shadowGeo.instanceCount = fx.torchShadows !== false ? this.writeShadows(slots, standees) : 0;
+    // ---- figure shadows: uploaded only when a figure or a light moved them
+    const n = fx.torchShadows !== false ? this.writeShadows(slots, standees) : 0;
+    if (n !== this.shadowGeo.instanceCount) this.changed = this.changed || n > 0 || this.shadowGeo.instanceCount > 0;
+    this.shadowGeo.instanceCount = n;
     return active;
   }
 
@@ -445,6 +494,7 @@ export class TorchesLayer {
     const A = this.shadowAttr;
     const amb = Number(this.shared.uAmbient?.value ?? 1);
     let n = 0;
+    let moved = false;
     const best = [];
     for (const e of entries.values()) {
       if (n >= MAX_TORCH_SHADOWS) break;
@@ -473,12 +523,16 @@ export class TorchesLayer {
         const rise = Math.max(0.25, (b.l.y ?? LIGHT_LIFT) - foot.y);
         const len = Math.min(2.6, Math.max(0.6, (h * b.dist) / rise * 0.7));
         const alpha = SHADOW_MAX * share * Math.min(1, b.dist / 0.4);
-        A.aFoot.array.set([foot.x, foot.y, foot.z, len], n * 4);
-        A.aDir.array.set([b.dx / b.dist, b.dz / b.dist, w, alpha], n * 4);
+        if (writeIf(A.aFoot.array, n * 4, foot.x, foot.y, foot.z, len)) moved = true;
+        if (writeIf(A.aDir.array, n * 4, b.dx / b.dist, b.dz / b.dist, w, alpha)) moved = true;
         n++;
       }
     }
-    A.aFoot.needsUpdate = A.aDir.needsUpdate = true;
+    // Nothing moved (a still room, a flicker held between ticks): nothing uploads.
+    if (moved) {
+      A.aFoot.needsUpdate = A.aDir.needsUpdate = true;
+      this.changed = true;
+    }
     return n;
   }
 
@@ -491,4 +545,12 @@ export class TorchesLayer {
 function smooth01(x) {
   const t = clamp01(x);
   return t * t * (3 - 2 * t);
+}
+
+/** Write four floats into a Float32Array at `o`, only where they differ. @returns {boolean} anything written */
+function writeIf(arr, o, a, b, c, d) {
+  const fa = Math.fround(a), fb = Math.fround(b), fc = Math.fround(c), fd = Math.fround(d);
+  if (arr[o] === fa && arr[o + 1] === fb && arr[o + 2] === fc && arr[o + 3] === fd) return false;
+  arr[o] = fa; arr[o + 1] = fb; arr[o + 2] = fc; arr[o + 3] = fd;
+  return true;
 }

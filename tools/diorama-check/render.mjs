@@ -18,6 +18,66 @@ function stripComments(src) {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/[^\n]*/g, "$1");
 }
 
+/** The text between the brace at `open` and its match. */
+function braceBody(src, open) {
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}" && --depth === 0) return src.slice(open + 1, i);
+  }
+  return src.slice(open + 1);
+}
+
+/** GLSL function bodies by name (top-level definitions only). */
+export function glslFunctions(src) {
+  const out = new Map();
+  const re = /^[ \t]*(?:highp |mediump |lowp )?[A-Za-z_][A-Za-z0-9_]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^;{}]*\)\s*\{/gm;
+  for (let m; (m = re.exec(src));) out.set(m[1], braceBody(src, m.index + m[0].length - 1));
+  return out;
+}
+
+/** An implicit-level sample: a texture read that takes its level from screen gradients. */
+const IMPLICIT_SAMPLE = /\b(?:texture2D|textureCube|texture)\s*\(/;
+
+/**
+ * Loops that D3D (ANGLE's HLSL backend) cannot unroll and that sample with an
+ * implicit level, directly or through a function they call (followed a few
+ * levels down). A loop it cannot unroll is one with a bound that is not a
+ * literal or a #define, one that leaves early (break, continue, return), or
+ * one that runs after the function may already have returned.
+ * An implicit sample in there is a gradient in divergent flow: warning X3595,
+ * and on some drivers a program that fails to link. textureLod and
+ * textureGrad are always fine.
+ */
+export function loopHazards(src) {
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const fns = glslFunctions(code);
+  const samples = (body, seen = new Set(), depth = 0) => {
+    if (IMPLICIT_SAMPLE.test(body)) return true;
+    if (depth > 4) return false;
+    for (const [name, inner] of fns) {
+      if (seen.has(name) || !new RegExp(`\\b${name}\\s*\\(`).test(body)) continue;
+      seen.add(name);
+      if (samples(inner, seen, depth + 1)) return true;
+    }
+    return false;
+  };
+  const found = [];
+  for (const [fn, body] of fns) {
+    const re = /\bfor\s*\(([^;]*);([^;]*);([^)]*)\)\s*\{/g;
+    for (let m; (m = re.exec(body));) {
+      const loop = braceBody(body, m.index + m[0].length - 1);
+      const constBound = /^\s*[A-Za-z_]\w*\s*(?:<|<=|>|>=)\s*(?:-?\d+|[A-Z][A-Z0-9_]*)\s*$/.test(m[2]);
+      const exits = /\b(?:break|continue|return)\b/.test(loop);
+      const after = /\breturn\b/.test(body.slice(0, m.index));
+      if ((constBound && !exits && !after) || !samples(loop)) continue;
+      const why = exits ? "leaves early" : after ? "follows an early return" : "has a runtime bound";
+      found.push(`${fn}(): for (${m[2].trim()}) ${why} and samples with an implicit level`);
+    }
+  }
+  return found;
+}
+
 export default async function check(ctx) {
   const dir = join(ctx.root, RENDER_DIR);
   const files = readdirSync(dir).filter((f) => f.endsWith(".mjs"));
@@ -68,6 +128,70 @@ export default async function check(ctx) {
   const allGlsl = Object.values(PROGRAMS).map((p) => p.vertex + p.fragment).join("\n");
   const dead = Object.keys(shared).filter((u) => !allGlsl.includes(u));
   ctx.ok("no shared uniform is unused by GLSL", dead.length === 0, dead.join(", "));
+
+  // ---- D3D-safe shaders -------------------------------------------------
+  // ANGLE on Windows compiles GLSL to HLSL. A gradient in a loop it cannot
+  // unroll is warning X3595 and on some drivers a failed link, which leaves
+  // the view drawing nothing; an early return before a value is set is X4000.
+  const hazards = Object.entries(PROGRAMS).flatMap(([name, p]) =>
+    ["vertex", "fragment"].flatMap((st) => loopHazards(p[st]).map((h) => `${name}.${st} ${h}`)));
+  ctx.ok("no loop samples with an implicit level where D3D cannot unroll it", hazards.length === 0, hazards.join("; "));
+  const topFns = glslFunctions(PROGRAMS.top.fragment.replace(/\/\/[^\n]*/g, ""));
+  const softLoop = /for\s*\(\s*int\s+i\s*=\s*0\s*;\s*i\s*<\s*(\d+)\s*;\s*i\+\+\s*\)\s*\{/.exec(topFns.get("shadowMapAt") ?? "");
+  const softBody = softLoop ? braceBody(topFns.get("shadowMapAt"), softLoop.index + softLoop[0].length - 1) : "";
+  ctx.ok("the soft-shadow loop has a literal bound and never leaves early",
+    !!softLoop && !/\b(?:break|continue|return)\b/.test(softBody), softLoop ? `${softLoop[1]} taps` : "loop not found");
+  const tap = topFns.get("shadowTap") ?? "";
+  ctx.ok("a shadow tap samples only at an explicit level",
+    /textureLod\(uShadowMap/.test(tap) && !IMPLICIT_SAMPLE.test(tap.replace(/textureLod\(/g, "")));
+  const painted = glslFunctions(PROGRAMS.side.fragment.replace(/\/\/[^\n]*/g, "")).get("paintedSide") ?? "";
+  ctx.ok("paintedSide returns once (an early return reads as uninitialised to D3D)",
+    (painted.match(/\breturn\b/g) ?? []).length === 1);
+  ctx.ok("the blur samples at an explicit level", !IMPLICIT_SAMPLE.test(PROGRAMS.blur.fragment.replace(/textureLod\(/g, "")));
+
+  // ---- the cost readout -------------------------------------------------
+  // GPU time never waits on the GPU, a disjoint event voids what is in flight,
+  // and a browser without the extension reads "n/a" rather than 0 ms.
+  const { GpuTimer, FrameProfile } = await import(ctx.url(`${RENDER_DIR}/profile.mjs`));
+  const { readoutRows } = await import(ctx.url("scripts/features/diorama/view/readout.mjs"));
+  const fakeGl = (ext) => {
+    const g = { ready: new Set(), disjoint: false, waited: 0, made: 0, deleted: 0, QUERY_RESULT_AVAILABLE: 1, QUERY_RESULT: 2 };
+    Object.assign(g, {
+      getExtension: () => (ext ? { TIME_ELAPSED_EXT: 10, GPU_DISJOINT_EXT: 11 } : null),
+      createQuery: () => ({ id: ++g.made }), deleteQuery: () => { g.deleted++; },
+      beginQuery() {}, endQuery() {},
+      getParameter: (p) => (p === 11 ? g.disjoint : null),
+      getQueryParameter: (q, p) => {
+        if (p === 1) return g.ready.has(q.id);
+        if (!g.ready.has(q.id)) g.waited++;
+        return 4e6; // 4 ms
+      },
+    });
+    return g;
+  };
+  const glA = fakeGl(true), gt = new GpuTimer(glA);
+  for (let i = 0; i < 3; i++) { gt.begin(); gt.end(); }
+  gt.poll();
+  const noneYet = gt.mean;
+  glA.ready.add(1); glA.ready.add(2);
+  gt.poll();
+  ctx.ok("GPU time reads only queries that are ready, oldest first", noneYet === null && gt.mean === 4 && gt.pending.length === 1 && glA.waited === 0,
+    `mean=${gt.mean} pending=${gt.pending.length} waited=${glA.waited}`);
+  for (let i = 0; i < 12; i++) { gt.begin(); gt.end(); }
+  ctx.ok("GPU queries in flight are capped, never waited on", gt.pending.length <= 6 && glA.waited === 0, `${gt.pending.length}`);
+  glA.disjoint = true;
+  const before = gt.ms.n;
+  gt.poll();
+  ctx.ok("a disjoint event voids every result in flight", gt.pending.length === 0 && gt.ms.n === before);
+  gt.dispose();
+  const fp = new FrameProfile(fakeGl(false));
+  fp.frame({ at: 1000, cpuMs: 2, calls: 40, triangles: 12000 });
+  const pr = fp.read(1500, { level: 0, of: 21, name: null });
+  const rows = Object.fromEntries(readoutRows(pr, (k) => k));
+  ctx.ok("without the timer extension GPU time reads n/a", pr.gpuMs === null && !pr.gpuSupported
+    && rows["GLDIO.graphics.readout.gpu"] === "GLDIO.graphics.readout.na", JSON.stringify(rows));
+  ctx.ok("the readout counts frames over the last second", pr.fps === 1 && fp.read(3000, pr.shed).fps === 0);
+  ctx.ok("a closed view reads as closed", readoutRows(null, (k) => k).length === 1);
 
   // ---- shedding ---------------------------------------------------------
   const { SHED_ORDER, KIND, DIR, SUB } = await import(ctx.url("scripts/features/diorama/constants.mjs"));

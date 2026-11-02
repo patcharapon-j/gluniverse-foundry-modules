@@ -9,7 +9,9 @@
  * allocated after construction: every per-mote value lives in typed arrays.
  *
  * The motes are tinted from the palette and dimmed with the scene's ambient,
- * so a puff at night is not a glowing cloud. Lifetime: TIMING.dustLife,
+ * so a puff at night is not a glowing cloud. Each mote has a darker warm core
+ * and a lighter rim (DUST_RAMP in art.mjs), so a puff reads on pale stone and
+ * on dark earth alike without turning into grey smoke. Lifetime: TIMING.dustLife,
  * shorter for a light footfall. Shed as "standeeDust" (the layer clears it).
  */
 
@@ -23,8 +25,8 @@ import { clamp01, ease } from "./tween.mjs";
 export const DUST_PUFFS = 12;
 export const DUST_MOTES = 6;
 /**
- * Pale warm dust, from the palette (never a hardcoded suite colour): light
- * enough to read over grey stone and dark earth alike.
+ * Pale warm dust, from the palette (never a hardcoded suite colour). This is
+ * the rim's colour; the mote's texture darkens its core from it.
  */
 const DUST_RGB = hexToRgbFloat(mix(PALETTE.text, PALETTE.warn, 0.18));
 /** Peak mote opacity for a full-strength puff. */

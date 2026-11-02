@@ -30,6 +30,7 @@ import { SUB, KIND, KIND_KEYS, CLIFF_MATERIALS, Q_PER_CELL } from "../constants.
 import { Terrain, sanitizePaletteEntry, distToQ } from "./model.mjs";
 import {
   PROP_SHAPES, PROP_MATERIALS, SHAPE_DEFAULTS, PROP_LIMIT, SIZE_MIN, SIZE_MAX, H_MIN, ELEV_LIMIT, IMG_MAX, normalizeProps,
+  normalizeProp, scaleProp, KIT_PART_SHAPES, KIT_PARTS_MAX, KIT_NAME_MAX, MODEL_RULES, POINTS_MAX, PATH_MAX, PROFILE_MAX, BEVEL_MAX,
 } from "./props.mjs";
 
 export const LAYOUT_FORMAT = "gluniverse-diorama-layout";
@@ -145,10 +146,9 @@ export function compileLayout(layout, grid) {
   });
 
   const tokens = tokenPlacements(L.tokens, { errors, toFt: (v) => (unit === "q" ? (v / 4) * distance : v), off });
-  const props = propPlacements(L.props, {
-    errors, warnings, off, map, mirror,
-    toCells: (v) => (unit === "q" ? v / Q_PER_CELL : v / distance),
-  });
+  const toCells = (v) => (unit === "q" ? v / Q_PER_CELL : v / distance);
+  const kits = kitDefinitions(L, { errors, warnings, toCells });
+  const props = propPlacements(L.props, { errors, warnings, off, map, mirror, toCells, kits });
   if (errors.length) return fail();
 
   // ── paint ──
@@ -365,17 +365,149 @@ function tokenPlacements(list, { errors, toFt, off }) {
 
 /* ── props ── */
 
-const PROP_KEYS = new Set(["id", "shape", "at", "w", "d", "h", "elev", "rot", "mat", "tint", "solid", "hidden", "label", "img", "mirror"]);
+const PROP_KEYS = new Set(["id", "shape", "at", "w", "d", "h", "elev", "rot", "mat", "tint", "solid", "hidden", "label", "img", "mirror",
+  "points", "path", "thick", "profile", "bevel", "cliff", "roof", "src", "scale", "rules", "kit"]);
+/** What a kit's part may carry (its `at` and outlines are relative to the kit's origin). */
+const PART_KEYS = new Set(["shape", "at", "w", "d", "h", "elev", "rot", "mat", "tint", "solid", "points", "path", "thick", "profile", "bevel"]);
+/** Shapes that keep an outline, a path or a profile. */
+const OUTLINED = new Set(["slab", "extrude"]);
+
+/**
+ * Check the fields every placement and every kit part shares. `part`: a kit
+ * part, whose outlines are relative [dRow, dCol] and whose elev is an offset.
+ * @returns {boolean} true when something failed
+ */
+function checkShared(p, { bad, warnings, where, toCells, part = false }) {
+  let failed = false;
+  for (const k of ["w", "d"]) {
+    if (p[k] !== undefined && (!isNum(p[k]) || p[k] < SIZE_MIN || p[k] > SIZE_MAX)) failed = bad(`"${k}" must be ${SIZE_MIN} to ${SIZE_MAX} squares.`);
+  }
+  if (p.h !== undefined && (!isNum(p.h) || toCells(p.h) < H_MIN || toCells(p.h) > SIZE_MAX)) failed = bad(`"h" must be a positive height in the layout's height unit.`);
+  if (p.elev !== undefined && p.elev !== null && (!isNum(p.elev) || Math.abs(toCells(p.elev)) > ELEV_LIMIT)) {
+    failed = bad(part ? `"elev" must be a height above the kit's base.` : `"elev" must be a height (or null to stand on the ground).`);
+  }
+  if (p.rot !== undefined && !isNum(p.rot)) failed = bad(`"rot" must be degrees clockwise.`);
+  if (p.mat !== undefined && !PROP_MATERIALS.includes(p.mat)) failed = bad(`"mat" must be one of ${PROP_MATERIALS.join(", ")}.`);
+  if (p.tint !== undefined && p.tint !== null && !(typeof p.tint === "string" && /^#[0-9a-f]{6}$/i.test(p.tint))) failed = bad(`"tint" must be "#rrggbb" or null.`);
+  if (p.solid !== undefined && typeof p.solid !== "boolean") failed = bad(`"solid" must be true or false.`);
+  const pairs = (v, n0, max) => Array.isArray(v) && v.length >= n0 && v.length <= max && v.every((q) => Array.isArray(q) && (q.length === 2 || q.length === 3) && q.every(isNum));
+  if (p.points !== undefined) {
+    if (!OUTLINED.has(p.shape)) warnings.push(`${where}: only a slab or an extrude keeps "points"; they were ignored.`);
+    else if (!pairs(p.points, 3, POINTS_MAX) || p.points.some((q) => q.length !== 2)) failed = bad(`"points" must be 3 to ${POINTS_MAX} [row, col] corners${part ? ", relative to the kit's origin" : " on the map"}.`);
+  }
+  if (p.path !== undefined) {
+    if (p.shape !== "pipe") warnings.push(`${where}: only a pipe keeps "path"; it was ignored.`);
+    else if (!pairs(p.path, 2, PATH_MAX)) failed = bad(`"path" must be 2 to ${PATH_MAX} [row, col] or [row, col, height] points${part ? ", relative to the kit's origin" : " on the map"}.`);
+  }
+  if (p.thick !== undefined && (!isNum(p.thick) || p.thick <= 0 || p.thick > 8)) failed = bad(`"thick" must be a pipe's width in squares, above 0 and up to 8.`);
+  if (p.profile !== undefined) {
+    if (p.shape !== "lathe") warnings.push(`${where}: only a lathe keeps "profile"; it was ignored.`);
+    else if (!pairs(p.profile, 2, PROFILE_MAX) || p.profile.some((q) => q.length !== 2 || q[0] < 0 || q[0] > 1 || q[1] < 0 || q[1] > 1)) {
+      failed = bad(`"profile" must be 2 to ${PROFILE_MAX} [radius, height] pairs, each 0 to 1 of the prop's half-width and height.`);
+    }
+  }
+  if (p.bevel !== undefined && (!isNum(p.bevel) || p.bevel < 0 || p.bevel > BEVEL_MAX)) failed = bad(`"bevel" must be 0 to ${BEVEL_MAX} squares.`);
+  if (p.bevel !== undefined && p.shape !== "extrude") warnings.push(`${where}: only an extrude keeps "bevel"; it was ignored.`);
+  if (!part && !p.points && OUTLINED.has(p.shape) && !isPair(p.at)) failed = bad(`a ${p.shape} needs "at" (a w × d rectangle) or "points" (its outline).`);
+  if (!part && p.shape === "pipe" && !p.path && !isPair(p.at)) failed = bad(`a pipe needs "at" (straight along w) or "path" (its centre line).`);
+  if (!part && !OUTLINED.has(p.shape) && p.shape !== "pipe" && !isPair(p.at)) failed = bad(`"at" must be [row, col], the middle of its footprint in map squares.`);
+  if (part && !isPair(p.at) && !p.points && !p.path) failed = bad(`"at" must be [dRow, dCol] from the kit's origin.`);
+  return failed;
+}
+
+/** Reflect a list of [row, col(, z)] points on the map across an axis. */
+function reflectPoints(points, axis, mirror) {
+  return points.map((q) => (axis === "cols" ? [q[0], mirror.cols - q[1], ...q.slice(2)] : [mirror.rows - q[0], q[1], ...q.slice(2)]));
+}
+
+/**
+ * Reflect a kit's raw parts in the kit's own frame: "x" across its local
+ * columns, "y" across its rows. A part with an outline mirrors the outline
+ * itself; a part without one is symmetric across its width, so a row
+ * reflection is a half turn (rot → 180 − rot), like a placed prop's.
+ */
+function reflectParts(parts, axis) {
+  return parts.map((q) => {
+    const o = { ...q };
+    const outlined = !!(q.points || q.path);
+    if (axis === "x") {
+      o.x = -q.x;
+      o.rot = -q.rot;
+      if (q.points) o.points = q.points.map(([x, y]) => [-x, y]);
+      if (q.path) o.path = q.path.map(([x, y, z]) => [-x, y, z]);
+    } else {
+      o.y = -q.y;
+      o.rot = outlined ? -q.rot : 180 - q.rot;
+      if (q.points) o.points = q.points.map(([x, y]) => [x, -y]);
+      if (q.path) o.path = q.path.map(([x, y, z]) => [x, -y, z]);
+    }
+    return o;
+  });
+}
+
+/**
+ * A layout's kits: name → raw parts (relative to the kit's origin, in cells),
+ * or an empty map. A kit is a prop built from primitives, defined once and
+ * placed many times (`{"shape": "kit", "kit": "name", "at": …}`).
+ */
+function kitDefinitions(L, { errors, warnings, toCells }) {
+  const kits = new Map();
+  let src = L.kits;
+  if (src === undefined && L.models !== undefined) {
+    warnings.push(`"models" is read as "kits" (the layout's name for crafted props); rename it to stop this warning.`);
+    src = L.models;
+  }
+  if (src === undefined) return kits;
+  if (!src || typeof src !== "object" || Array.isArray(src)) { errors.push(`"kits" must be an object: { "name": { "parts": [ … ] } }.`); return kits; }
+  for (const [name, def] of Object.entries(src)) {
+    const at = `kits["${name}"]`;
+    if (!name.trim() || name.length > KIT_NAME_MAX) { errors.push(`${at}: a kit's name must be 1 to ${KIT_NAME_MAX} characters.`); continue; }
+    const parts = Array.isArray(def) ? def : def?.parts;
+    if (!Array.isArray(parts) || !parts.length) { errors.push(`${at} needs "parts": a non-empty array of primitives.`); continue; }
+    if (parts.length > KIT_PARTS_MAX) errors.push(`${at} has ${parts.length} parts; the most is ${KIT_PARTS_MAX}.`);
+    const out = [];
+    parts.slice(0, KIT_PARTS_MAX).forEach((q, n) => {
+      const where = `${at}.parts[${n}] (${typeof q?.shape === "string" ? q.shape : "?"})`;
+      const bad = (msg) => { errors.push(`${where}: ${msg}`); return true; };
+      if (!q || typeof q !== "object" || Array.isArray(q)) { bad("is not an object."); return; }
+      for (const k of Object.keys(q)) if (!PART_KEYS.has(k)) warnings.push(`${where}: "${k}" is not a kit part field and was ignored.`);
+      if (!KIT_PART_SHAPES.includes(q.shape)) { bad(`"shape" must be one of ${KIT_PART_SHAPES.join(", ")} (a kit cannot hold a slab, a card, a model or another kit).`); return; }
+      if (checkShared(q, { bad, warnings, where, toCells, part: true })) return;
+      const def0 = SHAPE_DEFAULTS[q.shape];
+      const [dr, dc] = isPair(q.at) ? q.at : [0, 0];
+      out.push({
+        shape: q.shape, x: dc, y: dr,
+        w: q.w ?? def0.w, d: q.d ?? def0.d,
+        h: q.h !== undefined ? toCells(q.h) : def0.h,
+        elev: q.elev !== undefined && q.elev !== null ? toCells(q.elev) : 0,
+        rot: isNum(q.rot) ? q.rot : 0,
+        mat: q.mat ?? def0.mat, tint: q.tint ?? null, solid: q.solid ?? def0.solid,
+        points: OUTLINED.has(q.shape) && q.points ? q.points.map(([r, c]) => [c, r]) : undefined,
+        path: q.shape === "pipe" && q.path ? q.path.map(([r, c, z]) => [c, r, z !== undefined ? toCells(z) : (q.thick ?? def0.d) / 2]) : undefined,
+        thick: q.thick, profile: q.profile, bevel: q.bevel,
+      });
+    });
+    if (out.length) kits.set(name, out);
+  }
+  return kits;
+}
 
 /**
  * A layout's props as stored props (canvas cells), or null when the layout has
  * no `props` key, which leaves the scene's own props alone. `at` is the
  * footprint's centre in map squares, [row, col]; `w`/`d` are squares; `h` and
- * `elev` are heights in the layout's height unit. A mirrored prop is reflected
- * with its turn: across a column axis rot → −rot, across a row axis
- * rot → 180 − rot, so a wedge still climbs toward the reflected side.
+ * `elev` are heights in the layout's height unit. A slab or an extrude may
+ * give `points` instead (its outline, [row, col] corners on the map, at any
+ * precision); a pipe may give `path` ([row, col] or [row, col, height] points
+ * on the map, the height its centre line's). A kit names one of the layout's
+ * `kits` and stands its origin at `at`, turned by `rot`, sized by `scale`.
+ *
+ * A mirrored prop is reflected with its turn: across a column axis
+ * rot → −rot, across a row axis rot → 180 − rot, so a wedge still climbs
+ * toward the reflected side. An outline or a path reflects point by point; a
+ * kit reflects its parts in its own frame.
  */
-function propPlacements(list, { errors, warnings, off, map, mirror, toCells }) {
+function propPlacements(list, { errors, warnings, off, map, mirror, toCells, kits }) {
   if (list === undefined) return null;
   if (!Array.isArray(list)) { errors.push(`"props" must be an array.`); return null; }
   if (list.length > PROP_LIMIT) errors.push(`"props" has ${list.length} entries; the most is ${PROP_LIMIT}.`);
@@ -389,18 +521,10 @@ function propPlacements(list, { errors, warnings, off, map, mirror, toCells }) {
     for (const k of Object.keys(p)) if (!PROP_KEYS.has(k)) warnings.push(`${where}: "${k}" is not a prop field and was ignored.`);
     if (!PROP_SHAPES.includes(p.shape)) { bad(`"shape" must be one of ${PROP_SHAPES.join(", ")}.`); return; }
     const def = SHAPE_DEFAULTS[p.shape];
-    let failed = false;
-    if (!isPair(p.at)) failed = bad(`"at" must be [row, col], the middle of its footprint in map squares.`);
-    for (const k of ["w", "d"]) {
-      if (p[k] !== undefined && (!isNum(p[k]) || p[k] < SIZE_MIN || p[k] > SIZE_MAX)) failed = bad(`"${k}" must be ${SIZE_MIN} to ${SIZE_MAX} squares.`);
-    }
-    if (p.h !== undefined && (!isNum(p.h) || toCells(p.h) < H_MIN || toCells(p.h) > SIZE_MAX)) failed = bad(`"h" must be a positive height in the layout's height unit.`);
-    if (p.elev !== undefined && p.elev !== null && (!isNum(p.elev) || Math.abs(toCells(p.elev)) > ELEV_LIMIT)) failed = bad(`"elev" must be a height (or null to stand on the ground).`);
-    if (p.rot !== undefined && !isNum(p.rot)) failed = bad(`"rot" must be degrees clockwise.`);
-    if (p.mat !== undefined && !PROP_MATERIALS.includes(p.mat)) failed = bad(`"mat" must be one of ${PROP_MATERIALS.join(", ")}.`);
-    if (p.tint !== undefined && p.tint !== null && !(typeof p.tint === "string" && /^#[0-9a-f]{6}$/i.test(p.tint))) failed = bad(`"tint" must be "#rrggbb" or null.`);
-    for (const k of ["solid", "hidden"]) if (p[k] !== undefined && typeof p[k] !== "boolean") failed = bad(`"${k}" must be true or false.`);
-    for (const k of ["label", "img", "id"]) if (p[k] !== undefined && typeof p[k] !== "string") failed = bad(`"${k}" must be a string.`);
+    let failed = checkShared(p, { bad, warnings, where, toCells });
+    if (p.hidden !== undefined && typeof p.hidden !== "boolean") failed = bad(`"hidden" must be true or false.`);
+    if (p.roof !== undefined && typeof p.roof !== "boolean") failed = bad(`"roof" must be true or false.`);
+    for (const k of ["label", "img", "id", "src"]) if (p[k] !== undefined && typeof p[k] !== "string") failed = bad(`"${k}" must be a string.`);
     if (p.id !== undefined && typeof p.id === "string") {
       if (!/^[A-Za-z0-9_-]{1,28}$/.test(p.id)) failed = bad(`"id" must be 1 to 28 letters, digits, "_" or "-".`);
       else if (ids.has(p.id)) failed = bad(`the id "${p.id}" is used twice.`);
@@ -409,6 +533,28 @@ function propPlacements(list, { errors, warnings, off, map, mirror, toCells }) {
     if (typeof p.img === "string" && p.img.length > IMG_MAX) failed = bad(`"img" is longer than ${IMG_MAX} characters; use a file path, not a data URL.`);
     if (p.img !== undefined && p.shape !== "card") warnings.push(`${where}: only a card shows "img"; it was ignored.`);
     if (p.shape === "card" && !p.img) warnings.push(`${where}: a card with no "img" draws as a blank panel.`);
+    if (p.cliff !== undefined && !CLIFF_MATERIALS.includes(p.cliff)) failed = bad(`"cliff" must be one of ${CLIFF_MATERIALS.join(", ")}.`);
+    if (p.cliff !== undefined && p.shape !== "slab") warnings.push(`${where}: only a slab has a "cliff" side; it was ignored.`);
+    if (p.shape === "model") {
+      if (typeof p.src !== "string" || !/\.(glb|gltf)(\?|#|$)/i.test(p.src)) failed = bad(`a model needs "src": a .glb or .gltf file path.`);
+      else if (p.src.length > IMG_MAX) failed = bad(`"src" is longer than ${IMG_MAX} characters.`);
+      if (p.rules !== undefined && !MODEL_RULES.includes(p.rules)) failed = bad(`"rules" must be one of ${MODEL_RULES.join(", ")}.`);
+    } else {
+      for (const k of ["src", "rules"]) if (p[k] !== undefined) warnings.push(`${where}: only a model keeps "${k}"; it was ignored.`);
+    }
+    if (p.scale !== undefined && (!isNum(p.scale) || p.scale <= 0 || p.scale > 1000)) failed = bad(`"scale" must be a number above 0.`);
+    if (p.scale !== undefined && p.shape !== "model" && p.shape !== "kit") warnings.push(`${where}: only a model or a kit takes "scale"; it was ignored.`);
+    let kitParts = null;
+    if (p.shape === "kit") {
+      if (typeof p.kit !== "string" || !p.kit) failed = bad(`a kit placement needs "kit": the name of one of the layout's "kits".`);
+      else if (!kits.has(p.kit)) failed = bad(`there is no kit called "${p.kit}" in "kits"${kits.size ? ` (there is ${[...kits.keys()].map((k) => `"${k}"`).join(", ")})` : ""}.`);
+      else kitParts = kits.get(p.kit);
+      for (const k of ["w", "d", "h"]) if (p[k] !== undefined) warnings.push(`${where}: a kit's "${k}" comes from its parts; use "scale" to size it.`);
+    } else if (p.kit !== undefined) warnings.push(`${where}: only a kit placement keeps "kit"; it was ignored.`);
+    const outline = OUTLINED.has(p.shape) && Array.isArray(p.points) ? p.points : null;
+    const path = p.shape === "pipe" && Array.isArray(p.path) ? p.path : null;
+    if ((outline || path) && p.at !== undefined) warnings.push(`${where}: "${outline ? "points" : "path"}" places it; "at" was ignored.`);
+    if ((outline || path) && p.rot) warnings.push(`${where}: "${outline ? "points" : "path"}" are on the map already; "rot" was ignored.`);
     let axes = [];
     if (p.mirror) {
       const which = p.mirror === true ? (isNum(mirror.cols) ? "cols" : isNum(mirror.rows) ? "rows" : null) : p.mirror;
@@ -419,9 +565,51 @@ function propPlacements(list, { errors, warnings, off, map, mirror, toCells }) {
     }
     if (failed) return;
 
-    const [r, c] = p.at;
-    const rot = isNum(p.rot) ? p.rot : 0;
-    const one = (rr, cc, turn, suffix) => {
+    const rot = isNum(p.rot) && !outline && !path ? p.rot : 0;
+    const thick = p.thick ?? def.d;
+    /** The prop's own keys, before its place: shared by every mirrored copy. */
+    const base = {
+      shape: p.shape,
+      w: p.w ?? def.w, d: p.d ?? def.d,
+      h: p.h !== undefined ? toCells(p.h) : def.h,
+      elev: p.elev === undefined || p.elev === null ? null : toCells(p.elev),
+      mat: p.mat ?? def.mat,
+      tint: p.tint ?? null,
+      solid: p.solid ?? def.solid,
+      hidden: p.hidden ?? false,
+      label: p.label ?? "",
+      roof: p.roof,
+      img: p.shape === "card" ? p.img ?? "" : undefined,
+      cliff: p.shape === "slab" ? p.cliff : undefined,
+      bevel: p.shape === "extrude" ? p.bevel : undefined,
+      profile: p.shape === "lathe" ? p.profile : undefined,
+      thick: p.shape === "pipe" ? thick : undefined,
+      src: p.shape === "model" ? p.src : undefined,
+      scale: p.shape === "model" ? p.scale ?? null : undefined,
+      rules: p.shape === "model" ? p.rules : undefined,
+      kit: p.shape === "kit" ? p.kit : undefined,
+    };
+    /** The middle of a list of map points: what "sits on its own axis" is measured by. */
+    const middle = (pts) => {
+      const rs = pts.map((q) => q[0]), cs = pts.map((q) => q[1]);
+      return [(Math.min(...rs) + Math.max(...rs)) / 2, (Math.min(...cs) + Math.max(...cs)) / 2];
+    };
+    const [r, c] = outline ? middle(outline) : path ? middle(path) : p.at;
+    const one = (axis, suffix) => {
+      let rr = r, cc = c, turn = rot, pts = outline, line = path, parts = kitParts;
+      if (axis === "cols") { cc = mirror.cols - c; turn = -rot; }
+      else if (axis === "rows") { rr = mirror.rows - r; turn = parts ? -rot : 180 - rot; }
+      else if (axis === "both") { rr = mirror.rows - r; cc = mirror.cols - c; turn = 180 + rot; }
+      if (axis && axis !== "both") {
+        if (pts) pts = reflectPoints(pts, axis, mirror);
+        if (line) line = reflectPoints(line, axis, mirror);
+        if (parts) parts = reflectParts(parts, axis === "cols" ? "x" : "y");
+      } else if (axis === "both") {
+        if (pts) pts = reflectPoints(reflectPoints(pts, "cols", mirror), "rows", mirror);
+        if (line) line = reflectPoints(reflectPoints(line, "cols", mirror), "rows", mirror);
+      }
+      // an outline or a path is reflected point by point, so it is never turned
+      if (pts || line) turn = 0;
       if (suffix && Math.abs(rr - r) < 1e-6 && Math.abs(cc - c) < 1e-6) {
         warnings.push(`${where} sits on its own mirror axis, so its mirrored copy was not added.`);
         return;
@@ -430,28 +618,20 @@ function propPlacements(list, { errors, warnings, off, map, mirror, toCells }) {
         warnings.push(`${where}${suffix ? " (mirrored)" : ""} stands outside the map at [${rr}, ${cc}] and was dropped.`);
         return;
       }
-      out.push({
-        id: p.id !== undefined ? p.id + suffix : undefined,
-        shape: p.shape,
-        x: cc + off.j, y: rr + off.i,
-        w: p.w ?? def.w, d: p.d ?? def.d,
-        h: p.h !== undefined ? toCells(p.h) : def.h,
-        elev: p.elev === undefined || p.elev === null ? null : toCells(p.elev),
-        rot: turn,
-        mat: p.mat ?? def.mat,
-        tint: p.tint ?? null,
-        solid: p.solid ?? def.solid,
-        hidden: p.hidden ?? false,
-        label: p.label ?? "",
-        img: p.shape === "card" ? p.img ?? "" : undefined,
-      });
+      const o = { ...base, id: p.id !== undefined ? p.id + suffix : undefined, x: cc + off.j, y: rr + off.i, rot: turn };
+      if (pts) o.points = pts.map(([pr, pc]) => [pc - cc, pr - rr]);
+      if (line) o.path = line.map(([pr, pc, z]) => [pc - cc, pr - rr, z !== undefined ? toCells(z) : thick / 2]);
+      if (parts) {
+        o.parts = parts;
+        let k = normalizeProp(o);
+        if (k && isNum(p.scale) && p.scale !== 1) k = normalizeProp({ ...scaleProp(k, p.scale, p.scale, p.scale), id: k.id });
+        if (k) { k.id = o.id ?? ""; out.push(k); }
+        return;
+      }
+      out.push(o);
     };
-    one(r, c, rot, "");
-    for (const a of axes) {
-      if (a === "cols") one(r, mirror.cols - c, -rot, "m");
-      else if (a === "rows") one(mirror.rows - r, c, 180 - rot, "r");
-      else one(mirror.rows - r, mirror.cols - c, 180 + rot, "b");
-    }
+    one(null, "");
+    for (const a of axes) one(a, a === "cols" ? "m" : a === "rows" ? "r" : "b");
   });
   return normalizeProps(out);
 }

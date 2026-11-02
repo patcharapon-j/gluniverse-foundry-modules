@@ -23,6 +23,7 @@
  *                                                // graphics: resolveGraphics() (options.mjs)
  *   r.setEnvironment(env);                       // resolved environment (environment.mjs)
  *   r.setProps(PropState[]);                     // render/props.mjs
+ *   r.setLevels([{ id, terrain, image, rect, dim }]);  // floors below the viewed Level: render/level-stack.mjs
  *   r.setShed(ladderLike);                       // { allows(name) }
  *   r.requestRender();
  *   r.pick(clientX, clientY);   // {type:"token",id,part:"air"|"ground"} | {type:"door",id} | {type:"ground",x,y,zQ,i,j} | null
@@ -32,12 +33,18 @@
  *   r.dispose();
  *
  * Beyond the contract, for the view's Surfaces registration: `pause()`,
- * `resume()`, `webgl` (the THREE.WebGLRenderer) and `canvas`.
+ * `resume()`, `webgl` (the THREE.WebGLRenderer) and `canvas`. For layers that
+ * own shadow casters: `markShadowsDirty()`. For the readout (render/profile.mjs):
+ * `setProfiling(on)`, `profile()` and the always-kept counts in `stats`.
  *
  * The loop renders ON DEMAND: one frame per requestRender, and frames for as
  * long as something animates (a tween, water, sway, a playing video, a ping),
- * holding Budget.claimMotion("diorama") only for that long. Without
- * requestAnimationFrame (Node) no loop ever starts.
+ * holding Budget.claimMotion("diorama") only for that long. Living light is
+ * the one thing that ticks instead: a flicker or a flame steps at its own low
+ * cadence (TIMING.flickerTick, TIMING.fireTick): animation frames before the
+ * tick is due return at once, and a tick whose lights did not visibly change
+ * draws nothing. Without requestAnimationFrame
+ * (Node) no loop ever starts.
  */
 
 import * as THREE from "./three.mjs";
@@ -58,6 +65,10 @@ import { PropsLayer } from "./props.mjs";
 import { AtmosphereLayer } from "./atmosphere.mjs";
 import { TorchesLayer } from "./torches.mjs";
 import { FogLayer } from "./fog.mjs";
+import { LevelStackLayer } from "./level-stack.mjs";
+import { FrameProfile } from "./profile.mjs";
+import { TilesLayer } from "./tiles.mjs";
+import { RoofFader } from "./roofs.mjs";
 import { DEFAULT_GRAPHICS } from "../options.mjs";
 
 /** Under load (the fpsCap rung shed) the cap drops to this. */
@@ -132,9 +143,18 @@ export class DioramaRenderer {
     this.fog = new FogLayer(this.shared, { height: this.atmosphere.height, heightInfo: this.atmosphere.heightInfo });
     // flames sit on the rules ground (a brazier prop's top included)
     this.torches.setGround((x, z) => { const m = this.rulesModel(); return m ? m.groundAt(x * this.grid.size, z * this.grid.size, this.grid.size) / 4 : 0; });
+    // the mist backdrop's box stands over the highest ground the party has seen (render/fog.mjs)
+    this.fog.setGround((i, j) => { const m = this.terrainModel; try { return m ? m.cellTop(i, j) / 4 : NaN; } catch { return NaN; } });
+    // Foundry tiles: decals on the ground and roofs over it, and the roofs' fades (docs/DIORAMA_BUILDINGS.md)
+    this.tiles = new TilesLayer(this.shared, () => this.requestRender());
+    this.roofs = new RoofFader();
+    this._toCamera = new THREE.Vector3();
     for (const l of this.layers()) this.scene.add(l.group);
+    // the Levels below the viewed one (render/level-stack.mjs): quieter floors, no shadows
+    this.levelStack = new LevelStackLayer(this.shared, { maxAniso: this.maxAniso });
+    this.scene.add(this.levelStack.group);
     /** The shadow pass's own-material casters: standee cards, then props. */
-    this._casters = [this.standees.casters, this.props.casters];
+    this._casters = [this.standees.casters, this.props.casters, this.tiles.casters];
     /** Reused every frame: what the standees need from the view. */
     this._standeeFrame = { pxWorld: 0.01, markers: true, life: true, dust: true, hover: true };
 
@@ -173,6 +193,32 @@ export class DioramaRenderer {
     this._paused = false;
     this._disposed = false;
     this._waterClock = 0;
+    /** Something asked for a frame (requestRender) since the last one drew. */
+    this._wanted = false;
+    /**
+     * Clock ms of the next living-light tick (0: none). Until then an animation
+     * frame that nobody asked for returns at once: no layer work, no draw.
+     */
+    this._tickAt = 0;
+    /** The camera's frustum this frame: what a light's flicker must reach to be worth a frame. */
+    this._frustum = new THREE.Frustum();
+    this._viewProj = new THREE.Matrix4();
+    this._sphere = new THREE.Sphere();
+    this._inView = (x, y, z, r) => {
+      this._sphere.center.set(x, y, z);
+      this._sphere.radius = r;
+      return this._frustum.intersectsSphere(this._sphere);
+    };
+    /**
+     * Always kept, at the cost of an increment: frames drawn, ticks that drew
+     * nothing, shadow-map renders. The readout and the preview's probe read them.
+     */
+    this.stats = { frames: 0, skipped: 0, shadowRenders: 0 };
+    /** The readout (render/profile.mjs), only while someone looks: setProfiling. */
+    this._profiling = false;
+    this._profile = null;
+    // Counts per frame, not per render() call: the shadow pass and the main pass add up.
+    this.webgl.info.autoReset = false;
 
     // Overlays and picks stand on the RULES ground: the terrain with solid
     // props stamped in (props.rules), where a token actually stands.
@@ -199,7 +245,7 @@ export class DioramaRenderer {
 
   /** Every layer, in draw-group order. */
   layers() {
-    return [this.terrain, this.props, this.walls, this.standees, this.overlays, this.areas, this.effects, this.links, this.atmosphere, this.torches, this.fog];
+    return [this.terrain, this.props, this.walls, this.standees, this.overlays, this.areas, this.effects, this.links, this.atmosphere, this.torches, this.fog, this.tiles];
   }
 
   /* ------------------------------------------------------------ state in */
@@ -212,7 +258,7 @@ export class DioramaRenderer {
     if (Number(rows) > 0) g.rows = Math.round(Number(rows));
     if (sceneRect) g.sceneRect = { ...sceneRect };
     this.shared.uWorldSize.value.set(g.cols, g.rows);
-    for (const l of [this.walls, this.standees, this.overlays, this.areas, this.effects, this.props, this.atmosphere, this.torches, this.fog, this.rig]) l.setGridSize(g.size);
+    for (const l of [this.walls, this.standees, this.overlays, this.areas, this.effects, this.props, this.atmosphere, this.torches, this.fog, this.tiles, this.rig]) l.setGridSize(g.size);
     this.torches.relayout();
     this.updateMapRect();
     this.updateShadowBounds();
@@ -228,8 +274,10 @@ export class DioramaRenderer {
     this.terrainModel = terrain ?? null;
     this.terrain.set(this.terrainModel);
     this.props.setTerrain(this.terrainModel);
+    this.tiles.setTerrain(this.terrainModel);
     this.atmosphere.setTerrain(this.terrainModel, this.terrain.mesh);
     this.torches.relayout();
+    this.fog.refreshTop();
     this.updateShadowBounds();
     this.requestRender();
   }
@@ -281,7 +329,19 @@ export class DioramaRenderer {
 
   updateShadowBounds() {
     const m = this.terrain.mesh;
-    this.shadow.setBounds({ x1: this.grid.cols, z1: this.grid.rows, y0: m ? m.baseY : -1, y1: Math.max((m ? m.maxY : 0) + 3, (this.props?.maxY ?? 0) + 0.5) });
+    this.shadow.setBounds({ x1: this.grid.cols, z1: this.grid.rows, y0: m ? m.baseY : -1, y1: Math.max((m ? m.maxY : 0) + 3, (this.props?.maxY ?? 0) + 0.5, (this.tiles?.maxY ?? 0) + 0.5) });
+  }
+
+  /**
+   * Something that casts the sun's shadow changed (moved, appeared, changed
+   * shape): the shadow map is drawn again on the next frame, once. The map is
+   * fitted to the whole board, so the camera never dirties it. A layer that
+   * owns casters calls this, or raises its own `castersDirty` that frame()
+   * reads; an animated caster marks it only on the frames it moves.
+   */
+  markShadowsDirty() {
+    this.shadow.dirty = true;
+    this.requestRender();
   }
 
   /** @param {object[]} walls WallState[] */
@@ -405,9 +465,45 @@ export class DioramaRenderer {
     this.requestRender();
   }
 
+  /** @param {object[]} tiles TileState[] (integrations/tiles.mjs; render/tiles.mjs draws them) */
+  setTiles(tiles) {
+    this.tiles.set(tiles ?? []);
+    this.shadow.dirty = true;
+    this.updateShadowBounds();
+    this.requestRender();
+  }
+
+  /**
+   * What every roof should show, and the figures the camera keeps clear of
+   * roofs (view/roofs.mjs readRoofs). The fades run in frame().
+   * @param {{roofs?:object[], focus?:object[]}} o
+   */
+  setRoofs({ roofs = [], focus = [] } = {}) {
+    this.roofs.set(roofs, focus);
+    this.requestRender();
+  }
+
+  /**
+   * The floors below the viewed Level, lowest first (render/level-stack.mjs):
+   * each its terrain in the absolute frame, its own art and a dim. The table's
+   * shadow moves under the lowest of them. [] in a one-Level scene.
+   * @param {Array<{id:string, terrain:object, image?:any, rect?:object, dim?:number}>} levels
+   */
+  setLevels(levels) {
+    this.levelStack.set(levels ?? [], this.grid);
+    this.terrain.setTableFloor(this.levelStack.lowestY);
+    this.requestRender();
+  }
+
   setOptions({ tiltShift, cutaway, ghosts, grid, graphics } = {}) {
     const now = clock();
-    if (graphics) { this.graphics = { ...DEFAULT_GRAPHICS, ...graphics }; this.shadow.dirty = true; }
+    // The map is depth only, the same for hard and soft; with shadows off it is
+    // skipped and its dirty flag waits. Only prop detail reshapes a caster.
+    if (graphics) {
+      const detail = this.graphics.detail;
+      this.graphics = { ...DEFAULT_GRAPHICS, ...graphics };
+      if (this.graphics.detail !== detail) this.shadow.dirty = true;
+    }
     if (grid !== undefined) this.setGridLines(grid);
     if (tiltShift !== undefined) this.options.tiltShift = !!tiltShift;
     if (cutaway !== undefined) { this.options.cutaway = !!cutaway; this.walls.setCutaway(this.options.cutaway, now, this._drawn); }
@@ -436,7 +532,14 @@ export class DioramaRenderer {
 
   /* ------------------------------------------------------------ loop */
 
+  /** Draw the next frame (something changed, or something animates). */
   requestRender() {
+    this._wanted = true;
+    this.schedule();
+  }
+
+  /** The next animation frame, without asking it to draw: a tick decides for itself. */
+  schedule() {
     if (this._disposed || this._paused || this._raf || !hasRaf()) return;
     this._raf = globalThis.requestAnimationFrame((t) => this.frame(t));
   }
@@ -445,6 +548,7 @@ export class DioramaRenderer {
     this._paused = true;
     if (this._raf && typeof globalThis.cancelAnimationFrame === "function") globalThis.cancelAnimationFrame(this._raf);
     this._raf = 0;
+    this._tickAt = 0;
     this.claim(false);
   }
 
@@ -486,6 +590,9 @@ export class DioramaRenderer {
       fogDrift: allows("fogDrift"),
       torchShadows: allows("torchShadows"),
       torchFlicker: allows("torchFlicker"),
+      // Foundry tiles and roofs (tiles.mjs, roofs.mjs)
+      tileVideo: allows("tileVideo"),
+      roofFade: allows("roofFade"),
     };
   }
 
@@ -528,6 +635,9 @@ export class DioramaRenderer {
       // the fog of war (dio.fogStyle): 1 clouds, 0 flat; clouds hold still when fogDrift is shed
       fog: g.fog ?? 1,
       fogDrift: shed.fogDrift,
+      // a video tile holds its frame; roofs snap open and shut
+      tileVideo: shed.tileVideo,
+      roofFade: shed.roofFade,
     };
   }
 
@@ -538,9 +648,17 @@ export class DioramaRenderer {
     const fx = this.effectiveFx(shed);
     this.fx = fx;
     if (fx.frameMs && this._lastFrame && now - this._lastFrame < fx.frameMs - 2) {
-      this.requestRender();
+      this.schedule();
       return;
     }
+    // Asked to draw (requestRender), or only waiting for a living-light tick?
+    if (!this._wanted && this._tickAt && clock() < this._tickAt - 1) {
+      this.schedule();
+      return;
+    }
+    const wanted = this._wanted;
+    this._wanted = false;
+    this._tickAt = 0;
     const dt = this._last ? Math.min(MAX_DT, (now - this._last) / 1000) : 0;
     this._last = now;
     this._lastFrame = now;
@@ -556,6 +674,7 @@ export class DioramaRenderer {
     const sf = this._standeeFrame;
     sf.pxWorld = VIEW_CELLS / Math.max(1e-3, this.rig.view.zoom) / Math.max(1, this._h * ratio0);
     this.atmosphere.pxWorld = sf.pxWorld;
+    this.props.pxWorld = sf.pxWorld;
     sf.markers = fx.markers;
     sf.life = fx.life; sf.dust = fx.dust; sf.hover = fx.hover;
     if (this.standees.frame(t, this.rig.camera, yaw, sway, sf)) active = true;
@@ -579,8 +698,23 @@ export class DioramaRenderer {
     if (this.props.frame(t, dt, this.rig.camera, fx)) active = true;
     if (this.props.castersDirty) { this.props.castersDirty = false; this.shadow.dirty = true; }
     if (this.atmosphere.frame(t, dt, this.rig.camera, fx, this.rig.view)) active = true;
-    if (this.torches.frame(t, dt, fx, this.rig.view, this.standees, sf.pxWorld)) active = true;
+    // the camera's frustum: a light whose flicker cannot reach the screen asks for no ticks
+    const cam = this.rig.camera;
+    this._frustum.setFromProjectionMatrix(this._viewProj.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    if (this.torches.frame(t, dt, fx, this.rig.view, this.standees, sf.pxWorld, this._inView)) active = true;
     if (this.fog.frame(dt, fx)) active = true;
+    // roofs: fade toward what the view decided, and away from the camera over a viewer's figure
+    if (this.roofs.size) {
+      const dir = this.rig.camera.getWorldDirection(this._toCamera).negate();
+      if (this.roofs.frame(dt, dir, !fx.roofFade)) active = true;
+      if (this.roofs.changed) {
+        this.roofs.changed = false;
+        this.tiles.applyRoofs(this.roofs);
+        this.props.setRoofFade?.(this.roofs.propAlphas());
+      }
+    }
+    if (this.tiles.frame(t, dt, fx)) active = true;
+    if (this.tiles.castersDirty) { this.tiles.castersDirty = false; this.shadow.dirty = true; this.updateShadowBounds(); }
     if (isVideo(this.bg.source) && !this.bg.source.paused) active = true;
 
     const shadows = fx.shadows > 0;
@@ -593,21 +727,67 @@ export class DioramaRenderer {
       this.webgl.setSize(this._w, this._h, false);
     }
 
-    try {
-      if (shadows) this.shadow.render(this.webgl, this.scene, this._casters);
-      if (fx.tiltShift) this.tilt.render(this.webgl, this.scene, this.rig.camera);
-      else {
-        this.webgl.setRenderTarget(null);
-        this.webgl.render(this.scene, this.rig.camera);
+    // A frame woken only by a living-light tick draws only when a light visibly
+    // changed; anything else that asked, or that animates, draws as before.
+    const draw = wanted || active || this.torches.changed;
+    const prof = this.profiling ? (this._profile ??= new FrameProfile(this.webgl.getContext?.() ?? null)) : null;
+    if (draw) {
+      try {
+        this.webgl.info.reset();
+        prof?.gpu.begin();
+        if (shadows && this.shadow.render(this.webgl, this.scene, this._casters)) {
+          this.stats.shadowRenders++;
+          prof?.shadow(t);
+        }
+        if (fx.tiltShift) this.tilt.render(this.webgl, this.scene, this.rig.camera);
+        else {
+          this.webgl.setRenderTarget(null);
+          this.webgl.render(this.scene, this.rig.camera);
+        }
+        prof?.gpu.end();
+        this._drawn = true;
+        this.stats.frames++;
+        prof?.frame({ at: t, cpuMs: clock() - t, calls: this.webgl.info.render.calls, triangles: this.webgl.info.render.triangles });
+      } catch (e) {
+        prof?.gpu.end();
+        console.error("GLUniverse Suite | diorama render failed", e);
+        active = false;
       }
-      this._drawn = true;
-    } catch (e) {
-      console.error("GLUniverse Suite | diorama render failed", e);
-      active = false;
-    }
+    } else this.stats.skipped++;
 
-    this.claim(active);
+    // The next living-light tick, unless something animates at the full rate anyway.
+    const wake = active ? Infinity : this.torches.nextAt;
+    this.claim(active || Number.isFinite(wake));
     if (active) this.requestRender();
+    else if (Number.isFinite(wake)) { this._tickAt = wake; this.schedule(); }
+  }
+
+  /* ------------------------------------------------------------ readout */
+
+  /** True while the readout is open here (setProfiling) or the perf overlay is (Budget.profiling). */
+  get profiling() {
+    return this._profiling || Budget.profiling;
+  }
+
+  /** The Graphics panel's readout: time frames only while it is open. */
+  setProfiling(on) {
+    const was = this._profiling;
+    this._profiling = !!on;
+    if (!this.profiling && this._profile) { this._profile.dispose(); this._profile = null; }
+    if (this._profiling && !was) this.requestRender();
+  }
+
+  /**
+   * What the view costs now (render/profile.mjs FrameProfile#read): GPU and CPU
+   * ms per drawn frame, draw calls and triangles of the last one, frames and
+   * shadow-map renders over the last second, and the shed rung in force.
+   * null while nobody is profiling; a still board reads 0 frames per second.
+   */
+  profile() {
+    if (!this.profiling || this._disposed) return null;
+    this._profile ??= new FrameProfile(this.webgl.getContext?.() ?? null);
+    const names = SHED_ORDER.filter((n) => { try { return this.graphics.adaptive !== false && this.shed.allows(n) === false; } catch { return false; } });
+    return this._profile.read(clock(), { level: names.length, of: SHED_ORDER.length, name: names.at(-1) ?? null });
   }
 
   /* ------------------------------------------------------------ queries */
@@ -685,10 +865,14 @@ export class DioramaRenderer {
     this._disposed = true;
     if (this._raf && typeof globalThis.cancelAnimationFrame === "function") globalThis.cancelAnimationFrame(this._raf);
     this._raf = 0;
+    this._tickAt = 0;
     this.claim(false);
+    this._profile?.dispose();
+    this._profile = null;
     this._unbudget?.();
     this._ownLadder?.dispose();
     for (const l of this.layers()) l.dispose();
+    this.levelStack.dispose();
     this.shadow.dispose();
     this.tilt.dispose();
     this.backdrop.geometry.dispose();

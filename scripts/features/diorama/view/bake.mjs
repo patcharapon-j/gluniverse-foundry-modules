@@ -47,6 +47,12 @@ function tracePoly(ctx, poly) {
   return true;
 }
 
+/** Whether a light source is carried by a token the GM has hidden. */
+export function hiddenTokenLight(src) {
+  const doc = src?.object?.document;
+  return doc?.documentName === "Token" && !!doc.hidden;
+}
+
 function sourceList(coll) {
   if (!coll) return [];
   try { return Array.from(coll.values ? coll.values() : coll); } catch { return []; }
@@ -152,9 +158,11 @@ export class Baker {
     const env = globalThis.canvas?.environment;
     const globalLit = !!env?.globalLightSource?.active;
     const darkness = globalLit ? 0 : Math.max(0, Math.min(1, Number(env?.darknessLevel ?? globalThis.canvas?.darknessLevel ?? 0)));
-    const lights = this.lightSources(env);
-    this.drawLight(lights);
     const mode = this.mode();
+    // Viewing as the players, a hidden token's light is the GM's alone: its pool
+    // (and its flicker) would show the players where the token stands.
+    const lights = this.lightSources(env).filter((src) => mode !== "players" || !hiddenTokenLight(src));
+    this.drawLight(lights);
     let vision = null;
     this.seen = null;
     if (mode === "own") { this.drawOwnVision(lights, globalLit); vision = this.vision; }

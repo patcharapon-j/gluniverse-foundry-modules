@@ -26,6 +26,7 @@
 
 import { SUB } from "../constants.mjs";
 import { gridOf } from "../terrain/store.mjs";
+import { isMultiLevel, levelBackgroundSrc } from "../terrain/levels.mjs";
 import { warn } from "../../../core/const.mjs";
 
 /** Most canvas px per sub-cell per axis (16 per square: a stair tread is 4–8). */
@@ -91,8 +92,13 @@ function rgbOf(rgba, n) {
   return out;
 }
 
-/** The art the terrain is painted over (v14: the initial Level's background). */
-export function backgroundSrc(scene) {
+/**
+ * The art the terrain is painted over: v14 Levels carry their own background,
+ * so a Level's (default: the one viewed on the canvas, else the initial one).
+ */
+export function backgroundSrc(scene, level = null) {
+  // (not scene.background: v14 shims that to the FIRST Level's art)
+  if (isMultiLevel(scene)) return levelBackgroundSrc(scene, level);
   return scene?.initialLevel?.background?.src || scene?.background?.src || null;
 }
 

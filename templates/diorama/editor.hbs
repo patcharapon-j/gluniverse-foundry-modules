@@ -34,6 +34,19 @@
     <p class="gldio-ed-notice is-warn"><i class="fa-solid fa-power-off"></i> {{localize "GLDIO.editor.offNotice"}}</p>
   {{/if}}
 
+  {{!-- Multi-Level scenes only: the Level being edited, highest first. A button views that Level on the canvas. --}}
+  {{#if level}}
+    <div class="gldio-ed-seg gldio-ed-levels" role="group" aria-label="{{localize "GLDIO.editor.level.label"}}">
+      {{#each level.levels}}
+        <button type="button" class="gldio-ed-segbtn {{#if active}}is-active{{/if}}" data-action="level" data-level="{{id}}" aria-pressed="{{#if active}}true{{else}}false{{/if}}"
+          data-tooltip="{{#if saved}}{{localize "GLDIO.editor.level.saved" base=base}}{{else}}{{localize "GLDIO.editor.level.blank" base=base}}{{/if}}"><i class="fa-solid fa-layer-group"></i> {{name}}</button>
+      {{/each}}
+    </div>
+    {{#if level.mismatch}}
+      <p class="gldio-ed-notice is-warn"><i class="fa-solid fa-triangle-exclamation"></i> {{level.mismatch}}</p>
+    {{/if}}
+  {{/if}}
+
   {{!-- Terrain or props: the two things this panel edits. --}}
   <div class="gldio-ed-seg gldio-pr-modes" role="group" aria-label="{{localize "GLDIO.props.modeLabel"}}">
     <button type="button" class="gldio-ed-segbtn {{#if mode.terrain}}is-active{{/if}}" data-action="mode" data-mode="terrain" aria-pressed="{{#if mode.terrain}}true{{else}}false{{/if}}"><i class="fa-solid fa-mountain"></i> {{localize "GLDIO.props.mode.terrain"}}</button>
@@ -96,8 +109,35 @@
         <span class="gldio-pr-flags">
           <label class="gldio-ed-check" data-tooltip="{{localize "GLDIO.props.solidHint"}}"><input type="checkbox" data-field="prop.solid" {{#if props.sel.solid}}checked{{/if}}> {{localize "GLDIO.props.field.solid"}}</label>
           <label class="gldio-ed-check" data-tooltip="{{localize "GLDIO.props.hiddenHint"}}"><input type="checkbox" data-field="prop.hidden" {{#if props.sel.hidden}}checked{{/if}}> {{localize "GLDIO.props.field.hidden"}}</label>
+          <label class="gldio-ed-check" data-tooltip="{{localize "GLDIO.props.roofHint"}}"><input type="checkbox" data-field="prop.roof" {{#if props.sel.roof}}checked{{/if}}> {{localize "GLDIO.props.field.roof"}}</label>
         </span>
       </div>
+      {{#if props.sel.slab}}
+        <label class="gldio-ed-field"><span class="gldio-ed-label">{{localize "GLDIO.props.field.cliff"}}</span>
+          <select class="gldio-ed-select" data-field="prop.cliff">
+            {{#each props.sel.cliffs}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select></label>
+        <p class="gldio-ed-hint">{{localize "GLDIO.props.slabHint"}}</p>
+      {{/if}}
+      {{#if props.sel.model}}
+        <div class="gldio-ed-row">
+          <input class="gldio-ed-text" type="text" value="{{props.sel.src}}" data-field="prop.src" aria-label="{{localize "GLDIO.props.field.src"}}" placeholder="{{localize "GLDIO.props.field.src"}}">
+          <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--sm" data-action="propOp" data-op="pickModel"><i class="fa-solid fa-folder-open"></i> {{localize "GLDIO.props.action.pickModel"}}</button>
+        </div>
+        <div class="gldio-ed-grid2">
+          <label class="gldio-ed-field"><span class="gldio-ed-label">{{localize "GLDIO.props.field.scale"}}</span>
+            <input class="gldio-ed-num gl-numeric" type="number" min="0" step="0.05" value="{{props.sel.scale}}" data-field="prop.scale"
+              placeholder="{{localize "GLDIO.props.field.scaleFit"}}"></label>
+          <label class="gldio-ed-field"><span class="gldio-ed-label">{{localize "GLDIO.props.field.rules"}}</span>
+            <select class="gldio-ed-select" data-field="prop.rules">
+              {{#each props.sel.rulesList}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+            </select></label>
+        </div>
+        <p class="gldio-ed-hint">{{localize "GLDIO.props.modelHint"}}</p>
+      {{/if}}
+      {{#if props.sel.kit}}
+        <p class="gldio-ed-hint">{{localize "GLDIO.props.kitHint" name=props.sel.kitName n=props.sel.kitParts}}</p>
+      {{/if}}
       {{#if props.sel.card}}
         <div class="gldio-ed-row">
           <input class="gldio-ed-text" type="text" value="{{props.sel.img}}" data-field="prop.img" aria-label="{{localize "GLDIO.props.field.img"}}" placeholder="{{localize "GLDIO.props.field.img"}}">

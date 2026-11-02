@@ -135,12 +135,18 @@ export function shapesFor(cells, gridSize) {
   }));
 }
 
-/** Our difficult-terrain regions on a scene, in planner form. */
-export function readDifficult(scene) {
+/**
+ * Our difficult-terrain regions on a scene, in planner form. With a Level,
+ * only the regions included in it (v14 CanvasDocument#includedInLevel: a
+ * region with no Levels is in every one), so editing one floor never touches
+ * another floor's regions.
+ */
+export function readDifficult(scene, levelId = null) {
   const out = [];
   for (const r of scene?.regions ?? []) {
     const f = r.getFlag?.(SUITE_ID, FLAG_DIFFICULT);
     if (!f || !Array.isArray(f.cells)) continue;
+    if (levelId && typeof r.includedInLevel === "function" && !r.includedInLevel(levelId)) continue;
     out.push({ id: r.id, cells: f.cells.filter((k) => typeof k === "string"), difficulty: Number(f.difficulty) || 2 });
   }
   return out;

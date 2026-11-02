@@ -1,6 +1,11 @@
 {
   "GLDIO.editor.title": "Terrain editor",
   "GLDIO.editor.titleScene": "Terrain: {scene}",
+  "GLDIO.editor.titleLevel": "Terrain: {scene}, {level}",
+  "GLDIO.editor.level.label": "Level",
+  "GLDIO.editor.level.saved": "Base {base}. Has saved terrain. Click to view this Level and edit it.",
+  "GLDIO.editor.level.blank": "Base {base}. Flat, nothing saved yet. Click to view this Level and edit it.",
+  "GLDIO.editor.level.mismatch": "You are editing {level}, but the canvas shows {viewed}. Painting lands on {level}. Click {viewed} above to switch.",
   "GLDIO.editor.unsupported": "Diorama works on square grids only.",
   "GLDIO.editor.notViewing": "View this scene to paint on it. Saving still works.",
   "GLDIO.editor.offNotice": "3D is off for this scene. Players will not be offered the view.",

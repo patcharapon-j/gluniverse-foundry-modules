@@ -360,12 +360,22 @@ export const MATERIALS = {
     });
   },
 
-  ribbon(_shared, { opacity = 1, depthTest = true } = {}) {
+  /** mask: hidden over ground this viewer has never seen, faded under the mist (glsl.mjs RIBBON_FRAG). */
+  ribbon(shared, { opacity = 1, depthTest = true, mask = false } = {}) {
+    const ref = (k, v) => shared?.[k] ?? { value: v };
     return new THREE.ShaderMaterial({
       name: "dio.ribbon",
       vertexShader: PROGRAMS.ribbon.vertex,
       fragmentShader: PROGRAMS.ribbon.fragment,
-      uniforms: { uOpacity: { value: opacity } },
+      uniforms: {
+        uOpacity: { value: opacity },
+        uMask: { value: mask ? 1 : 0 },
+        uUseVision: ref("uUseVision", 0),
+        uWorldSize: ref("uWorldSize", new THREE.Vector2(1, 1)),
+        uVisionMap: ref("uVisionMap", null),
+        uFogMap: ref("uFogMap", null),
+        uFogStyle: ref("uFogStyle", new THREE.Vector2(0, 0)),
+      },
       transparent: true,
       depthWrite: false,
       depthTest,
@@ -491,8 +501,9 @@ export const MATERIALS = {
       name: "dio.fog.backdrop",
       vertexShader: PROGRAMS.fogBackdrop.vertex,
       fragmentShader: PROGRAMS.fogBackdrop.fragment,
-      // the coverage map (render/fog.mjs fogCoverage); blank is nothing hidden
-      uniforms: uniformsFor(shared, { uFogCover: cover ?? { value: blankTexture([0, 0, 0, 255]) } }),
+      // the coverage map (render/fog.mjs fogCoverage); blank is nothing hidden. uFogTop:
+      // the highest ground the party has SEEN (cells), so the box's height tells nothing
+      uniforms: uniformsFor(shared, { uFogCover: cover ?? { value: blankTexture([0, 0, 0, 255]) }, uFogTop: { value: 0 } }),
       side: THREE.BackSide,
     });
   },

@@ -69,5 +69,13 @@
   "GLDIO.env.note.weatherCalendarOff": "Weather should follow the Weather feature, but it is off or has no region, so the weather here is used.",
 
   "GLDIO.env.btn.reset": "Reset",
-  "GLDIO.env.btn.done": "Done"
+  "GLDIO.env.btn.done": "Done",
+
+  "GLDIO.env.section.tiles": "Tiles",
+  "GLDIO.env.field.tiles": "Tiles in 3D",
+  "GLDIO.env.tiles.all": "Ground tiles and roofs",
+  "GLDIO.env.tiles.roofs": "Roofs only",
+  "GLDIO.env.tiles.ground": "Ground tiles only",
+  "GLDIO.env.tiles.off": "Off",
+  "GLDIO.env.note.tiles": "Ground tiles lie on the 3D ground like decals. Tiles with an occlusion mode, or above the Level's top, become roofs that fade while a player's figure is inside. Turn tiles off here for a map whose tiles clash with the 3D board."
 }

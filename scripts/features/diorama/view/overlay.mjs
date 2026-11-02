@@ -34,9 +34,14 @@ import { currentLines, linksOn, onLinesChanged } from "../integrations/target-li
 import { OPTIONS, resolveGraphics } from "../options.mjs";
 import { sceneEnvironment, environmentTouched, ENV_HOOKS } from "./environment-source.mjs";
 import { PropStore } from "../terrain/props-store.mjs";
+import { levelBackgroundSrc, tokenLevelId, isMultiLevel } from "../terrain/levels.mjs";
+import { cutTokens } from "./levels.mjs";
+import { readStack, stackProps, loadFloors, tokenLevelOf, releaseFloorArt, wallsOnLevel } from "./level-view.mjs";
+import { readTiles } from "../integrations/tiles.mjs";
+import { readRoofs } from "./roofs.mjs";
 
 const ROOT_ID = "gldio-view";
-const PARTS = ["terrain", "background", "walls", "tokens", "links", "cells", "overlays", "effects", "options", "lighting", "environment", "props"];
+const PARTS = ["terrain", "background", "walls", "tokens", "links", "cells", "overlays", "effects", "options", "lighting", "environment", "props", "levels", "tiles", "roofs"];
 /** Setting keys whose change redraws with new graphics / a new environment. */
 const GRAPHICS_KEYS = new Set(OPTIONS.filter((o) => o.scope === "client").map((o) => `${SUITE_ID}.${o.key}`));
 const ENV_KEYS = new Set(["dio.envSource", "dio.weatherSource"].map((k) => `${SUITE_ID}.${k}`));
@@ -54,6 +59,10 @@ const fresh = () => ({
   lighting: null, bg: null, bgSeq: 0, cellSeq: 0,
   overlays: emptyOverlays(),
   asPlayers: false, cutaway: true, savedCamera: null,
+  // the Level stack (view/levels.mjs): the viewed Level, its plan, the floors' load sequence
+  levelId: null, stack: null, floorSeq: 0,
+  // Foundry tiles and roofs (docs/DIORAMA_BUILDINGS.md): the last walls, tiles and props read, and the GM's cut-away roofs
+  walls: [], tiles: [], props: [], roofCut: false,
 });
 
 const S = fresh();
@@ -62,6 +71,8 @@ let _opening = null;
 /* ═══════════════════════════ public ═══════════════════════════ */
 
 export const isOpen = () => S.open;
+/** The live renderer, or null while the view is closed (the cost readouts read it). */
+export const viewRenderer = () => S.r ?? null;
 
 /** Whether this client may open the view on a scene; notifies why not. */
 export function mayOpen(scene, notify = false) {
@@ -158,6 +169,16 @@ export function onCanvasReady() {
     readTerrain();
     S.baker?.setGrid(S.grid);
     initialCamera();
+  } else if (liveTerrain(scene)?.levelId !== S.levelId) {
+    // Foundry switched the viewed Level (it redraws the canvas): a new board, the same camera.
+    S.bg = null;
+    S.overlays = emptyOverlays();
+    S.reach = null;
+    S.input?.cancel();
+    readTerrain();
+    S.baker?.setGrid(S.grid);
+    const cam = S.r?.getCamera?.();
+    if (cam?.target) setCamera({ target: { ...cam.target, zQ: groundQ(cam.target.x, cam.target.y) } });
   }
   markAll();
   S.baker?.request();
@@ -284,9 +305,12 @@ function computeReach() {
     const c = globalThis.canvas?.tokens?.controlled ?? [];
     if (c.length === 1 && c[0].document?.parent === S.scene && c[0].document.isOwner) tok = c[0];
   }
+  // viewing as the players: a token not on their board has no reach (its squares would outline it)
+  const onBoard = S.asPlayers ? (id) => S.tokenIds.has(id) : null;
+  if (tok && onBoard && !onBoard(tok.id)) tok = null;
   let reach = null;
   if (tok && S.grid) {
-    try { reach = reachOf({ tok, scene: S.scene, grid: S.grid, terrain: S.terrain }); } catch (e) { err("diorama: reach failed", e); }
+    try { reach = reachOf({ tok, scene: S.scene, grid: S.grid, terrain: S.terrain, seen: onBoard }); } catch (e) { err("diorama: reach failed", e); }
   }
   S.reach = reach;
   const show = reach && mode !== "off" && (mode === "selected" || S.dragTok);
@@ -335,6 +359,7 @@ function teardown() {
   safe(() => S.seq?.dispose());
   safe(() => S.r?.dispose());
   safe(() => S.surface?.dispose());
+  safe(() => releaseFloorArt());
   S.root?.remove();
   Object.assign(S, fresh());
 }
@@ -350,14 +375,17 @@ function wireHooks() {
   const onActor = (doc) => { if (doc?.parent?.documentName === "Actor" || doc?.parent?.documentName === "Token") mark("tokens"); };
 
   for (const h of ["createToken", "updateToken", "deleteToken"]) on(h, tokensHere);
-  // The reach follows the selected token, the walls and doors, and difficult terrain.
-  on("updateToken", (doc) => { if (here(doc) && (doc.id === S.reach?.tokenId || doc.object?.controlled)) queueReach(); });
+  // The reach follows the selected token, the creatures around it, the walls and doors, and difficult terrain.
+  on("updateToken", (doc) => { if (here(doc) && (S.reach || doc.object?.controlled)) queueReach(); });
+  for (const h of ["createToken", "deleteToken"]) on(h, (doc) => { if (here(doc) && S.reach) queueReach(); });
   on("refreshToken", tokens);
   on("targetToken", tokens);
   on("controlToken", () => { mark("tokens"); S.baker?.request(); S.input?.hoverLabel(); queueReach(); });
   for (const h of ["createWall", "updateWall", "deleteWall"]) on(h, (doc) => { wallsHere(doc); if (here(doc)) queueReach(); });
   for (const h of ["createRegionBehavior", "updateRegionBehavior", "deleteRegionBehavior"]) on(h, () => queueReach());
-  on("updateActor", (actor) => { if (S.reach && actor === globalThis.canvas?.tokens?.get(S.reach.tokenId)?.actor) queueReach(); });
+  // any actor: the mover's Speed, or a creature around it dying (a dead body is not in the way)
+  on("updateActor", () => { if (S.reach) queueReach(); });
+  for (const h of ["createActiveEffect", "deleteActiveEffect"]) on(h, () => { if (S.reach) queueReach(); });
   for (const h of ["updateCombat", "deleteCombat", "createCombatant", "updateCombatant", "deleteCombatant"]) on(h, tokens);
   on("combatTurnChange", (combat) => { mark("tokens"); follow(combat); });
   on("combatStart", (combat) => { mark("tokens"); follow(combat); });
@@ -366,12 +394,15 @@ function wireHooks() {
   on("sightRefresh", () => { S.baker?.request(); mark("tokens"); });
   on("lightingRefresh", () => S.baker?.request());
   for (const h of ["createRegion", "updateRegion", "deleteRegion"]) on(h, (doc) => { if (here(doc)) { mark("cells"); queueReach(); } });
+  // Foundry tiles: decals and roofs (integrations/tiles.mjs). Roofs follow "tokens" in flush().
+  for (const h of ["createTile", "updateTile", "deleteTile"]) on(h, (doc) => { if (here(doc)) mark("tiles"); });
   on("updateScene", (scene, changes) => {
     if (scene !== S.scene) return;
-    if ("levels" in changes || "background" in changes || "initialLevel" in changes) mark("background");
+    if ("levels" in changes || "background" in changes || "initialLevel" in changes) { mark("background"); mark("levels"); }
     if ("environment" in changes) { S.baker?.request(); mark("environment"); }
     // a known layout (FLAG_KNOWN) is read off the document by the bake; any flag write re-bakes
     if (changes?.flags?.[SUITE_ID]) S.baker?.request();
+    if (changes?.flags?.[SUITE_ID]) mark("tiles"); // dio.tiles (integrations/tiles.mjs)
     if (environmentTouched(changes)) mark("environment");
     if (PropStore.touched(changes)) mark("props");
   });
@@ -451,6 +482,8 @@ function flush() {
   const r = S.r;
   const gm = isGM();
   try {
+    // the Level stack moved (a Level edited, "view as players"): who is cut, which floors show
+    if (d.has("levels") && !d.has("terrain")) { S.stack = readStack(S.scene, { gm: gm && !S.asPlayers }); d.add("tokens"); d.add("props"); }
     if (d.has("terrain")) {
       readTerrain();
       r.setGrid(gridArg());
@@ -460,32 +493,38 @@ function flush() {
       S.baker?.setGrid(S.grid);
       S.baker?.request();
       S.hud?.setSetup(gm && !S.saved);
-      d.add("walls"); d.add("tokens"); d.add("cells"); d.add("background"); d.add("props");
+      d.add("walls"); d.add("tokens"); d.add("cells"); d.add("background"); d.add("props"); d.add("levels");
       queueReach();
     }
     if (d.has("background")) loadBackground();
     if (d.has("walls")) {
-      r.setWalls(readWalls({ isGM: gm && !S.asPlayers, terrain: S.ground, grid: S.grid, defaultMaterial: setting(SETTINGS.wallMaterial, "stone") }));
+      const walls = readWalls({ isGM: gm && !S.asPlayers, terrain: S.ground, grid: S.grid, defaultMaterial: setting(SETTINGS.wallMaterial, "stone") });
+      // v14 Levels: only the viewed Level's walls stand in the view.
+      r.setWalls(S.walls = wallsOnLevel(walls, (id) => S.scene?.walls?.get?.(id) ?? null, isMultiLevel(S.scene) ? S.levelId : null));
+      d.add("tiles"); // a roof stands on its walls
     }
     if (d.has("tokens")) {
-      const tokens = readTokens({
+      const read = readTokens({
         isGM: gm,
         asPlayers: S.asPlayers,
         grid: S.grid,
         hoveredId: S.input?.hoverId ?? null,
         turns: turnState({ isGM: gm && !S.asPlayers }),
         heightOf: heightDist,
-        groundOf: (doc) => groundDist(S.scene, doc._source?.x ?? doc.x, doc._source?.y ?? doc.y, doc.width, doc.height),
+        // each token's glass stand reaches down to its OWN Level's ground
+        groundOf: (doc) => groundDist(S.scene, doc._source?.x ?? doc.x, doc._source?.y ?? doc.y, doc.width, doc.height, tokenLevelId(doc)),
         seen: S.asPlayers ? (S.baker?.seen ?? (() => false)) : null,
         systemId: game.system?.id ?? "",
         halo: haloLayout(),
       });
+      // a token on a Level cut away above this one: a ghost to the GM, off a player's board
+      const tokens = cutTokens(read, tokenLevelOf, S.stack?.cut, { gm: gm && !S.asPlayers });
       r.setTokens(tokens);
       const was = S.tokenIds;
       S.tokenIds = new Set(tokens.map((tk) => tk.id));
       d.add("links");
-      // who is on the board decides which attached areas (auras) show
-      if (was.size !== S.tokenIds.size || [...was].some((id) => !S.tokenIds.has(id))) d.add("cells");
+      // who is on the board decides which attached areas (auras) show, and whose squares the reach steps round
+      if (was.size !== S.tokenIds.size || [...was].some((id) => !S.tokenIds.has(id))) { d.add("cells"); d.add("effects"); queueReach(); }
     }
     // A line whose end is not standing on the board is dropped here, not drawn to nowhere.
     if (d.has("links")) r.setLinks?.(linksOn(currentLines(), S.tokenIds));
@@ -495,7 +534,8 @@ function flush() {
       r.setOverlays({ ...rest, cells: [...(cells ?? []), ...(marks ?? [])] });
     }
     if (d.has("effects")) {
-      const fx = S.seq?.states() ?? [];
+      // an effect on a creature this viewer's board does not hold is not drawn (it would outline it)
+      const fx = S.seq?.states((id) => S.tokenIds.has(id)) ?? [];
       r.setEffects(fx);
       if (fx.length) mark("effects"); // follow attached effects every frame while any play
     }
@@ -503,8 +543,17 @@ function flush() {
       r.setOptions({ tiltShift: !!setting(SETTINGS.tiltShift, false), cutaway: S.cutaway, ghosts: gm && !S.asPlayers, grid: gridLook(), graphics: readGraphics() });
     }
     if (d.has("environment")) r.setEnvironment?.(sceneEnvironment(S.scene, { dayNight: !!setting("dio.dayNight", true) }));
-    if (d.has("props")) r.setProps?.(PropStore.states(S.scene, { isGM: gm && !S.asPlayers }));
+    // the viewed Level's props at its base, and those of every floor drawn below it
+    if (d.has("props")) { r.setProps?.(S.props = stackProps(S.scene, S.stack, { isGM: gm && !S.asPlayers })); d.add("roofs"); }
+    if (d.has("levels")) loadLevelFloors();
     if (d.has("lighting") && S.lighting) r.setLighting(S.lighting);
+    // Foundry tiles as decals and roofs, then which roofs open, for whom (docs/DIORAMA_BUILDINGS.md)
+    if (d.has("tiles")) {
+      S.tiles = readTiles({ scene: S.scene, isGM: gm, asPlayers: S.asPlayers, grid: S.grid, walls: S.walls, ground: S.ground });
+      r.setTiles?.(S.tiles);
+      d.add("roofs");
+    }
+    if (d.has("roofs") || d.has("tokens") || d.has("lighting")) r.setRoofs?.(roofsNow());
     r.requestRender();
     if (d.has("tokens") || d.has("terrain")) S.input?.relabel();
   } catch (e) {
@@ -512,12 +561,30 @@ function flush() {
   }
 }
 
+/**
+ * The viewed Level's terrain, in the view's ABSOLUTE frame (q 0 = elevation 0):
+ * a Level's own heights lifted by its base (terrain/live.mjs absolute()), so a
+ * token's absolute elevation stands on it. A one-Level scene's base is 0, and
+ * these are the stored terrains themselves.
+ */
 function readTerrain() {
   const live = liveTerrain(S.scene);
+  const abs = live?.absolute?.() ?? live;
   S.grid = live?.grid ?? null;
-  S.terrain = live?.terrain ?? null;
-  S.ground = live?.ground ?? S.terrain;
+  S.terrain = abs?.terrain ?? null;
+  S.ground = abs?.ground ?? S.terrain;
   S.saved = !!live?.saved;
+  S.levelId = live?.levelId ?? null;
+  S.stack = S.scene ? readStack(S.scene, { gm: isGM() && !S.asPlayers }) : null;
+}
+
+/** The floors below the viewed Level, their art loaded, into the renderer. */
+async function loadLevelFloors() {
+  const seq = ++S.floorSeq;
+  let floors = [];
+  try { floors = await loadFloors(S.stack, S.scene, S.grid?.sceneRect ?? null); } catch (e) { err("diorama: level floors", e); }
+  if (!S.open || seq !== S.floorSeq || !S.r) return;
+  S.r.setLevels?.(floors);
 }
 
 const gridArg = () => ({ size: S.grid.size, distance: S.grid.distance, cols: S.grid.cols, rows: S.grid.rows, sceneRect: S.grid.sceneRect });
@@ -527,7 +594,8 @@ function groundQ(x, y) {
 }
 
 async function loadBackground() {
-  const src = backgroundSrc(S.scene);
+  // the viewed Level's own art (v14 Levels carry their own background)
+  const src = S.levelId ? levelBackgroundSrc(S.scene, S.levelId) : backgroundSrc(S.scene);
   if (S.bg && S.bg.src === src) { S.r?.setBackground(S.bg.img, S.grid.sceneRect); S.r?.requestRender(); return; }
   const seq = ++S.bgSeq;
   const img = await loadArt(src);
@@ -706,6 +774,29 @@ export function sanitizeCamera(c, snap = yawSnap()) {
   };
 }
 
+/* ═══════════════════════════ roofs ═══════════════════════════ */
+
+/** What every roof should show now, for this viewer (view/roofs.mjs). */
+function roofsNow() {
+  const gm = isGM();
+  return readRoofs({
+    tiles: S.tiles, props: S.props, isGM: gm, asPlayers: S.asPlayers, cutaway: gm && S.roofCut,
+    // the GM's own view bakes no sight: every roof counts as seen
+    vision: gm && !S.asPlayers ? null : (S.lighting?.vision ?? null),
+    bakeScale: S.baker?.scale ?? 0.16,
+    grid: S.grid,
+    heightQ: (tok) => (heightDist(tok?.actor ?? null, tok?.document ?? null) / (S.grid?.distance || 5)) * 4,
+  });
+}
+
+/** The GM's "cut away roofs": every roof in the GM's own view shows the room under it. */
+export function toggleRoofs() {
+  if (!S.open || !isGM()) return;
+  S.roofCut = !S.roofCut;
+  syncHud();
+  mark("roofs");
+}
+
 /* ═══════════════════════════ HUD ═══════════════════════════ */
 
 function syncHud() {
@@ -716,6 +807,7 @@ function syncHud() {
   h.setPressed("cutaway", S.cutaway);
   h.setPressed("follow", !!setting(SETTINGS.follow, false));
   h.setPressed("asPlayers", S.asPlayers);
+  h.setPressed("roofs", S.roofCut);
   h.setSetup(isGM() && !S.saved);
   S.root?.toggleAttribute("data-as-players", S.asPlayers);
 }
@@ -730,6 +822,7 @@ function hudActions() {
     grid: async () => { await setSetting(SETTINGS.grid, !setting(SETTINGS.grid, true)); syncHud(); mark("options"); },
     tiltShift: async () => { await setSetting(SETTINGS.tiltShift, !setting(SETTINGS.tiltShift, false)); syncHud(); mark("options"); },
     cutaway: () => { S.cutaway = !S.cutaway; syncHud(); mark("options"); },
+    roofs: () => toggleRoofs(),
     follow: async () => {
       const on = !setting(SETTINGS.follow, false);
       await setSetting(SETTINGS.follow, on);
@@ -747,6 +840,7 @@ function hudActions() {
       syncHud();
       markAll();
       S.baker?.request();
+      queueReach();
     },
     graphics: () => import("./graphics-app.mjs").then((m) => m.openGraphics()).catch((e) => err("diorama: graphics", e)),
     environment: () => import("./environment-app.mjs").then((m) => m.openEnvironment(S.scene)).catch((e) => err("diorama: environment", e)),

@@ -19,7 +19,8 @@ import { WEATHER_KINDS, PRESETS, PRESET_KEYS, DEFAULT_ENV, normalizeEnv, applyPr
 import { readEnvironment, writeEnvironment, environmentSources } from "./environment-source.mjs";
 import { el, isGM, setting, t } from "./util.mjs";
 import { SUITE_ID } from "../../../core/const.mjs";
-import { FLAG_KNOWN } from "../constants.mjs";
+import { FLAG_KNOWN, FLAG_TILES } from "../constants.mjs";
+import { TILE_MODES, DEFAULT_TILE_MODE, normalizeTileMode, sceneTileMode } from "../integrations/tiles.mjs";
 
 /** Throttle for live writes while a slider moves, ms. */
 const WRITE_MS = 200;
@@ -159,6 +160,15 @@ function makeClass() {
         el("p", { class: "gldio-env-hint", text: t("GLDIO.env.note.knownLayout") }),
       ]));
 
+      // Foundry tiles in 3D (integrations/tiles.mjs): all, roofs only, ground only, off
+      const tileMode = sceneTileMode(this.scene);
+      const tileSel = el("select", { name: "tileMode" });
+      for (const k of TILE_MODES) tileSel.append(el("option", { value: k, selected: tileMode === k, text: t(`GLDIO.env.tiles.${k}`) }));
+      root.append(this.#section("tiles", [
+        el("label", { class: "gldio-env-row" }, [el("span", { class: "gldio-env-label", text: t("GLDIO.env.field.tiles") }), tileSel]),
+        el("p", { class: "gldio-env-hint", text: t("GLDIO.env.note.tiles") }),
+      ]));
+
       const foot = el("footer", { class: "gldio-env-foot" }, [
         el("button", { type: "button", class: "gl-btn gldio-env-btn", dataset: { action: "reset" } }, [el("i", { class: "fa-solid fa-rotate-left" }), el("span", { text: t("GLDIO.env.btn.reset") })]),
         el("button", { type: "button", class: "gl-btn gldio-env-btn", dataset: { action: "done" } }, [el("i", { class: "fa-solid fa-check" }), el("span", { text: t("GLDIO.env.btn.done") })]),
@@ -216,6 +226,14 @@ function makeClass() {
         if (!settled || !this.scene) return;
         const write = input.checked ? this.scene.setFlag(SUITE_ID, FLAG_KNOWN, true) : this.scene.unsetFlag(SUITE_ID, FLAG_KNOWN);
         Promise.resolve(write).catch((e) => console.error("GLUniverse Suite | diorama known-layout write failed", e));
+        return;
+      }
+      if (name === "tileMode") {
+        // its own flag too; the default ("all") is stored as no flag
+        if (!settled || !this.scene) return;
+        const v = normalizeTileMode(input.value);
+        const write = v === DEFAULT_TILE_MODE ? this.scene.unsetFlag(SUITE_ID, FLAG_TILES) : this.scene.setFlag(SUITE_ID, FLAG_TILES, v);
+        Promise.resolve(write).catch((e) => console.error("GLUniverse Suite | diorama tile-mode write failed", e));
         return;
       }
       if (name === "tableLight") {

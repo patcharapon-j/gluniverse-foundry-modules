@@ -162,7 +162,8 @@ export class OverlaysLayer {
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute("rgba", new THREE.Float32BufferAttribute(rgba, 4));
     g.setIndex(idx);
-    const m = new THREE.Mesh(g, MATERIALS.ribbon(this.shared));
+    // a path on the ground keeps to the ground this viewer has seen; a ruler is a measurement in the air
+    const m = new THREE.Mesh(g, MATERIALS.ribbon(this.shared, { mask: hug }));
     m.renderOrder = 20 + order;
     m.frustumCulled = false;
     return m;
@@ -206,7 +207,7 @@ export class OverlaysLayer {
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute("rgba", new THREE.Float32BufferAttribute(rgba, 4));
     g.setIndex(idx);
-    const m = new THREE.Mesh(g, MATERIALS.ribbon(this.shared));
+    const m = new THREE.Mesh(g, MATERIALS.ribbon(this.shared, { mask: true }));
     m.renderOrder = 19;
     m.frustumCulled = false;
     return m;
@@ -252,8 +253,10 @@ export class OverlaysLayer {
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute("rgba", new THREE.Float32BufferAttribute(rgba, 4));
     g.setIndex(idx);
-    const m = new THREE.Mesh(g, MATERIALS.ribbon(this.shared));
-    m.renderOrder = 18;
+    // Only on ground this viewer has seen, faded under the mist's edge (RIBBON_FRAG
+    // uMask), and drawn before the fog bank (renderOrder 18), so the mist lies over it.
+    const m = new THREE.Mesh(g, MATERIALS.ribbon(this.shared, { mask: true }));
+    m.renderOrder = 17;
     m.frustumCulled = false;
     return m;
   }

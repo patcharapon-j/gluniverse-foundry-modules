@@ -29,7 +29,7 @@ export default async function check(ctx) {
   const { lightData } = await import(ctx.url(`${DIO}/view/bake.mjs`));
 
   // ── timing and shedding ──
-  const times = ["flickerStep", "flickerGentle", "lightPulse", "torchFade", "flameLick", "emberRise", "fogDrift"];
+  const times = ["flickerStep", "flickerGentle", "lightPulse", "torchFade", "flameLick", "emberRise", "fogDrift", "flickerTick", "fireTick"];
   ctx.ok("every living-light duration is in TIMING", times.every((k) => Number(C.TIMING[k]) > 0), times.filter((k) => !(C.TIMING[k] > 0)).join(", "));
   const sheds = ["embers", "fogDrift", "torchShadows", "torchFlicker"];
   ctx.ok("every living-light rung is in SHED_ORDER", sheds.every((n) => C.SHED_ORDER.includes(n)), sheds.filter((n) => !C.SHED_ORDER.includes(n)).join(", "));
@@ -137,7 +137,12 @@ export default async function check(ctx) {
   const cols = u.uTorchCol.value.slice(0, 3).map((v) => v.w);
   ctx.ok("each tracked light carries its flicker (steady ones exactly 1)", cols.every((a) => Math.abs(a - 1) <= T.FLICKER_MAX + 1e-9)
     && layer.slots.find((l) => l.id === "lamp") && u.uTorchCol.value[layer.slots.findIndex((l) => l.id === "lamp")].w === 1);
-  ctx.ok("a flickering light near the view keeps frames coming", active === true);
+  // Living light ticks: it never asks for the full frame rate, it says when its next step is due.
+  ctx.ok("a flickering light in view asks for its next tick, not the full frame rate",
+    active === false && Number.isFinite(layer.nextAt) && layer.nextAt > 1000 && layer.nextAt <= 1000 + Math.max(C.TIMING.flickerTick, C.TIMING.fireTick),
+    `active ${active}, next ${layer.nextAt}`);
+  ctx.ok("the ticks are slow (flicker ~15 Hz, flames ~30 Hz) and share frames (the flicker's is a whole number of the fire's)",
+    C.TIMING.flickerTick >= 1000 / 16 && C.TIMING.fireTick >= 1000 / 31 && C.TIMING.flickerTick % C.TIMING.fireTick === 0);
   ctx.ok("a torch on the ground burns a flame; a torch a token carries does not", layer.flameGeo.instanceCount === 1 && layer.fires[0].l.id === "torch"
     && Math.abs(layer.flameAttr.aFlame.array[1] - 0.5) < 1e-9);
   ctx.ok("each flame throws EMBERS_PER_FLAME sparks", layer.emberGeo.instanceCount === T.EMBERS_PER_FLAME);
@@ -168,6 +173,55 @@ export default async function check(ctx) {
   const fadeMs = (frames + 1) * 16;
   ctx.ok("a light joining the tracked set fades in over TIMING.torchFade", pNew > 0 && pNew < 0.1 && Math.abs(fadeMs - C.TIMING.torchFade) <= 40, `${pNew?.toFixed(3)}, ${fadeMs} ms`);
   layer.dispose();
+
+  // ── the ticks, driven: a held torch (flicker, no flame), then a fire, at 60 Hz for 10 s ──
+  const tickRun = (src, { inView = null, fxOver = {} } = {}) => {
+    const L = new T.TorchesLayer(createShared());
+    L.setGround(() => 0);
+    L.setSources([src], { size: 100, distance: 5 });
+    const out = { changed: 0, frames: 0, holdBad: 0, stepSmall: 0, finite: 0, lickOff: 0, cols: [] };
+    let prevW = null;
+    for (let k = 0; k < 600; k++) {
+      const t = 5000 + k * (1000 / 60);
+      L.frame(t, 1 / 60, { ...fx, embers: false, ...fxOver }, view, null, 0.01, inView);
+      out.frames++;
+      const w = L.shared.uTorchCol.value[0].w;
+      if (L.changed) out.changed++;
+      if (Number.isFinite(L.nextAt)) out.finite++;
+      const l = L.slots[0];
+      // a held value is within FLICKER_EPS of the true flicker at this tick; a written step is at least that big
+      const tick = C.TIMING.flickerTick;
+      const truth = T.flicker(l.kind, Math.floor(t / tick) * tick, l.seed, l.anim.speed, l.anim.intensity);
+      const lum = 0.299 * l.tint[0] + 0.587 * l.tint[1] + 0.114 * l.tint[2];
+      if (Math.abs(truth - w) * lum >= T.FLICKER_EPS + 1e-6) out.holdBad++;
+      if (prevW !== null && w !== prevW && Math.abs(w - prevW) * lum < T.FLICKER_EPS - 1e-6) out.stepSmall++;
+      prevW = w;
+      const lick = L.flameClock.value * C.TIMING.flameLick / C.TIMING.fireTick;
+      if (Math.abs(lick - Math.round(lick)) > 1e-6) out.lickOff++;
+    }
+    L.dispose();
+    return out;
+  };
+  const held = { id: "held", x: 300, y: 300, dim: 400, bright: 150, tint: [1, 0.7, 0.4], color: [1, 0.6, 0.25], anim: { type: "torch" }, token: true };
+  const fire = { id: "fire", x: 300, y: 300, dim: 400, bright: 150, tint: [1, 0.7, 0.4], color: [1, 0.6, 0.25], anim: { type: "torch" } };
+  const h = tickRun(held);
+  const perSec = h.changed / 10;
+  ctx.ok("a carried torch's flicker redraws at most at the flicker tick (~15 Hz), never at 60",
+    perSec > 3 && perSec <= 1000 / C.TIMING.flickerTick + 0.5 && h.finite === h.frames, `${perSec} changes/s over ${h.frames} frames`);
+  ctx.ok("a flicker holds within FLICKER_EPS of its noise, and never steps by less", h.holdBad === 0 && h.stepSmall === 0, `${h.holdBad} off, ${h.stepSmall} tiny`);
+  const off = tickRun(held, { inView: () => false });
+  ctx.ok("a light whose flicker cannot reach the screen asks for no ticks and draws nothing", off.changed === 0 && off.finite === 0, `${off.changed} changes, ${off.finite} wakes`);
+  const f = tickRun(fire);
+  ctx.ok("a fire's flames step on whole fire ticks (~30 Hz), nothing in between",
+    f.lickOff === 0 && f.changed / 10 <= 1000 / C.TIMING.fireTick + 0.5 && f.changed / 10 > 15, `${f.changed / 10} changes/s, ${f.lickOff} off-tick`);
+  const still = tickRun(held, { fxOver: { flicker: false } });
+  ctx.ok("torchFlicker shed: a still light asks for no ticks", still.finite === 0 && still.changed <= 1, `${still.finite} wakes`);
+  const rsrcT = read(`${DIO}/render/renderer.mjs`);
+  ctx.ok("the renderer draws a tick only when a light changed, and waits for the tick on the frame clock",
+    /const draw = wanted \|\| active \|\| this\.torches\.changed;/.test(rsrcT)
+    && /if \(!this\._wanted && this\._tickAt && clock\(\) < this\._tickAt - 1\) \{\s*this\.schedule\(\);\s*return;\s*\}/.test(rsrcT)
+    && /const wake = active \? Infinity : this\.torches\.nextAt;/.test(rsrcT)
+    && /this\.torches\.frame\([^)]*this\._inView\)/.test(rsrcT));
 
   // ── the shaders ──
   const LITSRC = G.HEAD;
@@ -287,13 +341,66 @@ export default async function check(ctx) {
   ctx.ok("the backdrop sits at the far plane on every path, and is off for the GM and the flat style",
     /^\s*gl_FragDepthEXT = 1\.0;\s*if \(uUseVision < 0\.5 \|\| uFogStyle\.x < 0\.5\) discard;/.test(bdMain));
   // The box covers the board from the plinth to above the bank's top sheet over
-  // the tallest ground, so no ray through the bank can miss it.
+  // the tallest SEEN ground (the bank lies only along seen ground), so no ray
+  // through the bank can miss it; and its height reads nothing of the unseen,
+  // or the mist would stand exactly as tall as the tallest tower hidden in it.
   const boxOver = Number(/const float FOG_BOX_OVER = ([\d.]+);/.exec(G.FOG_BACKDROP_VERT)?.[1]);
   const bankTop = Fg.FOG_FLOOR + (G.FOG_LAYERS - 1) * Fg.FOG_STEP;
-  ctx.ok("the backdrop box spans the board from the plinth to over the bank's top sheet",
-    /mix\(uHeightRange\.x - 0\.05, uHeightRange\.y \+ FOG_BOX_OVER, position\.y\)/.test(G.FOG_BACKDROP_VERT)
+  ctx.ok("the backdrop box spans the board from the plinth to over the bank's top sheet over the highest seen ground",
+    /mix\(uHeightRange\.x - 0\.05, uFogTop \+ FOG_BOX_OVER, position\.y\)/.test(G.FOG_BACKDROP_VERT)
+    && /vec3 hi = vec3\(uWorldSize\.x, uFogTop \+ FOG_BOX_OVER, uWorldSize\.y\);/.test(bdMain)
+    && !/uHeightRange\.y/.test(G.FOG_BACKDROP_VERT) && !/uHeightRange\.y/.test(bdMain)
     && /position\.x \* uWorldSize\.x/.test(G.FOG_BACKDROP_VERT) && /position\.z \* uWorldSize\.y/.test(G.FOG_BACKDROP_VERT)
     && boxOver === G.FOG_BOX_OVER && boxOver >= bankTop, `${boxOver} vs ${bankTop.toFixed(2)}`);
+  // Driven: a 6 × 4 board, a 12-cell tower in an unseen corner. The box's top is
+  // the highest seen ground; it does not move when the hidden tower grows, and it
+  // rises to the tower only once a pixel of the tower's cell is explored.
+  const seenTop = (() => {
+    const C = 6, Rr = 4, P = 4, vw = C * P, vh = Rr * P;
+    const ground = (towerH) => (i, j) => (i === 3 && j === 5 ? towerH : i < 2 ? 1 : 0);
+    const bake = (seeTower) => {
+      const px = new Uint8ClampedArray(vw * vh * 4);
+      for (let y = 0; y < vh; y++) for (let x = 0; x < vw; x++) {
+        const unseen = x >= 3 * P && y >= 2 * P && !(seeTower && x === vw - 1 && y === vh - 1);
+        px[(y * vw + x) * 4 + 1] = unseen ? 0 : 255;
+      }
+      return Fg.fogSeenCells(px, vw, vh, C, Rr);
+    };
+    const hidden = bake(false);
+    const a = Fg.fogSeenTop(hidden, C, Rr, ground(12)), b = Fg.fogSeenTop(hidden, C, Rr, ground(40));
+    const c = Fg.fogSeenTop(bake(true), C, Rr, ground(12));
+    const none = Fg.fogSeenTop(new Uint8Array(C * Rr), C, Rr, ground(12));
+    return { ok: a === 1 && b === 1 && c === 12 && none === -Infinity, a, b, c };
+  })();
+  const fogLayerSrc = read(`${DIO}/render/fog.mjs`);
+  ctx.ok("the box's top is the highest SEEN ground: a hidden tower never raises it",
+    seenTop.ok && /this\.top\.value = Number\.isFinite\(this\._seenTop\)/.test(fogLayerSrc)
+    && /this\.fog\.setGround\(/.test(read(`${DIO}/render/renderer.mjs`)) && /this\.fog\.refreshTop\(\)/.test(read(`${DIO}/render/renderer.mjs`)),
+    JSON.stringify(seenTop));
+  // The edge of sight. The wide blur alone never reaches "unseen" over a thin
+  // wedge behind a pillar, so the shadow and the floor stayed faint right up to
+  // the hard discard edge (a dark slab with a knife edge). The B channel is the
+  // unseen grown a fraction of a square and softened, and every reader takes
+  // the max of it and the blur. Driven: a one-pixel-wide unseen line on a 6-px
+  // cell bake is fully unseen at its own pixels, softens over the next few, and
+  // seen ground far from it stays seen.
+  const edge = (() => {
+    const W = 48, Hh = 12, PPC = 6;
+    const px = new Uint8ClampedArray(W * Hh * 4).fill(255);
+    for (let y = 0; y < Hh; y++) px[(y * W + 24) * 4 + 1] = 0;
+    const grow = Math.max(1, Math.round(Fg.FOG_EDGE_GROW * PPC)), soft = Math.max(1, Math.round(Fg.FOG_EDGE_SOFT * PPC));
+    const e = Fg.fogEdge(px, W, Hh, grow, soft);
+    const at = (x) => e[6 * W + x];
+    const mono = [24, 25, 26, 27, 28].every((x, k, a) => k === 0 || at(x) <= at(a[k - 1]));
+    return { ok: at(24) >= 200 && at(25) >= 128 && at(24 + grow + soft + 2) === 0 && at(4) === 0 && mono,
+      line: at(24), next: at(25), far: at(24 + grow + soft + 2) };
+  })();
+  const allGlsl = Object.values(G).filter((v) => typeof v === "string").join("\n");
+  const vRead = /float fogUnseenAt\(vec2 xz\) \{[\s\S]{0,400}?return max\(1\.0 - f\.g, f\.b\);/.test(allGlsl)
+    && /fogUnseenAt\(wp\.xz\)/.test(allGlsl) && /fogUnseenAt\(vWorld\.xz\)/.test(G.FOG_FRAG);
+  ctx.ok("the edge of sight is soft over a fraction of a square, and a thin wedge still reads as unseen",
+    edge.ok && vRead && Fg.FOG_EDGE_GROW > 0 && Fg.FOG_EDGE_GROW <= 0.5 && Fg.FOG_EDGE_SOFT > 0 && Fg.FOG_EDGE_SOFT <= 0.5,
+    JSON.stringify({ ...edge, vRead }));
   // Nothing unseen throws a sun shadow: the receiver finds the caster along the
   // key from the map's depth and drops it if nobody has seen it. Driven through
   // the real ShadowPass fit, so the depth-per-cell term is the matrix's own.

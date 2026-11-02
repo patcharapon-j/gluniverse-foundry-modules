@@ -103,7 +103,8 @@ export default async function check(ctx) {
   const arr = (v) => [v.x, v.y, v.z];
   ctx.ok("the shared light starts as today's", near(arr(shared.uKeyDir.value), TODAY.dir) && near(arr(shared.uEnvKey.value), TODAY.key)
     && near(arr(shared.uEnvFill.value), TODAY.fill) && near(arr(shared.uEnvBounce.value), TODAY.bounce) && near(arr(shared.uEnvSky.value), TODAY.sky));
-  const atmoSrc = read("scripts/features/diorama/render/atmosphere.mjs");
+  // A Windows checkout (core.autocrlf) can hand this file over with CRLF endings.
+  const atmoSrc = read("scripts/features/diorama/render/atmosphere.mjs").replace(/\r\n/g, "\n");
   const envUniforms = Object.keys(shared).filter((k) => k.startsWith("uEnv"));
   const unwritten = envUniforms.filter((k) => !new RegExp(`\\b${k}\\.value\\b`).test(atmoSrc));
   ctx.ok("the atmosphere layer writes every environment uniform", !unwritten.length, unwritten.join(", "));
