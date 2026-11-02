@@ -5,32 +5,50 @@
 <title>Spellglass preview</title>
 <link rel="stylesheet" href="__ROOT__/styles/gl-fonts.css">
 <link rel="stylesheet" href="__ROOT__/styles/gl-tokens.css">
+<link rel="stylesheet" href="__ROOT__/styles/pf2e-aoe.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/handlebars@4.7.8/dist/handlebars.min.js"></script>
 <style>
   html, body { margin: 0; height: 100%; }
-  body { background: #06080d; color: #eef1f7; font-family: "Oxanium", sans-serif; overflow: hidden; }
+  body { background: #06080d; color: #eef1f7; font-family: "Google Sans Flex", "Oxanium", sans-serif; overflow: hidden; }
   .bar {
-    position: fixed; inset: 0 0 auto 0; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
-    padding: 10px 16px; background: rgba(11, 15, 23, 0.86); border-bottom: 1px solid rgba(152, 162, 182, 0.18);
-    font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; z-index: 2;
+    position: fixed; inset: 0 0 auto 0; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+    padding: 8px 14px; background: rgba(5, 6, 10, 0.92); border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; z-index: 2;
   }
   .bar label { display: inline-flex; gap: 6px; align-items: center; color: #98a2b6; }
   .bar select, .bar button, .bar input { font: inherit; color: #eef1f7; }
   .bar select, .bar button {
-    background: #161d2c; border: 1px solid rgba(107, 134, 214, 0.45); padding: 4px 9px; border-radius: 2px;
+    background: #0f1017; border: 1px solid rgba(255, 255, 255, 0.14); padding: 3px 8px; border-radius: 2px;
     text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer;
   }
-  .bar .title { font-weight: 600; letter-spacing: 0.18em; margin-right: 6px; }
+  .bar .title { font-weight: 650; letter-spacing: 0.16em; margin-right: 4px; }
   .readout { margin-left: auto; font-family: "JetBrains Mono", monospace; color: #98a2b6; text-transform: none; letter-spacing: 0; }
   #stage { position: fixed; inset: 0; }
-  #tags { position: fixed; inset: 0; pointer-events: none; }
-  .tag {
-    position: absolute; transform: translate(-50%, 0); white-space: nowrap; text-align: center;
-    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #eef1f7;
-    text-shadow: 0 0 3px #000, 0 0 6px #000;
-  }
-  .tag small { display: block; color: #98a2b6; letter-spacing: 0.04em; font-family: "JetBrains Mono", monospace; text-transform: none; }
   .err { position: fixed; bottom: 12px; left: 16px; right: 16px; color: #ff4a52; font-family: monospace; white-space: pre-wrap; z-index: 3; }
+
+  /* ── the ui sheet: stand-ins for Foundry's window chrome only. Everything
+     inside a window is the shipped markup and styles/pf2e-aoe.css. ── */
+  #ui { position: fixed; inset: 46px 0 0 0; overflow: auto; padding: 18px; display: none; gap: 18px; align-items: start;
+    grid-template-columns: 720px minmax(0, 520px); background: #11141b; }
+  body.ui #ui { display: grid; }
+  body.ui #stage { display: none; }
+  .pv-window { background: #0b0d13; box-shadow: 0 0 0 1px rgba(255,255,255,0.1), 0 12px 32px rgba(0,0,0,0.5); }
+  .pv-window > header { padding: 8px 12px; font-size: 13px; font-weight: 600; letter-spacing: 0.04em;
+    border-bottom: 1px solid rgba(255,255,255,0.08); background: #07080c; }
+  .pv-window .window-content { padding: 12px 14px; }
+  .pv-col { display: grid; gap: 18px; }
+  #pv-profiles { height: 640px; display: flex; flex-direction: column; }
+  #pv-profiles form { flex: 1; min-height: 0; }
+  .pv-window .form-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 8px; font-size: 13px; }
+  .pv-window .form-group > label { flex: 0 0 9rem; color: #c9cedb; }
+  .pv-window .form-group > .form-fields { flex: 1; display: flex; gap: 6px; align-items: center; min-width: 0; }
+  .pv-window .form-group > .hint { flex: 1 0 100%; margin: 0; color: #8a90a0; font-size: 12px; }
+  .pv-window input[type="text"], .pv-window input[type="number"], .pv-window select {
+    height: 28px; padding: 0 6px; background: #05060a; color: #eef1f7; border: 1px solid rgba(255,255,255,0.14); font: inherit; min-width: 0; flex: 1; }
+  .pv-window .form-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+  .pv-window .form-footer button { height: 30px; padding: 0 14px; background: #161922; color: #eef1f7; border: 1px solid rgba(255,255,255,0.16); }
 </style>
 </head>
 <body>
@@ -40,18 +58,27 @@
     <option value="functions">12 functions</option>
     <option value="profiles">24 built-in profiles</option>
     <option value="materials">26 materials</option>
-    <option value="shapes">shapes &amp; gridless</option>
+    <option value="shapes">shapes</option>
+    <option value="ui">GM forms</option>
   </select></label>
   <label>Floor <select id="floor"><option value="dark">dark map</option><option value="bright">bright map</option></select></label>
-  <label>Zoom <input id="zoom" type="range" min="0.3" max="1.6" step="0.05" value="0.55"></label>
+  <label>Zoom <input id="zoom" type="range" min="0" max="2" step="0.05" value="0" title="0 fits the sheet"></label>
   <label>Shed <input id="shed" type="range" min="0" max="5" step="1" value="0"></label>
   <label><input id="motion" type="checkbox" checked> Motion</label>
+  <label><input id="inspect" type="checkbox"> Inspect</label>
   <button id="replay">Replay entrance</button>
   <button id="pulse">Pulse all</button>
+  <button id="release">Dissipate</button>
   <span class="readout" id="readout">—</span>
 </div>
 <div id="stage"></div>
-<div id="tags"></div>
+<div id="ui">
+  <section class="pv-window gl-aoe-style-app gls-scope gl-type" id="pv-profiles"><header>Spellglass World Profiles</header></section>
+  <div class="pv-col">
+    <section class="pv-window" id="pv-region"><header>Region: Fireball</header><div class="window-content"></div></section>
+    <section class="pv-window gl-aoe-create-dialog" id="pv-create"><header>Create Spellglass Area</header><div class="window-content"></div></section>
+  </div>
+</div>
 <div class="err" id="err"></div>
 <script type="module">
 const errBox = document.getElementById("err");
@@ -76,28 +103,46 @@ const walls = [];
 globalThis.CONFIG = { Canvas: { polygonBackends: { move: { testCollision: (o, d) => walls.some((w) => w(o, d)) } } } };
 
 const ROOT = "__ROOT__";
-const [{ AreaView }, look, data, anim, profiles, schema] = await Promise.all([
+/* The GM forms read game.i18n and game.settings: answer from the shipped
+   language file, and throw for settings so every caller takes its fallback. */
+const LANG = await (await fetch(`${ROOT}/lang/pf2e-aoe.en.json`)).json();
+const getProperty = (o, p) => p.split(".").reduce((v, k) => v?.[k], o);
+const setProperty = (o, p, v) => { const ks = p.split("."); let t = o; for (const k of ks.slice(0, -1)) t = t[k] ??= {}; t[ks.at(-1)] = v; return o; };
+globalThis.game = {
+  user: { isGM: true, id: "gm", can: () => true },
+  i18n: { localize: (k) => LANG[k] ?? k, format: (k, d) => (LANG[k] ?? k).replace(/\{(\w+)\}/g, (_, n) => d?.[n] ?? "") },
+  settings: { get: () => { throw new Error("unregistered in preview"); } },
+  scenes: [],
+};
+globalThis.foundry = { utils: { getProperty, setProperty, deepClone: (v) => structuredClone(v) } };
+
+const [{ AreaView }, look, data, anim, profiles, schema, plate, view, regionConfig, controls] = await Promise.all([
   import(`${ROOT}/scripts/features/pf2e-aoe/render/area.mjs`),
   import(`${ROOT}/scripts/features/pf2e-aoe/render/look.mjs`),
   import(`${ROOT}/scripts/features/pf2e-aoe/data.mjs`),
   import(`${ROOT}/scripts/features/pf2e-aoe/anim.mjs`),
   import(`${ROOT}/scripts/features/pf2e-aoe/profiles.mjs`),
   import(`${ROOT}/scripts/features/pf2e-aoe/schema.mjs`),
+  import(`${ROOT}/scripts/features/pf2e-aoe/render/plate.mjs`),
+  import(`${ROOT}/scripts/features/pf2e-aoe/profile-view.mjs`),
+  import(`${ROOT}/scripts/features/pf2e-aoe/region-config.mjs`),
+  import(`${ROOT}/scripts/features/pf2e-aoe/controls.mjs`),
 ]);
-const { composeLook, FUNCTION_LOOK, MATERIAL_COLORS } = look;
+const { composeLook, MATERIAL_COLORS } = look;
 const { AoeAnim } = anim;
 
 const q = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
 for (const [id, key] of [["sheet", "sheet"], ["floor", "floor"], ["zoom", "zoom"], ["shed", "shed"]]) if (q.has(key)) $(id).value = q.get(key);
 if (q.get("motion") === "0") $("motion").checked = false;
+if (q.get("inspect") === "1") $("inspect").checked = true;
 
 const app = new PIXI.Application({ resizeTo: window, backgroundColor: 0x06080d, antialias: true, autoDensity: true, resolution: devicePixelRatio || 1 });
 $("stage").appendChild(app.view);
 const world = new PIXI.Container();
 app.stage.addChild(world);
-const floorLayer = new PIXI.Container(), groundLayer = new PIXI.Container(), tokenLayer = new PIXI.Container(), overLayer = new PIXI.Container();
-world.addChild(floorLayer, groundLayer, tokenLayer, overLayer);
+const floorLayer = new PIXI.Container(), groundLayer = new PIXI.Container(), tokenLayer = new PIXI.Container(), overLayer = new PIXI.Container(), plateLayer = new PIXI.Container();
+world.addChild(floorLayer, groundLayer, tokenLayer, overLayer, plateLayer);
 
 /* ---- region fixtures, through the real data adapter ---- */
 function region(shape, areaShape, extra = {}) {
@@ -132,46 +177,47 @@ function bounds(r) {
 /* ---- sheets ---- */
 const CELL_W = 9, CELL_H = 9; // squares per showcase slot
 function slots(n, cols) {
-  return Array.from({ length: n }, (_, i) => ({ x: (i % cols) * CELL_W * G, y: Math.floor(i / cols) * (CELL_H + 2) * G }));
+  return Array.from({ length: n }, (_, i) => ({ x: (i % cols) * CELL_W * G, y: Math.floor(i / cols) * (CELL_H + 1) * G }));
 }
 const defaultMaterial = { harm: "fire", restore: "vitality", support: "holy", protect: "force", hinder: "mental", control: "arcane",
   conceal: "shadow", terrain: "plant", detect: "light", summon: "spirit", hazard: "metal", neutral: "neutral" };
 const defaultBehavior = { harm: "impact", restore: "pulse", support: "sustain", protect: "contain", hinder: "pulse", control: "contain",
   conceal: "linger", terrain: "grow", detect: "sweep", summon: "grow", hazard: "trigger", neutral: "static" };
+const t = (k) => LANG[k] ?? k;
 
 function sheet(id) {
   walls.length = 0;
   const out = [];
   if (id === "functions" || id === "profiles") {
     const list = id === "functions"
-      ? schema.FUNCTIONS.map((fn) => ({ name: fn, sem: { function: fn, material: defaultMaterial[fn], behavior: defaultBehavior[fn] }, appearance: {} }))
-      : profiles.BUILTIN_PROFILES.map((p) => ({ name: p.id.slice(8).replaceAll("-", " "), sem: p.semantics, appearance: p.appearance ?? {} }));
+      ? schema.FUNCTIONS.map((fn) => ({ name: t(`GLAOE.Function.${fn}`), sem: { function: fn, material: defaultMaterial[fn], behavior: defaultBehavior[fn] }, appearance: {} }))
+      : profiles.BUILTIN_PROFILES.map((p) => ({ name: t(p.nameKey), sem: p.semantics, appearance: p.appearance ?? {} }));
     const cols = id === "functions" ? 6 : 8;
     const shapes = ["burst", "cone", "square", "line", "emanation"];
     slots(list.length, cols).forEach((at, i) => {
       const kind = id === "functions" ? "burst" : shapes[i % shapes.length];
       const cx = at.x + 4.5 * G, cy = at.y + 4.5 * G;
-      const r = kind === "burst" ? burst(at.x + 4 * G, at.y + 4 * G, 15)
-        : kind === "cone" ? cone(at.x + 1 * G, at.y + 1 * G, 30, 45)
-        : kind === "square" ? square(at.x + 1.5 * G - G / 2, at.y + 1 * G, 6)
+      const r = kind === "burst" ? burst(at.x + 4 * G, at.y + 4.5 * G, 15)
+        : kind === "cone" ? cone(at.x + 1 * G, at.y + 1.5 * G, 30, 45)
+        : kind === "square" ? square(at.x + 1 * G, at.y + 1.5 * G, 6)
         : kind === "line" ? lineR(at.x + 1 * G, at.y + 4.5 * G, 35, 0, 10)
         : emanation(at.x + 3.5 * G, at.y + 3.5 * G, 2, 10);
       out.push({ r, sem: list[i].sem, appearance: list[i].appearance, tag: list[i].name,
         sub: `${list[i].sem.function} · ${list[i].sem.material} · ${list[i].sem.behavior}`, at, token: [cx, cy] });
     });
     /* A wall through the first slot, so the blocked hatch is on the sheet. */
-    walls.push((o, d) => d.x > 5 * G && d.x < 8 * G && d.y < 3 * G && o.x < 5 * G);
+    walls.push((o, d) => d.x > 5 * G && d.x < 8 * G && d.y < 3.5 * G && o.x < 5 * G);
   } else if (id === "materials") {
     const mats = Object.keys(MATERIAL_COLORS);
-    slots(mats.length, 9).forEach((at, i) => {
-      out.push({ r: burst(at.x + 4 * G, at.y + 4 * G, 15), sem: { function: "harm", material: mats[i], behavior: "pulse" },
-        appearance: {}, tag: mats[i], sub: MATERIAL_COLORS[mats[i]].join(" "), at, token: null });
+    slots(mats.length, 7).forEach((at, i) => {
+      out.push({ r: burst(at.x + 4 * G, at.y + 4.5 * G, 15), sem: { function: "harm", material: mats[i], behavior: "pulse" },
+        appearance: {}, tag: t(`GLAOE.Material.${mats[i]}`), sub: MATERIAL_COLORS[mats[i]].join(" "), at, token: null });
     });
   } else {
     const kinds = [
-      ["burst 20 ft", burst(4 * G, 4 * G, 20)], ["cone 30 ft", cone(1 * G, 1 * G, 30, 45)],
-      ["line 60 × 5 ft", lineR(1 * G, 4.5 * G, 40, 0, 5)], ["emanation 10 ft (large)", emanation(3.5 * G, 3.5 * G, 2, 10)],
-      ["square 30 ft", square(1 * G, 1 * G, 6)],
+      ["Burst 20 ft", burst(4 * G, 4.5 * G, 20)], ["Cone 30 ft", cone(1 * G, 1.5 * G, 30, 45)],
+      ["Line 40 × 5 ft", lineR(1 * G, 4.5 * G, 40, 0, 5)], ["Emanation 10 ft (Large)", emanation(3.5 * G, 3.5 * G, 2, 10)],
+      ["Square 30 ft", square(1 * G, 1.5 * G, 6)],
     ];
     slots(kinds.length, 5).forEach((at, i) => {
       const [tag, r] = kinds[i];
@@ -180,8 +226,10 @@ function sheet(id) {
       if (s.base) { s.base.x += at.x; s.base.y += at.y; }
       if (r.document.bounds) { r.document.bounds.x += at.x; r.document.bounds.y += at.y; }
       out.push({ r, sem: { function: ["harm", "hinder", "detect", "protect", "hazard"][i], material: ["fire", "mental", "light", "force", "metal"][i],
-        behavior: ["impact", "pulse", "sweep", "contain", "trigger"][i] }, appearance: {}, tag, sub: "", at, token: null });
+        behavior: ["impact", "pulse", "sweep", "contain", "trigger"][i] }, appearance: {}, tag, sub: "", at,
+        token: [[4.5, 4.5], [3.5, 3.5], [3.5, 4.5], [4.5, 4.5], [3.5, 4.5]][i].map((v, k) => v * G + (k ? at.y : at.x)) });
     });
+    walls.push((o, d) => d.x > 5 * G && d.x < 8 * G && d.y < 3.5 * G && o.x < 5 * G);
   }
   for (const item of out) bounds(item.r);
   return out;
@@ -192,77 +240,90 @@ function drawFloor(cols, rows, bright) {
   for (const c of floorLayer.removeChildren()) c.destroy();
   const g = new PIXI.Graphics();
   const W = cols * G, H = rows * G;
-  g.beginFill(bright ? 0xb9a77f : 0x1d2129); g.drawRect(-G, -G, W + 2 * G, H + 2 * G); g.endFill();
+  g.beginFill(bright ? 0xc4b48c : 0x1d2129); g.drawRect(-G, -G, W + 2 * G, H + 2 * G); g.endFill();
   let s = 7;
   const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
   for (let i = 0; i < cols * rows * 0.9; i++) {
-    g.beginFill(bright ? (rnd() > 0.5 ? 0xcdbb92 : 0x9c8a63) : (rnd() > 0.5 ? 0x272c36 : 0x15181e), 0.8);
+    g.beginFill(bright ? (rnd() > 0.5 ? 0xd6c69f : 0xa8966e) : (rnd() > 0.5 ? 0x272c36 : 0x15181e), 0.8);
     g.drawRoundedRect(rnd() * W, rnd() * H, G * (0.3 + rnd() * 1.4), G * (0.3 + rnd() * 1.1), G * 0.1);
     g.endFill();
   }
-  g.lineStyle({ width: 1.2, color: bright ? 0x5d5038 : 0x3a4150, alpha: 0.6 });
+  g.lineStyle({ width: 1.2, color: bright ? 0x5d5038 : 0x3a4150, alpha: 0.55 });
   for (let x = 0; x <= W; x += G) { g.moveTo(x, 0); g.lineTo(x, H); }
   for (let y = 0; y <= H; y += G) { g.moveTo(0, y); g.lineTo(W, y); }
   floorLayer.addChild(g);
 }
 
 let areas = [];
+let extent = { w: 1, h: 1 };
 function build() {
-  for (const a of areas) a.view.destroy();
+  for (const a of areas) { a.view.destroy(); a.plate?.destroy({ children: true }); }
   for (const c of tokenLayer.removeChildren()) c.destroy();
-  $("tags").innerHTML = "";
+  document.body.classList.toggle("ui", $("sheet").value === "ui");
+  if ($("sheet").value === "ui") { areas = []; buildUi(); return; }
   const items = sheet($("sheet").value);
   const cols = Math.max(...items.map((i) => i.at.x)) / G + CELL_W;
   const rows = Math.max(...items.map((i) => i.at.y)) / G + CELL_H + 1;
+  extent = { w: cols * G, h: rows * G };
   drawFloor(cols, rows, $("floor").value === "bright");
+  const zoom = currentZoom();
   areas = items.map((item, i) => {
     const geometry = data.regionGeometry(item.r);
     const cells = data.regionCells(item.r, geometry);
     const lk = composeLook({ fn: item.sem.function, secondary: item.sem.secondaryFunction, material: item.sem.material,
       accentMaterial: item.sem.accent, behavior: item.sem.behavior, treatment: item.appearance?.treatment, intensity: item.appearance?.intensity ?? "balanced" });
-    const view = new AreaView(PIXI, { geometry, cells, look: lk, zoom: Number($("zoom").value) });
+    const view = new AreaView(PIXI, { geometry, cells, look: lk, zoom });
     groundLayer.addChild(view.ground);
     overLayer.addChild(view.overlay);
     if (item.token) {
-      const t = new PIXI.Graphics();
-      t.beginFill(0x2a2f3a); t.lineStyle({ width: 6, color: 0xd9dee8 }); t.drawCircle(0, 0, G * 0.42); t.endFill();
-      t.position.set(...item.token);
-      tokenLayer.addChild(t);
+      const tk = new PIXI.Graphics();
+      tk.beginFill(0x2a2f3a); tk.lineStyle({ width: 6, color: 0xd9dee8 }); tk.drawCircle(0, 0, G * 0.4); tk.endFill();
+      tk.position.set(...item.token);
+      tokenLayer.addChild(tk);
       if (data.cellStateAt(cells, item.token[0], item.token[1], G) >= 0.75) view.setTokenMarks([[item.token[0] - G / 2, item.token[1] - G / 2, G, G]]);
     }
-    const tag = document.createElement("div");
-    tag.className = "tag";
-    tag.innerHTML = `${item.tag}<small>${item.sub}</small>`;
-    $("tags").appendChild(tag);
-    return { view, anim: new AoeAnim({ motionScale: 1 }), item, tag, delay: i * 70 };
+    /* The shipped identity plate, standing where the host stands it. */
+    const pl = plate.buildPlate(PIXI, { title: item.tag, detail: item.sub, tone: lk.hot, grid: G, resolution: 3 });
+    const at = view.labelAnchor;
+    pl.position.set(at.x, at.y);
+    plateLayer.addChild(pl);
+    return { view, plate: pl, anim: new AoeAnim({ motionScale: 1 }), item, delay: i * 60 };
   });
   layout();
 }
 
-function layout() {
+function currentZoom() {
   const z = Number($("zoom").value);
-  world.scale.set(z);
-  world.position.set(30, 70);
-  for (const a of areas) {
-    const p = world.toGlobal(new PIXI.Point(a.item.at.x + CELL_W * G / 2, a.item.at.y + (CELL_H - 0.2) * G));
-    a.tag.style.left = `${p.x}px`;
-    a.tag.style.top = `${p.y}px`;
-  }
+  if (z > 0) return z;
+  const w = innerWidth - 40, h = innerHeight - 96;
+  return Math.max(0.12, Math.min(w / extent.w, h / extent.h));
 }
 
-let paused = false, clock = 0;
+function layout() {
+  const z = currentZoom();
+  world.scale.set(z);
+  world.position.set(20, 64 + G * z * 0.6); // room for the top row's plates
+}
+
+let paused = false;
 function frame(dt) {
   const motion = $("motion").checked;
   const shed = Number($("shed").value);
-  const zoom = Number($("zoom").value);
+  const zoom = currentZoom();
+  layout(); // a late resize (headless, or a docked pane) refits
+  const inspect = $("inspect").checked;
   for (const a of areas) {
     a.anim.motionScale = motion ? 1 : 0;
     if (!paused) {
       if (a.delay > 0) a.delay -= dt;
       else a.anim.step(dt);
     }
-    a.view.update({ time: a.anim.time, enter: a.anim.enter, eased: a.anim.eased, presence: a.anim.presence,
+    if (a.anim.dead) { a.view.ground.visible = a.view.overlay.visible = a.plate.visible = false; continue; }
+    a.view.update({ time: a.anim.time, enter: a.anim.enter, eased: a.anim.eased, settle: a.anim.settle, presence: a.anim.presence,
       shock: a.anim.shock, pulse: a.anim.pulseProgress, zoom, shed, still: a.anim.still, motionScale: a.anim.motionScale });
+    a.plate.scale.set(Math.min(1.6, Math.max(0.78, 1 / zoom)));
+    a.plate.alpha = a.anim.presence;
+    a.plate.setInspected(inspect && !a.anim.leaving);
   }
 }
 let last = performance.now(), acc = 0, frames = 0;
@@ -273,24 +334,74 @@ app.ticker.add(() => {
   const t0 = performance.now();
   frame(dt);
   acc += performance.now() - t0; frames++;
-  if (frames >= 30) { $("readout").textContent = `${areas.length} areas · update ${(acc / frames).toFixed(2)} ms/frame · PIXI ${PIXI.VERSION}`; acc = 0; frames = 0; }
+  if (frames >= 30) { $("readout").textContent = `${areas.length} areas · update ${(acc / frames).toFixed(2)} ms/frame · zoom ${currentZoom().toFixed(2)} · PIXI ${PIXI.VERSION}`; acc = 0; frames = 0; }
 });
 
 window.__aoeSeek = (ms) => {
   paused = true;
+  app.resize();
   for (const a of areas) { a.anim.motionScale = 1; a.anim.step(ms); }
   frame(0);
   app.render();
 };
-window.__aoe = { areas, build };
+window.__aoeRelease = (ms = 0) => {
+  for (const a of areas) a.anim.release();
+  if (ms > 0) window.__aoeSeek(ms);
+};
+window.__aoe = { get areas() { return areas; }, build };
+
+/* ---- the ui sheet: the shipped GM forms, with the shipped stylesheet ---- */
+async function buildUi() {
+  const hbs = await (await fetch(`${ROOT}/templates/pf2e-aoe/profiles.hbs`)).text();
+  Handlebars.registerHelper("selectOptions", (options, { hash }) => new Handlebars.SafeString(options.map((o) => {
+    const value = o[hash.valueAttr]; const sel = String(value) === String(hash.selected ?? "") ? " selected" : "";
+    return `<option value="${value}"${sel}>${Handlebars.escapeExpression(o[hash.labelAttr])}</option>`;
+  }).join("")));
+  const draft = [
+    { id: "world:silence", name: "Silence Field", semantics: { function: "conceal", material: "sonic", behavior: "contain" }, appearance: {} },
+    { id: "world:bramble", name: "Bramble Wall", semantics: { function: "terrain", material: "plant", behavior: "grow" }, appearance: { palette: { body: "#6a8f2c" } } },
+    { id: "world:ward", name: "Warding Circle", semantics: { function: "protect", material: "holy", behavior: "sustain" }, appearance: { intensity: "cinematic" } },
+    { id: "world:hex", name: "Witch's Hex Ground", semantics: { function: "hinder", material: "void", behavior: "linger" }, appearance: { treatment: "airborne" } },
+  ];
+  const pane = $("pv-profiles");
+  pane.querySelector("form")?.remove();
+  const form = document.createElement("form");
+  form.className = "window-content standard-form";
+  form.innerHTML = Handlebars.compile(hbs)(view.profilesContext(draft, t));
+  pane.appendChild(form);
+  for (const card of form.querySelectorAll("[data-profile-id]")) view.paintProfileCard(card);
+  form.addEventListener("change", (e) => { const card = e.target.closest("[data-profile-id]"); if (card) view.paintProfileCard(card); form.querySelector("[data-dirty]").hidden = false; });
+  if (q.get("dirty") === "1") form.querySelector("[data-dirty]").hidden = false;
+
+  const regionPane = $("pv-region").querySelector(".window-content");
+  regionPane.innerHTML = `<form>
+    <div class="form-group"><label>Name</label><div class="form-fields"><input type="text" value="Fireball"></div></div>
+    <div class="form-group"><label>Visibility</label><div class="form-fields"><select><option>Always</option></select></div></div>
+    <footer class="form-footer"><button type="button">Update Region</button></footer></form>`;
+  const regionDoc = {
+    documentName: "Region", name: "Fireball", flags: { pf2e: { origin: { name: "Fireball", traits: ["fire"] } } },
+    getFlag: () => ({ schema: 2, mode: "auto", snapshot: { semantics: { function: "harm", material: "fire", behavior: "impact" }, confidence: "high", evidenceVersion: 1 } }),
+  };
+  regionConfig.injectRegionStyle({ document: regionDoc, setPosition() {} }, regionPane);
+  if (q.get("advanced") === "1") regionPane.querySelector(".gl-aoe-advanced").open = true;
+
+  const createPane = $("pv-create").querySelector(".window-content");
+  createPane.innerHTML = controls.creatorContent();
+  controls.bindCreatorDialog(null, { element: createPane });
+}
 
 for (const id of ["sheet", "floor"]) $(id).addEventListener("change", build);
 $("zoom").addEventListener("input", layout);
 $("replay").addEventListener("click", () => { paused = false; for (const a of areas) a.anim = new AoeAnim({ motionScale: 1 }); });
 $("pulse").addEventListener("click", () => { for (const a of areas) a.anim.pulse(); });
-addEventListener("resize", layout);
+$("release").addEventListener("click", () => window.__aoeRelease());
+/* PIXI queues its own resize on an animation frame, which a headless
+   screenshot never grants; refit and draw synchronously instead. */
+addEventListener("resize", () => { app.resize(); layout(); frame(0); app.render(); });
 build();
 if (q.has("seek")) window.__aoeSeek(Number(q.get("seek")));
+if (q.has("pulse")) { for (const a of areas) a.anim.pulse(); window.__aoeSeek(Number(q.get("pulse"))); }
+if (q.has("release")) window.__aoeRelease(Number(q.get("release")));
 </script>
 </body>
 </html>
