@@ -1343,7 +1343,7 @@ export class GLUniverseInitiativeOverlay {
     if (data?.type === "refresh") this.renderSoon();
     if (data?.type === "roundSplash") this.showRoundSplash(data.round);
     if (data?.type === "guardBreakImpact") this.queueGuardBreakImpact(data);
-    if (data?.type === "breakSplash") this.showBreakSplash(data.name);
+    if (data?.type === "breakSplash") this.showBreakSplashFor(data.combatId, data.combatantId);
     if (data?.type === "statusAnimation") this.queueStatusAnimation(data);
     if (data?.type === "requestEndTurn") this.onSocketEndTurnRequest(data);
   }
@@ -3273,11 +3273,11 @@ export class GLUniverseInitiativeOverlay {
     }
     this.pendingSlideInIds.add(combatant.id);
     this.statusAnimationRecentlyQueued(combatant.id, "guardBreak");
-    this.showBreakSplash(combatant.name);
+    this.showBreakSplashFor(combat.id, combatant.id);
     // The broken card is moved before the active turn, so it falls outside the
     // forward-looking window on other clients and their local detection can't
     // see it. Broadcast the splash + entrance so every player gets the cue.
-    this.broadcastBreakSplash(combatant.name);
+    this.broadcastBreakSplash(combat.id, combatant.id);
     this.broadcastStatusAnimation(combatant.id, "guardBreak");
 
     const payload = {
@@ -3506,9 +3506,24 @@ export class GLUniverseInitiativeOverlay {
     return 1300;
   }
 
-  broadcastBreakSplash(name) {
-    if (!socketReady() || !name) return;
-    emitSocket(FEATURE_ID, { type: "breakSplash", name });
+  // The payload names the combatant, never its name: each client resolves the
+  // name through its own visibility, so a masked creature breaks as "Unknown"
+  // and a hidden one plays no splash at all. A name in the payload reached every
+  // player's console, masked or not.
+  broadcastBreakSplash(combatId, combatantId) {
+    if (!socketReady() || !combatantId) return;
+    emitSocket(FEATURE_ID, { type: "breakSplash", combatId, combatantId });
+  }
+
+  showBreakSplashFor(combatId, combatantId) {
+    const combat = this.getCombatById(combatId) ?? this.combat;
+    const combatant = combat?.combatants?.get?.(combatantId);
+    if (!combatant) return;
+    const card = this.buildCombatantCard(combatant, {
+      active: false, delayed: false, roundOffset: 0,
+      displayRound: Number(combat.round) || 1, key: `splash:${combatantId}`
+    });
+    if (card?.name) this.showBreakSplash(card.name);
   }
 
   queueStatusAnimation(data) {
