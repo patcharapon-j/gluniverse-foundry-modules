@@ -1,31 +1,30 @@
 <section class="gluniverse-stream-panel">
-  <h2>Roll Cards</h2>
+  <h2>{{localize "GLUNIVERSE_STREAM.cardsPanel.heading"}}</h2>
   <div class="gluniverse-stream-default-art">
-    <label for="gluniverse-stream-default-roll-art">Default GM roll art</label>
-    <input type="text" id="gluniverse-stream-default-roll-art" name="defaultRollArt.src" value="{{defaultRollArt.src}}" placeholder="path/to/picture.webp" title="Picture shown on a GM roll with no art of its own, such as a plain roll with no token." {{#unless canEdit}}disabled{{/unless}}>
-    <button type="button" data-action="browse-default-roll-art" title="Pick a picture" {{#unless canEdit}}disabled{{/unless}}><i class="fas fa-file-import"></i> Browse</button>
-    <button type="button" data-action="frame-default-roll-art" title="Choose how the default GM roll picture is framed" {{#unless defaultRollArt.src}}disabled{{/unless}}><i class="fas fa-crop-simple"></i> Frame</button>
+    <label class="gluniverse-stream-field gluniverse-stream-field--wide" title="{{localize 'GLUNIVERSE_STREAM.cardsPanel.defaultArtTitle'}}"><span>{{localize "GLUNIVERSE_STREAM.cardsPanel.defaultArt"}}</span>
+      <input type="text" name="defaultRollArt.src" value="{{defaultRollArt.src}}" placeholder="path/to/picture.webp" {{#unless canEdit}}disabled{{/unless}}>
+    </label>
+    <button type="button" class="gluniverse-stream-btn gluniverse-stream-btn--small" data-action="browse-default-roll-art" title="{{localize 'GLUNIVERSE_STREAM.cardsPanel.browseHint'}}" {{#unless canEdit}}disabled{{/unless}}><i class="fas fa-file-import"></i> {{localize "GLUNIVERSE_STREAM.cardsPanel.browse"}}</button>
+    <button type="button" class="gluniverse-stream-btn gluniverse-stream-btn--small" data-action="frame-default-roll-art" title="{{localize 'GLUNIVERSE_STREAM.cardsPanel.frameHint'}}" {{#unless defaultRollArt.src}}disabled{{/unless}}><i class="fas fa-crop-simple"></i> {{localize "GLUNIVERSE_STREAM.cardsPanel.frame"}}</button>
   </div>
-  <p class="gluniverse-stream-form-hint"><small>A GM roll with no art of its own — a plain roll with no token, or a creature still on a default icon — shows this picture instead of the monogram. Leave it empty to keep the monogram. {{#if defaultRollArt.focus}}Framed by hand.{{else}}Framed automatically.{{/if}}</small></p>
+  <p class="gluniverse-stream-form-hint">{{localize "GLUNIVERSE_STREAM.cardsPanel.defaultArtHint"}} {{#if defaultRollArt.focus}}{{localize "GLUNIVERSE_STREAM.cardsPanel.framedByHand"}}{{else}}{{localize "GLUNIVERSE_STREAM.cardsPanel.framedAuto"}}{{/if}}</p>
   <div class="gluniverse-stream-actions">
-    <button type="button" data-action="portrait-framing" title="Choose how each character's picture is framed on roll cards"><i class="fas fa-crop-simple"></i> Frame Portraits</button>
+    <button type="button" class="gluniverse-stream-btn gluniverse-stream-btn--small" data-action="portrait-framing" title="{{localize 'GLUNIVERSE_STREAM.cardsPanel.portraitsHint'}}"><i class="fas fa-crop-simple"></i> {{localize "GLUNIVERSE_STREAM.cardsPanel.portraits"}}</button>
   </div>
 </section>
 
 {{#if statusCards}}
 <section class="gluniverse-stream-panel">
-  <h2>Status Updates</h2>
-  <p class="gluniverse-stream-form-hint"><small>A small card, the size of the damage row, when a creature gains or loses a condition. An NPC also has to be standing somewhere a player could see it — a token on the scene that is not hidden — whatever is ticked here. Which statuses are shown, and for whose creatures, is on the <a data-action="open-chat-filter">Chat Filter</a> page.</small></p>
-  <div class="gluniverse-stream-user-list">
-    <label title="Draw status cards at all."><input type="checkbox" name="statusUpdates.enabled" {{#if status.enabled}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.enabled"}}</label>
-    <label title="A condition's value moving, such as frightened 1 rising to 2 or ticking back down."><input type="checkbox" name="statusUpdates.valueChanges" {{#if status.valueChanges}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.valueChanges"}}</label>
-    <label title="A condition ending."><input type="checkbox" name="statusUpdates.removals" {{#if status.removals}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.removals"}}</label>
+  <h2>{{localize "GLUNIVERSE_STREAM.cardsPanel.statusHeading"}}</h2>
+  <p class="gluniverse-stream-form-hint">{{localize "GLUNIVERSE_STREAM.cardsPanel.statusHint"}} <a data-action="open-chat-filter">{{localize "GLUNIVERSE_STREAM.room.chat.filterButton"}}</a></p>
+  <div class="gluniverse-stream-checks">
+    <label title="{{localize 'GLUNIVERSE_STREAM.cardsPanel.enabledHint'}}"><input type="checkbox" name="statusUpdates.enabled" {{#if status.enabled}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.enabled"}}</label>
+    <label title="{{localize 'GLUNIVERSE_STREAM.cardsPanel.valueChangesHint'}}"><input type="checkbox" name="statusUpdates.valueChanges" {{#if status.valueChanges}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.valueChanges"}}</label>
+    <label title="{{localize 'GLUNIVERSE_STREAM.cardsPanel.removalsHint'}}"><input type="checkbox" name="statusUpdates.removals" {{#if status.removals}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.statusCard.settings.removals"}}</label>
   </div>
-  <div class="gluniverse-stream-number-grid">
-    <label class="gluniverse-stream-range">{{localize "GLUNIVERSE_STREAM.statusCard.settings.lifetimeFactor"}} <output data-for="statusUpdates.lifetimeFactor">{{statusLifetime.percent}}%</output>
-      <input type="range" name="statusUpdates.lifetimeFactor" value="{{status.lifetimeFactor}}" min="{{statusLifetime.min}}" max="{{statusLifetime.max}}" step="{{statusLifetime.step}}" title="How long a status card stays up, as a share of the chat overlay's lifetime." {{#unless canEdit}}disabled{{/unless}}>
-    </label>
-  </div>
+  <label class="gluniverse-stream-range" title="{{localize 'GLUNIVERSE_STREAM.cardsPanel.lifetimeHint'}}"><span>{{localize "GLUNIVERSE_STREAM.statusCard.settings.lifetimeFactor"}}</span>
+    <input type="range" name="statusUpdates.lifetimeFactor" value="{{status.lifetimeFactor}}" min="{{statusLifetime.min}}" max="{{statusLifetime.max}}" step="{{statusLifetime.step}}" {{#unless canEdit}}disabled{{/unless}}>
+    <output data-for="statusUpdates.lifetimeFactor">{{statusLifetime.percent}}%</output>
+  </label>
 </section>
 {{/if}}
-

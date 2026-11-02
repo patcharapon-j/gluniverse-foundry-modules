@@ -92,13 +92,28 @@ export function createCardFeed(overlay, system) {
  *        throwing, so without this a trusted director got live-looking controls
  *        that discarded every edit without a word. Declared by the section
  *        because only it knows whether it has a delegated path.
+ * @param {string} [section.tab] which Control Room tab the section sits on: one of PANEL_TABS.
+ *        Optional; a section that names none, or one the room does not have, sits on "overlay",
+ *        beside the chat overlay, because everything contributed so far draws over the shot.
  */
 export function registerPanelSection(section) {
   if (!section?.id || typeof section.render !== "function") return;
   const at = panelSections.findIndex((s) => s.id === section.id);
-  const entry = { order: 0, ...section };
+  const entry = { order: 0, ...section, tab: panelTabOf(section) };
   if (at >= 0) panelSections[at] = entry;
   else panelSections.push(entry);
+}
+
+/** The Control Room's tabs, in order. A contributed section lands on one of them. */
+export const PANEL_TABS = Object.freeze(["shot", "overlay", "screen", "access"]);
+export const DEFAULT_PANEL_TAB = "overlay";
+
+/**
+ * The tab a section is drawn on. Never a tab the room does not have: a section filed under a name
+ * nothing renders would vanish from the panel with no error, and a director would never find it.
+ */
+export function panelTabOf(section) {
+  return PANEL_TABS.includes(section?.tab) ? section.tab : DEFAULT_PANEL_TAB;
 }
 
 /** Remove a contributed section (a feature disabled at runtime). */
@@ -118,22 +133,31 @@ export function getPanelSections() {
  * how a GM stops a stream that has gone wrong, so it has to open.
  */
 export async function renderPanelSections() {
-  const out = [];
-  const isGM = Boolean(game.user?.isGM);
+  const byTab = await renderPanelSectionsByTab();
+  return PANEL_TABS.map((tab) => byTab[tab]).join("");
+}
+
+/**
+ * Every contributed section rendered and grouped by its tab: `{ shot, overlay, screen, access }`, each
+ * the joined HTML of that tab's sections in display order (an empty string for a tab with none).
+ */
+export async function renderPanelSectionsByTab() {
+  const out = Object.fromEntries(PANEL_TABS.map((tab) => [tab, []]));
+  const isGM = Boolean(globalThis.game?.user?.isGM);
   for (const section of getPanelSections()) {
     try {
       const html = String((await section.render()) ?? "");
       if (!html) continue;
       // Shown, not hidden: a director should still be able to read what the
       // cards and the arcs are set to while looking at the shot they affect.
-      out.push(section.gmOnly && !isGM
+      out[panelTabOf(section)].push(section.gmOnly && !isGM
         ? `<fieldset class="gluniverse-stream-controls" disabled>${html}</fieldset>`
         : html);
     } catch (error) {
       console.error(`GLUniverse Suite | Stream: panel section "${section.id}" failed to render.`, error);
     }
   }
-  return out.join("");
+  return Object.fromEntries(PANEL_TABS.map((tab) => [tab, out[tab].join("")]));
 }
 
 /** Offer a form change to the contributed sections. True once one claims it. */
