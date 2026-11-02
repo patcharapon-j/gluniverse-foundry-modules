@@ -10,8 +10,14 @@
  * Bubbles are DOM in one fixed layer over the canvas, under Foundry's interface, placed on the PIXI
  * ticker from the stage transform so they follow a moving token and every pan and zoom. The ticker
  * callback exists only while something is up.
+ *
+ * While Diorama's 3D view covers the board, the stage transform names a spot on a board nobody can
+ * see, so bubbles are placed from the view instead (`tokenAnchor`, `project`) on animation frames,
+ * which follow its camera and a hopping standee. The bubble layer stacks above the view (z sticky
+ * over the view's z base). A token with no standee on this viewer's board gets no bubble.
  */
 
+import { SUITE_ID } from "../../core/const.mjs";
 import { Features } from "../../core/registry.mjs";
 import { rpModeOf } from "../../core/rp-mode.mjs";
 import { isConfiguredStreamUser } from "../stream/settings.js";
@@ -41,6 +47,21 @@ const parse = (html) => {
   return t.content.firstElementChild;
 };
 
+/**
+ * Diorama's api while its 3D view is open on this client, else null (feature off, absent, closed).
+ * Every access is guarded: this feature never depends on Diorama being there.
+ */
+function diorama() {
+  try {
+    const api = game.modules.get(SUITE_ID)?.api?.features?.diorama;
+    return api?.isOpen?.() ? api : null;
+  } catch {
+    return null;
+  }
+}
+
+const finitePoint = (p) => (p && Number.isFinite(p.x) && Number.isFinite(p.y) ? p : null);
+
 class Overlay {
   layer = null;
   lane = null;
@@ -49,7 +70,10 @@ class Overlay {
   /** tokenId → { el, timer }: the "…" over a token whose player is writing. */
   typers = new Map();
   laneLines = [];
+  /** The PIXI ticker callback (the 2D board). */
   #tick = null;
+  /** The animation frame placing bubbles over Diorama's 3D view, while it is open. */
+  #raf = 0;
 
   /* ── a new line ─────────────────────────────────────────────────────── */
 
@@ -153,10 +177,53 @@ class Overlay {
   }
 
   #tokenFacts(token) {
+    const dio = diorama();
+    if (dio) {
+      // The view covers the window; a token with no standee there is not on screen.
+      const point = token.visible ? this.#point3d(dio, token, "above") : null;
+      const viewport = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+      return { onScene: true, visible: Boolean(token.visible), onScreen: onScreen(point, viewport) };
+    }
     const rect = canvas.app?.view?.getBoundingClientRect?.();
     const point = rect ? this.#screenPoint(token, "above", rect) : null;
     const viewport = rect ? { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom } : null;
     return { onScene: true, visible: Boolean(token.visible), onScreen: onScreen(point, viewport) };
+  }
+
+  /**
+   * Where a token's line hangs in the 3D view, client px, or null when its token has no standee on
+   * this viewer's board. "above" is over the standee's head; "below" is its feet on the 3D ground.
+   */
+  #point3d(dio, token, place) {
+    let head = null;
+    try {
+      head = finitePoint(dio.tokenAnchor?.(token.id));
+    } catch {
+      return null;
+    }
+    if (!head || place === "above") return head;
+    const c = token.center ?? { x: token.x, y: token.y };
+    try {
+      return finitePoint(dio.project?.(c.x, c.y, Number(token.document?.elevation) || 0));
+    } catch {
+      return null;
+    }
+  }
+
+  /** Screen px per scene px around a token in the 3D view: the stage scale's equivalent. */
+  #scale3d(dio, token) {
+    const size = canvas?.grid?.size || canvas?.dimensions?.size || 100;
+    const c = token.center ?? { x: token.x, y: token.y };
+    const e = Number(token.document?.elevation) || 0;
+    try {
+      const o = finitePoint(dio.project?.(c.x, c.y, e));
+      const ax = finitePoint(dio.project?.(c.x + size, c.y, e));
+      const ay = finitePoint(dio.project?.(c.x, c.y + size, e));
+      if (!o || !ax || !ay) return 1;
+      return (Math.hypot(ax.x - o.x, ax.y - o.y) + Math.hypot(ay.x - o.x, ay.y - o.y)) / 2 / size;
+    } catch {
+      return 1;
+    }
   }
 
   #screenPoint(token, place, rect) {
@@ -282,19 +349,41 @@ class Overlay {
     }
   }
 
+  /**
+   * Run placement while anything is up: the PIXI ticker for the board, and animation frames while
+   * Diorama's 3D view is open (its camera and standees move with no canvas frame behind them). Each
+   * loop notices the view opening or closing and hands over, re-placing at once.
+   */
   #listen() {
     const ticker = canvas?.app?.ticker;
     const busy = this.stacks.size > 0 || this.typers.size > 0;
     if (busy && !this.#tick && ticker) {
-      this.#tick = () => this.#place();
+      this.#tick = () => {
+        if (diorama()) this.#listen();
+        else this.#place();
+      };
       ticker.add(this.#tick);
     } else if (!busy && this.#tick) {
       ticker?.remove(this.#tick);
       this.#tick = null;
     }
+    const over3d = busy && Boolean(diorama());
+    if (over3d && !this.#raf) this.#raf = requestAnimationFrame(this.#frame3d);
+    else if (!over3d && this.#raf) {
+      cancelAnimationFrame(this.#raf);
+      this.#raf = 0;
+    }
   }
 
+  #frame3d = () => {
+    this.#raf = 0;
+    this.#place();
+    this.#listen();
+  };
+
   #place() {
+    const dio = diorama();
+    if (dio) return this.#place3d(dio);
     const rect = canvas?.app?.view?.getBoundingClientRect?.();
     if (!rect || !canvas.stage) return;
     const scale = overlayScale(canvas.stage.scale?.x ?? 1);
@@ -321,6 +410,41 @@ class Overlay {
       typer.el.style.visibility = "";
       typer.el.style.translate = `${Math.round(rect.left + p.x)}px ${Math.round(rect.top + p.y)}px`;
       typer.el.style.setProperty("--glrp-scale", scale.toFixed(3));
+    }
+  }
+
+  /**
+   * Placement over Diorama's 3D view. A token Foundry hides from this viewer, or one with no standee
+   * on their board, gets no bubble and no pill: hiding here is privacy as much as layout.
+   */
+  #place3d(dio) {
+    const hide = (el) => {
+      el.style.visibility = "hidden";
+    };
+    for (const stack of this.stacks.values()) {
+      const token = canvas?.tokens?.get(stack.tokenId);
+      const p = token?.visible ? this.#point3d(dio, token, stack.place) : null;
+      if (!p) {
+        hide(stack.el);
+        continue;
+      }
+      stack.el.style.visibility = "";
+      stack.el.style.translate = `${Math.round(p.x)}px ${Math.round(p.y)}px`;
+      stack.el.style.setProperty("--glrp-scale", overlayScale(this.#scale3d(dio, token)).toFixed(3));
+    }
+    for (const [tokenId, typer] of this.typers) {
+      const token = canvas?.tokens?.get(tokenId);
+      const head = token?.visible ? this.#point3d(dio, token, "above") : null;
+      if (!head) {
+        hide(typer.el);
+        continue;
+      }
+      // Beside the standee's head, where the board puts it at the token's top-right corner.
+      const px = this.#scale3d(dio, token);
+      const x = head.x + ((token.w ?? 0) / 2) * px;
+      typer.el.style.visibility = "";
+      typer.el.style.translate = `${Math.round(x)}px ${Math.round(head.y)}px`;
+      typer.el.style.setProperty("--glrp-scale", overlayScale(px).toFixed(3));
     }
   }
 }

@@ -148,6 +148,8 @@ export default async function check(ctx) {
     "GLDIO.material.cliff": C.CLIFF_MATERIALS,
     "GLDIO.cover": [...COVER_KEYS, "noSight"],
     "GLDIO.band": C.DH_BANDS.map((b) => b.key),
+    "GLDIO.standee.size": ["tiny", "sm", "med", "lg", "huge", "grg"],
+    "GLDIO.standee.marks": ["top", "bottom"],
   };
   for (const [fam, members] of Object.entries(families)) {
     const gaps = members.filter((m) => !(`${fam}.${m}` in lang));
@@ -272,10 +274,21 @@ export default async function check(ctx) {
 
   const art = Snap.tokenArtFor;
   ctx.ok("the GM's standee override wins", art({ standee: "s.webp", canObserve: false, actorImg: "a.webp", tokenImg: "t.webp" }) === "s.webp");
-  ctx.ok("a viewer who cannot Observe never sees the portrait", art({ canObserve: false, actorImg: "a.webp", tokenImg: "t.webp" }) === "t.webp"
-    && art({ canObserve: false, actorImg: "a.webp", tokenImg: null }) === Snap.DEFAULT_ART);
+  ctx.ok("every viewer sees the portrait (a bestiary creature stands as its art)",
+    art({ canObserve: false, actorImg: "a.webp", tokenImg: "t.webp", protoImg: "t.webp" }) === "a.webp"
+    && art({ canObserve: false, actorImg: "a.webp", tokenImg: "t.webp" }) === "a.webp"
+    && art({ canObserve: false, actorImg: "a.webp", tokenImg: null }) === "a.webp");
+  ctx.ok("a disguised token stays disguised to a viewer who cannot Observe",
+    art({ canObserve: false, actorImg: "mimic.webp", tokenImg: "chest.webp", protoImg: "mimic-token.webp" }) === "chest.webp");
+  ctx.ok("an observer sees through the disguise",
+    art({ canObserve: true, actorImg: "mimic.webp", tokenImg: "chest.webp", protoImg: "mimic-token.webp" }) === "mimic.webp");
+  ctx.ok("a random or wildcard prototype image is no disguise",
+    art({ canObserve: false, actorImg: "a.webp", tokenImg: "wolf-2.webp", protoImg: "wolf-*.webp" }) === "a.webp"
+    && art({ canObserve: false, actorImg: "a.webp", tokenImg: "wolf-2.webp", protoImg: "wolf-1.webp", protoRandom: true }) === "a.webp");
   ctx.ok("an observer sees the portrait", art({ canObserve: true, actorImg: "a.webp", tokenImg: "t.webp" }) === "a.webp");
-  ctx.ok("the mystery-man portrait falls back to the token", art({ canObserve: true, actorImg: Snap.DEFAULT_ART, tokenImg: "t.webp" }) === "t.webp");
+  ctx.ok("the mystery-man portrait falls back to the token", art({ canObserve: true, actorImg: Snap.DEFAULT_ART, tokenImg: "t.webp" }) === "t.webp"
+    && art({ canObserve: false, actorImg: Snap.DEFAULT_ART, tokenImg: "t.webp", protoImg: "t.webp" }) === "t.webp");
+  ctx.ok("the standee override beats a disguise", art({ standee: "s.webp", canObserve: false, actorImg: "a.webp", tokenImg: "chest.webp", protoImg: "p.webp" }) === "s.webp");
 
   const p1 = Snap.pathCellsTo([{ i: 0, j: 0 }], { i: 2, j: 3 });
   const contiguous = p1.every((c, k) => !k || (Math.abs(c.i - p1[k - 1].i) <= 1 && Math.abs(c.j - p1[k - 1].j) <= 1));

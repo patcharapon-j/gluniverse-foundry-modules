@@ -1,13 +1,18 @@
 /**
  * Diorama view — the HUD: toolbar, "Not set up" chip, floating labels and the
- * token menu. Etched Glass (`.gl-glass`, `.gl-btn`), sized by this feature
+ * drag-select box (a token's own controls are Foundry's Token HUD,
+ * view/token-hud.mjs). Etched Glass (`.gl-glass`, `.gl-btn`), sized by this feature
  * (`.gl-btn` declares no font-size), every string through i18n and every name
  * set as text, never markup.
  */
 
-import { el, t } from "./util.mjs";
+import { el, keyHint, t } from "./util.mjs";
 
-/** Toolbar buttons, in order. `gm` = GM only; `toggle` = shows a pressed state. */
+/**
+ * Toolbar buttons, in order. `gm` = GM only; `toggle` = shows a pressed state;
+ * `bind` = a keybinding whose current keys are added to the tooltip. The way
+ * out is not in this list: it is the labelled "Exit 3D" button under the bar.
+ */
 export const TOOLBAR = Object.freeze([
   { act: "yawLeft", icon: "fa-solid fa-rotate-left", key: "GLDIO.view.yawLeft" },
   { act: "yawRight", icon: "fa-solid fa-rotate-right", key: "GLDIO.view.yawRight" },
@@ -25,7 +30,7 @@ export const TOOLBAR = Object.freeze([
   { act: "summon", icon: "fa-solid fa-users-viewfinder", key: "GLDIO.view.summon", gm: true },
   { act: "asPlayers", icon: "fa-solid fa-eye", key: "GLDIO.view.asPlayers", gm: true, toggle: true },
   { sep: true },
-  { act: "close", icon: "fa-solid fa-xmark", key: "GLDIO.view.close" },
+  { act: "peek", icon: "fa-solid fa-map", key: "GLDIO.view.peek", toggle: true, bind: "dio.peek" },
 ]);
 
 /** Tones a label badge may take: each is a suite token (`--gl-<tone>`). */
@@ -46,8 +51,9 @@ export class Hud {
       if (b.gm && !isGM) continue;
       if (b.sep) { bar.append(el("span", { class: "gldio-sep", "aria-hidden": "true" })); continue; }
       const label = t(b.key);
+      const keys = b.bind ? keyHint(b.bind) : "";
       const btn = el("button", {
-        type: "button", class: "gldio-btn gl-btn", title: label, "aria-label": label,
+        type: "button", class: "gldio-btn gl-btn", title: keys ? `${label} (${keys})` : label, "aria-label": label,
         "aria-pressed": b.toggle ? "false" : null, dataset: { act: b.act },
       }, [el("i", { class: b.icon, "aria-hidden": "true" })]);
       btn.addEventListener("click", (ev) => { ev.stopPropagation(); this.actions[b.act]?.(); });
@@ -55,6 +61,16 @@ export class Hud {
       bar.append(btn);
     }
     this.bar = bar;
+
+    // The way back to 2D: labelled and in the accent, so nobody has to guess
+    // which glyph leaves the view. Its keys are in the tooltip.
+    const exitKeys = ["Esc", keyHint("dio.toggle")].filter(Boolean).join(" / ");
+    const exit = el("button", {
+      type: "button", class: "gldio-exit gldio-door gl-btn gl-btn-accent",
+      title: t("GLDIO.view.exitTitle", { keys: exitKeys }), dataset: { act: "close" },
+    }, [el("i", { class: "fa-solid fa-arrow-right-from-bracket", "aria-hidden": "true" }), el("span", { text: t("GLDIO.view.exit") })]);
+    exit.addEventListener("click", (ev) => { ev.stopPropagation(); this.actions.close?.(); });
+    this.buttons.set("close", exit);
 
     this.chip = el("div", { class: "gldio-chip gl-glass", hidden: true }, [
       el("span", { class: "gldio-chip-text", text: t("GLDIO.view.notSetUp") }),
@@ -65,12 +81,14 @@ export class Hud {
       this.chip.append(auto);
     }
 
+    // One column beside the scene controls: the "Not set up" chip, the bar, the way out.
+    this.rail = el("div", { class: "gldio-rail" }, [this.chip, bar, exit]);
+
     this.labels = el("div", { class: "gldio-labels", "aria-hidden": "true" });
     this.labelEls = new Map();
-    this.menuEl = null;
-    this._outside = (ev) => { if (this.menuEl && !this.menuEl.contains(ev.target)) this.closeMenu(); };
+    this.marqueeEl = null;
 
-    root.append(this.labels, bar, this.chip);
+    root.append(this.labels, this.rail);
   }
 
   setPressed(act, on) {
@@ -121,49 +139,28 @@ export class Hud {
   }
 
   /**
-   * A small menu at client px.
-   * @param {{x:number, y:number}} at
-   * @param {Array<{icon:string, label:string, run:() => void}>} items
+   * The drag-select box between two client points, or null to take it away.
+   * @param {{x:number, y:number}|null} a
+   * @param {{x:number, y:number}} [b]
    */
-  menu(at, items) {
-    this.closeMenu();
-    if (!items.length) return;
-    const m = el("div", { class: "gldio-menu gl-glass", role: "menu" });
-    for (const it of items) {
-      const b = el("button", { type: "button", class: "gldio-menu-item", role: "menuitem" }, [
-        el("i", { class: it.icon, "aria-hidden": "true" }),
-        el("span", { text: it.label }),
-      ]);
-      b.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        this.closeMenu();
-        try { it.run(); } catch (e) { console.error(e); }
-      });
-      m.append(b);
+  marquee(a, b) {
+    if (!a || !b) { this.marqueeEl?.remove(); this.marqueeEl = null; return; }
+    if (!this.marqueeEl) {
+      this.marqueeEl = el("div", { class: "gldio-marquee", "aria-hidden": "true" });
+      this.root.append(this.marqueeEl);
     }
     const r = this.root.getBoundingClientRect();
-    m.style.setProperty("--gldio-x", `${Math.round(at.x - r.left)}px`);
-    m.style.setProperty("--gldio-y", `${Math.round(at.y - r.top)}px`);
-    this.root.append(m);
-    this.menuEl = m;
-    m.querySelector("button")?.focus({ preventScroll: true });
-    setTimeout(() => document.addEventListener("pointerdown", this._outside, true), 0);
-  }
-
-  get menuOpen() { return !!this.menuEl; }
-
-  closeMenu() {
-    if (!this.menuEl) return false;
-    this.menuEl.remove();
-    this.menuEl = null;
-    document.removeEventListener("pointerdown", this._outside, true);
-    return true;
+    const s = this.marqueeEl.style;
+    s.setProperty("--gldio-x", `${Math.round(Math.min(a.x, b.x) - r.left)}px`);
+    s.setProperty("--gldio-y", `${Math.round(Math.min(a.y, b.y) - r.top)}px`);
+    s.setProperty("--gldio-w", `${Math.round(Math.abs(b.x - a.x))}px`);
+    s.setProperty("--gldio-h", `${Math.round(Math.abs(b.y - a.y))}px`);
   }
 
   dispose() {
-    this.closeMenu();
+    this.marquee(null);
     this.labels.remove();
-    this.bar.remove();
+    this.rail.remove();
     this.chip.remove();
     this.labelEls.clear();
   }

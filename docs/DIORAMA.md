@@ -11,14 +11,43 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
 
 ## What a table gets
 
-- **The view.** A full-screen 3D overlay over the 2D canvas (Shift+V or the suite
-  scene-control button). The 2D canvas stays the only source of truth: every action
-  in 3D writes ordinary Foundry documents, and the GM can drop back to 2D for
-  anything 3D does not cover.
+- **The view.** A full-screen 3D overlay over the 2D canvas. The way in is the
+  labelled **3D view** chip on the 2D board, beside the scene controls (shown where
+  the view is offered and the scene is not switched off; hidden while the view is
+  open and on the stream capture; `view/entry.mjs`), Shift+V, or the suite
+  scene-control button. The way out is the labelled **Exit 3D** button under the
+  toolbar (beside the scene controls), Esc or Shift+V; leaving pans the 2D canvas to
+  centre what the 3D camera was looking at, so the switch keeps the player's place
+  (never on the stream capture, whose camera owns the 2D view). A scene-control
+  layer or tool switch never opens or closes it: only a press does. The 2D canvas
+  stays the only source of truth: every action in 3D writes ordinary Foundry
+  documents, and anyone can drop back to 2D for anything 3D does not cover.
+- **The 2D map window** (toolbar map button, Shift+M; `view/peek.mjs`). A small
+  framed window, docked bottom-right beside the sidebar the first time (32% of the
+  viewport wide, 16:10), through which the **live** 2D canvas shows and takes input
+  with all its usual tools: tokens, walls, lights, drawings, regions, the scene
+  controls, the wheel. It is not a copy: the view's root gets an evenodd
+  `clip-path` with the window's rectangle cut out, so the real `#board` under the
+  overlay shows through, and a clipped-out region is not hit-tested, so every
+  pointer and wheel event in it lands on Foundry's canvas (Foundry's wheel handler
+  asks `elementFromPoint`, which honours the clip). The 3D input listens on its
+  own canvas and never sees them; T and Escape over the window are Foundry's too.
+  Opening it (and its Centre button) pans the 2D canvas so the 3D camera's target
+  sits in the middle of the window; after that the user pans and zooms 2D freely,
+  and the stream follow stands down while it is open. Drag it by the header,
+  resize it from the top-left corner; its place is remembered per client
+  (localStorage `gluniverse-foundry-modules.dio.peek`). **Switch to 2D** leaves the
+  view centred on what the window was showing. Escape closes it before the view;
+  it closes with the view and never opens on the stream capture. Foundry's canvas
+  keeps rendering under the overlay the whole time (nothing in the suite pauses
+  it; the Performance feature's idle rate wakes on any input), so the window adds
+  nothing per frame and the 3D view still renders on demand.
 - **Camera.** An orthographic tactics view: pitch presets 30° (default), 45° and 65°
   (R), yaw on the four diagonals (Q/E), or in 45° steps if the GM sets
   `dio.yawSnap` to 45. Free zoom (wheel) and pan (right or middle drag), all
-  tweened. Opening the view frames what the 2D canvas was showing. The scene's
+  tweened. Opening the view frames the controlled token (a player's own token),
+  else what the 2D canvas was showing when its centre is on the map, else the
+  current combatant, else the scene's middle. The scene's
   grid can be drawn on the ground (`dio.grid`, per client, toolbar toggle).
   Tilt-shift blur is opt-in.
 - **Standees.** Figures cut out of their art with a dark outline, leaned back so
@@ -41,16 +70,44 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   figure does none of this. Plans and curves: `render/life.mjs` (pure). Off: the
   old slide with a plain bounce, and nothing moves on its own.
 - **Other features, in 3D.** The targeting lines are the ones `stream-targets`
-  draws on that client, in its colours. pf2e-odds badges hang over the standee's
-  head (suite api `tokenAnchor`). In stream mode the capture's view follows the
+  draws on that client, in its colours: an arc from the source's chest with an
+  arrowhead whose tip lands on the target's base, turned along the arc's end as
+  it falls on screen, both with the dark ink edge and sized in device pixels
+  (`LINK_PX`: a 10 px ribbon, a 32 × 24 px head). pf2e-odds badges and Roleplay
+  Chat bubbles hang over the standee's head (suite api `tokenAnchor`). In stream mode the capture's view follows the
   stream camera, joins invites without a toast, and hides the view's chrome.
   The view sits on the board's layer, so Foundry's UI, Stage portraits and
   every suite overlay stay in front of it.
-- **At the table in 3D.** Select (click, shift-click), drag-move with a path preview
-  (distance, PF2e actions by Speed, Daggerheart range bands, climb and fall marks),
-  target (T), open / close doors, ping (long press), ruler, a compact token menu
-  (right-click), the sheet (double-click), and hover distance + cover from the
-  controlled token to the hovered one.
+- **At the table in 3D.** The usual Foundry token controls, on the standees.
+  Select by click, shift-click or a box dragged from empty ground (every token on
+  your board whose foot or head is in it; shift adds); a click on the ground
+  releases all. Drag-move with a path preview (distance, PF2e actions by Speed,
+  Daggerheart range bands, climb and fall marks); dragging one of several
+  controlled tokens carries them all by the same offset. Target (T), open / close
+  doors, ping (long press or Alt+click), ruler (Ctrl+drag), the sheet
+  (double-click), and hover distance + cover from the controlled token to the
+  hovered one.
+  **Right-click opens Foundry's own Token HUD** (`view/token-hud.mjs`), bound
+  exactly as a 2D right-click binds it, so its bars, elevation, status effects,
+  movement action, visibility, target and combat toggle are Foundry's, the
+  system's and every module's. It is placed at the standee and follows it as the
+  camera or the token moves: while the view is open `_updatePosition` is
+  shadowed on the HUD instance and states the standee's screen box in #hud's own
+  units (#hud is scaled with the hidden 2D stage, so the HUD is drawn at scale
+  1 / stage scale, its controls at their native size). #hud sits under the view,
+  so while the HUD is open it is lifted one step above it, with everything else
+  in #hud hidden. Escape, a press elsewhere on the board, a drag or closing the
+  view closes it. In 3D only it carries one more button, "Standee & height…"
+  (`view/standee-app.mjs`), for the actor's owner and the GM. The HUD's
+  elevation field is how a figure's height is set: see "Elevation is written".
+  **Drop** an Actor, Item, Journal entry, Macro or anything else Foundry's canvas
+  takes onto the 3D board: it is handed to Foundry's own canvas drop (a `drop`
+  dispatched on #board) at the client point the 2D canvas has for the ground
+  under the pointer (a standee's centre when dropped on one), so `dropCanvasData`
+  and every system handler run as in 2D.
+  **The keyboard is Foundry's.** The view keeps the Tokens layer active, so
+  Delete, the movement keys and Tab act on what is controlled in 3D; the view
+  keeps only T (target the hovered standee) and Escape.
 - **Tactical readouts** (`dio.tactics`, per client). Hovering a token while one
   of yours is selected, and every token you target, draws a sight line from eye
   to eye: solid while clear, dashed where terrain or a sight-blocking wall cuts
@@ -138,6 +195,13 @@ dist (scene units, `q / 4 · grid.distance`).
   altitude (token flag `dio.altitude`, for flyers). Written per waypoint in the same
   move (`Token#_getDragWaypointPosition`), so drags animate up and down ledges.
   Repainting under standing tokens resyncs them (active GM, one batched update).
+  An elevation set on purpose with the token staying on its square (the Token
+  HUD's field, the token config, the keyboard's up / down, a macro) re-derives
+  the altitude, `max(0, elevation − ground)`, in the same update on the client
+  that makes it (`preUpdateToken`), so the figure stays at that height and later
+  moves carry it, with or without a GM connected. A new token (a drop, a paste)
+  is seated on the ground under it on `preCreateToken`: a pasted flyer keeps its
+  altitude flag, otherwise an elevation above the ground becomes its altitude.
 - **Cliffs block walking.** A rise above the step height (default 2.5 ft) costs
   Infinity for `walk` (Foundry's own pathfinding routes via stairs / ramps), is
   allowed at cost for `climb`, and only sets the minimum altitude for `fly`. A drop
@@ -158,7 +222,24 @@ dist (scene units, `q / 4 · grid.distance`).
   hover and targeting only; PF2e's own cover is per-target for all attackers, so
   applying it for one attacker would be wrong for the rest.
 - **Creature height** by size (Tiny 2.5, Small 3, Medium 6, Large 10, Huge 15,
-  Gargantuan 20 ft), overridable with the actor flag `dio.height`.
+  Gargantuan 20 ft, converted to the scene's units, so a metre scene gets
+  metres), overridable per actor in the **Standee** window: actor flag
+  `dio.heightCm` (centimetres, entered as cm or ft + in), converted to the
+  scene's distance units (`ft`/`feet` ÷ 30.48, `m`/`metre(s)`/`meter(s)` ÷ 100,
+  unknown units read as feet). The legacy flag `dio.height` (distance units) is
+  still read below it; saving the window moves it to `dio.heightCm`.
+  `rules/creature.mjs` `creatureHeightDist` is the one reader.
+- **The Standee window** (`view/standee-app.mjs` `openStandeeConfig(actor)`),
+  for the actor's owners and the GM, from the actor sheet header (ApplicationV2
+  and AppV1 sheets, PF2e's included) and the Token HUD: the standee art (the
+  portrait, or a picked file written to `dio.standee`), two lines dragged to
+  the top of the head and the soles of the feet (`dio.artMarks`), and the
+  height. With marks, the span between them is the creature's height and the
+  feet line stands on the base; art below the feet is cut off, art above the
+  head (a raised sword, a hat) draws above the height. Marks are stored as
+  `{ top, bottom, src }`, fractions 0..1 of the art's height plus the art they
+  were made on, and are ignored on any other art (a disguised token, a changed
+  portrait). No marks: the whole art is the height, as before.
 
 ## Light and vision in 3D
 
@@ -229,9 +310,14 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   like a token's. The view hands the renderer each light's position, radii,
   colour and animation from the bake (`view/bake.mjs` `lightData`).
 - Token visibility is Foundry's (`token.isVisible`), never recomputed.
-- Standee art for an actor the viewer cannot Observe never uses the actor portrait:
-  the GM's standee override if set (actor flag `dio.standee`), else the token
-  image. This keeps a disguised creature (a mimic's chest token) disguised.
+- Standee art is the actor portrait for every viewer, so a bestiary creature
+  stands as its full art for the players too (a mystery-man or missing portrait
+  falls back to the token image). The GM's standee override (actor flag
+  `dio.standee`) always wins. One escape hatch keeps a disguise: to a viewer who
+  cannot Observe the actor, a token whose image was deliberately changed from
+  the actor's prototype token image shows that token image instead (a mimic's
+  chest token stays a chest). A prototype that picks a random or wildcard image
+  is never read as a disguise. `view/snapshot.mjs` `tokenArtFor`.
 
 ## Looks
 
@@ -347,9 +433,15 @@ r.dispose();
 ```
 
 - `WallState = { id, a:[x,y], b:[x,y], type:"wall"|"door"|"secret"|"window"|"terrain"|"invisible", door:"none"|"closed"|"open"|"locked", material, baseQ, topQ }`
-- `TokenState = { id, x, y, footQ, groundQ, heightQ, widthCells, art, disposition, visible, ghost, controlled, hovered, targets:[css colour], turn:"current"|"next"|null, conditions:[{icon, value}], halo, bars:[{frac, color}], name }`.
+- `TokenState = { id, x, y, footQ, groundQ, heightQ, widthCells, art, artTop, artBottom, disposition, visible, ghost, controlled, hovered, targets:[css colour], turn:"current"|"next"|null, conditions:[{icon, value}], halo, bars:[{frac, color}], name }`.
   `groundQ` is the ground under a flyer (its stand reaches down to it); `halo`
-  puts `conditions` on the base ring instead of the head plate.
+  puts `conditions` on the base ring instead of the head plate. `artTop` /
+  `artBottom` are the top of the head and the soles of the feet in `art`,
+  fractions 0..1 of its height, or `null` (both, or neither): with them the
+  card's head-to-feet span is `heightQ` and the art below `artBottom` is cut
+  off (`render/art.mjs` `composeCard`, `render/standees.mjs` `cardLayout`).
+  Cards are cached per art URL **and** marks, so two actors sharing art with
+  different marks each get their own.
 - `setLinks`: only lines whose two ends are on the board; the view filters them
   (`integrations/target-lines.mjs`) and the renderer draws exactly what it gets.
 - `setLighting`: `light` is a canvas covering px `[0, cols·size] × [0, rows·size]`

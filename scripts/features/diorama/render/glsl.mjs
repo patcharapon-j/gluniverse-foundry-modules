@@ -1454,32 +1454,67 @@ void main() {
 
 /*
  * A target line: a raised arc from the source's chest to the target's base,
- * drawn as a ribbon of constant DEVICE-pixel width. Each vertex carries its
- * point on the curve (position), the next point (aNext), which side of the line
- * it is (aSide, -1 / 1) and how far along (aAlong, 0..1). The vertex shader
- * offsets it across the curve's screen direction by uWidth px; uViewport is the
- * drawing buffer in device px. A bright core, a soft body, a glint that runs
- * from source to target once per TIMING.linkGlint (uPhase 0..1).
+ * drawn as a ribbon of constant DEVICE-pixel width with an arrowhead at the
+ * target. Each ribbon vertex carries its point on the curve (position), the
+ * next point (aNext), which side of the line it is (aSide, -1 / 1) and how far
+ * along (aAlong, 0..1); the vertex shader offsets it across the curve's screen
+ * direction by uWidth px (half the ribbon). uViewport is half the drawing
+ * buffer in device px.
+ *
+ * The arrowhead is four more vertices of the same mesh (aHead.z = 1): a quad in
+ * the tip's screen frame, uHead.x px long and 2 × uHead.y px wide, its tip on
+ * uTip (the target's base) and turned along the arc's end tangent as it lands
+ * on screen (uTipFrom is a point back along that tangent). Both parts know
+ * where they sit in that frame (vHead: px back from the tip, px across), so
+ * the ribbon stops under the arrowhead instead of poking through its point,
+ * and the head is a triangle SDF in px: one clean edge at every zoom.
+ *
+ * Both carry the suite's dark ink edge (uHead.z px, inside the shape so the
+ * tip lands exactly on the anchor), so the line reads on pale paint and dark
+ * paint alike. A glint runs source to target once per TIMING.linkGlint
+ * (uPhase 0..1, negative when shed) and lights the head as it arrives.
  */
 export const LINK_VERT = /* glsl */ `
 uniform vec2 uViewport;
 uniform float uWidth;
+uniform vec3 uHead;
+uniform vec3 uTip;
+uniform vec3 uTipFrom;
 attribute vec3 aNext;
 attribute float aSide;
 attribute float aAlong;
+attribute vec3 aHead;
 varying float vSide;
 varying float vAlong;
+varying vec3 vHead;
 void main() {
-  vec4 a = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  vec4 b = projectionMatrix * modelViewMatrix * vec4(aNext, 1.0);
-  vec2 sa = a.xy / a.w * uViewport, sb = b.xy / b.w * uViewport;
-  vec2 d = sb - sa;
-  float l = length(d);
-  vec2 n = l > 1e-4 ? vec2(-d.y, d.x) / l : vec2(0.0, 1.0);
-  vec2 off = n * aSide * uWidth / uViewport;
-  gl_Position = vec4(a.xy + off * a.w, a.z, a.w);
+  mat4 mvp = projectionMatrix * modelViewMatrix;
+  vec4 t = mvp * vec4(uTip, 1.0);
+  vec4 f = mvp * vec4(uTipFrom, 1.0);
+  vec2 tp = t.xy / t.w * uViewport;
+  vec2 td = tp - f.xy / f.w * uViewport;
+  float tl = length(td);
+  // straight down the screen if the end tangent points into the lens
+  vec2 dir = tl > 1e-3 ? td / tl : vec2(0.0, -1.0);
+  vec2 nrm = vec2(-dir.y, dir.x);
+  vec2 px;
+  if (aHead.z > 0.5) {
+    float pad = 2.0;
+    px = tp - dir * mix(-pad, uHead.x + pad, aHead.x) + nrm * aHead.y * (uHead.y + pad);
+    gl_Position = vec4(px / uViewport * t.w, t.z, t.w);
+  } else {
+    vec4 a = mvp * vec4(position, 1.0);
+    vec4 b = mvp * vec4(aNext, 1.0);
+    vec2 sa = a.xy / a.w * uViewport, sb = b.xy / b.w * uViewport;
+    vec2 d = sb - sa;
+    float l = length(d);
+    vec2 n = l > 1e-4 ? vec2(-d.y, d.x) / l : vec2(0.0, 1.0);
+    px = sa + n * aSide * uWidth;
+    gl_Position = vec4(px / uViewport * a.w, a.z, a.w);
+  }
   vSide = aSide;
   vAlong = aAlong;
+  vHead = vec3(dot(tp - px, dir), dot(px - tp, nrm), aHead.z);
 }
 `;
 
@@ -1487,23 +1522,46 @@ export const LINK_FRAG = /* glsl */ `
 uniform vec3 uColor;
 uniform float uOpacity;
 uniform float uPhase;
+uniform float uWidth;
+uniform vec3 uHead;
 varying float vSide;
 varying float vAlong;
+varying vec3 vHead;
 void main() {
-  float x = abs(vSide);
-  float px = max(fwidth(vSide), 1e-5);
-  float body = 1.0 - smoothstep(1.0 - px * 1.2, 1.0, x);
-  float core = 1.0 - smoothstep(0.3, 0.3 + px * 1.5, x);
-  float g = vAlong - uPhase;
-  g -= floor(g + 0.5);
-  float glint = exp(-g * g * 900.0);
-  // fade in off the source's chest and settle onto the target's base
-  float ends = smoothstep(0.0, 0.06, vAlong) * (0.55 + 0.45 * smoothstep(1.0, 0.92, vAlong));
-  vec3 col = mix(uColor * 0.9, vec3(1.0), core * 0.7 + glint * 0.6);
-  // an ink rim on the outer edge, so the line reads on pale ground too
-  float rim = smoothstep(0.66, 0.86, x) * (1.0 - glint);
-  col = mix(col, vec3(0.01, 0.03, 0.05), rim * 0.7);
-  float a = (body * (0.72 + 0.28 * core) + glint * 0.3 * body) * ends * uOpacity;
+  vec3 ink = vec3(0.01, 0.03, 0.05);
+  float run = step(0.0, uPhase);
+  vec3 col;
+  float a;
+  if (vHead.z > 0.5) {
+    // the arrowhead: tip at (0, 0), base uHead.x px back, uHead.y px each side
+    vec2 p = vec2(vHead.x, abs(vHead.y));
+    float side = dot(p, vec2(-uHead.y, uHead.x)) / length(uHead.xy);
+    float d = max(p.x - uHead.x, side);
+    float fill = clamp(0.5 - d, 0.0, 1.0);
+    float rim = smoothstep(-uHead.z - 0.5, -uHead.z + 0.5, d);
+    float g = 1.0 - uPhase;
+    g -= floor(g + 0.5);
+    float glint = exp(-g * g * 300.0) * run;
+    col = mix(mix(uColor, vec3(1.0), 0.14 + glint * 0.5), ink, rim * 0.88);
+    a = fill;
+  } else {
+    // the ribbon stops under the arrowhead's middle
+    if (vHead.x < uHead.x * 0.6 && abs(vHead.y) < uHead.y) discard;
+    float x = abs(vSide) * uWidth;
+    float aa = max(fwidth(x), 0.5);
+    float body = 1.0 - smoothstep(uWidth - aa, uWidth, x);
+    float core = 1.0 - smoothstep(uWidth * 0.3, uWidth * 0.3 + aa, x);
+    float g = vAlong - uPhase;
+    g -= floor(g + 0.5);
+    float glint = exp(-g * g * 900.0) * run;
+    col = mix(uColor * 0.92, vec3(1.0), core * 0.4 + glint * 0.6);
+    // the ink edge, so the line reads on pale ground and busy paint
+    float rim = smoothstep(uWidth - uHead.z - aa * 0.5, uWidth - uHead.z + aa * 0.5, x);
+    col = mix(col, ink, rim * 0.88);
+    // fade in off the source's chest; the arrowhead takes the other end
+    a = body * (0.9 + 0.1 * core) * smoothstep(0.0, 0.06, vAlong);
+  }
+  a *= uOpacity;
   if (a <= 0.003) discard;
   gl_FragColor = vec4(min(col, vec3(1.0)), min(a, 1.0));
 }

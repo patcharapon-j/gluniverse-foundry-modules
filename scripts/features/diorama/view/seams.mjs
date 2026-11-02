@@ -32,10 +32,10 @@ export function loadSeams() {
   return _loading;
 }
 
-/** Creature height, distance units. */
-export function heightDist(actor, doc) {
+/** Creature height, distance units (`units`: the scene's, else the token's own scene). */
+export function heightDist(actor, doc, units = undefined) {
   const f = seams.creature?.creatureHeightDist;
-  try { return typeof f === "function" ? f(actor, doc) : 6; } catch { return 6; }
+  try { return typeof f === "function" ? f(actor, doc, units || undefined) : 6; } catch { return 6; }
 }
 
 /** Ground under a footprint (top-left px), distance units. */
