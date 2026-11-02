@@ -3,15 +3,27 @@
  *
  * No program of ours runs on the GPU: there is no shader, no filter and no
  * texture atlas, and so nothing to compile, warm, lose or fall back from. An
- * area is Graphics (fill, rim, glow, brackets, echo) and TilingSprites of the
- * function's pattern, baked once per session on a 2D canvas, under a Graphics
- * mask of the covered squares. Every frame after the landing only moves
- * numbers that PIXI already batches: alphas, a tile offset, a rotation and a
- * scale. A look that does not move asks for no frames at all.
+ * area is Graphics (veil, fill, rim, halo, edge light, cuts, echo) and
+ * TilingSprites of the function's pattern, baked once per session on a 2D
+ * canvas, under a Graphics mask of the covered squares. Every frame after the
+ * landing only moves numbers that PIXI already batches: alphas, a tile offset,
+ * a rotation and a scale. A look that does not move asks for no frames at all.
+ *
+ * The picture, from the floor up:
+ *   halo     a soft ink shadow round the outside, so the area lifts off any map
+ *   veil     a thin ink wash over the covered floor (black-leaning on purpose)
+ *   fill     the material's body tint over the veil
+ *   pattern  the function's mark in the hot colour, on an ink shadow of itself
+ *   edge     the body colour lit just inside the rim (masked: never outside)
+ *   rim      the tactical boundary, the brightest thing in the picture
+ *   cuts     the suite's chamfer across each convex corner, in the accent
+ * Nothing in it is additive, so it reads the same on a black dungeon and on
+ * pale parchment: a pale glow on a pale map is simply not there.
  *
  * Two layers, because Foundry sorts Tokens between them:
- *   ground   under Tokens — fill, pattern, blocked hatch, seams, glow, chevrons
- *   overlay  over Tokens — the rim, its flare, the brackets, the echo, marks
+ *   ground   under Tokens — halo, veil, fill, pattern, edge, blocked, seams,
+ *            chevrons
+ *   overlay  over Tokens — the rim, its flare, the cuts, the echo, marks
  * Nothing that veils a creature is in the overlay: only hairlines.
  *
  * Pure: PIXI is handed in and nothing here reads `game`, `canvas`, `ui`,
@@ -19,14 +31,14 @@
  */
 
 import { TIMING, alertLevel, echoPhase } from "../anim.mjs";
-import { SIZES, BLOCKED_PATTERN } from "./look.mjs";
+import { BLOCKED_PATTERN, INK, SIZES } from "./look.mjs";
 import {
   areaOutline, chevronMarks, convexCorners, dashes, dotsAlong, partialLoops,
 } from "./outline.mjs";
 import { TILE, paintPattern } from "./patterns.mjs";
 
-const INK = 0x020306;
 const ALERT_GAIN = Object.freeze({ heartbeat: 1, strobe: 1, throb: 0.85, breathe: 0.55, none: 0 });
+const CHASED_RIMS = Object.freeze(["dashed", "dotted", "chain", "tape"]);
 const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : n);
 const smooth = (t) => t * t * (3 - 2 * t);
 
@@ -133,7 +145,18 @@ export class AreaView {
   get animated() {
     const L = this.look;
     return L.pace > 0 && (L.alert !== "none" || L.drift > 0 || L.spin > 0 || L.sweep
-      || ["dashed", "dotted", "chain", "tape"].includes(L.rim) || this.chevrons.children.length > 0);
+      || CHASED_RIMS.includes(L.rim) || this.chevrons.children.length > 0);
+  }
+
+  /**
+   * Where the identity plate stands, in the world pixels the area was built
+   * in: centred over the top of the area, so it names the area without
+   * sitting on whoever is standing in the middle of it.
+   */
+  get labelAnchor() {
+    const box = this.outline.box;
+    if (!box) return { ...this.geometry.labelAt };
+    return { x: box.x + box.width / 2, y: box.y };
   }
 
   drawArea(gfx, color, alpha = 1) {
@@ -144,13 +167,19 @@ export class AreaView {
     gfx.endFill();
   }
 
-  /** Everything that does not depend on the zoom: fill, mask, patterns. */
+  /** Everything that does not depend on the zoom: veil, fill, mask, patterns. */
   buildBody() {
     const { PIXI, look: L, outline, geometry: geo } = this;
     const g = geo.grid;
     const box = outline.box ?? geo.bounds;
     const pad = g;
     this.box = { x: box.x - pad, y: box.y - pad, width: box.width + pad * 2, height: box.height + pad * 2 };
+
+    this.halo = graphics(PIXI, "halo");
+
+    this.veil = graphics(PIXI, "veil");
+    this.drawArea(this.veil, INK);
+    this.veil.alpha = L.veil;
 
     this.fill = graphics(PIXI, "fill");
     this.drawArea(this.fill, L.bodyInt);
@@ -162,15 +191,15 @@ export class AreaView {
     this.patterns.mask = this.mask;
 
     /* The same tile in ink, a hair down and right, under the lit one: on a
-       dark map it is invisible, on a parchment map it is what keeps a pale
-       pattern from washing out into the floor. */
-    this.shadow = this.tiling(L.pattern, L.span, INK, Math.min(0.75, L.patternAlpha * 0.9));
+       dark map it is nearly invisible, on a parchment map it is what keeps a
+       pale pattern from washing out into the floor. */
+    this.shadow = this.tiling(L.pattern, L.span, INK, Math.min(0.8, L.patternAlpha * 0.95));
     this.shadow.glAoeShift = SIZES.shadowOffset / L.span;
     this.primary = this.tiling(L.pattern, L.span, L.hotInt, L.patternAlpha);
     this.patterns.addChild(this.shadow, this.primary);
     this.secondary = null;
     if (L.secondary) {
-      this.secondary = this.tiling(L.secondary.pattern, L.secondary.span, L.secondary.colorInt, L.patternAlpha * 0.55);
+      this.secondary = this.tiling(L.secondary.pattern, L.secondary.span, L.secondary.colorInt, L.patternAlpha * 0.5);
       /* Half a tile off the primary, so two patterns read as two marks rather
          than as one busier mark. */
       this.secondary.glAoeShift = 0.5;
@@ -180,27 +209,29 @@ export class AreaView {
     if (L.sweep) {
       this.sweep = graphics(PIXI, "sweep");
       const r = outline.extent + g;
-      const slices = 10, width = Math.PI * 0.42;
+      const slices = 10, width = Math.PI * 0.4;
       for (let i = 0; i < slices; i++) {
         const a1 = 0, a0 = -width * (1 - i / slices);
-        this.sweep.beginFill(L.hotInt, 0.025 + 0.03 * (i / slices));
+        this.sweep.beginFill(L.hotInt, 0.012 + 0.026 * (i / slices));
         this.sweep.moveTo(0, 0);
         this.sweep.arc(0, 0, r, a0, a1);
         this.sweep.lineTo(0, 0);
         this.sweep.endFill();
       }
-      this.sweep.lineStyle(line(PIXI, Math.max(2, g * 0.025), L.hotInt, 0.6));
-      this.sweep.moveTo(0, 0);
-      this.sweep.lineTo(r, 0);
       this.sweep.position.set(geo.origin.x, geo.origin.y);
       this.patterns.addChild(this.sweep);
     }
+    /* The inner edge light lives under the mask on purpose: its strokes are
+       centred on the boundary and the mask keeps only the inside half, so the
+       area is lit from its own edge and never spills light onto the floor. */
+    this.edge = graphics(PIXI, "edge");
+    this.patterns.addChild(this.edge);
 
     this.blocked = null;
     if (outline.blocked.rects.length) {
       const blocked = node(PIXI, "blocked");
       const shade = graphics(PIXI, "blocked-shade");
-      shade.beginFill(INK, 0.5);
+      shade.beginFill(INK, 0.45);
       for (const [x, y, w, h] of outline.blocked.rects) shade.drawRect(x, y, w, h);
       shade.endFill();
       const mask = graphics(PIXI, "blocked-mask");
@@ -209,30 +240,27 @@ export class AreaView {
       mask.endFill();
       const hatch = node(PIXI, "blocked-hatch");
       hatch.mask = mask;
-      hatch.addChild(this.tiling(BLOCKED_PATTERN, 0.5, L.hotInt, 0.42));
+      hatch.addChild(this.tiling(BLOCKED_PATTERN, 0.5, L.hotInt, 0.36));
       blocked.addChild(shade, mask, hatch);
       this.blocked = blocked;
     }
 
     this.seams = graphics(PIXI, "seams");
-    this.glow = graphics(PIXI, "glow");
-    this.glow.blendMode = PIXI.BLEND_MODES?.ADD ?? this.glow.blendMode;
     this.chevrons = node(PIXI, "chevrons");
-    this.ground.addChild(this.glow, this.fill, this.mask, this.patterns);
+    this.ground.addChild(this.halo, this.veil, this.fill, this.mask, this.patterns);
     if (this.blocked) this.ground.addChild(this.blocked);
     this.ground.addChild(this.seams, this.chevrons);
 
     this.rim = node(PIXI, "rim");
     this.pen = graphics(PIXI, "pen");
     this.flare = graphics(PIXI, "flare");
-    this.flare.blendMode = PIXI.BLEND_MODES?.ADD ?? this.flare.blendMode;
-    this.brackets = graphics(PIXI, "brackets");
+    this.cuts = graphics(PIXI, "cuts");
     this.echoRing = graphics(PIXI, "echo");
     this.echoRing.pivot.set(geo.origin.x, geo.origin.y);
     this.echoRing.position.set(geo.origin.x, geo.origin.y);
     this.echoRing.visible = false;
     this.marks = graphics(PIXI, "marks");
-    this.overlay.addChild(this.echoRing, this.flare, this.rim, this.pen, this.brackets, this.marks);
+    this.overlay.addChild(this.echoRing, this.flare, this.rim, this.pen, this.cuts, this.marks);
   }
 
   tiling(id, span, tint, alpha) {
@@ -272,31 +300,36 @@ export class AreaView {
   buildStrokes() {
     const { PIXI, look: L, outline, geometry: geo } = this;
     const k = 1 / this.zoom;
-    const g = geo.grid;
     const loops = outline.loops;
+
+    this.halo.clear();
+    SIZES.haloPx.forEach((px, i) => {
+      this.halo.lineStyle(line(PIXI, px * k, INK, clamp01(SIZES.haloAlpha[i] * Math.max(0.8, L.glow)), true));
+      strokeLoops(this.halo, loops);
+    });
+
+    this.edge.clear();
+    SIZES.edgePx.forEach((px, i) => {
+      this.edge.lineStyle(line(PIXI, px * k, L.bodyInt, clamp01(SIZES.edgeAlpha[i] * L.glow), true));
+      strokeLoops(this.edge, loops);
+    });
 
     this.seams.clear();
     if (outline.lattice && outline.seams.length) {
-      this.seams.lineStyle(line(PIXI, SIZES.seamPx * k, L.hotInt, 0.26));
+      this.seams.lineStyle(line(PIXI, SIZES.seamPx * k, L.hotInt, 0.16));
       for (const [x0, y0, x1, y1] of outline.seams) { this.seams.moveTo(x0, y0); this.seams.lineTo(x1, y1); }
     }
     if (outline.blocked.loops.length) {
-      this.seams.lineStyle(line(PIXI, 1.4 * k, L.hotInt, 0.55));
-      for (const loop of outline.blocked.loops) strokePaths(this.seams, dashes(loop, 10 * k, 0.55));
+      this.seams.lineStyle(line(PIXI, 1.2 * k, L.hotInt, 0.5));
+      for (const loop of outline.blocked.loops) strokePaths(this.seams, dashes(loop, 10 * k, 0.5));
     }
-
-    this.glow.clear();
-    SIZES.glowPx.forEach((px, i) => {
-      this.glow.lineStyle(line(PIXI, px * k, L.bodyInt, clamp01(SIZES.glowAlpha[i] * L.glow), true));
-      strokeLoops(this.glow, loops);
-    });
 
     for (const child of this.chevrons.removeChildren()) child.destroy();
     for (const path of chevronMarks(geo)) {
       const chev = graphics(PIXI, "chevron");
-      chev.lineStyle(line(PIXI, (SIZES.chevronPx + 2) * k, INK, 0.5, true));
+      chev.lineStyle(line(PIXI, (SIZES.chevronPx + 2.4) * k, INK, 0.45, true));
       strokePaths(chev, [path]);
-      chev.lineStyle(line(PIXI, SIZES.chevronPx * k, L.accentInt, 1, true));
+      chev.lineStyle(line(PIXI, SIZES.chevronPx * k, L.accentInt, 0.9, true));
       strokePaths(chev, [path]);
       this.chevrons.addChild(chev);
     }
@@ -304,23 +337,14 @@ export class AreaView {
     this.buildRim(k);
 
     this.flare.clear();
-    this.flare.lineStyle(line(PIXI, L.rimPx * 3.2 * k, L.accentInt, 0.9, true));
+    this.flare.lineStyle(line(PIXI, (L.rimPx + SIZES.flarePx) * k, L.hotInt, 0.55, true));
+    strokeLoops(this.flare, loops);
+    this.flare.lineStyle(line(PIXI, (L.rimPx + SIZES.flarePx * 0.4) * k, L.hotInt, 0.85, true));
     strokeLoops(this.flare, loops);
 
-    this.brackets.clear();
-    if (L.brackets) {
-      const corners = loops.flatMap((loop) => convexCorners(loop));
-      for (const [width, color, alpha] of [[(SIZES.bracketPx + 2.4) * k, INK, 0.7], [SIZES.bracketPx * k, L.accentInt, 1]]) {
-        this.brackets.lineStyle(line(PIXI, width, color, alpha));
-        for (const c of corners) {
-          const a = Math.min(SIZES.bracketArm * g, c.armIn * 0.45);
-          const b = Math.min(SIZES.bracketArm * g, c.armOut * 0.45);
-          this.brackets.moveTo(c.x + c.back[0] * a, c.y + c.back[1] * a);
-          this.brackets.lineTo(c.x, c.y);
-          this.brackets.lineTo(c.x + c.fwd[0] * b, c.y + c.fwd[1] * b);
-        }
-      }
-    }
+    this.corners = loops.flatMap((loop) => convexCorners(loop));
+    this.cutsAt = -1;
+    this.drawCuts(1);
 
     this.echoRing.clear();
     this.echoRing.lineStyle(line(PIXI, SIZES.echoPx * k, L.accentInt, 1, true));
@@ -328,6 +352,30 @@ export class AreaView {
 
     this.drawMarks();
     this.penAt = -1;
+  }
+
+  /**
+   * The chamfer cut across each convex corner — the suite's corner motif laid
+   * on the area itself — at `reach` (0 → 1) of its full arm, so the cuts can
+   * stamp in as the area lands.
+   */
+  drawCuts(reach) {
+    if (Math.abs(this.cutsAt - reach) < 0.01) return;
+    const { PIXI, look: L } = this;
+    const k = 1 / this.zoom;
+    const g = this.geometry.grid;
+    this.cuts.clear();
+    this.cutsAt = reach;
+    if (!L.cuts || reach <= 0) return;
+    for (const [width, color, alpha] of [[(SIZES.tickPx + 2.6) * k, INK, 0.7], [SIZES.tickPx * k, L.accentInt, 1]]) {
+      this.cuts.lineStyle(line(PIXI, width, color, alpha, true));
+      for (const c of this.corners) {
+        const a = Math.min(SIZES.tickArm * g, c.armIn * 0.4) * reach;
+        const b = Math.min(SIZES.tickArm * g, c.armOut * 0.4) * reach;
+        this.cuts.moveTo(c.x + c.back[0] * a, c.y + c.back[1] * a);
+        this.cuts.lineTo(c.x + c.fwd[0] * b, c.y + c.fwd[1] * b);
+      }
+    }
   }
 
   /** The tactical boundary. Every style keeps an unbroken line under it. */
@@ -339,19 +387,19 @@ export class AreaView {
     const w = L.rimPx * k;
 
     const base = graphics(PIXI, "rim-base");
-    base.lineStyle(line(PIXI, w + SIZES.keylinePx * 2 * k, INK, 0.72));
+    base.lineStyle(line(PIXI, w + SIZES.keylinePx * 2 * k, INK, 0.8));
     strokeLoops(base, loops);
-    const continuous = { solid: 1, double: 1, dashed: 0.4, dotted: 0.35, chain: 0.4, tape: 1 }[L.rim] ?? 1;
+    const continuous = { solid: 1, double: 1, dashed: 0.35, dotted: 0.3, chain: 0.35, tape: 1 }[L.rim] ?? 1;
     if (L.rim === "double") {
-      base.lineStyle(line(PIXI, w * 2.4, L.hotInt, L.rimAlpha));
+      base.lineStyle(line(PIXI, w * 2.2, L.hotInt, L.rimAlpha));
       strokeLoops(base, loops);
-      base.lineStyle(line(PIXI, w * 0.85, INK, 0.9));
+      base.lineStyle(line(PIXI, w * 0.9, INK, 0.92));
       strokeLoops(base, loops);
     } else if (L.rim === "tape") {
       base.lineStyle(line(PIXI, w, L.accentInt, L.rimAlpha));
       strokeLoops(base, loops);
     } else {
-      base.lineStyle(line(PIXI, L.rim === "solid" ? w : w * 0.6, L.hotInt, L.rimAlpha * continuous));
+      base.lineStyle(line(PIXI, L.rim === "solid" ? w : w * 0.5, L.hotInt, L.rimAlpha * continuous));
       strokeLoops(base, loops);
     }
     this.rim.addChild(base);
@@ -368,7 +416,7 @@ export class AreaView {
       const sets = [set("rim-dot-0"), set("rim-dot-1"), set("rim-dot-2")];
       sets.forEach((gfx) => gfx.beginFill(L.hotInt, L.rimAlpha));
       for (const loop of loops) {
-        dotsAlong(loop, SIZES.dotGapPx * k).forEach((p, i) => sets[i % 3].drawCircle(p.x, p.y, w * 0.85));
+        dotsAlong(loop, SIZES.dotGapPx * k).forEach((p, i) => sets[i % 3].drawCircle(p.x, p.y, w * 0.8));
       }
       sets.forEach((gfx) => gfx.endFill());
     } else if (L.rim === "chain") {
@@ -378,7 +426,7 @@ export class AreaView {
       const knots = set("rim-knots");
       knots.beginFill(L.hotInt, L.rimAlpha);
       for (const loop of loops) {
-        for (const path of dashes(loop, period, 0.001, 0.75)) knots.drawCircle(path[0], path[1], w * 1.1);
+        for (const path of dashes(loop, period, 0.001, 0.75)) knots.drawCircle(path[0], path[1], w * 1.05);
       }
       knots.endFill();
     } else if (L.rim === "tape") {
@@ -403,10 +451,10 @@ export class AreaView {
     gfx.clear();
     gfx.position.set(-this.offset.x, -this.offset.y);
     if (!this.markRects.length) return;
-    for (const [width, color, alpha] of [[(SIZES.markPx + 2.2) * k, INK, 0.65], [SIZES.markPx * k, L.accentInt, 1]]) {
+    for (const [width, color, alpha] of [[(SIZES.markPx + 2.4) * k, INK, 0.65], [SIZES.markPx * k, L.accentInt, 1]]) {
       gfx.lineStyle(line(PIXI, width, color, alpha));
       for (const [x, y, w, h] of this.markRects) {
-        const arm = Math.min(w, h) * 0.24;
+        const arm = Math.min(w, h) * 0.2;
         const inset = Math.min(w, h) * 0.04;
         for (const [cx, cy, sx, sy] of [[x, y, 1, 1], [x + w, y, -1, 1], [x + w, y + h, -1, -1], [x, y + h, 1, -1]]) {
           const px = cx + sx * inset, py = cy + sy * inset;
@@ -431,6 +479,7 @@ export class AreaView {
    * Write one frame.
    *   time      seconds since the area appeared
    *   enter     0 → 1 through the entrance; eased is its pen curve
+   *   settle    1 → 0 through the landing just after the entrance, else 0
    *   presence  1 → 0 through the exit
    *   shock     the trigger beat, 0 at rest; pulse its 0 → 1 progress or -1
    *   zoom      the stage scale (strokes rebuild past a 6% change)
@@ -438,26 +487,36 @@ export class AreaView {
    *   still     motion tier "none"
    *   motionScale  the motion tier's duration scale
    */
-  update({ time = 0, enter = 1, eased = 1, presence = 1, shock = 0, pulse = -1, zoom = this.zoom, shed = 0, still = false, motionScale = 1 } = {}) {
+  update({
+    time = 0, enter = 1, eased = 1, settle = 0, presence = 1, shock = 0, pulse = -1,
+    zoom = this.zoom, shed = 0, still = false, motionScale = 1,
+  } = {}) {
     const L = this.look;
     if (zoom > 0 && Math.abs(zoom / this.zoom - 1) > 0.06) { this.zoom = zoom; this.buildStrokes(); }
     const moving = !still && L.pace > 0;
     const gain = ALERT_GAIN[L.alert] ?? 0;
     const a = moving ? alertLevel(L.alert, time, L.period) * gain : 0;
     const drawing = !still && L.enter === "draw" && enter < 1;
-    const flash = still ? 0 : Math.max(L.enter === "flash" ? (1 - enter) ** 2 : 0, shock);
+    const strike = still || L.enter !== "flash" ? 0 : (1 - enter) ** 2;
+    const flash = Math.max(strike, still ? 0 : shock);
+    const glint = still ? 0 : settle;
     const ink = drawing ? eased : 1;
 
-    this.ground.alpha = presence;
+    /* The exit drains the floor first and lets the rim go last, so the area
+       visibly empties rather than simply turning down. */
+    this.ground.alpha = presence * presence;
     this.overlay.alpha = presence;
-    this.fill.alpha = Math.min(0.9, L.fill * ink * (1 + 0.45 * a + 1.8 * flash));
-    this.patterns.alpha = Math.min(1, ink * (0.82 + 0.3 * a + 0.6 * flash));
+    this.veil.alpha = L.veil * ink;
+    this.fill.alpha = Math.min(0.85, L.fill * ink * (1 + 0.5 * a + 1.6 * flash));
+    this.patterns.alpha = Math.min(1, ink * (0.85 + 0.25 * a + 0.5 * flash));
 
     const glowOn = shed < 5;
-    this.glow.visible = glowOn;
-    this.glow.alpha = Math.min(1, ink * (0.72 + 0.28 * a + flash));
+    this.halo.visible = glowOn;
+    this.halo.alpha = ink;
+    this.edge.visible = glowOn;
+    this.edge.alpha = Math.min(1, ink * (0.7 + 0.3 * a + 0.8 * flash + 0.6 * glint));
     this.flare.visible = glowOn;
-    this.flare.alpha = Math.min(1, (L.alert === "none" ? 0 : 0.1 + 0.75 * a) + flash * 0.9);
+    this.flare.alpha = Math.min(1, (L.alert === "none" ? 0 : 0.04 + 0.42 * a) + flash * 0.85 + glint * 0.55);
 
     const drift = moving && shed < 3;
     const along = drift ? L.drift * time * this.geometry.grid : 0;
@@ -496,11 +555,16 @@ export class AreaView {
       if (Math.abs(this.penAt - eased) > 0.004) this.drawPen(eased);
       this.pen.visible = true;
       this.rim.visible = false;
-      this.brackets.alpha = 0;
+      this.cuts.visible = false;
     } else {
       this.pen.visible = false;
       this.rim.visible = true;
-      this.brackets.alpha = 1;
+      this.cuts.visible = true;
+      /* A drawn area's cuts stamp in on the landing; a struck one has them
+         from the first frame, because the strike is the whole frame at once. */
+      const reach = L.enter === "draw" ? 1 - glint : 1;
+      this.drawCuts(0.35 + 0.65 * smooth(clamp01(reach)));
+      this.cuts.alpha = L.enter === "draw" ? clamp01(reach * 1.4) : 1;
     }
 
     let echo = pulse >= 0 ? pulse : -1;
@@ -513,7 +577,7 @@ export class AreaView {
       const s = 1 + reach * smooth(echo);
       this.echoRing.visible = true;
       this.echoRing.scale.set(s, s);
-      this.echoRing.alpha = (1 - echo) ** 1.5 * 0.95;
+      this.echoRing.alpha = (1 - echo) ** 1.5 * 0.9;
     } else this.echoRing.visible = false;
 
     this.marks.visible = shed < 1;
@@ -524,14 +588,15 @@ export class AreaView {
     const k = 1 / this.zoom;
     const paths = partialLoops(this.outline.loops, fraction);
     this.pen.clear();
-    this.pen.lineStyle(line(PIXI, (L.rimPx + SIZES.keylinePx * 2) * k, INK, 0.72, true));
+    this.pen.lineStyle(line(PIXI, (L.rimPx + SIZES.keylinePx * 2) * k, INK, 0.8, true));
     strokePaths(this.pen, paths);
-    this.pen.lineStyle(line(PIXI, L.rimPx * 1.3 * k, L.hotInt, 1, true));
+    this.pen.lineStyle(line(PIXI, L.rimPx * 1.2 * k, L.hotInt, 1, true));
     strokePaths(this.pen, paths);
-    /* The nib: a bright point where the pen is. */
-    this.pen.lineStyle(0);
+    /* The nib: a bright point where the pen is, on a dark ring so it reads on
+       parchment too. */
+    this.pen.lineStyle(line(PIXI, 1.6 * k, INK, 0.85));
     this.pen.beginFill(L.accentInt, 1);
-    for (const path of paths) this.pen.drawCircle(path.at(-2), path.at(-1), L.rimPx * 2.2 * k);
+    for (const path of paths) this.pen.drawCircle(path.at(-2), path.at(-1), L.rimPx * 1.9 * k);
     this.pen.endFill();
     this.penAt = fraction;
   }

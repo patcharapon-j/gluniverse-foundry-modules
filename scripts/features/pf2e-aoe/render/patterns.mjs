@@ -9,12 +9,19 @@
  * per tile. A pattern that does not wrap draws a hard seam at the tile period
  * across the whole area, which reads as a grid that is not the rules grid.
  *
- * Pure: no PIXI, no Foundry, no DOM lookup. The renderer and the preview page
- * hand in the context, and `tools/pf2e-aoe-check.mjs` drives every recipe
- * against a recording context to prove each one paints.
+ * The marks are drawn fine on purpose. A pattern is a texture the eye reads
+ * at a glance ("that is a net, that is a heal"), not a picture to study, and
+ * a heavy one competes with the tokens standing on it. Every size below is a
+ * fraction of the tile, so the tile can change resolution without a recipe
+ * changing its look.
+ *
+ * Pure: no PIXI, no Foundry, no DOM lookup. The renderer, the GM swatches and
+ * the preview page hand in the context, and `tools/pf2e-aoe-check.mjs` drives
+ * every recipe against a recording context to prove each one paints.
  */
 
-export const TILE = 128;
+/** Tile edge in texels. A power of two, so it repeats in hardware with mips. */
+export const TILE = 256;
 
 /** Deterministic hash → [0, 1), so a tile is identical on every client. */
 function rand(seed) {
@@ -33,71 +40,75 @@ function wrapped(S, fn) {
   for (const dx of [-S, 0, S]) for (const dy of [-S, 0, S]) fn(dx, dy);
 }
 
-function star(ctx, x, y, r, points, inner, rot) {
+function dot(ctx, x, y, r) {
   ctx.beginPath();
-  for (let i = 0; i < points * 2; i++) {
-    const a = rot + i * Math.PI / points;
-    const k = i % 2 ? r * inner : r;
-    const px = x + Math.cos(a) * k, py = y + Math.sin(a) * k;
-    if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
-  }
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** A long, thin, two-sided blade from (x, y) along angle `a`. */
+function sliver(ctx, x, y, len, width, a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  const nx = -s * width / 2, ny = c * width / 2;
+  ctx.beginPath();
+  ctx.moveTo(x - c * len / 2, y - s * len / 2);
+  ctx.lineTo(x + nx - c * len * 0.08, y + ny - s * len * 0.08);
+  ctx.lineTo(x + c * len / 2, y + s * len / 2);
+  ctx.lineTo(x - nx - c * len * 0.08, y - ny - s * len * 0.08);
   ctx.closePath();
   ctx.fill();
 }
 
 const RECIPES = {
-  /* harm — scattered jagged starbursts and slash streaks: impact. */
+  /* harm — thin blades thrown outward, with a scatter of sparks: impact. */
   shards(ctx, S) {
     const r = rand(11);
-    const bursts = Array.from({ length: 5 }, () => ({
-      x: r() * S, y: r() * S, s: S * (0.07 + r() * 0.07), rot: r() * Math.PI, n: 4 + Math.floor(r() * 3),
+    const blades = Array.from({ length: 5 }, () => ({
+      x: r() * S, y: r() * S, l: S * (0.16 + r() * 0.14), w: S * (0.026 + r() * 0.014),
+      a: -Math.PI / 4 + (r() - 0.5) * 1.1, alpha: 0.55 + r() * 0.45,
     }));
-    const slashes = Array.from({ length: 6 }, () => ({ x: r() * S, y: r() * S, l: S * (0.10 + r() * 0.10) }));
-    ctx.lineCap = "round";
+    const sparks = Array.from({ length: 7 }, () => ({ x: r() * S, y: r() * S, s: S * (0.008 + r() * 0.008) }));
     wrapped(S, (dx, dy) => {
-      ctx.globalAlpha = 1;
-      for (const b of bursts) star(ctx, b.x + dx, b.y + dy, b.s, b.n, 0.32, b.rot);
-      ctx.globalAlpha = 0.7;
-      ctx.lineWidth = S * 0.022;
-      for (const s of slashes) {
-        ctx.beginPath();
-        ctx.moveTo(s.x + dx - s.l * 0.5, s.y + dy + s.l * 0.5);
-        ctx.lineTo(s.x + dx + s.l * 0.5, s.y + dy - s.l * 0.5);
-        ctx.stroke();
+      for (const b of blades) {
+        ctx.globalAlpha = b.alpha;
+        sliver(ctx, b.x + dx, b.y + dy, b.l, b.w, b.a);
       }
+      ctx.globalAlpha = 0.85;
+      for (const s of sparks) dot(ctx, s.x + dx, s.y + dy, s.s);
     });
   },
 
-  /* restore — plus signs on a staggered grid: aid. */
+  /* restore — small plus signs on a staggered lattice: aid. */
   cross(ctx, S) {
-    const arm = S * 0.13, w = S * 0.05;
-    const marks = [[S * 0.25, S * 0.25, 1], [S * 0.75, S * 0.75, 1], [S * 0.75, S * 0.25, 0.45], [S * 0.25, S * 0.75, 0.45]];
-    wrapped(S, (dx, dy) => {
-      for (const [x, y, a] of marks) {
-        ctx.globalAlpha = a;
-        ctx.fillRect(x + dx - arm, y + dy - w / 2, arm * 2, w);
-        ctx.fillRect(x + dx - w / 2, y + dy - arm, w, arm * 2);
-      }
-    });
+    const marks = [[0.25, 0.25, 0.1, 1], [0.75, 0.75, 0.1, 1], [0.75, 0.25, 0.065, 0.5], [0.25, 0.75, 0.065, 0.5]];
+    const w = S * 0.022;
+    for (const [x, y, arm, a] of marks) {
+      ctx.globalAlpha = a;
+      ctx.fillRect(x * S - arm * S, y * S - w / 2, arm * S * 2, w);
+      ctx.fillRect(x * S - w / 2, y * S - arm * S, w, arm * S * 2);
+    }
   },
 
-  /* support — rising chevrons: uplift. */
+  /* support — rising chevrons in two staggered rows: uplift. */
   chevron(ctx, S) {
-    ctx.lineWidth = S * 0.05;
+    ctx.lineWidth = S * 0.022;
     ctx.lineJoin = "miter";
     ctx.lineCap = "butt";
-    const rows = 2, per = 2, h = S * 0.12, w = S * 0.18;
+    const rows = 2, per = 2, h = S * 0.075, w = S * 0.12;
     wrapped(S, (dx, dy) => {
       for (let j = 0; j < rows; j++) {
         for (let i = 0; i < per; i++) {
           const x = (i + 0.5 + (j % 2) * 0.5) * S / per + dx;
           const y = (j + 0.5) * S / rows + dy;
-          ctx.globalAlpha = j % 2 ? 0.6 : 1;
-          ctx.beginPath();
-          ctx.moveTo(x - w, y + h / 2);
-          ctx.lineTo(x, y - h / 2);
-          ctx.lineTo(x + w, y + h / 2);
-          ctx.stroke();
+          for (const [k, a] of [[0, 1], [1, 0.45]]) {
+            ctx.globalAlpha = (j % 2 ? 0.7 : 1) * a;
+            const oy = k * h * 1.15;
+            ctx.beginPath();
+            ctx.moveTo(x - w, y + h / 2 + oy);
+            ctx.lineTo(x, y - h / 2 + oy);
+            ctx.lineTo(x + w, y + h / 2 + oy);
+            ctx.stroke();
+          }
         }
       }
     });
@@ -106,33 +117,33 @@ const RECIPES = {
   /* protect — overlapping shield scales. */
   scales(ctx, S) {
     const n = 2, cw = S / n, r = cw / 2;
-    ctx.lineWidth = S * 0.03;
+    ctx.lineWidth = S * 0.016;
     wrapped(S, (dx, dy) => {
       for (let j = 0; j < n * 2; j++) {
         for (let i = 0; i < n; i++) {
           const x = (i + (j % 2) * 0.5) * cw + r + dx;
           const y = j * (S / (n * 2)) + dy;
-          ctx.globalAlpha = 0.9;
+          ctx.globalAlpha = 0.95;
           ctx.beginPath();
           ctx.arc(x, y, r * 0.92, 0, Math.PI);
           ctx.stroke();
-          ctx.globalAlpha = 0.22;
+          ctx.globalAlpha = 0.35;
           ctx.beginPath();
-          ctx.arc(x, y, r * 0.55, 0, Math.PI);
-          ctx.fill();
+          ctx.arc(x, y, r * 0.62, Math.PI * 0.15, Math.PI * 0.85);
+          ctx.stroke();
         }
       }
     });
   },
 
-  /* hinder — sawtooth zigzags: drag. */
+  /* hinder — sawtooth lines: drag. */
   zigzag(ctx, S) {
-    const lines = 3, teeth = 4, amp = S * 0.06;
-    ctx.lineWidth = S * 0.045;
+    const lines = 3, teeth = 4, amp = S * 0.045;
+    ctx.lineWidth = S * 0.02;
     ctx.lineJoin = "miter";
     for (let j = 0; j < lines; j++) {
       const y = (j + 0.5) * S / lines;
-      ctx.globalAlpha = j === 1 ? 1 : 0.65;
+      ctx.globalAlpha = j === 1 ? 1 : 0.5;
       ctx.beginPath();
       for (let k = -1; k <= teeth * 2 + 1; k++) {
         const x = k * S / (teeth * 2);
@@ -145,7 +156,7 @@ const RECIPES = {
 
   /* control — a knotted diamond net: binding. */
   net(ctx, S) {
-    ctx.lineWidth = S * 0.028;
+    ctx.lineWidth = S * 0.014;
     ctx.globalAlpha = 0.85;
     wrapped(S, (dx, dy) => {
       for (const k of [0, 0.5]) {
@@ -160,18 +171,16 @@ const RECIPES = {
     ctx.globalAlpha = 1;
     wrapped(S, (dx, dy) => {
       for (const [x, y] of [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75], [0, 0], [0.5, 0], [0, 0.5], [0.5, 0.5]]) {
-        ctx.beginPath();
-        ctx.arc(x * S + dx, y * S + dy, S * 0.035, 0, Math.PI * 2);
-        ctx.fill();
+        dot(ctx, x * S + dx, y * S + dy, S * 0.024);
       }
     });
   },
 
-  /* conceal — drifting fog: soft blobs and stipple. */
+  /* conceal — drifting fog: soft banks and a fine stipple. */
   fog(ctx, S) {
     const r = rand(29);
-    const blobs = Array.from({ length: 9 }, () => ({ x: r() * S, y: r() * S, s: S * (0.12 + r() * 0.16), a: 0.18 + r() * 0.22 }));
-    const dots = Array.from({ length: 70 }, () => ({ x: r() * S, y: r() * S, s: S * (0.006 + r() * 0.014), a: 0.35 + r() * 0.6 }));
+    const blobs = Array.from({ length: 9 }, () => ({ x: r() * S, y: r() * S, s: S * (0.14 + r() * 0.16), a: 0.16 + r() * 0.2 }));
+    const dots = Array.from({ length: 40 }, () => ({ x: r() * S, y: r() * S, s: S * (0.004 + r() * 0.008), a: 0.3 + r() * 0.5 }));
     wrapped(S, (dx, dy) => {
       for (const b of blobs) {
         const g = ctx.createRadialGradient(b.x + dx, b.y + dy, 0, b.x + dx, b.y + dy, b.s);
@@ -184,18 +193,16 @@ const RECIPES = {
       ctx.fillStyle = "#ffffff";
       for (const d of dots) {
         ctx.globalAlpha = d.a;
-        ctx.beginPath();
-        ctx.arc(d.x + dx, d.y + dy, d.s, 0, Math.PI * 2);
-        ctx.fill();
+        dot(ctx, d.x + dx, d.y + dy, d.s);
       }
     });
   },
 
   /* terrain — laid cobbles: difficult ground. */
   cobble(ctx, S) {
-    const rows = 3, per = 2, gap = S * 0.035;
+    const rows = 3, per = 2, gap = S * 0.04;
     const rh = S / rows, cw = S / per;
-    ctx.lineWidth = S * 0.026;
+    ctx.lineWidth = S * 0.014;
     wrapped(S, (dx, dy) => {
       const rr = rand(47);
       for (let j = 0; j < rows; j++) {
@@ -204,7 +211,7 @@ const RECIPES = {
           const x = i * cw + (j % 2) * cw * 0.5 + dx + gap + jitter * 0.3;
           const y = j * rh + dy + gap;
           const w = cw - gap * 2, h = rh - gap * 2;
-          const k = Math.min(w, h) * 0.32;
+          const k = Math.min(w, h) * 0.34;
           ctx.globalAlpha = 0.9;
           ctx.beginPath();
           ctx.moveTo(x + k, y);
@@ -217,56 +224,63 @@ const RECIPES = {
           ctx.lineTo(x, y + k);
           ctx.quadraticCurveTo(x, y, x + k, y);
           ctx.stroke();
-          ctx.globalAlpha = 0.14;
+          ctx.globalAlpha = 0.1;
           ctx.fill();
         }
       }
     });
   },
 
-  /* detect — scan lines with blips. */
+  /* detect — scan lines with ringed blips. */
   scan(ctx, S) {
     const lines = 8;
     for (let j = 0; j < lines; j++) {
-      ctx.globalAlpha = j % 4 === 0 ? 0.95 : 0.4;
-      ctx.fillRect(0, j * S / lines, S, j % 4 === 0 ? S * 0.03 : S * 0.014);
+      const major = j % 4 === 0;
+      ctx.globalAlpha = major ? 0.9 : 0.32;
+      ctx.fillRect(0, j * S / lines, S, major ? S * 0.012 : S * 0.006);
     }
     const r = rand(61);
-    const blips = Array.from({ length: 4 }, () => ({ x: r() * S, y: r() * S }));
+    const blips = Array.from({ length: 3 }, () => ({ x: r() * S, y: r() * S }));
+    ctx.lineWidth = S * 0.01;
     wrapped(S, (dx, dy) => {
-      ctx.globalAlpha = 1;
       for (const b of blips) {
+        ctx.globalAlpha = 1;
+        dot(ctx, b.x + dx, b.y + dy, S * 0.012);
+        ctx.globalAlpha = 0.5;
         ctx.beginPath();
-        ctx.arc(b.x + dx, b.y + dy, S * 0.025, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.arc(b.x + dx, b.y + dy, S * 0.04, 0, Math.PI * 2);
+        ctx.stroke();
       }
     });
   },
 
-  /* summon — rune circles: a gate. */
+  /* summon — a ticked rune circle: a gate. */
   sigil(ctx, S) {
     const c = S / 2, R = S * 0.3;
-    ctx.lineWidth = S * 0.028;
+    ctx.lineWidth = S * 0.014;
     ctx.globalAlpha = 1;
     ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 0.55;
-    ctx.beginPath(); ctx.arc(c, c, R * 0.62, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1;
-    for (let i = 0; i < 6; i++) {
-      const a = i * Math.PI / 3;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.arc(c, c, R * 0.64, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 12; i++) {
+      const a = i * Math.PI / 6;
+      const long = i % 2 === 0;
+      const reach = long ? 1.2 : 1.1;
+      ctx.globalAlpha = long ? 1 : 0.55;
       ctx.beginPath();
-      ctx.moveTo(c + Math.cos(a) * R * 0.62, c + Math.sin(a) * R * 0.62);
-      ctx.lineTo(c + Math.cos(a) * R * 1.18, c + Math.sin(a) * R * 1.18);
+      ctx.moveTo(c + Math.cos(a) * R, c + Math.sin(a) * R);
+      ctx.lineTo(c + Math.cos(a) * R * reach, c + Math.sin(a) * R * reach);
       ctx.stroke();
     }
-    ctx.beginPath(); ctx.arc(c, c, S * 0.04, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    dot(ctx, c, c, S * 0.022);
     wrapped(S, (dx, dy) => {
-      ctx.globalAlpha = 0.8;
-      ctx.beginPath(); ctx.arc(dx, dy, S * 0.03, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.6;
+      dot(ctx, dx, dy, S * 0.014);
     });
   },
 
-  /* hazard — warning tape: wide 45° bands at 50% duty. */
+  /* hazard — warning tape: wide 45° bands at 50% duty. Loud on purpose. */
   tape(ctx, S) {
     const bands = 2, p = S / bands;
     ctx.globalAlpha = 1;
@@ -289,17 +303,15 @@ const RECIPES = {
     const n = 4;
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
-        ctx.globalAlpha = (i + j) % 2 ? 0.55 : 1;
-        ctx.beginPath();
-        ctx.arc((i + 0.5) * S / n, (j + 0.5) * S / n, S * 0.022, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.globalAlpha = (i + j) % 2 ? 0.5 : 1;
+        dot(ctx, (i + 0.5) * S / n, (j + 0.5) * S / n, S * 0.016);
       }
     }
   },
 
   /* blocked squares — the oldest "no line of effect" mark there is. */
   hatch(ctx, S) {
-    ctx.lineWidth = S * 0.035;
+    ctx.lineWidth = S * 0.022;
     ctx.globalAlpha = 1;
     wrapped(S, (dx, dy) => {
       for (let k = 0; k < 4; k++) {
@@ -315,7 +327,7 @@ const RECIPES = {
 
 export const PATTERN_IDS = Object.freeze(Object.keys(RECIPES));
 
-/** Paint pattern `id` into `ctx` as a TILE × TILE white-on-clear tile. */
+/** Paint pattern `id` into `ctx` as a size × size white-on-clear tile. */
 export function paintPattern(ctx, id, size = TILE) {
   const recipe = RECIPES[id] ?? RECIPES.dots;
   ctx.save();
