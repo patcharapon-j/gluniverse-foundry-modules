@@ -1980,10 +1980,10 @@ export class GLUniverseInitiativeOverlay {
     // "Who is up after this?" is the question the rail is asked most. The answer
     // is the first card this viewer can see after the active one, so a hidden
     // creature in between is skipped here exactly as it is skipped on the rail.
-    if (activeIndex >= 0) {
-      const next = normal.slice(activeIndex + 1).find(item => item.type === "combatant" && item.id !== activeId);
-      if (next) next.next = true;
-    }
+    // The rail starts at the current turn, so when the active creature is the
+    // hidden one, the first card this viewer sees is the one up next.
+    const next = normal.slice(activeIndex + 1).find(item => item.type === "combatant" && item.id !== activeId);
+    if (next) next.next = true;
     return { normal, delayed, activeId, activeKey };
   }
 
