@@ -168,9 +168,25 @@ float visionAt(vec2 xz) {
   return 0.0;
 }
 
-float shadowTap(vec3 p, vec2 o) {
-  float d = texture2D(uShadowMap, p.xy + o * uShadowTexel).r;
-  return p.z - 0.0018 <= d ? 1.0 : 0.0;
+/*
+ * Under the fog of war's mist, what nobody has seen throws no shadow: a tower
+ * the mist hides would otherwise lay its exact outline across the ground the
+ * party can see. The shadow map holds the caster's depth, so the caster sits
+ * that far towards the sun from the point it shades (the map is orthographic:
+ * depth runs straight along the key). dz is the map's depth per cell moved
+ * towards the sun, wp the point shaded.
+ */
+float shadowTap(vec3 p, vec2 o, vec3 wp, float dz) {
+  // explicit levels throughout (the map has none): an implicit one inside this
+  // loop's branches is a gradient in divergent flow, which D3D refuses to link
+  float d = textureLod(uShadowMap, p.xy + o * uShadowTexel, 0.0).r;
+  if (p.z - 0.0018 <= d) return 1.0;
+  if (uUseVision > 0.5 && uFogStyle.x > 0.5 && dz < 0.0) {
+    vec2 cuv = (wp.xz + uKeyDir.xz * ((d - p.z) / dz)) / uWorldSize;
+    vec4 cv = dioInWorld(cuv) ? textureLod(uVisionMap, cuv, 0.0) : vec4(0.0);
+    if (max(cv.r, cv.g) <= 0.5) return 1.0;
+  }
+  return 0.0;
 }
 
 float shadowMapAt(vec3 wp, vec3 n) {
@@ -178,7 +194,8 @@ float shadowMapAt(vec3 wp, vec3 n) {
   vec4 lp = uShadowMatrix * vec4(wp + n * 0.03, 1.0);
   vec3 p = lp.xyz / lp.w * 0.5 + 0.5;
   if (!dioInWorld(p.xy) || p.z > 1.0) return 1.0;
-  if (uShadowMode < 1.5) return shadowTap(p, vec2(0.0));
+  float dz = 0.5 * dot(vec3(uShadowMatrix[0][2], uShadowMatrix[1][2], uShadowMatrix[2][2]), uKeyDir);
+  if (uShadowMode < 1.5) return shadowTap(p, vec2(0.0), wp, dz);
   // a golden-angle disc turned per pixel: a smooth penumbra, no grid steps
   float rot = dioHash(gl_FragCoord.xy) * 6.2831853;
   float s = 0.0;
@@ -186,7 +203,7 @@ float shadowMapAt(vec3 wp, vec3 n) {
     float fi = float(i);
     float r = sqrt((fi + 0.5) / 12.0) * 2.4;
     float a = fi * 2.3999632 + rot;
-    s += shadowTap(p, vec2(cos(a), sin(a)) * r);
+    s += shadowTap(p, vec2(cos(a), sin(a)) * r, wp, dz);
   }
   return s / 12.0;
 }
@@ -495,27 +512,44 @@ export const HEAD = NOISE + MAP + LIT;
 /*
  * The ground's own surfaces (tops, cliff faces, water) under fog. Each of these
  * programs writes its depth itself, starting every fragment at its own depth
- * (dioGroundDepth). Ground nobody has seen is painted flat in the bank floor's
- * colour, unlit, so it tells nothing about what is there. Beyond the first
- * square or so past the edge of sight (the soft map's seen value under
- * FOG_SOLID) it is a BACKDROP at the far plane: it hides nothing, so an unseen
- * tower casts no silhouette over what the party can see and its shape cannot be
- * read off its outline, and it leaves no hole (where the camera looks under the
- * bank's rim it finds more fog, not the clear colour). Right at the edge it
- * keeps its depth, so the pillar beside the party still stands there as a dark
- * shape rather than as two lit faces with nothing on top. True when it wrote
- * the pixel. Only these programs include it: a program that assigns
- * gl_FragDepth anywhere must assign it on every path.
+ * (dioGroundDepth). Ground nobody has seen is not drawn as itself, and it is
+ * not drawn where it stands: it is a BACKDROP at the far plane, painted as the
+ * mist. At the far plane it hides nothing, so an unseen tower beside the party
+ * is neither a prism nor a silhouette (whatever the party can see behind it
+ * draws over it), and its shape cannot be read off an outline; and it leaves no
+ * hole, since every ray that finds no seen ground finds the backdrop (where the
+ * camera looks under the bank's rim it finds more fog, not the clear colour).
+ * The paint is the mist as the bank would have drawn it over that pixel:
+ * unlit, the bank floor's colour with the bank's wisps over it, each sheet
+ * sampled where the camera's ray through the pixel crosses it, so the noise
+ * runs on across an outline instead of breaking at it and an unseen wall never
+ * reads as a flat panel. True when it wrote the pixel. Only these programs
+ * include it: a program that assigns gl_FragDepth anywhere must assign it on
+ * every path.
  */
 const UNSEEN = /* glsl */ `
-const float FOG_SOLID = 0.12;
-/** The bank height whose colour unseen ground takes: the floor with its wisps over it, on average. */
-const float FOG_PAINT = 0.3;
+/** The bank's sheets (render/fog.mjs FOG_FLOOR, FOG_STEP, FOG_LAYERS), over the lowest ground. */
+const float FOG_SHEET0 = 0.06;
+const float FOG_SHEET_STEP = 0.26;
 void dioGroundDepth() { gl_FragDepthEXT = gl_FragCoord.z; }
-bool dioUnseenFog(float vis, vec2 xz) {
+vec3 dioUnseenMist(vec3 wp) {
+  vec3 fwd = vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]);
+  vec2 slide = fwd.xz / max(fwd.y, 0.2);
+  float y0 = uHeightRange.x + FOG_SHEET0;
+  vec3 c = dioFogColor(0.0, dioFogNoise(wp.xz - slide * (wp.y - y0), 0.0));
+  for (int i = 1; i < 4; i++) {
+    float k = float(i) / 3.0;
+    float y = y0 + float(i) * FOG_SHEET_STEP;
+    float nk = dioFogNoise(wp.xz - slide * (wp.y - y), k);
+    float w = smoothstep(0.28 + 0.1 * k, 0.75, nk) * mix(0.6, 0.34, k) * 0.85;
+    c = mix(c, dioFogColor(k, nk) * (1.0 + 0.5 * k), w * smoothstep(y - 0.1, y + 0.1, wp.y));
+  }
+  return c;
+}
+bool dioUnseenFog(float vis, vec3 wp) {
   if (vis > 0.0 || uUseVision < 0.5 || uFogStyle.x < 0.5) return false;
-  gl_FragColor = vec4(dioFogColor(FOG_PAINT, dioFogNoise(xz, 0.0)), 1.0);
-  if (fogSoftAt(xz).y < FOG_SOLID) gl_FragDepthEXT = 1.0;
+  gl_FragColor = vec4(dioUnseenMist(wp), 1.0);
+  gl_FragDepthEXT = 1.0;
   return true;
 }
 `;
@@ -565,7 +599,7 @@ const float LIP_RANGE = 0.5;
 void main() {
   dioGroundDepth();
   float vis = visionAt(vWorld.xz);
-  if (dioUnseenFog(vis, vWorld.xz)) return;
+  if (dioUnseenFog(vis, vWorld)) return;
   if (vis <= 0.0) discard;
   vec4 f = fieldAt(vWorld.xz);
   vec3 albedo = mapAt(vWorld.xz) * vTint;
@@ -763,7 +797,7 @@ void main() {
   // and the bank sits on it instead of floating over the room.
   bool plinthOnly = vis <= 0.0 && uFogStyle.x > 0.5 && mod(vFlag + 0.25, 2.0) < 1.0
     && vWorld.y < uHeightRange.x - 0.05;
-  if (!plinthOnly && dioUnseenFog(vis, vLip)) return;
+  if (!plinthOnly && dioUnseenFog(vis, vWorld)) return;
   if (vis <= 0.0 && !plinthOnly) discard;
   vec3 n = normalize(vNormal);
   if (plinthOnly) {
@@ -913,7 +947,7 @@ float ripples(vec2 p, float t, float amount) {
 void main() {
   dioGroundDepth();
   float vis = visionAt(vWorld.xz);
-  if (dioUnseenFog(vis, vWorld.xz)) return;
+  if (dioUnseenFog(vis, vWorld)) return;
   if (vis <= 0.0) discard;
   vec2 p = vWorld.xz;
   float t = uTime;
@@ -1896,11 +1930,12 @@ void main() {
  * the board, one geometry, drawn floor first. The sheets lie along the ground
  * blurred over a few squares (the atmosphere layer's height texture), so the mist
  * follows the terraces and keeps no shape of anything standing in it. What is
- * under it was never drawn as itself: unseen ground is a flat backdrop at the far
- * plane (UNSEEN), unseen props and walls are discarded. The floor is a dark matte
- * slate lit by the sky alone, dense over every point nobody has seen (seen ≤ 0.5,
- * the threshold visionAt() uses), thinning where it turns edge-on to the camera
- * and fading out as a veil over the edge of sight; a curtain hangs from it down
+ * under it was never drawn as itself: unseen ground is mist painted as a backdrop
+ * at the far plane (UNSEEN), unseen props and walls are discarded, and nothing
+ * unseen throws a shadow (shadowTap). The floor is a dark matte slate lit by the
+ * sky alone, dense over the unseen, thinning where it turns edge-on to the
+ * camera and fading out across the soft map's blur as a ragged veil over the
+ * edge of sight (never along the hard bake); a curtain hangs from it down
  * the board's side to the plinth. The sheets above it are wisps: thin,
  * translucent streaks along the wind, each drifting at its own pace, reaching a
  * little past the edge of sight so the reveal is soft.
@@ -1919,7 +1954,7 @@ varying float vSkirt;
  * The ground around a vertex, blurred over about four squares: the bank lies
  * along the lie of the land, a terrace's worth of mist on a terrace, and never
  * stands up into the shape of a single tower. It does not have to cover what it
- * lies over: unseen ground is a backdrop that hides nothing (UNSEEN).
+ * lies over: unseen ground is a backdrop of mist that hides nothing (UNSEEN).
  */
 float fogGround(vec2 xz) {
   float h = 0.0;
@@ -1955,8 +1990,6 @@ void main() {
   if (uUseVision < 0.5 || uFogStyle.x < 0.5) discard;
   vec2 uv = vWorld.xz / uWorldSize;
   if (!dioInWorld(uv)) discard;
-  vec4 v = texture2D(uVisionMap, uv);
-  float seen = max(v.r, v.g);
   float k = vLayer / max(uFogLayers - 1.0, 1.0);
   float n = dioFogNoise(vWorld.xz, k);
   float unseen = 1.0 - fogSoftAt(vWorld.xz).y;
@@ -1966,11 +1999,15 @@ void main() {
   float flank = 1.0 - smoothstep(0.08, 0.7, abs(dot(nrm, fwd)));
   float a;
   if (vLayer < 0.5) {
-    // the floor: opaque wherever seen <= 0.5 and it faces the camera, thinning on
-    // its flanks to FOG_FLANK, then fading out over the soft map's blur, so its
-    // rim is a fading veil and never a cut edge
+    // the floor: opaque over the unseen where it faces the camera, thinning on
+    // its flanks to FOG_FLANK, then fading out across the soft map's blur with a
+    // ragged noise edge, so its rim is a fading veil and never a cut edge (the
+    // hard vision bake would cut one, and where the bank lies above the ground
+    // that cut floats off its footprint as a dark slab). What it lets through
+    // over the unseen is the unseen ground, which is mist itself (UNSEEN).
     float veil = 0.6 * smoothstep(0.04, 0.5, unseen + 0.2 * (n - 0.5));
-    a = max((1.0 - smoothstep(0.5, 0.8, seen)) * (1.0 - (1.0 - FOG_FLANK) * flank), veil);
+    float dense = 1.0 - smoothstep(0.3, 0.65, 1.0 - unseen + 0.2 * (n - 0.5));
+    a = max(dense * (1.0 - (1.0 - FOG_FLANK) * flank), veil);
   } else {
     // wisps: densest over the unseen, reaching a little past the edge of sight, never solid
     float reach = smoothstep(0.04, 0.55, unseen + 0.25 * (n - 0.5));

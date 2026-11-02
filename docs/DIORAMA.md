@@ -176,14 +176,19 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   mist (`render/fog.mjs`): a cool dark slate lit by the sky alone, well below
   the lit board so what the party sees stands out. It lies along the ground
   blurred over a few squares, so it follows the terraces and keeps no shape of
-  anything standing in it; its floor is dense wherever the bake says nobody has
-  seen, thins where it turns edge-on to the camera and fades out as a veil over
-  the edge of sight, and translucent wisps streak above it down the wind.
-  **Unseen ground is never drawn as itself**: tops, cliff faces and water there
-  are painted flat in the fog's colour, and beyond the first square past the
-  edge of sight they are a backdrop at the far plane, so an unseen tower hides
-  nothing and casts no silhouette to read its shape from, and the camera never
-  finds a hole under the bank's rim. Unseen props and walls are discarded. Lit
+  anything standing in it; its floor is dense over the unseen, thins where it
+  turns edge-on to the camera and fades out across the blurred bake as a ragged
+  veil over the edge of sight, and translucent wisps streak above it down the
+  wind. **Unseen ground is never drawn as itself, nor where it stands**: tops,
+  cliff faces and water there are a backdrop at the far plane painted as the
+  mist (the bank's colour and wisps, each sheet sampled where the camera's ray
+  crosses it, so the noise runs on across an outline). An unseen tower beside
+  the party is therefore no prism and no silhouette: whatever the party can see
+  behind it draws over it, and the camera never finds a hole under the bank's
+  rim. Nothing unseen throws a sun shadow either (the receiver finds the caster
+  along the key from the shadow map's depth and drops it if nobody has seen it),
+  so a hidden tower cannot lay its outline across the ground. Unseen props and
+  walls are discarded. Lit
   ground falls into the fog's shadow over most of a square at the edge of sight,
   and ground out of sight now fades to its remembered look (dim, grey, a faint
   mist) rather than switching at a line. Figures are never fogged. The drift is

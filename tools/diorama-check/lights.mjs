@@ -4,10 +4,10 @@
  *
  * Everything here fails silently: a flicker that wraps snaps once a loop
  * forever, a flicker that strays strobes, a torch kind nobody maps burns
- * steady, a flame drawn in the fog names a lit room nobody has seen, a fog
- * floor that is not opaque shows the backdrop through the board, a GM who gets
- * clouds cannot see their own map, a shed rung that maps to nothing never
- * degrades.
+ * steady, a flame drawn in the fog names a lit room nobody has seen, unseen
+ * ground drawn where it stands (or its sun shadow) outlines a tower nobody has
+ * seen, a GM who gets clouds cannot see their own map, a shed rung that maps to
+ * nothing never degrades.
  */
 
 import { readFileSync } from "node:fs";
@@ -184,36 +184,85 @@ export default async function check(ctx) {
   ctx.ok("figure shadows only on ground seen now, only where the light reaches", /if \(visionAt\(vWorld\.xz\) < 0\.75\) discard;/.test(G.TORCH_SHADOW_FRAG) && /lightAt\(vWorld\.xz\)/.test(G.TORCH_SHADOW_FRAG));
 
   // ── the fog of war ──
-  // Where nobody has seen, the ground is discarded, or (mist on) painted flat in
-  // the bank's colour by dioUnseenFog: never the map, its light or its shading,
-  // so neither its colour nor its shape reaches a player. Deep in the unseen it
-  // is a backdrop at the far plane (hides nothing, so no holes); near the edge it
-  // keeps its depth, so what borders the party reads as a fog-coloured shape.
+  // Where nobody has seen, the ground is discarded, or (mist on) drawn by
+  // dioUnseenFog as a backdrop at the far plane painted as the mist: never the
+  // map, its light or its shading, and never where it stands, so neither its
+  // colour nor its shape reaches a player (whatever they can see behind an
+  // unseen tower draws over it), and every ray that finds no seen ground finds
+  // the backdrop, so there are no holes.
   const discardRule = /if \(v\.r > 0\.5\) return 1\.0;\s*if \(v\.g > 0\.5\) return 0\.5;\s*return 0\.0;/.test(LITSRC);
-  const unseenBody = /bool dioUnseenFog\(float vis, vec2 xz\) \{\s*if \(vis > 0\.0 \|\| uUseVision < 0\.5 \|\| uFogStyle\.x < 0\.5\) return false;\s*gl_FragColor = vec4\(dioFogColor\(FOG_PAINT, dioFogNoise\(xz, 0\.0\)\), 1\.0\);\s*if \(fogSoftAt\(xz\)\.y < FOG_SOLID\) gl_FragDepthEXT = 1\.0;\s*return true;\s*\}/;
+  const unseenBody = /bool dioUnseenFog\(float vis, vec3 wp\) \{\s*if \(vis > 0\.0 \|\| uUseVision < 0\.5 \|\| uFogStyle\.x < 0\.5\) return false;\s*gl_FragColor = vec4\(dioUnseenMist\(wp\), 1\.0\);\s*gl_FragDepthEXT = 1\.0;\s*return true;\s*\}/;
   const groundFrags = [["TOP", G.TOP_FRAG], ["SIDE", G.SIDE_FRAG], ["WATER", G.WATER_FRAG]];
-  const paintsFlat = groundFrags.every(([, s]) => unseenBody.test(s));
-  ctx.ok("unseen ground is painted flat in the mist's colour (no map, no light), a backdrop away from the edge",
-    discardRule && paintsFlat && /const float FOG_SOLID = 0\.\d+;/.test(G.TOP_FRAG),
+  const mistBody = /vec3 dioUnseenMist\(vec3 wp\) \{([\s\S]*?)\n\}/.exec(G.TOP_FRAG)?.[1] ?? "";
+  const mistOnly = !!mistBody && !/texture2D|textureLod|mapAt|lightAt|sunlight|shadowAt|torchLight|visionAt|fieldAt/.test(mistBody)
+    && /dioFogColor\(/.test(mistBody);
+  ctx.ok("unseen ground is a backdrop painted as the mist (no map, no light, never where it stands)",
+    discardRule && mistOnly && groundFrags.every(([, s]) => unseenBody.test(s)),
     groundFrags.filter(([, s]) => !unseenBody.test(s)).map(([k]) => k).join(", "));
-  ctx.ok("the ground is still not drawn where nobody has seen (flat mist or nothing)",
-    /float vis = visionAt\(vWorld\.xz\);\s*if \(dioUnseenFog\(vis, vWorld\.xz\)\) return;\s*if \(vis <= 0\.0\) discard;/.test(G.TOP_FRAG)
-    && /float vis = visionAt\(vWorld\.xz\);\s*if \(dioUnseenFog\(vis, vWorld\.xz\)\) return;\s*if \(vis <= 0\.0\) discard;/.test(G.WATER_FRAG)
-    && /if \(!plinthOnly && dioUnseenFog\(vis, vLip\)\) return;/.test(G.SIDE_FRAG));
+  // The paint is the bank's own sheets, sampled along the camera's ray: they
+  // must be the sheets fog.mjs lays, or the noise breaks at every outline.
+  const sheet0 = Number(/const float FOG_SHEET0 = ([\d.]+);/.exec(G.TOP_FRAG)?.[1]);
+  const sheetStep = Number(/const float FOG_SHEET_STEP = ([\d.]+);/.exec(G.TOP_FRAG)?.[1]);
+  const sheetCount = Number(/for \(int i = 1; i < (\d+); i\+\+\)/.exec(mistBody)?.[1]);
+  ctx.ok("the unseen paint samples the bank's own sheets along the camera's ray",
+    sheet0 === Fg.FOG_FLOOR && sheetStep === Fg.FOG_STEP && sheetCount === G.FOG_LAYERS
+    && /vec2 slide = fwd\.xz \/ max\(fwd\.y, 0\.2\);/.test(mistBody) && /dioFogNoise\(wp\.xz - slide \* \(wp\.y - y\), k\)/.test(mistBody),
+    `${sheet0}/${sheetStep}/${sheetCount}`);
+  ctx.ok("the ground is still not drawn where nobody has seen (mist or nothing)",
+    /float vis = visionAt\(vWorld\.xz\);\s*if \(dioUnseenFog\(vis, vWorld\)\) return;\s*if \(vis <= 0\.0\) discard;/.test(G.TOP_FRAG)
+    && /float vis = visionAt\(vWorld\.xz\);\s*if \(dioUnseenFog\(vis, vWorld\)\) return;\s*if \(vis <= 0\.0\) discard;/.test(G.WATER_FRAG)
+    && /if \(!plinthOnly && dioUnseenFog\(vis, vWorld\)\) return;/.test(G.SIDE_FRAG));
+  // Nothing unseen throws a sun shadow: the receiver finds the caster along the
+  // key from the map's depth and drops it if nobody has seen it. Driven through
+  // the real ShadowPass fit, so the depth-per-cell term is the matrix's own.
+  const tap = /float shadowTap\(vec3 p, vec2 o, vec3 wp, float dz\) \{([\s\S]*?)\n\}/.exec(LITSRC)?.[1] ?? "";
+  const tapRule = /if \(uUseVision > 0\.5 && uFogStyle\.x > 0\.5 && dz < 0\.0\)/.test(tap)
+    && /vec2 cuv = \(wp\.xz \+ uKeyDir\.xz \* \(\(d - p\.z\) \/ dz\)\) \/ uWorldSize;/.test(tap)
+    && /textureLod\(uVisionMap, cuv, 0\.0\)/.test(tap) && !/texture2D\(uVisionMap/.test(tap)
+    && /if \(max\(cv\.r, cv\.g\) <= 0\.5\) return 1\.0;/.test(tap)
+    && /float dz = 0\.5 \* dot\(vec3\(uShadowMatrix\[0\]\[2\], uShadowMatrix\[1\]\[2\], uShadowMatrix\[2\]\[2\]\), uKeyDir\);/.test(LITSRC);
+  const casterFound = await (async () => {
+    const THREE = await import(ctx.url(`${DIO}/render/three.mjs`));
+    const { ShadowPass } = await import(ctx.url(`${DIO}/render/post.mjs`));
+    const sh = createShared();
+    const pass = new ShadowPass(sh);
+    pass.setBounds({ x1: 30, z1: 20, y0: -1, y1: 6 });
+    pass.fit();
+    const M = sh.uShadowMatrix.value, k = sh.uKeyDir.value;
+    const depth = (v) => new THREE.Vector4(v.x, v.y, v.z, 1).applyMatrix4(M).z * 0.5 + 0.5;
+    const e = M.elements;
+    const dz = 0.5 * (e[2] * k.x + e[6] * k.y + e[10] * k.z);
+    const wp = new THREE.Vector3(12.3, 0.5, 7.7);
+    const ok = [0.4, 1.7, 3.2].every((t) => {
+      const c = wp.clone().addScaledVector(k, t);
+      const back = (depth(c) - depth(wp)) / dz;
+      return Math.abs(back - t) < 1e-4;
+    });
+    pass.dispose();
+    return ok && dz < 0;
+  })();
+  ctx.ok("an unseen caster throws no sun shadow (found along the key from the map's depth, explicit LOD)", tapRule && casterFound);
   // A program that writes gl_FragDepth anywhere must write it on every path, or
   // the paths that do not are undefined depth. So each ground program writes its
   // own depth first, and nothing else in the shared head touches it.
   const depthFirst = groundFrags.every(([, s]) => /void main\(\) \{\s*dioGroundDepth\(\);/.test(s));
   ctx.ok("every program that pushes unseen ground back writes its depth on every path, and only those do",
     depthFirst && !/gl_FragDepthEXT/.test(G.HEAD) && !/gl_FragDepthEXT/.test(G.FOG_FRAG) && !/gl_FragDepthEXT/.test(G.CARD_FRAG));
-  // The floor is dense over every never-seen point (even thinned on a flank),
-  // and clears where the party has seen.
-  const floor = /if \(vLayer < 0\.5\) \{[\s\S]*?a = max\(\(1\.0 - smoothstep\(0\.5, 0\.8, seen\)\) \* \(1\.0 - \(1\.0 - FOG_FLANK\) \* flank\), veil\);/.test(G.FOG_FRAG);
+  // The floor is dense over the unseen (even thinned on a flank) and clear where
+  // the party has seen, and its edge follows the BLURRED map only: the hard bake
+  // cuts a line, and where the bank lies above the ground that line floats off
+  // its footprint as a dark slab.
+  const floor = /if \(vLayer < 0\.5\) \{[\s\S]*?float veil = 0\.6 \* smoothstep\(0\.04, 0\.5, unseen \+ 0\.2 \* \(n - 0\.5\)\);\s*float dense = 1\.0 - smoothstep\(0\.3, 0\.65, 1\.0 - unseen \+ 0\.2 \* \(n - 0\.5\)\);\s*a = max\(dense \* \(1\.0 - \(1\.0 - FOG_FLANK\) \* flank\), veil\);/.test(G.FOG_FRAG);
   const flankMatch = /const float FOG_FLANK = ([\d.]+);/.exec(G.FOG_FRAG);
   const flankK = flankMatch ? Number(flankMatch[1]) : 0;
-  const dense = Array.from({ length: 51 }, (_, i) => i / 100).every((s) => (1 - smoothstep(0.5, 0.8, s)) * flankK >= 0.5);
-  ctx.ok("the fog floor is dense on every never-seen point and clear where seen",
-    floor && /float seen = max\(v\.r, v\.g\);/.test(G.FOG_FRAG) && dense && 1 - smoothstep(0.5, 0.8, 1) === 0, `flank ${flankK}`);
+  const floorA = (unseen, n, flank) => Math.max((1 - smoothstep(0.3, 0.65, 1 - unseen + 0.2 * (n - 0.5))) * (1 - (1 - flankK) * flank),
+    0.6 * smoothstep(0.04, 0.5, unseen + 0.2 * (n - 0.5)));
+  const grid = Array.from({ length: 11 }, (_, i) => i / 10);
+  const denseUnseen = grid.every((n) => grid.every((f) => [0.85, 0.9, 1].every((u) => floorA(u, n, f) >= 0.5)));
+  const clearSeen = grid.every((n) => floorA(0, n, 0) < 0.05);
+  const fogMain = /void main\(\) \{([\s\S]*)\}\s*$/.exec(G.FOG_FRAG)?.[1] ?? "";
+  ctx.ok("the fog floor is dense over the unseen, clear where seen, and edged by the blurred map only",
+    floor && denseUnseen && clearSeen && !/uVisionMap/.test(fogMain), `flank ${flankK}`);
   ctx.ok("the GM (no vision bake) and the flat style get no mist",
     /if \(uUseVision < 0\.5 \|\| uFogStyle\.x < 0\.5\) discard;/.test(G.FOG_FRAG) && /if \(uUseVision < 0\.5 \|\| uFogStyle\.x < 0\.5\) return c;/.test(LITSRC));
   ctx.ok("the shadow reaches full mist where nobody has seen, in the bank's own colour",
