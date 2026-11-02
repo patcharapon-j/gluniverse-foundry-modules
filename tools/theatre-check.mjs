@@ -73,6 +73,12 @@ section = "model";
   ok("letterbox null survives (scene default)", M.normalizeShot({ treatment: { letterbox: null } }).treatment.letterbox === null);
   ok("NEUTRAL_TREATMENT is neutral", M.isNeutralTreatment(M.NEUTRAL_TREATMENT));
   ok("a shot's shake is clamped", M.normalizeShot({ shake: 5 }).shake === 1);
+  {
+    // Number(null) is 0: a stored null saturation drew a grey shot, a null focus the top-left corner.
+    const s = M.normalizeShot({ focus: { x: null, y: false }, treatment: { exposure: null, saturation: null, vignette: null, blur: true, tintAmount: null } });
+    ok("a null or boolean shot field is missing, never 0", s.focus.x === 0.5 && s.focus.y === 0.5 && s.treatment.saturation === 1
+      && s.treatment.exposure === 0 && s.treatment.vignette === M.DEFAULT_TREATMENT.vignette && s.treatment.blur === 0 && s.treatment.tintAmount === 0);
+  }
   ok("a shot's shake null survives (the GM's default)", M.normalizeShot({ shake: null }).shake === null && M.normalizeShot({}).shake === null);
   ok("a face key off the prototype is refused", M.normalizeShot({ face: "toString" }).face === null && M.normalizeConfig({ face: "toString", v: M.CONFIG_VERSION }).face === null);
 

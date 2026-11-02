@@ -55,8 +55,11 @@
 import { foldText, matchesQuery } from "../../core/util.mjs";
 import { DEFAULT_FACE, DEFAULT_MODE, DEFAULT_STYLE, FACES, MODES, STYLES, TIMING, VIDEO_RE, CUE_KINDS } from "./constants.mjs";
 
+// Only a number, or a string that spells one, is a value: `Number(null)` is 0,
+// which turned a stored `saturation: null` into a grey shot and a null focus
+// into the top-left corner.
 const num = (v, lo, hi, fallback) => {
-  const n = Number(v);
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
 };
 const str = (v, fallback = "") => (typeof v === "string" ? v : fallback);

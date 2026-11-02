@@ -225,6 +225,8 @@ section = "picture";
   const n = P.normalizePicture(null);
   ok("normalizePicture(null) is the neutral picture", same(n, { ...P.NEUTRAL_PICTURE, focus: { ...P.NEUTRAL_PICTURE.focus } }));
   ok("normalizeLight carries a complete picture", same(R.normalizeLight({}).picture, n));
+  // Number(null) is 0: a null saturation drew the room grey, a null focus cropped to the corner.
+  ok("a null or boolean field is missing, never 0", same(P.normalizePicture({ focus: { x: null, y: false }, exposure: null, saturation: null, tintAmount: true, blur: null }), n));
   ok("normalizePicture clamps", same(P.normalizePicture({ focus: { x: 9, y: -9 }, exposure: 9, saturation: -1, tintAmount: 4, blur: 3, tint: "red" }),
     { focus: { x: 1, y: 0 }, exposure: 2, saturation: 0, tint: "#000000", tintAmount: 1, blur: 1 }));
   ok("the picture never moves the rig (mood off is still the identity)",

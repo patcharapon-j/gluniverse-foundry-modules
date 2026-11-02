@@ -19,8 +19,11 @@
  */
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+// Only a number, or a string that spells one, is a value. `Number(null)` and
+// `Number(false)` are 0, which read a missing saturation as a grey picture and a
+// missing focus as the top-left corner.
 const num = (v, lo, hi, fallback) => {
-  const n = typeof v === "string" && v.trim() === "" ? NaN : Number(v);
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
   return Number.isFinite(n) ? clamp(n, lo, hi) : fallback;
 };
 const hex = (v, fallback) => (/^#[0-9a-f]{6}$/i.test(String(v)) ? String(v).toLowerCase() : fallback);
