@@ -389,8 +389,18 @@ const {
   split = applyReveal(split, S, "b", ["offense"], fx.snapshots, fx.meta, true);
   if (!split[S].meta.deferred?.length) fail("ledger: a completion by the party's union did not store the held-back abilities");
   if (scrubDeferred(split, true) !== null) fail("ledger: scrubDeferred drops abilities the party earned with Party Knowledge on");
-  if (scrubDeferred(split, false)?.[S]?.meta?.deferred?.length !== 0) {
+  const off = scrubDeferred(split, false);
+  if (off?.[S]?.meta?.deferred?.length !== 0) {
     fail("ledger: with Party Knowledge off, abilities nobody earned alone stay in a store every client reads");
+  } else {
+    // ...and switching it back on earns them again, read back off the live creature.
+    const on = ledger.applyDeferred(off, S, fx.meta.deferred, true);
+    if (!on?.[S]?.meta?.deferred?.length) fail("ledger: switching Party Knowledge back on never restores the held-back abilities");
+    if (JSON.stringify(on?.[S]?.sections) !== JSON.stringify(off[S].sections)) fail("ledger: restoring held-back abilities rewrote the section snapshots");
+    if (ledger.applyDeferred(off, S, fx.meta.deferred, false) !== null) fail("ledger: held-back abilities were restored to an entry nobody earned");
+  }
+  if (!/applyDeferred\(/.test(storeSrc) || !/settleDeferred\(\)/.test(src["index.mjs"])) {
+    fail("index/store: nothing restores held-back abilities when Party Knowledge earns them again");
   }
 
   // Refresh re-takes only what is held, and never a lie.

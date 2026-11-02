@@ -42,7 +42,9 @@
 
 import { SUITE_ID, warn } from "../../core/const.mjs";
 import { SETTINGS } from "./constants.mjs";
+import { buildSections } from "./sections.mjs";
 import {
+  applyDeferred,
   applyFalse,
   applyForget,
   applyRedact,
@@ -140,3 +142,29 @@ export const forget = (subject) => writeAll(applyForget(readAll(), subject));
 
 /** Drop held-back abilities nobody earned (older worlds stored them early). */
 export const scrub = () => writeAll(scrubDeferred(readAll(), partyMode()));
+
+/**
+ * Bring the stored held-back abilities in line with the current read rule, in
+ * both directions. Switching Party Knowledge off can un-earn them (scrubbed);
+ * switching it back on earns them again, and only the live creature still has
+ * them, so they are read back off it here. Active GM only.
+ */
+export async function settleDeferred() {
+  await scrub();
+  const party = partyMode();
+  let data = readAll();
+  let changed = false;
+  for (const subject of Object.keys(data)) {
+    const meta = metaIn(data, subject);
+    if (!meta?.uuid || meta.deferred?.length) continue;
+    // Cheap test first: a write that would be refused needs no actor lookup.
+    if (!applyDeferred(data, subject, [{}], party)) continue;
+    const actor = await fromUuid(meta.uuid).catch(() => null);
+    const next = actor ? applyDeferred(data, subject, buildSections(actor).deferred, party) : null;
+    if (next) {
+      data = next;
+      changed = true;
+    }
+  }
+  return changed ? writeAll(data) : false;
+}

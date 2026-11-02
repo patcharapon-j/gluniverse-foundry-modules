@@ -168,8 +168,9 @@ The same guarantee covers the **held-back abilities** (the untagged ones
 deferred to completion). They are stored only while somebody's entry is truly
 complete, and dropped again if a redaction undoes that. Older worlds stored them
 on the first reveal, where every client could read them, and switching Party
-Knowledge off can un-earn them; the active GM scrubs them on ready and whenever
-that setting changes. While nobody has completed an entry, the GM's view says
+Knowledge off can un-earn them. On ready and whenever that setting changes, the
+active GM drops the ones nobody has earned and reads back, from the live
+creature, the ones that are earned again. While nobody has completed an entry, the GM's view says
 the creature has held-back abilities, reading the count off the live creature
 rather than the store.
 

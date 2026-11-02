@@ -36,7 +36,7 @@ import { DELIVERY, FEATURE_ID, PREFIX, SETTINGS } from "./constants.mjs";
 import { ensureSuiteGroup, bindSuiteToolClicks } from "../../core/scene-controls.mjs";
 import { CreaturedexApp, mayOpen } from "./app.mjs";
 import { dexKey } from "./identity.mjs";
-import { KNOWLEDGE_SETTING, scrub } from "./store.mjs";
+import { KNOWLEDGE_SETTING, settleDeferred } from "./store.mjs";
 
 const L = (key) => {
   const s = game.i18n.localize(key);
@@ -271,8 +271,8 @@ function registerLiveRefresh() {
   Hooks.on("updateSetting", (setting) => {
     const key = String(setting?.key ?? "");
     if (!watched.has(key)) return;
-    // Switching Party Knowledge off can un-earn held-back abilities.
-    if (key === `${SUITE_ID}.${SETTINGS.party}` && game.user?.isGM && game.users?.activeGM === game.user) scrub();
+    // Switching Party Knowledge can un-earn held-back abilities, or earn them back.
+    if (key === `${SUITE_ID}.${SETTINGS.party}` && game.user?.isGM && game.users?.activeGM === game.user) settleDeferred();
     CreaturedexApp.refreshOpen();
   });
 }
@@ -337,12 +337,12 @@ function onInit() {
 }
 
 /**
- * One pass, by the active GM: drop held-back abilities nobody has earned.
- * Worlds from before that rule stored them on the first reveal, where every
- * client could read them.
+ * One pass, by the active GM: drop held-back abilities nobody has earned, and
+ * restore any that are earned again. Worlds from before that rule stored them
+ * on the first reveal, where every client could read them.
  */
 function onReady() {
-  if (game.user?.isGM && game.users?.activeGM === game.user) scrub();
+  if (game.user?.isGM && game.users?.activeGM === game.user) settleDeferred();
 }
 
 Suite.register({

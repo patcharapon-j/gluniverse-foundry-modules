@@ -218,6 +218,21 @@ export function applyRefresh(data, subject, snapshots = {}, meta = null, party =
   return out;
 }
 
+/**
+ * Put held-back abilities back once a subject is earned again, read off the
+ * live creature by the GM. Touches nothing else: the section snapshots are
+ * memories and stay as they were. Null when the subject is not earned under
+ * `party`, or already holds them.
+ */
+export function applyDeferred(data, subject, deferred, party = false) {
+  const entry = data?.[subject];
+  if (!plain(entry?.meta) || !Array.isArray(deferred) || !deferred.length) return null;
+  if (entry.meta.deferred?.length || !completeForSomeone(entry, party)) return null;
+  const out = clone(data);
+  out[subject].meta.deferred = deferred;
+  return out;
+}
+
 export function applyForget(data, subject) {
   if (!data || !(subject in data)) return null;
   const out = clone(data);
