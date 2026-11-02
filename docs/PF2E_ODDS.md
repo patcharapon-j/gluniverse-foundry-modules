@@ -120,27 +120,36 @@ dice highlight, and an NPC row's degree in Save Resolution.
 The targeting line shows the **armed action**: whatever the player last hovered
 or clicked on the sheet, the HUD or a chat card. Otherwise it falls back to the
 primary strike (the wielded weapon with the best attack bonus). The badge always
-names its action (`LONGSWORD · 2ND ›› OGRE`).
+names its action (`Longsword 2nd  vs Ogre`).
 
-### The badge — variant C, "d20 strip"
-- **Headline:** P(success or better) in large type, or a range `55–70%`, or
-  violet `???` when nothing is known.
-- **Strip:** 20 pips, one per die face, coloured by degree:
-  - crit: amber `--gl-signal`
-  - success: cyan
-  - failure: dim steel
-  - crit fail: `--gl-hazard`
-- **Uncertain faces:** hatched in their two possible colours. With nothing
-  known, every face is violet hatch.
-- **Beside the headline:** crit %, and the AC/DC range as known.
-- **Chips:** small Endfield tags (MAP −5, OFF-GUARD +2, FRIGHT −1, EVASION,
-  CONCEALED…).
-- **GM-only:** a dashed violet tag, `GM · TRUE 60% · PLAYERS SEE 55–70%`.
-- **Material:** the Etched × Endfield language the initiative rail already uses.
-  This is not a third skin; it uses tokens only.
-- **Lifetime:** shown as long as the line exists. It collapses to a compact `60%`
-  tag off the attacker's turn and expands on their turn, on hover, or while
-  their roll dialog is open.
+### On the line: the tag and the plate
+- **The tag** rides the targeting line itself, a little short of the arrowhead:
+  the chance and the word for what it is the chance of (`75% Hit`, `40% They
+  fail`), on an ink chip with a rule in the line's own colour. It is placed on
+  `stream-targets`' own path for the same two tokens (`line-place.mjs`), so it
+  sits on the line the canvas draws; with the line feature off it sits where
+  that line would be. Every line carries one, so a busy table is a row of small
+  figures, not a wall of plates.
+- **The plate** opens off the tag on the bow side of the arc, on the roller's
+  turn, out of combat, and while either token or the tag is hovered. Tags and
+  plates are placed in priority order (hovered, then the acting creature's,
+  then open ones) and slide back along their own lines to stay clear of each
+  other; an open plate also keeps off the tokens. Under load the plate is shed
+  back to the tag.
+- **Headline:** P(success or better) in large type, or a range `55–70%`, or a
+  plain `?` when nothing is known.
+- **The skyline:** 20 bars, one per die face. A bar's height is the degree the
+  face lands on (critical tallest, then success, failure, and a critical
+  failure as a stub), and colour says it again: amber, paper, steel, red. It
+  reads on height alone, on a compressed stream and to a colour-blind player.
+- **Uncertain faces:** solid to the lower degree and hatched up to the higher.
+  With nothing known, every face is a faint hatch at full height.
+- **Beside the headline:** crit %, and the defence as known.
+- **Chips:** MAP −5, Off-guard +2, Frightened −1, Evasion, Concealed, in quiet
+  type with the value in its tone.
+- **GM-only:** a dashed line under the chips, `True 60%  Players see 55–70%`.
+- **Material:** a scoped skin, black-leaning ink with paper type and amber kept
+  for criticals (docs/adr/0005-odds-and-line-skin.md).
 - **Visibility:**
   - Every client draws the badge from its own knowledge.
   - The stream client always renders the **player** view, even when it is logged
@@ -168,14 +177,16 @@ The "Roll Reflex save" button on a spell's chat card gets the player's own odds
 against that DC, gated on whether they've learned it.
 
 ### Motion
-- **Narrowing:** hatched pips resolve one at a time, staggered outward from the
-  boundary that moved. The headline counts from the old range to the new one;
-  the AC readout ticks.
-- **Collapsing to exact:** a bigger beat. The pips sweep and the plate gets a
-  short amber etched rim.
-- **Roll lands:** the landed face's pip pulses, and the badge shows the degree
-  stamp (CRIT / HIT / MISS / FUMBLE, or the save words) for about 1.5 s before
-  returning to odds.
+- **Narrowing:** hatched bars grow into their new height one at a time,
+  staggered outward from the boundary that moved. The headline counts from the
+  old range to the new one.
+- **Collapsing to exact:** an amber rule draws across the top of the plate once.
+- **Roll lands:** the landed face's bar rises out of the skyline and the plate
+  shows the degree (Crit / Hit / Miss / Fumble, or the save words) for about
+  1.5 s. With the plate closed, the tag on the line takes the degree's colour
+  and word for the same hold instead.
+- **A refresh that changed nothing draws nothing**, and a frame where the
+  camera, the tokens and the sizes are all where they were writes no position.
 - **Holding through a roll:** when a check is posted, every badge touching its
   roller or target freezes on the number it showed when the die left the hand.
   Condition, MAP and target changes that arrive mid-throw are queued and applied
@@ -231,8 +242,15 @@ Spotlight's `rollSlot`, and the session carries message ids, never results).
   - ledger narrowing, normalisation and contradiction reset
   - the stream client never rendering truth
   - the dynamic `GLOD.*` key families
-- `tools/pf2e-odds-preview.mjs`: the badge, sheet chips and dialog panel driven
-  by the shipped pure modules, including the narrowing and landing beats.
+  - line placement (`line-place.mjs`): on the line's own path, clear of the
+    head, tags and plates never stacked, plates off the tokens, inside the view
+  - the skin: no `:root`, every `--glod-*` read is declared, the skyline ranks
+    the degrees, every animation names keyframes that exist
+- `tools/pf2e-odds-preview.mjs`: the plate, sheet readout and dice mark driven
+  by the shipped pure modules, including the narrowing and landing beats, with
+  the odds on the real targeting line framed from
+  `tools/target-line-preview.mjs` (`?odds=1`; add `gm`, `land`,
+  `acting=<id>`, `hover=<source>><target>`, `floor=bright`).
 - `tools/pf2e-saves-check.mjs`:
   - degree × basic-save multipliers
   - area membership against `pf2eCoverage`

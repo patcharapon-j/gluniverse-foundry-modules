@@ -82,14 +82,21 @@ only and stays off the canvas during a drag or ruler.
 
 ## Targeting lines
 
-An arc from the combatant whose turn it is to each token it targets, with a
-dark rim for busy maps, a band in the relationship colour and a one-pixel
-hairline.
+An arc from the combatant whose turn it is to each token it targets: an ink rim
+for busy maps, a band in the relationship colour that tapers towards the source,
+a one-pixel hairline, and four corner brackets that close on the target as the
+line lands. A landed line is still. It draws out, locks on and stops; nothing
+loops, there is no filter pass, and the launch holds a `Budget.claimMotion`
+only while something is moving. Every duration is in
+`targeting/line-motion.js`. The set of lines is announced on
+`TARGETS_HOOKS.linesChanged` (`[{ sourceId, targetId, color }]`) only when it
+changes, never on a sight refresh; PF2e Odds and Diorama both read it.
+`node tools/stream-targets-check.mjs` pins all of that.
 
 - **Player turns** show that player's standing targets as soon as the turn starts.
 - **GM turns** do not reuse the GM's carried targets from the previous NPC.
 - **Back-to-back turns for one player** hand the line over: it retracts into the
-  first token while the reticle stays up dimmed, then relaunches from the next.
+  first token while the brackets stay up dimmed, then relaunches from the next.
   Under either of the two scope switches below the hand-off is skipped: the
   outgoing token's lines stay up, so nothing retracts and staging a hand-off
   would only hold the incoming lines back for a beat that shows nothing.

@@ -91,8 +91,9 @@ etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
 - **CSS** — read `docs/DESIGN_SYSTEM.md`. Etched Glass is the suite's ONLY
   theme (the exceptions are the scoped Aegis skin of the initiative rail and
   Combat Intro, docs/adr/0001-scoped-skins.md, Stream Pacer's black skin,
-  docs/adr/0003-stream-pacer-skin.md, and Resource Trackers' skin,
-  docs/adr/0004-resource-trackers-skin.md — each lives only under its features' own
+  docs/adr/0003-stream-pacer-skin.md, Resource Trackers' skin,
+  docs/adr/0004-resource-trackers-skin.md, and PF2e Odds' ink skin,
+  docs/adr/0005-odds-and-line-skin.md — each lives only under its features' own
   roots and never on `:root`); `styles/gl-tokens.css` is the single source of truth and
   `styles/gl-motion.css` the single keyframe pool. Use the `--gl-*` tokens and
   the `.gl-*` utilities. The non-negotiables:
@@ -1289,9 +1290,16 @@ produced a different card). **Every surface builds its model through
 never `isGM`: the stream login holds GM rights and is watched by the players.
 **Knowledge is the bare stat**: observations are filed with the visible status
 and circumstance modifiers (and MAP) taken off, and a ledger write is the
-active GM's alone. To see it: `node tools/pf2e-odds-preview.mjs && node
-tools/preview-server.mjs`, then `/.preview/odds.html` (`?freeze=1` stops the
-narrowing loop). See `docs/PF2E_ODDS.md`.
+active GM's alone. **The tag sits on the line the canvas draws**: it is placed
+on `stream-targets`' own path for the same two tokens through the pure
+`line-place.mjs`, which the preview places through too, so a lookalike path in
+`line-badges.mjs` would put every tag beside its line with nothing reported. The
+skin is scoped (ADR 0005): a `--glod-*` read with no declaration falls back to
+nothing, and the check refuses one. To see it: `node tools/target-line-preview.mjs
+&& node tools/pf2e-odds-preview.mjs && node tools/preview-server.mjs`, then
+`/.preview/odds.html` (`?freeze=1` stops the narrowing loop) or
+`/.preview/target-lines.html?odds=1` for the odds on the real line. See
+`docs/PF2E_ODDS.md`.
 
 **When touching Save Resolution** (`features/pf2e-saves/`, `styles/pf2e-saves.css`),
 re-run its check. Everything it covers fails silently:
@@ -1424,8 +1432,12 @@ seam can get wrong fails *silently*:
 node tools/stream-check.mjs
 ```
 
-Zero problems required, plus `node --test tests/*.test.mjs` (240 tests; Node's
-directory mode is not supported here, so name the glob).
+Zero problems required, plus `node --test tests/*.test.mjs` (Node's directory
+mode is not supported here, so name the glob). The targeting line has its own
+check, `node tools/stream-targets-check.mjs`: no filter pass, no loop, a motion
+claim while it moves, device-pixel hairlines, every timing read, and
+`linesChanged` announced only when the set changes, since PF2e Odds and Diorama
+both redraw on it.
 
 Eight things are worth knowing before you change any of it.
 
