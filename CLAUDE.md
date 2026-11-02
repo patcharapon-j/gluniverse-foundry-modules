@@ -1618,8 +1618,18 @@ own focus — that focus is struck for an 8.2:4.4 art box, and in a square it sh
 a face pushed left and a lot of shoulder, which reads as the framing being broken
 rather than as the wrong box.
 
-See `docs/STREAM.md` for the camera modes, the targeting audiences, the status
-cards and the migration.
+The view has a scoped black skin (docs/adr/0004-stream-view-skin.md): `--glus-*`
+tokens on the stream's own roots, `glus-` keyframes, and every duration a row of
+`CARD_MOTION` or `OVERLAY_MOTION` read through the tier-scaled lookup, never a
+literal. `audience.mjs`, `chat-settings.mjs` and `room-model.mjs` are pure so the
+check, the tests and the preview can load them; `director-app.js` cannot be
+imported anywhere, so anything the room decides goes in `room-model.mjs`. A
+whisper to anyone, or a blind roll, never reaches the cloned-card path. To see
+the overlay, the Control Room and the Chat Filter: `node tools/stream-preview.mjs
+&& node tools/preview-server.mjs`, then `/.preview/stream.html?view=overlay|room|filter`.
+
+See `docs/STREAM.md` for the camera modes, the Control Room, the targeting
+audiences, the status cards and the migration.
 
 **When touching the hexcrawl** (`features/hexcrawl/`, `styles/hexcrawl*.css`,
 `templates/hexcrawl/`), re-run its check. Everything it covers fails silently:
