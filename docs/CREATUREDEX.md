@@ -64,7 +64,17 @@ mechanic: a lie a player can see is not a lie. It is also the only place in this
 feature where two people looking at the same window see different things.
 
 A lie never overwrites a section already known truly. A bad roll should fail to
-add something, not destroy something the player earned.
+add something, not destroy something the player earned. Told to a mixed group,
+a lie lands only on the characters who did not already know the truth.
+
+A lie also arrives exactly the way a truth does. Both post the same reveal
+notice, both count toward "learned", and an entry completed with a lie inside it
+reads as complete to its holder. The GM sees the difference: the entry is
+**believed complete**, with a note naming the false section. Two things stay on
+the true answer, because they are the rules rather than the display: Discerning
+Aid is granted on the entry the *player* sees as complete (they cannot know
+otherwise, and a missing reaction would be the tell), and the held-back
+abilities below print only on a true completion.
 
 ## The sidebars, as settings
 
@@ -73,11 +83,13 @@ add something, not destroy something the player earned.
   how a read is *resolved*, unioning every owner instead of reading one. So it
   can be turned on and off mid-campaign without inventing or destroying a single
   fact, which a shared-pool-on-write design could not manage in either direction.
-- **Recall Knowledge delivery** — prose only, sections only, or both, for a world
-  that also runs `features/pf2e-recall`. Explicit rather than accidental: the
-  prose saying "you sense it is dangerous" beside a card printing AC 24 is two
-  disagreeing answers to one roll.
+- **Grant Discerning Aid** and **Players may open the dex**. The second is read
+  live: switching it off closes a player's open window.
 - **Doctoring may alter resistances** — off by default. See below.
+
+`dex.delivery` (prose, sections or both, for a world that also runs
+`features/pf2e-recall`) is still registered so old worlds keep their value, but
+it is hidden: nothing ever read it, so it was a switch that did nothing.
 
 The book's other two sidebars, *It's Not a Secret* and the 1d4 section pick, both
 describe how to resolve a roll. Since nothing here resolves one, they are the
@@ -152,6 +164,28 @@ thing on the board.
 Redacting the last holder of a section drops its stored snapshot too, so the
 store keeps its one guarantee: it contains only what somebody was told.
 
+The same guarantee covers the **held-back abilities** (the untagged ones
+deferred to completion). They are stored only while somebody's entry is truly
+complete, and dropped again if a redaction undoes that. Older worlds stored them
+on the first reveal, where every client could read them, and switching Party
+Knowledge off can un-earn them. On ready and whenever that setting changes, the
+active GM drops the ones nobody has earned and reads back, from the live
+creature, the ones that are earned again. While nobody has completed an entry, the GM's view says
+the creature has held-back abilities, reading the count off the live creature
+rather than the store.
+
+### Every read and write is pure
+
+`ledger.mjs` is every read and write over the plain `dex.knowledge` object;
+`store.mjs` wraps it with the one setting read and write. `model.mjs` decides
+what each surface shows for each viewer, and `render.mjs` turns that into
+markup. None of the three touches `game`, so the check tool drives the real
+writes and draws the real window, and the preview draws what the module ships.
+
+Every client redraws an open dex on `updateSetting` for the knowledge, Party
+Knowledge and player-access settings. That is also the GM's only redraw after a
+write, which is what lets a section **unseal** on screen, once, on every screen.
+
 ## Authoring a lie
 
 A false section is stored beside the true one and **rendered identically to its
@@ -196,8 +230,10 @@ gesture the canvas will give them: double-click opens a sheet they lack
 permission for, right-click summons a HUD they cannot raise, and the token's
 context menu is the GM's.
 
-- **A scene control**, under Token controls, opening the browsable shelf. This is
-  the "what have we learned" moment, which is not attached to any one creature.
+- **A scene control**, in the suite's own control group, opening the browsable
+  shelf. This is the "what have we learned" moment, which is not attached to any
+  one creature. It used to go under Foundry's `token` group, which v13 renamed
+  `tokens`, so it never appeared.
 - **`K`**, rebindable and unbound in core Foundry, opening the entry for whatever
   the user is pointing at: their target first, then a controlled token, then a
   hover. All three matter — a player aiming a spell has a target, a summoner has
@@ -247,12 +283,18 @@ section the book puts it in (and in **only** that section — a field in two
 sections is worse than a field in none, because the player buys one and silently
 receives part of another), pins the doctoring bounds and the immunity rule (behaviourally *and*
 structurally, since a PF2e immunity list carries no digits for a numeric drift to
-move), the three-way identity keying, that the store keeps snapshots and drops
-one when its last holder loses it, both runtime-built i18n families, that every
-button is sized, that a whole-party reveal fans out to the members rather than
-writing a shared bucket, that all three section controls survive the trip from
-context flag to template branch to registered action, and that every road in from
-the board still asks `mayView`.
+move) and the three-way identity keying.
+
+It drives the real ledger: a reveal to the party key is refused, a lie never
+lands on a truth-holder, redacting the last holder drops the snapshot, held-back
+abilities are stored only on a true completion and scrubbed from old worlds. It
+draws the real window: a lie draws byte for byte what the truth draws for its
+holder, a player's model carries no `false` state anywhere, a sealed plate has
+no rows, a player is drawn no GM control, and the notice is whispered to exactly
+the players told. Then it sweeps what was drawn: every key resolves, every class
+has a rule, no `.gl-btn` is drawn, every `data-action` is registered, and the
+anchors PF2e Odds hangs its "observed" line from still exist. It also holds the
+skin to ADR 0005 and every road in from the board to `mayView`.
 
 It also pins an **absence**. `chat.mjs`, `reveal.mjs`, a chat-card hook, a socket
 and any read of a roll outcome are all refused outright, because "helpfully"
@@ -267,8 +309,9 @@ node tools/creaturedex-preview.mjs --out=.preview/dex.html && node tools/preview
 ```
 
 **Serve it** — a `file://` page will not load the stylesheets the same way. The
-page shows the player view beside the GM view, so the sealed plate can be judged
-against a revealed section, and both chat cards at a real chat card's 14px type,
-which is the only size at which an unsized button looks wrong. The check tool
-refuses any `gldex-` class in the preview that the module does not actually
-emit, so it cannot drift into showing a window that does not exist.
+page builds its dex with the real ledger writes and draws it with the real model
+and markup, so it cannot drift into showing a window that does not exist. Frames:
+`player` (a lie the player cannot tell), `gm` (the same entry, the lie labelled),
+`unseal` (a section learned while the window is open; `&seek=300` freezes the
+unseal), `complete`, `hazard`, `empty`, `narrow`, `falsify`, `draft` and `chat`
+(the notices at a real chat log's 14px). `?only=<frame>` shows one.
