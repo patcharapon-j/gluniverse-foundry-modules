@@ -19,6 +19,7 @@ function createHarness({ users, calm = true }) {
   const clock = { now: 0, timers: [] };
   const log = [];
   const rings = [];
+  const announcements = [];
   const combat = { id: "combat", started: true, round: 1, turn: 0, combatant: null };
   /** The world targeting settings the controller reads; tests mutate these in place. */
   const settings = { enabled: true, showAllSources: false, outOfCombat: false };
@@ -42,7 +43,7 @@ function createHarness({ users, calm = true }) {
     }
     get retractMs() {
       const motion = context.TARGET_LINE_MOTION;
-      return this.calm ? motion.calmFadeOutMs : Math.max(motion.retractMs, motion.reticleCollapseMs);
+      return this.calm ? motion.calmFadeOutMs : Math.max(motion.retractMs, motion.releaseMs);
     }
     get beatMs() {
       const motion = context.TARGET_LINE_MOTION;
@@ -113,7 +114,7 @@ function createHarness({ users, calm = true }) {
       tokens: { get: id => tokens.get(id), get placeables() { return [...tokens.values()]; } }
     },
     // `callAll` announces the drawn lines to the Diorama view; nothing here listens.
-    Hooks: { on: (name, fn) => hooks.set(name, [...(hooks.get(name) ?? []), fn]), callAll: () => {} },
+    Hooks: { on: (name, fn) => hooks.set(name, [...(hooks.get(name) ?? []), fn]), callAll: (name, payload) => announcements.push({ name, payload }) },
     requestAnimationFrame: fn => frames.push(fn),
     getActiveSceneCombat: () => combat,
     getActiveCombatant: c => c.combatant,
@@ -124,10 +125,14 @@ function createHarness({ users, calm = true }) {
     // constants.js namespaces onto the suite id, and the feature raises its own
     // settings hook; both are imports the sandbox supplies.
     SUITE_ID: "gluniverse-foundry-modules",
-    TARGETS_HOOKS: { settingsChanged: "gluniverse-foundry-modules.targets.settingsChanged" },
+    TARGETS_HOOKS: {
+      settingsChanged: "gluniverse-foundry-modules.targets.settingsChanged",
+      linesChanged: "gluniverse-foundry-modules.targets.linesChanged"
+    },
     CONST: { TOKEN_DISPOSITIONS: { FRIENDLY: 1, HOSTILE: -1 } },
     prefersCalmMotion: () => calm,
     onCanvasFrame: () => () => {},
+    Budget: { claimMotion: () => {} },
     createTimer: ({ duration = 0, delay = 0, onComplete }) => {
       const timer = {
         duration: delay + duration,
@@ -148,9 +153,11 @@ function createHarness({ users, calm = true }) {
   vm.runInContext([
     asScript(read("../scripts/features/stream/constants.js")),
     asScript(read("../scripts/features/stream/token-utils.js")),
+    // The line's own timings; renamed so they do not collide with the stream rig's old copy in constants.js.
+    asScript(read("../scripts/features/stream-targets/targeting/line-motion.js")).replace("const TARGET_LINE_MOTION", "const LINE_MOTION"),
     asScript(read("../scripts/features/stream-targets/targeting/target-lines.js")),
     "globalThis.controller = new TargetLineController();",
-    "globalThis.TARGET_LINE_MOTION = TARGET_LINE_MOTION;"
+    "globalThis.TARGET_LINE_MOTION = LINE_MOTION;"
   ].join("\n"), context);
 
   const controller = context.controller;
@@ -168,6 +175,7 @@ function createHarness({ users, calm = true }) {
     clock,
     log,
     rings,
+    announcements,
     motion: context.TARGET_LINE_MOTION,
     flush,
     emit,
@@ -265,7 +273,7 @@ const gmUser = (targets = []) => ({ id: "gm", active: true, isGM: true, characte
 const player = (id, targets = []) => ({ id, active: true, isGM: false, character: null, targets: new Set(targets) });
 const holdFor = (motion, calm) => (calm
   ? motion.calmFadeOutMs + motion.calmHandoffBeatMs
-  : Math.max(motion.retractMs, motion.reticleCollapseMs) + motion.handoffBeatMs);
+  : Math.max(motion.retractMs, motion.releaseMs) + motion.handoffBeatMs);
 
 test("a GM-controlled turn ignores the GM's carried targets until they target fresh", () => {
   const gm = gmUser();
@@ -718,13 +726,14 @@ function loadTargetLine() {
     }
   });
   vm.runInContext([
-    asScript(read("../scripts/features/stream/constants.js")),
+    asScript(read("../scripts/features/stream-targets/targeting/line-motion.js")),
     asScript(read("../scripts/features/stream-targets/targeting/target-geometry.js")),
     asScript(read("../scripts/features/stream-targets/targeting/target-line.js")),
     "globalThis.TargetLine = TargetLine;",
     "globalThis.OriginRing = OriginRing;",
     "globalThis.MOTION = TARGET_LINE_MOTION;",
     "globalThis.INK = INK;",
+    "globalThis.PAPER = PAPER;",
     "globalThis.HANDOFF_ALPHA = RETICLE_HANDOFF_ALPHA;"
   ].join("\n"), context);
   const container = { addChild: child => child };
@@ -734,9 +743,10 @@ function loadTargetLine() {
     OriginRing: context.OriginRing,
     motion: context.MOTION,
     INK: context.INK,
+    PAPER: context.PAPER,
     HANDOFF_ALPHA: context.HANDOFF_ALPHA,
     make: ({ calm = false, sourceId = "a", targetId = "b", color = 0x4db8ff } = {}) => new context.TargetLine({
-      sourceId, targetId, halo: container, core: container, glint: container, style: { color, intensity: 1 }, calm
+      sourceId, targetId, under: container, core: container, style: { color, intensity: 1 }, calm
     }),
     since: mark => animations.slice(mark),
     finish: list => Math.max(...list.map(animation => (animation.params.delay ?? 0) + animation.params.duration)),
@@ -852,13 +862,44 @@ test("both widened modes still obey enabled, the client switch and visibility", 
   assert.equal(h.leaving("pc>goblin"), true, "out of combat too");
 });
 
+test("the drawn set is announced when it changes, never on a sync that changed nothing", () => {
+  const gm = gmUser();
+  const seri = player("seri");
+  const h = createHarness({ users: [gm, seri] });
+  const pc = h.token("pc", [seri]);
+  const goblin = h.token("goblin");
+  h.start(pc);
+  h.target(seri, goblin);
+  h.flush();
+  const announced = () => h.announcements.filter(a => a.name === "gluniverse-foundry-modules.targets.linesChanged");
+  const before = announced().length;
+  const [pair, ...rest] = announced().at(-1).payload;
+  assert.equal(rest.length, 0);
+  assert.deepEqual(Object.keys(pair).sort(), ["color", "sourceId", "targetId"], "the payload Diorama and pf2e-odds read");
+  assert.equal(pair.sourceId, "pc");
+  assert.equal(pair.targetId, "goblin");
+  assert.equal(typeof pair.color, "number", "the line's own colour, as 0xRRGGBB");
+  // A token walking fires sightRefresh many times a second; the set has not moved.
+  for (let i = 0; i < 10; i++) {
+    h.emit("sightRefresh");
+    h.flush();
+  }
+  assert.equal(announced().length, before, "ten syncs, nothing new to say");
+  h.untarget(seri, goblin);
+  h.flush();
+  assert.deepEqual(JSON.parse(JSON.stringify(announced().at(-1).payload)), [], "the line going is announced");
+});
+
 test("TargetLine launches and collapses on the clock it reports", () => {
   const t = loadTargetLine();
   const motion = t.motion;
   const line = t.make();
   let mark = t.animations.length;
   line.show();
-  assert.equal(t.finish(t.since(mark)), motion.launchMs, "the reticle pop lands with the line");
+  const launch = t.since(mark);
+  assert.equal(t.finish(launch), motion.lockDelayMs + motion.lockMs, "the launch ends when the brackets lock");
+  assert.ok(motion.lockDelayMs + motion.lockMs >= motion.launchMs, "the brackets lock once the line has landed, not before");
+  assert.ok(launch.every(animation => !animation.params.loop), "a launched line starts no loop");
 
   Object.assign(line.state, { reach: 1, ringAlpha: 1, ringScale: 1 });
   mark = t.animations.length;
@@ -884,12 +925,11 @@ test("TargetLine launches and collapses on the clock it reports", () => {
   assert.equal(calm.beatMs, motion.calmHandoffBeatMs);
 });
 
-test("TargetLine retarget keeps the reticle at 45% with loops frozen, then relaunches from the new source", () => {
+test("TargetLine retarget keeps the brackets at 45%, then relaunches from the new source", () => {
   const t = loadTargetLine();
   const motion = t.motion;
   const line = t.make();
-  const loops = t.animations.filter(animation => animation.params.loop);
-  assert.equal(loops.length, 3, "sweep, spin and pulse");
+  assert.equal(t.animations.filter(animation => animation.params.loop).length, 0, "a line has no hold loops");
   line.show();
   Object.assign(line.state, { reach: 1, ringAlpha: 1, ringScale: 1 });
   assert.equal(line.canHandOff("b", "c"), true);
@@ -910,7 +950,6 @@ test("TargetLine retarget keeps the reticle at 45% with loops frozen, then relau
   assert.equal(t.last(retract, "headOut").duration, motion.headFadeOutMs);
   assert.equal(t.finish(retract), line.retractMs, "the retract fits the controller's wait");
   assert.ok(retract.every(animation => !animation.params.onComplete), "nothing removes a retargeted line");
-  assert.ok(loops.every(loop => loop.paused), "loops freeze through the hand-off");
   assert.equal(t.animations.some(animation => "sink" in animation.params || "rise" in animation.params), false,
     "origin rings belong to the controller, one per token");
 
@@ -920,7 +959,6 @@ test("TargetLine retarget keeps the reticle at 45% with loops frozen, then relau
   const relaunch = t.since(mark);
   assert.equal(line.sourceId, "c");
   assert.equal(line.state.headOut, 1);
-  assert.ok(loops.every(loop => !loop.paused), "loops resume on relaunch");
   assert.equal(t.last(relaunch, "reach").duration, motion.launchMs);
   assert.equal(t.last(relaunch, "ringAlpha").ringAlpha, 1);
   assert.equal(t.finish(relaunch), motion.launchMs);
@@ -991,27 +1029,26 @@ test("an origin ring sinks over the end of the retract, rises at the relaunch, a
   assert.equal(rise.graphics.ops.length, 0, "nothing once it has finished");
 });
 
-test("the Etched Bow draws device-pixel hairlines in the line's own colours", () => {
+test("the line draws device-pixel hairlines in its own colours, over ink, and only when its shape moves", () => {
   const t = loadTargetLine();
   const color = 0x4db8ff;
   const line = t.make({ color });
   line.show();
-  Object.assign(line.state, { reach: 1, body: 1, ringAlpha: 1, ringScale: 1, pulse: 0.5, sweep: 0.5, spin: 1 });
+  Object.assign(line.state, { reach: 1, body: 1, ringAlpha: 1, ringScale: 1 });
   const render = (scale, resolution) => line.render({
     source: token(50, 50), target: token(550, 50), scale, gridSize: 100, resolution
   });
   const strokes = graphics => graphics.ops.filter(op => op.op === "line" && op.width > 0);
-  const halo = line.haloGraphics;
+  const under = line.underGraphics;
   const core = line.coreGraphics;
-  const glint = line.glintGraphics;
   const headDrawn = () => core.ops.some(op => op.op === "fill" && op.color === color);
 
-  render(2, 1.5);
+  assert.equal(render(2, 1.5), true, "a first render draws");
   const hairline = 1 / (2 * 1.5);
   assert.ok(Math.abs(Math.min(...strokes(core).map(op => op.width)) - hairline) < 1e-9, "hairline is one device pixel");
-  assert.ok(Math.min(...strokes(halo).map(op => op.width)) > 4 * hairline, "no hairlines inside the blurred halo");
-  const allowed = new Set([color, line.bright, t.INK, 0xffffff]);
-  for (const graphics of [halo, core, glint]) {
+  assert.ok(Math.min(...strokes(under).map(op => op.width)) > 4 * hairline, "the soft bed holds no hairline");
+  const allowed = new Set([color, line.bright, t.INK]);
+  for (const graphics of [under, core]) {
     for (const op of graphics.ops) {
       if ((op.op === "line" && op.width > 0) || op.op === "fill") {
         assert.ok(allowed.has(op.color), `unexpected colour #${op.color.toString(16)}`);
@@ -1021,19 +1058,24 @@ test("the Etched Bow draws device-pixel hairlines in the line's own colours", ()
       }
     }
   }
-  assert.equal(glint.blendMode, 1, "the sweep adds light");
-  assert.notEqual(core.blendMode, 1, "the etched rim must not be additive, or INK draws nothing");
-  assert.ok(strokes(glint).length > 0, "the light sweep runs while the line holds");
+  assert.ok(strokes(core).some(op => op.color === t.INK), "an ink rim runs under the colour, so the line reads on a pale map");
+  assert.notEqual(core.blendMode, 1, "the ink rim must not be additive, or INK draws nothing");
   assert.ok(headDrawn(), "the head wedge is drawn");
+  // Four L-shaped brackets lock on the target: corners, not a ring.
+  const corners = core.ops.filter((op, i) => op.op === "lineTo" && core.ops[i + 1]?.op === "lineTo" && core.ops[i - 1]?.op === "moveTo");
+  assert.ok(corners.length >= 4, "the target carries four corner brackets");
+  assert.equal(core.ops.some(op => op.op === "arc"), false, "no spinning arc marks");
+
+  // The body tapers out of the source: its colour band is narrower at the start than at the end.
+  const band = strokes(core).filter(op => op.color === color).map(op => op.width);
+  assert.ok(band[0] < band.at(-1), "the body leaves the source thin and arrives at full width");
+
+  assert.equal(render(2, 1.5), false, "a held line whose tokens are still redraws nothing");
 
   const path = line.path;
   render(0.5, 1);
   assert.equal(line.path, path, "the path buffer is reused every frame");
   assert.ok(Math.abs(Math.min(...strokes(core).map(op => op.width)) - 2) < 1e-9, "hairline follows zoom and resolution");
-
-  line.state.reach = 0.5;
-  render(1, 1);
-  assert.equal(strokes(glint).length, 0, "no sweep on a body that is moving");
 
   // Retracting: the head goes in the first moments of the retract, long before the body does.
   line.hide();
@@ -1041,9 +1083,24 @@ test("the Etched Bow draws device-pixel hairlines in the line's own colours", ()
   render(1, 1);
   assert.equal(headDrawn(), false, "no head on a retracting line that still has most of its reach");
 
-  const calm = t.make({ calm: true, color });
-  calm.show();
-  Object.assign(calm.state, { reach: 1, body: 1, ringAlpha: 1, ringScale: 1, sweep: 0.5 });
-  calm.render({ source: token(50, 50), target: token(550, 50), scale: 1, gridSize: 100, resolution: 1 });
-  assert.equal(strokes(calm.glintGraphics).length, 0, "calm motion has no sweep");
+  // A self-target draws only the brackets.
+  const self = t.make({ color, sourceId: "a", targetId: "a" });
+  self.show();
+  Object.assign(self.state, { reach: 1, body: 1, ringAlpha: 1, ringScale: 1 });
+  self.render({ source: token(50, 50), target: token(50, 50), scale: 1, gridSize: 100, resolution: 1 });
+  assert.equal(self.coreGraphics.ops.some(op => op.op === "fill" && op.color === color), false, "no head on a self-target");
+  assert.ok(strokes(self.coreGraphics).length > 0, "but the brackets are there");
+});
+
+test("a style that has not changed does not force a redraw", () => {
+  const t = loadTargetLine();
+  const line = t.make({ color: 0x4db8ff });
+  line.show();
+  Object.assign(line.state, { reach: 1, body: 1, ringAlpha: 1, ringScale: 1 });
+  const args = { source: token(50, 50), target: token(550, 50), scale: 1, gridSize: 100, resolution: 1 };
+  line.render(args);
+  line.setStyle({ color: 0x4db8ff, intensity: 1 });
+  assert.equal(line.render(args), false, "every sync re-sends the style; an identical one is free");
+  line.setStyle({ color: 0xff4a5c, intensity: 1 });
+  assert.equal(line.render(args), true, "a new relationship colour redraws");
 });

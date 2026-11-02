@@ -1,28 +1,40 @@
 /**
- * Drawing a badge model — the d20 strip (design variant C).
+ * Drawing a badge model: the tag that rides the targeting line, the plate that
+ * opens beside it, the inline readout on a sheet button and the mark on a
+ * landed die.
  *
  * Pure: no `game`, no `canvas`. Markup is built as strings (escaped) and
  * updated in place with plain DOM calls, so the preview page drives the very
- * same code the line badge, the sheet, the roll dialog and the save prompt do.
- * A preview built on a second copy flatters whichever copy was touched last.
+ * same code the line, the sheet, the roll dialog and the save prompt do. A
+ * preview built on a second copy flatters whichever copy was touched last.
  *
  * Text arrives through `t(key)`, an i18n function the caller supplies. Keys
  * are passed through it; anything that is not a key (a weapon name) comes back
  * from Foundry's localize unchanged.
+ *
+ * ## The die, as a skyline
+ *
+ * Twenty bars, one per d20 face, and a bar's HEIGHT is the degree that face
+ * lands on: a critical stands tallest, a success below it, a failure low and a
+ * critical failure a stub. Colour says the same thing again (amber, paper,
+ * steel, red), so the strip reads without hue, on a stream's compressed video
+ * and to a colour-blind player alike. A face whose degree is still uncertain
+ * is drawn solid to the lower degree and hatched up to the higher; with
+ * nothing known every face is a faint hatch at full height.
  *
  * ## The beats
  *
  * `updateBadge` diffs the previous model against the next one instead of
  * re-rendering, because the two things worth watching are changes:
  *
- *   • NARROW — pips that were uncertain become certain. They resolve one at a
+ *   • NARROW: faces that were uncertain become certain. They resolve one at a
  *     time, staggered outward from the boundary that moved, and the headline
  *     counts from the old range to the new.
- *   • COLLAPSE — the range closes to exact. The resolve sweeps the whole strip
- *     and the plate takes a short amber rim.
+ *   • COLLAPSE: the range closes to exact. The plate's rule draws across in
+ *     amber once.
  *
  * Every duration is a token in CSS; the stagger is TIMING.pipStagger scaled by
- * the motion scale, set as a custom property per pip.
+ * the motion scale, set as a custom property per bar.
  */
 
 import { escapeHTML } from "../../core/util.mjs";
@@ -42,19 +54,21 @@ function headlineParts(text) {
 }
 
 export function headlineHTML(model) {
-  if (!model || model.state === "unknown") return `<span class="glod-pct glod-pct--unknown">???</span>`;
+  if (!model || model.state === "unknown") return `<span class="glod-pct glod-pct--unknown">?</span>`;
   const p = headlineParts(model.headline);
-  if (!p) return `<span class="glod-pct glod-pct--unknown">???</span>`;
+  if (!p) return `<span class="glod-pct glod-pct--unknown">?</span>`;
   return p.b == null
     ? `<span class="glod-pct"><span class="glod-pct-n">${escapeHTML(p.a)}</span><small>%</small></span>`
-    : `<span class="glod-pct"><span class="glod-pct-n">${escapeHTML(p.a)}</span><small>–</small><span class="glod-pct-n">${escapeHTML(p.b)}</span><small>%</small></span>`;
+    : `<span class="glod-pct"><span class="glod-pct-n">${escapeHTML(p.a)}</span><small class="glod-pct-to">–</small><span class="glod-pct-n">${escapeHTML(p.b)}</span><small>%</small></span>`;
 }
 
-/** One pip's attributes: a certain degree, or the two it could still be. */
+/** One bar's attributes: a certain degree, or the two it could still be. */
 function pipAttrs(face, unknown) {
   if (unknown) return `data-u="x"`;
   if (face.certain) return `data-d="${DEGREE[face.lo]}"`;
-  return `data-u="${DEGREE[face.lo]}-${DEGREE[face.hi]}" style="--glod-lo:var(--glod-${DEGREE[face.lo]});--glod-hi:var(--glod-${DEGREE[face.hi]})"`;
+  const lo = DEGREE[face.lo];
+  const hi = DEGREE[face.hi];
+  return `data-u="${lo}-${hi}" style="--glod-lo:var(--glod-${lo});--glod-hi:var(--glod-${hi});--glod-lo-h:var(--glod-h-${lo});--glod-hi-h:var(--glod-h-${hi})"`;
 }
 
 export function stripHTML(model, { numbers = true } = {}) {
@@ -65,87 +79,99 @@ export function stripHTML(model, { numbers = true } = {}) {
     const f = faces[i] ?? { lo: 0, hi: 3, certain: false };
     pips.push(`<i class="glod-pip" data-face="${i + 1}" ${pipAttrs(f, unknown)}></i>`);
   }
+  // Only the faces a reader counts from: 1, every fifth, and 20.
   const nums = numbers
-    ? `<div class="glod-faces" aria-hidden="true">${Array.from({ length: PIP_COUNT }, (_, i) => `<span>${i + 1}</span>`).join("")}</div>`
+    ? `<div class="glod-faces" aria-hidden="true">${Array.from({ length: PIP_COUNT }, (_, i) => `<span>${i === 0 || (i + 1) % 5 === 0 ? i + 1 : ""}</span>`).join("")}</div>`
     : "";
   return `<div class="glod-strip" role="img">${pips.join("")}</div>${nums}`;
 }
 
 function chipText(chip, t) {
   const label = t(chip.label);
-  if (chip.key === "flat") return `${label} · ${t("GLOD.word.dc")} ${chip.flatDc} · ${Math.round((chip.chance ?? 0) * 100)}%`;
-  if (chip.key === "fixed") return `${label} ${chip.value}`;
-  if (chip.value == null) return label;
-  const v = chip.value > 0 ? `+${chip.value}` : `−${Math.abs(chip.value)}`;
-  return `${label} ${v}`;
+  if (chip.key === "flat") return { label, value: `${t("GLOD.word.dc")} ${chip.flatDc} · ${Math.round((chip.chance ?? 0) * 100)}%` };
+  if (chip.key === "fixed") return { label, value: String(chip.value) };
+  if (chip.value == null) return { label, value: "" };
+  return { label, value: chip.value > 0 ? `+${chip.value}` : `−${Math.abs(chip.value)}` };
 }
 
 export function chipsHTML(model, t = ident) {
   const chips = model?.chips ?? [];
   if (!chips.length) return "";
   return `<div class="glod-chips">${chips
-    .map(
-      (c) =>
-        `<span class="glod-chip" data-tone="${escapeHTML(c.tone)}">${escapeHTML(chipText(c, t))}</span>`
-    )
+    .map((c) => {
+      const { label, value } = chipText(c, t);
+      return `<span class="glod-chip" data-tone="${escapeHTML(c.tone)}">${escapeHTML(label)}${value ? `<b>${escapeHTML(value)}</b>` : ""}</span>`;
+    })
     .join("")}</div>`;
+}
+
+/** The word for what the headline is the chance of. */
+export function chanceWord(model) {
+  if (model?.invert) return "GLOD.word.theyFail";
+  return model?.stamps === "check" ? "GLOD.word.success" : "GLOD.word.hit";
 }
 
 function degreeLine(model, t) {
   if (!model || model.state === "unknown") return `<span class="glod-deg glod-deg--unknown">${escapeHTML(t(model?.side === "mod" ? "GLOD.unseen.attack" : "GLOD.unseen.defence"))}</span>`;
   // Inverted (a save against the viewer's own spell): the headline is the
   // target doing WORSE than a success, and the second figure its critical failure.
-  const words = model.invert ? ["GLOD.word.theyFail", "GLOD.word.critFail"] : model.stamps === "check" ? ["GLOD.word.success", "GLOD.word.crit"] : ["GLOD.word.hit", "GLOD.word.crit"];
-  return `<span class="glod-deg"><b>${escapeHTML(t(words[0]))}</b><em>${escapeHTML(t(words[1]))} ${escapeHTML(model.crit ?? "")}</em></span>`;
+  const crit = model.invert ? "GLOD.word.critFail" : "GLOD.word.crit";
+  return `<span class="glod-deg"><b>${escapeHTML(t(chanceWord(model)))}</b><em>${escapeHTML(t(crit))} <span>${escapeHTML(model.crit ?? "")}</span></em></span>`;
 }
 
-/** The defence being rolled against: its label over its value, at the ribbon's right end. */
+/** The defence being rolled against: its label over its value, at the plate's right. */
 function dcHTML(model, t) {
   if (!model?.dcText || model.state === "unknown") return "";
   return `<span class="glod-dc"><small>${escapeHTML(t(model.dcLabel ?? "GLOD.word.dc"))}</small>${escapeHTML(model.dcText)}</span>`;
 }
 
-/** The ribbon's working line: headline, degree words, defence. */
+/** The plate's working row: headline, degree words, defence. */
 const rowHTML = (model, t) => headlineHTML(model) + degreeLine(model, t) + dcHTML(model, t);
 
 function gmHTML(model, t) {
   const gm = model?.gm;
   if (!gm) return "";
   const truth = gm.truth ? `${Math.round(gm.truth.lo * 100)}%` : "—";
-  const theirs = !gm.players ? "???" : gm.playersExact ? t("GLOD.gm.exact") : `${Math.round(gm.players.lo * 100)}–${Math.round(gm.players.hi * 100)}%`;
+  const theirs = !gm.players ? "?" : gm.playersExact ? t("GLOD.gm.exact") : `${Math.round(gm.players.lo * 100)}–${Math.round(gm.players.hi * 100)}%`;
   const flags = [gm.lie ? t("GLOD.gm.lie") : null, gm.contradiction ? t("GLOD.gm.reset") : null].filter(Boolean);
-  return `<div class="glod-gm"><span>${escapeHTML(t("GLOD.gm.true"))} ${escapeHTML(truth)}</span><span>${escapeHTML(t("GLOD.gm.players"))} ${escapeHTML(theirs)}</span>${flags
+  return `<div class="glod-gm"><span>${escapeHTML(t("GLOD.gm.true"))} <b>${escapeHTML(truth)}</b></span><span>${escapeHTML(t("GLOD.gm.players"))} <b>${escapeHTML(theirs)}</b></span>${flags
     .map((f) => `<span class="glod-gm-flag">${escapeHTML(f)}</span>`)
     .join("")}</div>`;
 }
 
-/** The plate's heading: action · attack ordinal ›› target. */
+/** The plate's heading: the action, its attack ordinal, and who it is against. */
 function headHTML(model, t, target) {
-  const title = [t(model.label), model.sub ? t(model.sub) : ""].filter(Boolean).join(" · ");
-  return `<div class="glod-head"><span class="glod-title">${escapeHTML(title)}</span>${target ? `<span class="glod-arrow" aria-hidden="true">››</span><span class="glod-target">${escapeHTML(target)}</span>` : ""}</div>`;
+  const sub = model.sub ? `<span class="glod-ord">${escapeHTML(t(model.sub))}</span>` : "";
+  const against = target ? `<span class="glod-target"><i>${escapeHTML(t("GLOD.word.vs"))}</i> ${escapeHTML(target)}</span>` : "";
+  return `<div class="glod-head"><span class="glod-title">${escapeHTML(t(model.label))}</span>${sub}${against}</div>`;
 }
 
 /**
- * The full plate: a ribbon. Heading, then the headline beside its degree
- * words and defence, then the full-width strip; chips and the GM line only
- * take a row when they exist. The strip carries no face numbers here.
+ * The plate. Heading, then the headline beside its degree words and the
+ * defence, then the die as a skyline; chips and the GM line only take a row
+ * when they exist.
  * @param {object} model   view-model.mjs `buildModel` output
- * @param {{t?: Function, target?: string, gm?: boolean}} [opts]
+ * @param {{t?: Function, target?: string, gm?: boolean, numbers?: boolean}} [opts]
  */
-export function badgeHTML(model, { t = ident, target = "", gm = true } = {}) {
+export function badgeHTML(model, { t = ident, target = "", gm = true, numbers = false } = {}) {
   if (!model) return "";
   if (model.state === "oor") {
-    return `<div class="glod-badge gl-type" data-state="oor"><div class="glod-head">${escapeHTML(t(model.label))}</div><div class="glod-oor">${escapeHTML(t("GLOD.outOfRange"))}</div></div>`;
+    return `<div class="glod-badge gl-type" data-state="oor"><div class="glod-head"><span class="glod-title">${escapeHTML(t(model.label))}</span></div><div class="glod-oor">${escapeHTML(t("GLOD.outOfRange"))}</div></div>`;
   }
   const head = headHTML(model, t, target);
-  return `<div class="glod-badge gl-type" data-state="${model.state}" data-stamps="${model.stamps}">${head}<div class="glod-row">${rowHTML(model, t)}</div>${stripHTML(model, { numbers: false })}${chipsHTML(model, t)}${gm ? gmHTML(model, t) : ""}<div class="glod-stamp" aria-live="polite"></div></div>`;
+  return `<div class="glod-badge gl-type" data-state="${model.state}" data-stamps="${model.stamps}">${head}<div class="glod-row">${rowHTML(model, t)}</div>${stripHTML(model, { numbers })}${chipsHTML(model, t)}${gm ? gmHTML(model, t) : ""}<div class="glod-stamp" aria-live="polite"></div></div>`;
 }
 
-/** The collapsed tag a line wears off its roller's turn. */
-export function compactHTML(model) {
+/**
+ * The tag that sits on the line itself: the chance and the word for what it
+ * is the chance of, so a red line ending at a player reads as "the ogre's
+ * chance to hit you" rather than as a bare number.
+ */
+export function compactHTML(model, { t = ident } = {}) {
   if (!model) return "";
-  const text = model.state === "oor" ? "—" : model.headline ?? "???";
-  return `<div class="glod-tag gl-type" data-state="${model.state}">${escapeHTML(text)}</div>`;
+  if (model.state === "oor") return `<div class="glod-tag gl-type" data-state="oor"><span class="glod-tag-n">—</span><span class="glod-tag-w">${escapeHTML(t("GLOD.outOfRange"))}</span></div>`;
+  const text = model.state === "unknown" ? "?" : model.headline ?? "?";
+  return `<div class="glod-tag gl-type" data-state="${model.state}"><span class="glod-tag-n">${escapeHTML(text)}</span><span class="glod-tag-w">${escapeHTML(t(chanceWord(model)))}</span></div>`;
 }
 
 /** A sheet button's inline readout: the number and a bar under it. */
@@ -153,13 +179,13 @@ export function inlineHTML(model) {
   if (!model || model.state === "oor") return "";
   const lo = model.odds?.headline?.lo ?? 0;
   const hi = model.odds?.headline?.hi ?? 0;
-  const text = model.state === "unknown" ? "???" : model.headline;
+  const text = model.state === "unknown" ? "?" : model.headline;
   return `<span class="glod-inline gl-type" data-state="${model.state}" style="--glod-lo-p:${Math.round(lo * 100)}%;--glod-hi-p:${Math.round(hi * 100)}%"><span class="glod-inline-n">${escapeHTML(text)}</span><span class="glod-inline-bar"></span></span>`;
 }
 
 /**
- * The ring and stamp drawn over a landed Dice So Nice d20. Positioned by the
- * caller through --glod-die-x/-y/-r; this is only the mark.
+ * The mark drawn over a landed Dice So Nice d20. Positioned by the caller
+ * through --glod-die-x/-y/-r; this is only the mark.
  * @param {{degree: number, stamps?: "attack"|"check"}} landing
  */
 export function diceHTML(landing, { t = ident } = {}) {
@@ -173,14 +199,25 @@ export function diceHTML(landing, { t = ident } = {}) {
 
 const pipKey = (p) => p.getAttribute("data-d") ?? `u:${p.getAttribute("data-u")}`;
 
+/** Whether two models would draw the same plate: the redraw on a refresh that changed nothing is skipped. */
+export function sameModel(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Update a mounted `.glod-badge` to a new model, playing the narrowing beat
- * where pips resolve. Falls back to a re-render when the badge's shape changed.
+ * where bars resolve. Falls back to a re-render when the badge's shape changed.
  *
  * @param {HTMLElement} el     the `.glod-badge`
  * @param {object} prev        the model it was drawn from
  * @param {object} next
- * @param {{t?: Function, target?: string, motion?: number, gm?: boolean}} [opts]
+ * @param {{t?: Function, target?: string, motion?: number, gm?: boolean, numbers?: boolean}} [opts]
  */
 export function updateBadge(el, prev, next, opts = {}) {
   const t = opts.t ?? ident;
@@ -204,7 +241,7 @@ export function updateBadge(el, prev, next, opts = {}) {
     if (scale > 0 && fromNums.length && to.length) countUp(to, fromNums, TIMING.count * scale);
   }
 
-  // Pips: diff and stagger the ones that changed outward from the moved edge.
+  // Bars: diff and stagger the ones that changed outward from the moved edge.
   const nextHtml = document.createElement("div");
   nextHtml.innerHTML = stripHTML(next, { numbers: false });
   const fresh = [...nextHtml.querySelectorAll(".glod-pip")];
@@ -213,7 +250,6 @@ export function updateBadge(el, prev, next, opts = {}) {
   pips.forEach((p, i) => {
     if (fresh[i] && pipKey(p) !== pipKey(fresh[i])) moved.push(i);
   });
-  const resolving = prev.state !== "exact" && next.state !== prev.state || moved.length;
   if (moved.length) {
     const centre = moved.reduce((a, b) => a + b, 0) / moved.length;
     const order = [...moved].sort((a, b) => Math.abs(a - centre) - Math.abs(b - centre));
@@ -232,7 +268,7 @@ export function updateBadge(el, prev, next, opts = {}) {
       }
     });
   }
-  if (resolving && next.state === "exact" && prev.state !== "exact" && scale > 0) {
+  if (next.state === "exact" && prev.state !== "exact" && scale > 0) {
     el.classList.remove("is-collapsing");
     void el.offsetWidth;
     el.classList.add("is-collapsing");
@@ -268,9 +304,8 @@ function countUp(nodes, from, ms) {
 }
 
 /**
- * The landing beat: the face that came up pulses, and the plate shows the
- * degree stamp for TIMING.stampHold. (PR 2 wires it to Dice So Nice; the
- * chat card already carries the face.)
+ * The landing beat: the face that came up rises out of the skyline, and the
+ * plate shows the degree stamp for TIMING.stampHold.
  */
 export function playLanding(el, { face, degree, stamps = "attack", t = ident, motion = 1 }) {
   if (!el) return;
@@ -285,6 +320,23 @@ export function playLanding(el, { face, degree, stamps = "attack", t = ident, mo
   const keys = DEGREE_STAMP[stamps] ?? DEGREE_STAMP.attack;
   stamp.textContent = t(keys[degree]);
   stamp.dataset.d = DEGREE[degree];
+  el.classList.add("is-stamped");
+  clearTimeout(el._glodStamp);
+  el._glodStamp = setTimeout(() => el.classList.remove("is-stamped"), Math.max(400, TIMING.stampHold * (motion || 1)));
+}
+
+/**
+ * The landing on the line's tag, for a line whose plate is closed: the tag
+ * takes the degree's colour and word for the same hold. The tag is what the
+ * table is looking at off-turn, so a roll that lands there should say so.
+ */
+export function playTagLanding(el, { degree, stamps = "attack", t = ident, motion = 1 }) {
+  if (!el || !Number.isInteger(degree)) return;
+  const keys = DEGREE_STAMP[stamps] ?? DEGREE_STAMP.attack;
+  el.dataset.d = DEGREE[degree];
+  el.dataset.word = t(keys[degree]);
+  el.classList.remove("is-stamped");
+  void el.offsetWidth;
   el.classList.add("is-stamped");
   clearTimeout(el._glodStamp);
   el._glodStamp = setTimeout(() => el.classList.remove("is-stamped"), Math.max(400, TIMING.stampHold * (motion || 1)));

@@ -1,37 +1,39 @@
 /**
- * The odds badge on the targeting line.
+ * The odds on the targeting line.
  *
- * ## Where a badge appears
+ * ## Where they appear
  *
  * Exactly where a targeting line does. With `stream-targets` on, its
- * controller announces the lines it draws (`TARGETS_HOOKS.linesChanged`) and a
- * badge is hung on each — so a badge never names a token that client cannot
- * see, because the line already refused to. With the line feature off, the
- * badge falls back to the honest minimum: the user's own token to their own
- * targets (and, for the GM in combat, the acting combatant to the GM's).
+ * controller announces the lines it draws (`TARGETS_HOOKS.linesChanged`) and
+ * the odds hang on each, so they never name a token that client cannot see,
+ * because the line already refused to. With the line feature off, they fall
+ * back to the honest minimum: the user's own token to their own targets (and,
+ * for the GM in combat, the acting combatant to the GM's).
  *
- * ## What it is
+ * ## The tag and the plate
  *
- * DOM, not PIXI. Text at 9–34px with tabular figures, hatching and chips is
- * what the DOM is good at and a canvas is not, and the suite's tokens apply
- * as-is. It sits in one fixed layer above the board and is moved on the
- * canvas ticker to follow the target token through pans and zooms; nothing in
- * it animates per frame except its position.
+ * Every line carries a TAG: the chance and the word for what it is the chance
+ * of, sitting on the line itself a little short of the head, with a rule in
+ * the line's own colour. The path is `stream-targets`' own geometry for the
+ * same two tokens (line-place.mjs), so the tag is on the line the canvas
+ * draws. A table full of lines stays a row of small figures.
  *
- * ## Full and compact
+ * The PLATE (the skyline, the chips, the GM's line) opens off the tag on the
+ * bow side of the arc only while it matters: on its roller's turn, while
+ * either token or the tag is hovered, and out of combat (where there are few
+ * lines and no turns). Under load it is shed back to the tag.
  *
- * A table full of lines would be a wall of plates, so a badge is the full
- * strip only while it matters — on its roller's turn, while either token or
- * the badge is hovered, and out of combat (where there are few lines and no
- * turns) — and the compact `60%` tag otherwise (Q21).
+ * DOM, not PIXI: tabular figures, hatching and chips are what the DOM is good
+ * at. One fixed layer above the board, moved on the canvas ticker; a frame
+ * whose camera, tokens and sizes are all where they were writes nothing.
  *
  * ## Holding through a roll
  *
- * A roll changes what a badge would say — a narrowed AC, a used reaction, an
- * item consumed — and a number that moves while the die is still in the air
+ * A roll changes what the odds would say (a narrowed AC, a used reaction, an
+ * item consumed) and a number that moves while the die is still in the air
  * reads as the badge rolling the dice. So from the moment a check is posted
  * until it has landed (dice-highlight.mjs `release`, after the stamp), every
- * badge naming its roller or its target holds the numbers it had. Recomputes
+ * line naming its roller or its target holds the numbers it had. Recomputes
  * still happen; they wait in `view.pending` and are drawn on release.
  */
 
@@ -39,18 +41,19 @@ import { Budget } from "../../core/budget.mjs";
 import { SUITE_ID, warn } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
 import { motionScale } from "../../core/theme.mjs";
+import { createPath } from "../stream-targets/targeting/target-geometry.js";
 import { TARGETS_HOOKS } from "../stream-targets/settings.js";
 import { TARGETS_FEATURE_ID } from "../stream/constants.js";
 import { FEATURE_ID, SETTINGS, SHED_ORDER, TIMING } from "./constants.mjs";
-import { badgeHTML, compactHTML, playLanding, updateBadge } from "./render.mjs";
+import { lineCss, linePath, placeLines, straightAnchor, tagAnchor } from "./line-place.mjs";
+import { badgeHTML, compactHTML, playLanding, playTagLanding, sameModel, updateBadge } from "./render.mjs";
 import { get } from "./settings.mjs";
 import { onTrackerChange } from "./tracker.mjs";
 import { modelFor, nameFor } from "./view.mjs";
 
 const L = (key) => {
   if (typeof key !== "string" || !key) return "";
-  const s = game.i18n.localize(key);
-  return s;
+  return game.i18n.localize(key);
 };
 
 const tokenById = (id) => canvas?.tokens?.get(id) ?? null;
@@ -63,8 +66,15 @@ function dioramaAnchor(tokenId) {
   try { return game.modules.get(SUITE_ID)?.api?.features?.diorama?.tokenAnchor?.(tokenId) ?? null; } catch { return null; }
 }
 
+/** One element from a markup string. */
+function fromHTML(html) {
+  const host = document.createElement("div");
+  host.innerHTML = html;
+  return host.firstElementChild;
+}
+
 export class LineBadges {
-  /** pairKey → { sourceId, targetId, el, model, full, seq } */
+  /** pairKey → { sourceId, targetId, el, tag, plate, model, full, color, path, tagBox, plateBox, at } */
   views = new Map();
   layer = null;
   hovered = new Set();
@@ -73,6 +83,9 @@ export class LineBadges {
   #tick = null;
   #timer = null;
   #seq = 0;
+  /** The numbers the last placement was made from; an unchanged frame writes nothing. */
+  #sig = [];
+  #nextSig = [];
   /** messageId → { actors: Set<actorId>, timer } — rolls in flight. */
   #holds = new Map();
 
@@ -94,13 +107,18 @@ export class LineBadges {
       else this.hovered.delete(id);
       this.#applySizes();
     });
+    // A token deleted while hovered never sends its hover-out; left in the set
+    // it would hold every plate on its lines open for the rest of the scene.
+    Hooks.on("deleteToken", (doc) => {
+      if (doc?.id && this.hovered.delete(doc.id)) this.#applySizes();
+    });
     for (const hook of ["combatTurnChange", "combatStart", "deleteCombat", "controlToken"]) Hooks.on(hook, () => this.refresh());
     onTrackerChange(() => this.refresh());
     if (canvas?.ready) this.#mount();
     this.refresh();
   }
 
-  /** Debounced: recompute every badge's model and redraw. */
+  /** Debounced: recompute every line's model and redraw what changed. */
   refresh() {
     clearTimeout(this.#timer);
     this.#timer = setTimeout(() => this.#sync().catch((e) => warn("pf2e-odds | badge sync failed", e)), TIMING.debounce);
@@ -118,9 +136,10 @@ export class LineBadges {
     }
   }
 
-  /** The pairs this client should badge. */
+  /** The pairs this client should price. */
   #pairs() {
-    if (this.#linesOn()) return this.linePairs ?? [];
+    // A token targeting itself draws its brackets and nothing to price.
+    if (this.#linesOn()) return (this.linePairs ?? []).filter((p) => p.sourceId !== p.targetId);
     const out = [];
     const targets = [...(game.user?.targets ?? [])];
     if (!targets.length) return out;
@@ -129,7 +148,7 @@ export class LineBadges {
     const acting = combat && game.user.isGM ? canvas.tokens?.get(combat.combatant?.tokenId) : null;
     const source = acting ?? own;
     if (!source) return out;
-    for (const t of targets) if (t.id !== source.id) out.push({ sourceId: source.document.id, targetId: t.document.id });
+    for (const t of targets) if (t.id !== source.id) out.push({ sourceId: source.document.id, targetId: t.document.id, color: null });
     return out;
   }
 
@@ -175,35 +194,63 @@ export class LineBadges {
       if (view) this.#drop(key, view);
       return;
     }
+    const color = lineCss(pair.color);
     const opts = { t: L, target: nameFor(target, target.actor), motion: this.#motion() };
     if (!view) {
       const el = document.createElement("div");
       el.className = "glod-line";
       el.dataset.pair = key;
-      el.innerHTML = badgeHTML(model, opts) + compactHTML(model);
-      this.#bind(el, pair);
+      el.innerHTML = compactHTML(model, { t: L }) + badgeHTML(model, opts);
+      this.#bind(el, key);
       this.layer.append(el);
-      view = { ...pair, el, model, full: null };
+      view = { ...pair, el, model, target: opts.target, full: null, color: null, path: createPath(), tagBox: null, plateBox: null, at: [] };
       this.views.set(key, view);
+      this.#paint(view, color);
       return;
     }
+    this.#paint(view, color);
+    // A refresh that changed nothing draws nothing: no rebuilt tag, no replayed beat.
+    if (sameModel(view.model, model) && view.target === opts.target) return;
     const plate = view.el.querySelector(".glod-badge");
     if (plate && this.ladder?.allows("narrowBeat") !== false) updateBadge(plate, view.model, model, opts);
     else if (plate) plate.outerHTML = badgeHTML(model, opts);
+    // The tag keeps its element, so a landing stamp in progress on it survives.
     const tag = view.el.querySelector(".glod-tag");
-    if (tag) tag.outerHTML = compactHTML(model);
+    const fresh = fromHTML(compactHTML(model, { t: L }));
+    if (tag && fresh) {
+      tag.dataset.state = fresh.dataset.state;
+      tag.innerHTML = fresh.innerHTML;
+    }
     view.model = model;
-    view.box = null;
+    view.target = opts.target;
+    view.tagBox = null;
+    view.plateBox = null;
   }
 
-  #bind(el, pair) {
+  /** The tag's rule in the line's own colour; paper with no line behind it. */
+  #paint(view, color) {
+    if (color === view.color) return;
+    view.color = color;
+    if (color) view.el.style.setProperty("--glod-line", color);
+    else view.el.style.removeProperty("--glod-line");
+  }
+
+  #bind(el, key) {
+    // Leaving waits a beat: the pointer crosses the gap between the tag and
+    // the plate on its way from one to the other, and an instant close would
+    // take the plate away before it arrives.
+    let leave = null;
     el.addEventListener("pointerenter", () => {
-      this.hovered.add(`badge:${pair.sourceId}>${pair.targetId}`);
+      clearTimeout(leave);
+      this.hovered.add(`badge:${key}`);
       this.#applySizes();
     });
     el.addEventListener("pointerleave", () => {
-      this.hovered.delete(`badge:${pair.sourceId}>${pair.targetId}`);
-      this.#applySizes();
+      clearTimeout(leave);
+      leave = setTimeout(() => {
+        this.hovered.delete(`badge:${key}`);
+        this.#applySizes();
+      }, TIMING.debounce);
     });
   }
 
@@ -217,7 +264,7 @@ export class LineBadges {
   }
 
   /**
-   * A check was posted: hold every badge naming its roller or its target until
+   * A check was posted: hold every line naming its roller or its target until
    * `release`. Returns whether anything is held, so the landing knows to wait
    * for the die even when it has no beat of its own to play.
    */
@@ -251,7 +298,7 @@ export class LineBadges {
     }, Math.max(0, delay));
   }
 
-  /** Full or compact, per Q21; and shed to compact under load. */
+  /** Plate or tag alone; and shed to the tag under load. */
   #applySizes() {
     const combat = game.combat?.started ? game.combat : null;
     const actingToken = combat?.combatant?.tokenId ?? null;
@@ -261,14 +308,18 @@ export class LineBadges {
       const hovered = this.hovered.has(view.sourceId) || this.hovered.has(view.targetId) || this.hovered.has(`badge:${key}`);
       const turn = !combat || actingToken === view.sourceId;
       const full = hovered || (turn && !shedExpanded);
+      view.acting = !!combat && actingToken === view.sourceId;
+      view.hot = hovered;
       if (full !== view.full) {
         view.full = full;
         view.el.classList.toggle("is-full", full);
         view.el.classList.toggle("is-compact", !full);
-        view.box = null;
+        view.el.style.zIndex = full ? "2" : "";
+        view.plateBox = null;
       }
       view.el.classList.toggle("is-flat", shedGlass);
     }
+    this.#sig.length = 0;
   }
 
   #motion() {
@@ -279,7 +330,7 @@ export class LineBadges {
     }
   }
 
-  /* ── following the token ─────────────────────────────────────────────── */
+  /* ── following the line ──────────────────────────────────────────────── */
 
   #listen() {
     const ticker = canvas?.app?.ticker;
@@ -291,49 +342,124 @@ export class LineBadges {
       ticker.remove(this.#tick);
       this.#tick = null;
     }
+    this.#sig.length = 0;
     this.#position();
   }
 
-  #position() {
-    const view = canvas?.app?.view;
-    const stage = canvas?.stage;
-    if (!view || !stage) return;
-    const rect = view.getBoundingClientRect?.() ?? { left: 0, top: 0, width: innerWidth, height: innerHeight };
-    const wt = stage.worldTransform;
-    // Measure every badge that needs it first, then write: interleaving a read
-    // with the previous badge's write forces a layout per badge per frame.
-    for (const v of this.views.values()) if (!v.box) v.box = v.el.getBoundingClientRect();
+  /** Everything a placement reads, as numbers; equal to last frame's means nothing moved. */
+  #unchanged(rect, wt) {
+    const s = this.#nextSig;
+    s.length = 0;
+    s.push(rect.left, rect.top, innerWidth, innerHeight, wt.a, wt.b, wt.c, wt.d, wt.tx, wt.ty);
     for (const v of this.views.values()) {
+      const a = tokenById(v.sourceId);
+      const b = tokenById(v.targetId);
+      s.push(a?.center?.x, a?.center?.y, a?.w, a?.h, a?.visible ? 1 : 0, b?.center?.x, b?.center?.y, b?.w, b?.h, b?.visible ? 1 : 0, v.full ? 1 : 0, v.tagBox ? 1 : 0, v.plateBox ? 1 : 0);
+      // Both standees: the straight run under Diorama moves with either end.
+      for (const id of [v.sourceId, v.targetId]) {
+        const anchor = dioramaAnchor(id);
+        s.push(anchor ? 1 : 0, anchor?.x, anchor?.y);
+      }
+    }
+    const prev = this.#sig;
+    const same = prev.length === s.length && s.every((n, i) => Object.is(n, prev[i]));
+    this.#nextSig = prev;
+    this.#sig = s;
+    return same;
+  }
+
+  #position() {
+    const canvasView = canvas?.app?.view;
+    const stage = canvas?.stage;
+    if (!canvasView || !stage || !this.views.size) return;
+    const rect = canvasView.getBoundingClientRect?.() ?? { left: 0, top: 0 };
+    const wt = stage.worldTransform;
+    if (this.#unchanged(rect, wt)) return;
+    const grid = canvas.grid?.size ?? canvas.dimensions?.size ?? 100;
+
+    // Measure everything that needs it first, then write: interleaving a read
+    // with the previous element's write forces a layout per line per frame.
+    // Layout sizes, not getBoundingClientRect: a tag measured mid-entry carries
+    // its `scale(0.86)` and would be placed and collided too small for good.
+    for (const v of this.views.values()) {
+      if (!v.tagBox) v.tagBox = layoutSize(v.el.querySelector(".glod-tag"));
+      if (v.full && !v.plateBox) v.plateBox = layoutSize(v.el.querySelector(".glod-badge"));
+    }
+
+    const items = [];
+    const obstacles = [];
+    const seen = new Set();
+    const onBoard = !this.#diorama();
+    for (const v of this.views.values()) {
+      const source = tokenById(v.sourceId);
       const target = tokenById(v.targetId);
-      if (!target || !target.visible) {
+      if (!source || !target || !source.visible || !target.visible || !v.tagBox) {
         v.el.style.visibility = "hidden";
         continue;
       }
-      // Anchor at the target's lower-right shoulder: off the art, clear of the
-      // reticle the line lands on and of the resource bars under the token.
-      // With Diorama's 3D view over the board, beside its standee instead.
-      const c = target.center ?? { x: target.x, y: target.y };
-      const w = target.w ?? 0;
-      const h = target.h ?? 0;
-      const head = dioramaAnchor(v.targetId);
-      let x, y;
-      if (head) {
-        x = Math.round(head.x + 18);
-        y = Math.round(head.y);
-      } else {
-        const p = wt.apply({ x: c.x + w * 0.5, y: c.y - h * 0.1 });
-        x = Math.round(rect.left + p.x + 10);
-        y = Math.round(rect.top + p.y);
+      const at = this.#anchors(v, source, target, grid, wt, rect);
+      const plate = v.full && v.plateBox ? { w: v.plateBox.width, h: v.plateBox.height } : null;
+      items.push({ v, at, w: v.tagBox.width, h: v.tagBox.height, plate });
+      if (onBoard) for (const token of [source, target]) if (!seen.has(token)) {
+        seen.add(token);
+        obstacles.push(screenBox(token, wt, rect));
       }
-      const box = v.box;
-      const cx = Math.min(Math.max(8, x), innerWidth - box.width - 8);
-      const cy = Math.min(Math.max(8, y), innerHeight - box.height - 8);
-      v.el.style.visibility = "";
-      // The individual `translate` property, never `transform`: the entry
-      // animation (gl-pop-in, fill `both`) owns `transform`, and a filled
-      // animation outranks an inline style, which pinned every badge to 0,0.
-      v.el.style.translate = `${cx}px ${cy}px`;
     }
+    // The acting creature's lines and the one under the cursor choose first;
+    // the rest slide back along their own lines to stay clear of them.
+    items.sort((a, b) => rank(b.v) - rank(a.v));
+    const spots = placeLines(items, { w: innerWidth, h: innerHeight }, { obstacles });
+    items.forEach((item, i) => {
+      const { v } = item;
+      const placed = spots[i];
+      if (!placed) {
+        v.el.style.visibility = "hidden";
+        return;
+      }
+      v.el.style.visibility = "";
+      if (placed.side && v.el.dataset.side !== placed.side) v.el.dataset.side = placed.side;
+      // The individual `translate` property, never `transform`: the entry
+      // animations (fill `both`) own `transform`, and a filled animation
+      // outranks an inline style, which would pin every tag to 0,0.
+      const tag = v.el.querySelector(".glod-tag");
+      if (tag) tag.style.translate = `${placed.tag.x}px ${placed.tag.y}px`;
+      const plateEl = v.el.querySelector(".glod-badge");
+      if (plateEl && placed.plate) plateEl.style.translate = `${placed.plate.x}px ${placed.plate.y}px`;
+    });
+  }
+
+  /**
+   * `share → screen point and bow normal` for one line. On the board it is
+   * the canvas line's own path; under Diorama's 3D view a straight run between
+   * the two standees, since the 2D path names the wrong spot there.
+   */
+  /** Whether Diorama's 3D view is over the board (it answers for any token it draws). */
+  #diorama() {
+    for (const v of this.views.values()) if (dioramaAnchor(v.targetId)) return true;
+    return false;
+  }
+
+  #anchors(v, source, target, grid, wt, rect) {
+    const head = dioramaAnchor(v.targetId);
+    const tail = head ? dioramaAnchor(v.sourceId) : null;
+    if (head && tail) return (share) => straightAnchor(tail, head, Math.min(share, 0.8));
+    const path = linePath(
+      { from: source.center, to: target.center, sourceSize: Math.max(source.w, source.h), targetSize: Math.max(target.w, target.h), gridSize: grid },
+      v.path
+    );
+    const out = { x: 0, y: 0, nx: 0, ny: 1, arc: 0 };
+    return (share) => {
+      const a = tagAnchor(path, share, grid, out);
+      const nx = wt.a * a.nx + wt.c * a.ny;
+      const ny = wt.b * a.nx + wt.d * a.ny;
+      const n = Math.hypot(nx, ny) || 1;
+      return {
+        x: rect.left + wt.a * a.x + wt.c * a.y + wt.tx,
+        y: rect.top + wt.b * a.x + wt.d * a.y + wt.ty,
+        nx: nx / n,
+        ny: ny / n,
+      };
+    };
   }
 
   /* ── lifecycle ───────────────────────────────────────────────────────── */
@@ -352,6 +478,8 @@ export class LineBadges {
     const el = view.el;
     setTimeout(() => el.remove(), TIMING.leave * Math.max(0, this.#motion()));
     this.views.delete(key);
+    // Removed under the cursor, it never hears its pointerleave.
+    this.hovered.delete(`badge:${key}`);
   }
 
   #clear() {
@@ -365,30 +493,54 @@ export class LineBadges {
       canvas?.app?.ticker?.remove(this.#tick);
       this.#tick = null;
     }
+    // The next scene's tokens are new objects; ids hovered here mean nothing there.
+    this.hovered.clear();
     this.layer?.remove();
     this.layer = null;
   }
 
-  /** Whether a landing would show on a badge here (dice-highlight.mjs asks before it waits). */
+  /** Whether a landing would show on a line here (dice-highlight.mjs asks before it waits). */
   hasLine(landing) {
     return !!landing?.sourceId && !!landing.targetId && this.views.has(`${landing.sourceId}>${landing.targetId}`);
   }
 
   /**
    * A check on this line resolved: stamp its degree on the plate and mark the
-   * face that came up. dice-highlight.mjs calls it once the die has come to
-   * rest (or at once, without Dice So Nice); what may be shown is
-   * landing.mjs's to decide.
+   * face that came up, or, with the plate closed, on the tag the table is
+   * looking at. dice-highlight.mjs calls it once the die has come to rest (or
+   * at once, without Dice So Nice); what may be shown is landing.mjs's to decide.
    */
   land(landing, motion = this.#motion()) {
     if (this.ladder?.allows("landBeat") === false || !this.hasLine(landing)) return;
-    const plate = this.views.get(`${landing.sourceId}>${landing.targetId}`)?.el.querySelector(".glod-badge");
-    if (plate) playLanding(plate, { face: landing.face, degree: landing.degree, stamps: landing.stamps, t: L, motion });
+    const view = this.views.get(`${landing.sourceId}>${landing.targetId}`);
+    const plate = view?.el.querySelector(".glod-badge");
+    if (view?.full && plate) playLanding(plate, { face: landing.face, degree: landing.degree, stamps: landing.stamps, t: L, motion });
+    else playTagLanding(view?.el.querySelector(".glod-tag"), { degree: landing.degree, stamps: landing.stamps, t: L, motion });
   }
 
-  /** The landing beat on every badge whose roller is this actor (PR 2 drives it). */
+  /** The plates whose roller is this actor. */
   badgesFor(actorId) {
     return [...this.views.values()].filter((v) => tokenById(v.sourceId)?.actor?.id === actorId).map((v) => v.el.querySelector(".glod-badge"));
   }
 }
 
+/** An element's untransformed size; null while it is not laid out. */
+function layoutSize(el) {
+  if (!el || !el.offsetWidth) return null;
+  return { width: el.offsetWidth, height: el.offsetHeight };
+}
+
+/** A token's square on screen, which an open plate keeps off. */
+function screenBox(token, wt, rect) {
+  const c = token.center ?? { x: token.x + token.w / 2, y: token.y + token.h / 2 };
+  const x = rect.left + wt.a * c.x + wt.c * c.y + wt.tx;
+  const y = rect.top + wt.b * c.x + wt.d * c.y + wt.ty;
+  const w = Math.abs(wt.a) * (token.w ?? 0);
+  const h = Math.abs(wt.d) * (token.h ?? 0);
+  return { x: x - w / 2, y: y - h / 2, w, h };
+}
+
+/** Who picks a spot on the line first. */
+function rank(v) {
+  return (v.hot ? 4 : 0) + (v.acting ? 2 : 0) + (v.full ? 1 : 0);
+}

@@ -3,28 +3,23 @@
    ------------------------------------------------------------
    A DOM mark laid over DSN's canvas the moment the dice rest:
    a hairline ring in the degree's colour around the kept d20,
-   one burst outward, four corner brackets that close in on the
-   die (Endfield's targeting reticle, pulled back to plain
-   geometry), and a small stamp plate beneath it. It never
-   touches a DSN material.
+   one ring outward, four corner brackets that close on the die
+   (the same lock the targeting line makes on a token), and an
+   ink slab beneath it with the word. It never touches a DSN
+   material.
 
-   Colours are the badge's degree aliases (pf2e-odds.css),
-   redeclared on this feature's own root — never :root:
-     c  amber · s  cyan · f  steel · cf  hazard
+   The degree colours are the skin's (pf2e-odds.css, scoped to
+   `.glod-dice-layer` there): c amber, s paper, f steel, cf red.
    Sizes follow the die: --glod-die-r is its on-screen radius,
-   written by dice-highlight.mjs; hairlines stay device pixels.
+   written by dice-highlight.mjs.
    ============================================================ */
 
 .glod-dice-layer {
-  --gl-accent: var(--gl-cyan);
-  --glod-c: var(--gl-signal);
-  --glod-s: var(--gl-cyan);
-  --glod-f: color-mix(in srgb, var(--gl-text-dim) 70%, var(--gl-ink-3));
-  --glod-cf: var(--gl-hazard);
   position: fixed;
   inset: 0;
   z-index: var(--gl-z-hud);
   pointer-events: none;
+  font-family: var(--glod-font);
 }
 
 .glod-dice {
@@ -35,7 +30,7 @@
   height: 0;
 }
 
-.glod-dice.is-leaving { animation: gl-fade-out var(--gl-d-brisk) var(--gl-ease) both; }
+.glod-dice.is-leaving { animation: glod-fade var(--gl-d-brisk) var(--gl-exit) both; }
 
 .glod-dice-mark {
   --glod-tone: var(--glod-s);
@@ -47,10 +42,9 @@
 
 .glod-dice-mark[data-d="c"] { --glod-tone: var(--glod-c); }
 .glod-dice-mark[data-d="s"] { --glod-tone: var(--glod-s); }
-.glod-dice-mark[data-d="f"] { --glod-tone: var(--glod-f); }
+.glod-dice-mark[data-d="f"] { --glod-tone: var(--glod-dim); }
 .glod-dice-mark[data-d="cf"] { --glod-tone: var(--glod-cf); }
 
-/* The ring: a hairline circle with a soft inner wash of the degree. */
 .glod-dice-ring,
 .glod-dice-burst {
   position: absolute;
@@ -61,26 +55,30 @@
   border-radius: 50%;
 }
 
+/* The ring: the degree's colour on an ink rim, so it reads on any floor. */
 .glod-dice-ring {
   border: 2px solid var(--glod-tone);
-  background: radial-gradient(circle, transparent 58%, color-mix(in srgb, var(--glod-tone) 18%, transparent) 100%);
   box-shadow:
-    0 0 0 1px rgb(var(--gl-tint-dark) / 0.55),
-    0 0 18px color-mix(in srgb, var(--glod-tone) 45%, transparent);
-  animation: gl-pop-in var(--gl-d-swift) var(--gl-pop) both;
+    0 0 0 1px rgb(var(--gl-tint-dark) / 0.6),
+    inset 0 0 0 1px rgb(var(--gl-tint-dark) / 0.6);
+  animation: glod-dice-ring var(--gl-d-swift) var(--gl-ease) both;
 }
 
-/* A critical carries a second, finer ring outside the first. */
+@keyframes glod-dice-ring {
+  from { opacity: 0; transform: scale(0.82); }
+  to { opacity: 1; transform: none; }
+}
+
+/* A critical either way carries a second, finer ring outside the first. */
 .glod-dice-mark[data-d="c"] .glod-dice-ring,
 .glod-dice-mark[data-d="cf"] .glod-dice-ring {
-  outline: 1px solid color-mix(in srgb, var(--glod-tone) 60%, transparent);
+  outline: 1px solid color-mix(in oklab, var(--glod-tone) 60%, transparent);
   outline-offset: 5px;
 }
 
 /* A critical failure is hatched as well as red, so it never reads by hue alone. */
 .glod-dice-mark[data-d="cf"] .glod-dice-ring {
-  background:
-    repeating-linear-gradient(135deg, color-mix(in srgb, var(--glod-tone) 22%, transparent) 0 3px, transparent 3px 7px);
+  background: repeating-linear-gradient(135deg, color-mix(in oklab, var(--glod-tone) 26%, transparent) 0 3px, transparent 3px 7px);
   -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%);
           mask: radial-gradient(circle, transparent 62%, #000 63%);
 }
@@ -95,7 +93,12 @@
 
 .glod-dice-burst {
   border: 1px solid var(--glod-tone);
-  animation: gl-burst var(--gl-d-glide) var(--gl-ease) both;
+  animation: glod-dice-burst var(--gl-d-glide) var(--gl-ease) both;
+}
+
+@keyframes glod-dice-burst {
+  from { opacity: 0.9; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.6); }
 }
 
 /* Four corner brackets closing on the die. */
@@ -105,46 +108,50 @@
   top: calc(var(--glod-ring) * -1.18);
   width: calc(var(--glod-ring) * 2.36);
   height: calc(var(--glod-ring) * 2.36);
-  --glod-arm: 10px;
+  --glod-arm: calc(var(--glod-ring) * 0.42);
   background:
-    linear-gradient(var(--glod-tone), var(--glod-tone)) left top / var(--glod-arm) 1px no-repeat,
-    linear-gradient(var(--glod-tone), var(--glod-tone)) left top / 1px var(--glod-arm) no-repeat,
-    linear-gradient(var(--glod-tone), var(--glod-tone)) right top / var(--glod-arm) 1px no-repeat,
-    linear-gradient(var(--glod-tone), var(--glod-tone)) right top / 1px var(--glod-arm) no-repeat,
-    linear-gradient(var(--glod-tone), var(--glod-tone)) left bottom / var(--glod-arm) 1px no-repeat,
-    linear-gradient(var(--glod-tone), var(--glod-tone)) left bottom / 1px var(--glod-arm) no-repeat,
-    linear-gradient(var(--glod-tone), var(--glod-tone)) right bottom / var(--glod-arm) 1px no-repeat,
-    linear-gradient(var(--glod-tone), var(--glod-tone)) right bottom / 1px var(--glod-arm) no-repeat;
-  opacity: 0.85;
+    linear-gradient(var(--glod-tone), var(--glod-tone)) left top / var(--glod-arm) 2px no-repeat,
+    linear-gradient(var(--glod-tone), var(--glod-tone)) left top / 2px var(--glod-arm) no-repeat,
+    linear-gradient(var(--glod-tone), var(--glod-tone)) right top / var(--glod-arm) 2px no-repeat,
+    linear-gradient(var(--glod-tone), var(--glod-tone)) right top / 2px var(--glod-arm) no-repeat,
+    linear-gradient(var(--glod-tone), var(--glod-tone)) left bottom / var(--glod-arm) 2px no-repeat,
+    linear-gradient(var(--glod-tone), var(--glod-tone)) left bottom / 2px var(--glod-arm) no-repeat,
+    linear-gradient(var(--glod-tone), var(--glod-tone)) right bottom / var(--glod-arm) 2px no-repeat,
+    linear-gradient(var(--glod-tone), var(--glod-tone)) right bottom / 2px var(--glod-arm) no-repeat;
+  filter: drop-shadow(0 0 1px rgb(var(--gl-tint-dark) / 0.9));
   animation: glod-dice-close var(--gl-d-reveal) var(--gl-ease) both;
 }
 
 @keyframes glod-dice-close {
-  0% { transform: scale(1.35); opacity: 0; }
-  100% { transform: scale(1); opacity: 0.85; }
+  0% { transform: scale(1.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
-/* The stamp plate, beneath the die: a chamfered slab of dark glass. */
+/* The word, beneath the die: an ink slab with a rule in the degree's colour. */
 .glod-dice-stamp {
   position: absolute;
   left: 0;
-  top: calc(var(--glod-ring) + 12px);
-  /* `translate`, not `transform`: gl-stamp animates transform and would
+  top: calc(var(--glod-ring) + 14px);
+  /* `translate`, not `transform`: the entrance animates transform and would
      overwrite the centring, leaving the plate hanging off to the right. */
   translate: -50% 0;
-  padding: 3px 12px 4px;
+  padding: 4px 12px 5px;
   white-space: nowrap;
-  font-family: var(--gl-display);
-  font-size: var(--gl-fs-md);
-  font-weight: var(--gl-weight-heavy);
-  letter-spacing: var(--gl-track-xwide);
-  text-transform: uppercase;
+  font-size: 15px;
+  font-weight: 780;
+  font-stretch: 118%;
+  letter-spacing: 0.01em;
   color: var(--glod-tone);
-  background: color-mix(in srgb, var(--glod-tone) 12%, rgb(var(--gl-tint-dark) / 0.82));
-  border-top: 1px solid var(--glod-tone);
-  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
-  animation: gl-stamp var(--gl-d-splash) var(--gl-pop) both;
+  background: color-mix(in oklab, var(--glod-ink-1) 94%, transparent);
+  box-shadow: inset 0 2px 0 var(--glod-tone), 0 6px 16px rgb(var(--gl-tint-dark) / 0.5);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);
+  animation: glod-dice-stamp var(--gl-d-swift) var(--gl-ease) both;
   animation-delay: var(--gl-d-flash);
 }
 
-.glod-dice-mark[data-d="f"] .glod-dice-stamp { color: var(--gl-text); }
+@keyframes glod-dice-stamp {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.glod-dice-mark[data-d="f"] .glod-dice-stamp { color: var(--glod-paper); }

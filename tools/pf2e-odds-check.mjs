@@ -654,6 +654,104 @@ for (const f of readdirSync(join(ROOT, "styles")).filter((f) => /^pf2e-odds.*\.c
   ok(!animatesTransform || !/\.style\.transform\b/.test(lb), "the badge's entry animation never owns the property that places it");
 }
 
+/* ── the odds on the line: placement ─────────────────────────────────────── */
+
+{
+  const P = await imp("scripts/features/pf2e-odds/line-place.mjs");
+  const G = await imp("scripts/features/stream-targets/targeting/target-geometry.js");
+  const src = read("scripts/features/pf2e-odds/line-place.mjs");
+  // The preview places through this module; a world read here makes the
+  // preview reimplement it, and then it flatters whichever copy was touched last.
+  ok(!/\b(game|canvas|foundry|Hooks|ui|document|window)\s*[.?[]/.test(src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")), "line-place.mjs reaches the world or the DOM");
+  ok(/from "\.\.\/stream-targets\/targeting\/target-geometry\.js"/.test(src), "line-place.mjs must lay the tag on stream-targets' own path, not a lookalike");
+
+  const grid = 100;
+  const path = P.linePath({ from: { x: 100, y: 500 }, to: { x: 900, y: 300 }, sourceSize: 100, targetSize: 100, gridSize: grid });
+  const a = P.tagAnchor(path, 0.72, grid);
+  const onPath = G.pointAt(path, a.arc);
+  ok(Math.hypot(onPath.x - a.x, onPath.y - a.y) < 1e-6, "the tag's anchor is a point on the line's own path");
+  ok(a.arc <= path.length - (G.HEAD_LENGTH_SQUARES + P.TAG_HEAD_CLEARANCE_SQUARES) * grid + 1e-6, "the tag sits clear of the arrowhead");
+  ok(Math.abs(Math.hypot(a.nx, a.ny) - 1) < 1e-9, "the bow normal is a unit vector");
+  const mid = G.pointAt(path, path.length / 2);
+  const cm = { x: (path.xs[0] + path.xs.at(-1)) / 2, y: (path.ys[0] + path.ys.at(-1)) / 2 };
+  ok((mid.x - cm.x) * a.nx + (mid.y - cm.y) * a.ny > 0, "the bow normal points to the side the arc bulges to");
+  const short = P.linePath({ from: { x: 400, y: 400 }, to: { x: 500, y: 400 }, sourceSize: 100, targetSize: 100, gridSize: grid });
+  const s = P.tagAnchor(short, 0.72, grid);
+  ok(Number.isFinite(s.x) && Number.isFinite(s.nx) && s.arc >= 0 && s.arc <= short.length, "a melee arch still places its tag");
+
+  const vp = { w: 1200, h: 700 };
+  const at = (x, y) => () => ({ x, y, nx: 0, ny: 1 });
+  const two = P.placeLines([{ at: at(500, 300), w: 80, h: 21 }, { at: (share) => ({ x: 500 + (share - 0.72) * 400, y: 300, nx: 0, ny: 1 }), w: 80, h: 21 }], vp);
+  const boxA = { x: two[0].tag.x, w: 80 };
+  const boxB = { x: two[1].tag.x, w: 80 };
+  ok(boxA.x + boxA.w <= boxB.x || boxB.x + boxB.w <= boxA.x, "two tags on one spot: the second slides along its line instead of covering the first");
+  const plated = P.placeLines([{ at: at(500, 300), w: 80, h: 21, plate: { w: 214, h: 120 } }], vp, { obstacles: [{ x: 400, y: 320, w: 300, h: 200 }] })[0];
+  const pb = { x: plated.plate.x, y: plated.plate.y, w: 214, h: 120 };
+  ok(!(pb.x < 700 && 400 < pb.x + pb.w && pb.y < 520 && 320 < pb.y + pb.h), "an open plate keeps off a token when there is room elsewhere");
+  // An open plate that takes its spot first must still leave room for a later line's tag.
+  const crowd = P.placeLines([
+    { at: at(500, 300), w: 80, h: 21, plate: { w: 214, h: 120 } },
+    { at: () => ({ x: 520, y: 380, nx: 0, ny: 1 }), w: 80, h: 21 },
+  ], vp);
+  const cp = { x: crowd[0].plate.x, y: crowd[0].plate.y, w: 214, h: 120 };
+  const ct = { x: crowd[1].tag.x, y: crowd[1].tag.y, w: 80, h: 21 };
+  ok(!(cp.x < ct.x + ct.w && ct.x < cp.x + cp.w && cp.y < ct.y + ct.h && ct.y < cp.y + cp.h), "an open plate buries another line's tag");
+  const edge = P.placeLines([{ at: at(1190, 690), w: 80, h: 21, plate: { w: 214, h: 120 } }], vp)[0];
+  ok(edge.tag.x + 80 <= vp.w - P.VIEW_MARGIN_PX && edge.plate.x + 214 <= vp.w - P.VIEW_MARGIN_PX && edge.plate.y + 120 <= vp.h - P.VIEW_MARGIN_PX, "tag and plate stay inside the viewport");
+  ok(P.lineCss(0x4db8ff) === "#4db8ff" && P.lineCss(0) === "#000000" && P.lineCss("#ABCDEF") === "#abcdef" && P.lineCss(null) === null && P.lineCss("red") === null, "the line's announced colour becomes the tag's rule");
+
+  const lb = read("scripts/features/pf2e-odds/line-badges.mjs");
+  ok(/placeLines\(/.test(lb) && /tagAnchor\(/.test(lb) && /linePath\(/.test(lb), "line-badges places through line-place.mjs");
+  ok(/p\.sourceId !== p\.targetId/.test(lb), "a self-target line is never priced");
+  ok(/canvasTearDown[\s\S]{0,80}#unmount/.test(lb) && /#unmount\(\) \{[\s\S]*?this\.hovered\.clear\(\)/.test(lb), "hovered tokens are forgotten when the canvas tears down");
+  ok(/Hooks\.on\("deleteToken"[\s\S]{0,120}this\.hovered\.delete/.test(lb), "a deleted token is dropped from the hovered set");
+  ok(/sameModel\(view\.model, model\)/.test(lb), "a refresh that changed nothing redraws nothing");
+  ok(/#unchanged\(rect, wt\)\) return/.test(lb), "an unchanged frame writes no position");
+  // A tag measured mid-entry carries its scale and is placed too small for good.
+  ok(!/querySelector\("\.glod-(tag|badge)"\)\??\.getBoundingClientRect/.test(lb), "tags and plates are measured by layout size, not a transformed rect");
+  // Under Diorama the run is between two standees; a signature missing one freezes the tag when it moves.
+  ok(/\[v\.sourceId, v\.targetId\]\)\s*\{\s*const anchor = dioramaAnchor\(id\)/.test(lb), "the frame signature tracks both Diorama anchors");
+}
+
+/* ── the skin ───────────────────────────────────────────────────────────── */
+
+{
+  const files = readdirSync(join(ROOT, "styles")).filter((f) => /^pf2e-odds.*\.css$/.test(f));
+  const css = Object.fromEntries(files.map((f) => [f, read(`styles/${f}`).replace(/\/\*[\s\S]*?\*\//g, "")]));
+  const all = Object.values(css).join("\n");
+  const main = css["pf2e-odds.css"];
+  // A scoped skin lives on the feature's own roots (ADR 0006), never on :root.
+  ok(!/:root\b/.test(all), "an odds stylesheet writes to :root");
+  const rootBlock = main.match(/:is\(([^)]*)\)\s*\{([\s\S]*?)\n\}/);
+  ok(!!rootBlock, "the skin's root block is missing");
+  const declared = new Set([...(rootBlock?.[2] ?? "").matchAll(/(--glod-[\w-]+)\s*:/g)].map((m) => m[1]));
+  // Set inline by render.mjs / dice-highlight.mjs or locally on one rule, never at the root.
+  const local = new Set([...all.matchAll(/(--glod-[\w-]+)\s*:/g)].map((m) => m[1]));
+  for (const js of ["render.mjs", "dice-highlight.mjs", "line-badges.mjs"]) for (const m of read(`scripts/features/pf2e-odds/${js}`).matchAll(/(--glod-[\w-]+)/g)) local.add(m[1]);
+  for (const m of all.matchAll(/var\((--glod-[\w-]+)/g)) {
+    if (!declared.has(m[1]) && !local.has(m[1])) fail(`${m[1]} is read but never declared: it falls back to nothing`);
+  }
+  // `--glod-line` is set per line on `.glod-line` and inherited by its tag;
+  // declared on a root (`.glod-tag` is one) it overrides that and every rule goes paper.
+  ok(!declared.has("--glod-line") && !/--glod-line\s*:/.test(all), "--glod-line is declared in CSS: it shadows the line colour the tag inherits");
+  ok(/var\(--glod-line, /.test(main), "--glod-line is read without a fallback");
+  for (const root of [".glod-lines", ".glod-badge", ".glod-tag", ".glod-inline", ".glod-dice-layer", ".glod-obs-root", ".glod-dexhint"]) {
+    ok(rootBlock?.[1].includes(root), `${root} is drawn but the skin is not declared on it`);
+  }
+  const px = (k) => Number(rootBlock?.[2].match(new RegExp(`--glod-h-${k}:\\s*(\\d+)px`))?.[1]);
+  ok(px("c") > px("s") && px("s") > px("f") && px("f") > px("cf") && px("cf") > 0, "the skyline's heights must rank the degrees: critical > success > failure > critical failure");
+  // Every animation names a keyframe that exists, or the beat silently never plays.
+  const motion = read("styles/gl-motion.css");
+  for (const m of all.matchAll(/animation:\s*([\w-]+)/g)) {
+    if (m[1] === "none") continue;
+    ok(new RegExp(`@keyframes ${m[1]}\\b`).test(all + motion), `animation ${m[1]} names no keyframes`);
+  }
+  // A face never seen is a question mark, not a hue: no violet, no ???.
+  ok(!/violet|holo/.test(all), "the unknown state is a hatch, not a hue");
+  const R = await imp("scripts/features/pf2e-odds/render.mjs");
+  ok(!/\?\?\?/.test(R.headlineHTML({ state: "unknown" }) + R.compactHTML({ state: "unknown", headline: null })), "unknown reads as a single ?");
+}
+
 /* ── report ─────────────────────────────────────────────────────────────── */
 
 if (problems.length) {
