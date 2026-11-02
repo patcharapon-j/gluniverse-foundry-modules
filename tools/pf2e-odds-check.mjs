@@ -707,6 +707,10 @@ for (const f of readdirSync(join(ROOT, "styles")).filter((f) => /^pf2e-odds.*\.c
   ok(/Hooks\.on\("deleteToken"[\s\S]{0,120}this\.hovered\.delete/.test(lb), "a deleted token is dropped from the hovered set");
   ok(/sameModel\(view\.model, model\)/.test(lb), "a refresh that changed nothing redraws nothing");
   ok(/#unchanged\(rect, wt\)\) return/.test(lb), "an unchanged frame writes no position");
+  // A tag measured mid-entry carries its scale and is placed too small for good.
+  ok(!/querySelector\("\.glod-(tag|badge)"\)\??\.getBoundingClientRect/.test(lb), "tags and plates are measured by layout size, not a transformed rect");
+  // Under Diorama the run is between two standees; a signature missing one freezes the tag when it moves.
+  ok(/\[v\.sourceId, v\.targetId\]\)\s*\{\s*const anchor = dioramaAnchor\(id\)/.test(lb), "the frame signature tracks both Diorama anchors");
 }
 
 /* ── the skin ───────────────────────────────────────────────────────────── */
@@ -727,6 +731,10 @@ for (const f of readdirSync(join(ROOT, "styles")).filter((f) => /^pf2e-odds.*\.c
   for (const m of all.matchAll(/var\((--glod-[\w-]+)/g)) {
     if (!declared.has(m[1]) && !local.has(m[1])) fail(`${m[1]} is read but never declared: it falls back to nothing`);
   }
+  // `--glod-line` is set per line on `.glod-line` and inherited by its tag;
+  // declared on a root (`.glod-tag` is one) it overrides that and every rule goes paper.
+  ok(!declared.has("--glod-line") && !/--glod-line\s*:/.test(all), "--glod-line is declared in CSS: it shadows the line colour the tag inherits");
+  ok(/var\(--glod-line, /.test(main), "--glod-line is read without a fallback");
   for (const root of [".glod-lines", ".glod-badge", ".glod-tag", ".glod-inline", ".glod-dice-layer", ".glod-obs-root", ".glod-dexhint"]) {
     ok(rootBlock?.[1].includes(root), `${root} is drawn but the skin is not declared on it`);
   }
