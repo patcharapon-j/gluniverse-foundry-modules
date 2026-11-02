@@ -1,406 +1,836 @@
-/* ══════════════════════════════════════════════════════════════════════════
-   Creaturedex — Etched Glass surfaces
+/* ═══════════════════════════════════════════════════════════════════════════
+   Creaturedex — the dex window, the Falsify dialog, the reveal notice.
 
-   The book prints its three sections in three colours — Characteristics green,
-   Defense blue, Offense red — and those are the only colours in this feature.
-   Each is a semantic token routed through `--gl-accent` on the section root, so
-   the border, the label, the rule and the sealed plate all follow from one
-   declaration and a retheme carries every one of them.
+   A scoped skin (docs/adr/0004-creaturedex-skin.md): the design system's
+   neutral ramp, mirrored as feature-local `--gldex-*` tokens under the
+   feature's own roots and never on :root. Black-leaning on purpose: the dex is
+   read beside every campaign's art, so it carries no setting of its own, only
+   ink, paper and the book's three section hues (Characteristics green, Defense
+   blue, Offense red), which are the suite's own semantic tokens. A lie, which
+   only a GM ever sees named, is violet, the suite's "secret" hue.
 
-   Nothing here redeclares a foundation token, writes a raw duration or easing,
-   or strikes a veil from anything but a tint channel.
-   ══════════════════════════════════════════════════════════════════════════ */
+   A section's hue is routed through `--gldex-tone` on the element that carries
+   `data-section`, so a plate, a pip, an index tab and a chat card all follow
+   one declaration. Motion and timing come from the suite (`--gl-d-*`,
+   `--gl-ease*`, `--gl-stagger`); keyframes are prefixed `gldex-`.
 
-/* ── Control metrics ──────────────────────────────────────────────────────
-   `.gl-btn` declares no font size and states its padding in `em`, so it takes
-   the host's type — 14px in a chat card, more in an app frame — beside labels
-   this feature strikes at 9-11px, and the padding inflates with it until the
-   label crowds its own border. Every button this feature ships is sized here. */
-.gldex-root .gl-btn,
-.gldex-lie-root .gl-btn {
-  font-size: var(--gl-fs-3xs);
-  line-height: var(--gl-lh-tight);
-  padding: 0.55em 0.9em;
+   Roots: `.application.gldex` (both windows' frames), `.gldex-root`,
+   `.gldex-lie-root`, `.gldex-card` (a chat message) and `.gldex-hud`.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:is(.gldex, .gldex-root, .gldex-lie-root, .gldex-card) {
+  /* the neutral ramp (design system: color.neutral) */
+  --gldex-ink-0: #05060a;
+  --gldex-ink-1: #0a0b11;
+  --gldex-ink-2: #0f1017;
+  --gldex-ink-3: #15171f;
+  --gldex-ink-4: #1c1e28;
+  --gldex-ink-5: #272a36;
+  --gldex-text: #f4f4f7;
+  --gldex-dim: #b3b5c2;
+  --gldex-faint: #6a6d7c;
+  --gldex-paper: #ecedf2;
+  --gldex-steel: #8e91a0;
+  --gldex-line: rgb(var(--gl-tint-light) / 0.08);
+  --gldex-line-strong: rgb(var(--gl-tint-light) / 0.16);
+  --gldex-hover: rgb(var(--gl-tint-light) / 0.05);
+  --gldex-hatch: rgb(var(--gl-tint-light) / 0.028);
+  --gldex-shade: rgb(var(--gl-tint-dark) / 0.55);
+
+  /* meaning: the book's section hues, and the GM's lie */
+  --gldex-green: var(--gl-good);
+  --gldex-blue: var(--gl-info);
+  --gldex-red: var(--gl-hazard);
+  --gldex-lie: var(--gl-violet);
+  --gldex-tone: var(--gldex-steel);
+
+  /* type and shape */
+  --gldex-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
+  --gldex-cut: 8px;
+  --gldex-cut-sm: 5px;
+
+  font-family: var(--gldex-font);
+  color: var(--gldex-text);
 }
 
-/* ── The window ───────────────────────────────────────────────────────────── */
+/* One statement per hue: the creature table and the hazard table share three. */
+:is(.gldex-root, .gldex-card) :is([data-section="characteristics"], [data-section="complexity"]),
+.gldex-card:is([data-section="characteristics"], [data-section="complexity"]) { --gldex-tone: var(--gldex-green); }
+:is(.gldex-root, .gldex-card) :is([data-section="defense"], [data-section="disable"]),
+.gldex-card:is([data-section="defense"], [data-section="disable"]) { --gldex-tone: var(--gldex-blue); }
+:is(.gldex-root, .gldex-card) :is([data-section="offense"], [data-section="routine"]),
+.gldex-card:is([data-section="offense"], [data-section="routine"]) { --gldex-tone: var(--gldex-red); }
+
+/* ── Controls: Foundry styles every button and input at element level ───── */
+
+:is(.gldex-root, .gldex-lie-root) :is(button, input, select) {
+  appearance: none;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  /* `.gl-btn` and Foundry both leave a button's size to its host; every
+     control this feature ships is sized here, then again per class below. */
+  font-size: 12px;
+  line-height: 1;
+}
+:is(.gldex-root, .gldex-lie-root) button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--gl-d-quick) var(--gl-ease),
+    color var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease),
+    scale var(--gl-d-tap) var(--gl-ease);
+}
+:is(.gldex-root, .gldex-lie-root) button i { font-size: 11px; }
+:is(.gldex-root, .gldex-lie-root) button:active:not(:disabled) { scale: 0.97; }
+:is(.gldex-root, .gldex-lie-root) button:disabled { opacity: 0.35; cursor: default; }
+:is(.gldex-root, .gldex-lie-root) :is(button, input, select):focus-visible {
+  outline: 2px solid var(--gldex-paper);
+  outline-offset: 2px;
+}
+/* Zero-specificity, so every class rule below wins over it. */
+:where(.gldex-root, .gldex-lie-root, .gldex-card) :where(h2, h3, p) { margin: 0; border: 0; font: inherit; color: inherit; }
+:is(.gldex-root, .gldex-lie-root, .gldex-card) .gldex-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+:is(.gldex-root, .gldex-lie-root) .gldex-dim { color: var(--gldex-dim); font-style: normal; }
+
+/* ── The window frame (both apps) ────────────────────────────────────────── */
+
+.application.gldex {
+  background: var(--gldex-ink-1);
+  border: 1px solid var(--gldex-line-strong);
+  box-shadow: 0 24px 60px var(--gldex-shade), 0 0 0 1px rgb(var(--gl-tint-dark) / 0.5);
+}
+.application.gldex .window-header {
+  background: var(--gldex-ink-0);
+  border-bottom: 1px solid var(--gldex-line);
+  color: var(--gldex-dim);
+}
+.application.gldex .window-header .window-title {
+  font-family: var(--gldex-font);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.application.gldex .window-content {
+  padding: 0;
+  background: none;
+  overflow: hidden;
+}
+.application.gldex-falsify-app .window-content { overflow-y: auto; }
+
+/* ═══ The dex window ═══════════════════════════════════════════════════════ */
 
 .gldex-root {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  gap: var(--gl-sp-5);
-  padding: var(--gl-sp-6);
-  color: var(--gl-text);
+  background: var(--gldex-ink-1);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
+/* ── the bar: whose dex this is ── */
 .gldex-bar {
-  display: flex;
   flex: none;
-  align-items: center;
-  gap: var(--gl-sp-4);
-  padding-bottom: var(--gl-sp-4);
-  border-bottom: 1px solid var(--gl-hair);
-}
-
-.gldex-bar-title {
-  color: var(--gl-text-bright);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-2xs);
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: var(--gl-track-xwide);
-  text-transform: uppercase;
-}
-
-.gldex-bar-owner,
-.gldex-bar-tag {
-  color: var(--gl-text-faint);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
-}
-.gldex-bar-tag { margin-left: auto; color: var(--gl-teal); }
-
-/* A GM at a six-player table has seven of these plus Everyone, so the row
-   scrolls rather than wrapping the header into three lines. */
-.gldex-owners {
-  display: flex;
-  flex: 1 1 auto;
-  gap: var(--gl-sp-3);
-  min-width: 0;
-  margin-left: auto;
-  overflow-x: auto;
-  justify-content: flex-end;
-}
-.gldex-owner { flex: 0 0 auto; }
-.gldex-owner.is-on { border-color: var(--gl-accent); color: var(--gl-text-bright); }
-
-.gldex-body {
-  display: grid;
-  flex: 1 1 auto;
-  min-height: 0;
-  grid-template-columns: minmax(140px, 200px) 1fr;
-  gap: var(--gl-sp-5);
-}
-
-/* ── The shelf ────────────────────────────────────────────────────────────── */
-
-.gldex-shelf {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gl-sp-3);
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: var(--gl-sp-3);
-  border-right: 1px solid var(--gl-hair);
-}
-
-.gldex-entry {
   display: flex;
   align-items: center;
-  gap: var(--gl-sp-4);
-  width: 100%;
-  padding: var(--gl-sp-3);
-  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
-  background: var(--gl-surface-inset);
-  border: 1px solid var(--gl-hair);
-  color: var(--gl-text-dim);
-  cursor: pointer;
-  text-align: left;
-  transition:
-    border-color var(--gl-d-quick) var(--gl-ease),
-    color var(--gl-d-quick) var(--gl-ease);
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 8px 0 14px;
+  background: var(--gldex-ink-0);
+  border-bottom: 1px solid var(--gldex-line);
 }
-.gldex-entry:hover { color: var(--gl-text); border-color: var(--gl-accent-soft); }
-.gldex-entry.is-on { border-color: var(--gl-accent); color: var(--gl-text-bright); }
-
-.gldex-entry-img {
+.gldex-mark {
   flex: none;
-  width: 28px;
-  height: 28px;
-  object-fit: cover;
-  border: 1px solid var(--gl-hair);
+  width: 11px;
+  height: 11px;
+  background: var(--gldex-paper);
+  clip-path: polygon(0 0, 100% 0, 45% 100%, 0 100%);
 }
-
-.gldex-entry-meta { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; }
-.gldex-entry-name {
+.gldex-bar-owner {
+  margin-right: auto;
   overflow: hidden;
-  font-size: var(--gl-fs-xs);
+  font-size: 12.5px;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.gldex-entry-count {
-  color: var(--gl-text-faint);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  font-variant-numeric: tabular-nums;
+.gldex-owners { margin-right: auto; }
+.gldex-bar-tag {
+  flex: none;
+  padding: 4px 7px;
+  box-shadow: inset 0 0 0 1px var(--gldex-line-strong);
+  color: var(--gldex-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 
-/* A completed dex is the one state worth a mark of its own: it is what unlocks
-   Discerning Aid, so it has to be legible at a glance down the shelf. */
-.gldex-entry.is-complete { border-color: color-mix(in srgb, var(--gl-signal) 45%, transparent); }
-.gldex-entry-seal { flex: none; color: var(--gl-signal); font-size: var(--gl-fs-3xs); }
+/* A GM at a six-player table has seven of these, so the row scrolls rather
+   than wrapping the bar into three lines. */
+.gldex-owners {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px;
+  overflow-x: auto;
+  background: var(--gldex-ink-2);
+  scrollbar-width: none;
+}
+.gldex-owners-label {
+  flex: none;
+  padding: 0 8px 0 6px;
+  color: var(--gldex-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.gldex-root .gldex-owner {
+  flex: none;
+  height: 26px;
+  padding: 0 11px;
+  color: var(--gldex-dim);
+  font-size: 12px;
+  font-weight: 600;
+}
+.gldex-root .gldex-owner.is-on { background: var(--gldex-paper); color: var(--gldex-ink-0); }
+@media (hover: hover) and (pointer: fine) {
+  .gldex-root .gldex-owner:not(.is-on):hover { background: var(--gldex-hover); color: var(--gldex-text); }
+}
 
-/* ── The stat block ───────────────────────────────────────────────────────── */
+.gldex-body {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 0;
+}
+.gldex-body:has(> .gldex-shelf.is-empty) { grid-template-columns: minmax(0, 1fr); }
+.gldex-shelf.is-empty { display: none; }
 
-.gldex-detail { min-height: 0; overflow-y: auto; padding-right: var(--gl-sp-3); }
+/* ── the shelf ── */
+.gldex-shelf {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--gldex-ink-0);
+  border-right: 1px solid var(--gldex-line);
+}
+.gldex-search {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin: 8px 8px 2px;
+  padding: 0 10px;
+  background: var(--gldex-ink-2);
+  box-shadow: inset 0 0 0 1px var(--gldex-line);
+  color: var(--gldex-faint);
+  font-size: 11px;
+}
+.gldex-search:focus-within { box-shadow: inset 0 0 0 1px var(--gldex-line-strong); color: var(--gldex-dim); }
+.gldex-root .gldex-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  background: none;
+  color: var(--gldex-text);
+  font-size: 12.5px;
+}
+.gldex-root .gldex-search input::placeholder { color: var(--gldex-faint); }
+.gldex-root .gldex-search input:focus-visible { outline: none; }
+
+.gldex-shelf-list {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  padding: 6px 6px 12px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gldex-ink-5) transparent;
+}
+
+.gldex-root .gldex-entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  justify-content: stretch;
+  gap: 10px;
+  flex: none;
+  width: 100%;
+  padding: 6px 10px 6px 6px;
+  color: var(--gldex-dim);
+  text-align: left;
+  font-size: 12.5px;
+}
+.gldex-root .gldex-entry[hidden] { display: none; }
+.gldex-root .gldex-entry.is-on {
+  background: var(--gldex-ink-3);
+  box-shadow: inset 2px 0 0 var(--gldex-paper);
+  color: var(--gldex-text);
+}
+@media (hover: hover) and (pointer: fine) {
+  .gldex-root .gldex-entry:not(.is-on):hover { background: var(--gldex-hover); color: var(--gldex-text); }
+}
+.gldex-entry-img {
+  display: block;
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  object-position: top;
+  background: var(--gldex-ink-4);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gldex-cut-sm)), calc(100% - var(--gldex-cut-sm)) 100%, 0 100%);
+}
+.gldex-entry-meta { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.gldex-entry-name {
+  overflow: hidden;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gldex-entry-state { display: inline-flex; align-items: center; }
+.gldex-entry-count {
+  color: var(--gldex-faint);
+  font-family: var(--gl-tech);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.gldex-entry-seal { color: var(--gldex-paper); font-size: 11px; }
+
+/* A section is a pip: lit in its hue when held, a hairline when sealed, and,
+   in the GM's view only, hatched violet when what is held is a lie. */
+.gldex-pips { display: flex; gap: 3px; }
+.gldex-pip {
+  display: block;
+  width: 18px;
+  height: 3px;
+  background: var(--gldex-ink-5);
+  transition: background-color var(--gl-d-brisk) var(--gl-ease);
+}
+.gldex-pip[data-state="known"] { background: var(--gldex-tone); }
+.gldex-pip[data-state="false"] {
+  background: repeating-linear-gradient(-45deg, var(--gldex-lie) 0 2px, transparent 2px 4px);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--gldex-lie) 60%, transparent);
+}
+
+/* ── the entry ── */
+.gldex-detail {
+  min-height: 0;
+  padding: 0 18px 24px;
+  overflow-y: auto;
+  scroll-padding-top: 56px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gldex-ink-5) transparent;
+}
+.gldex-detail:has(> .gldex-pick) { display: grid; place-items: center; }
 
 .gldex-detail-head {
   display: flex;
   align-items: center;
-  gap: var(--gl-sp-5);
-  padding-bottom: var(--gl-sp-5);
-  border-bottom: 1px solid var(--gl-hair);
+  gap: 14px;
+  padding: 18px 0 14px;
 }
-.gldex-detail-img { width: 52px; height: 52px; object-fit: cover; border: 1px solid var(--gl-edge); }
-.gldex-detail-meta { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; gap: 2px; }
-.gldex-detail-name { margin: 0; color: var(--gl-text-bright); font-size: var(--gl-fs-lg); }
+.gldex-detail-img {
+  flex: none;
+  display: block;
+  width: 68px;
+  height: 68px;
+  object-fit: cover;
+  object-position: top;
+  background: var(--gldex-ink-4);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gldex-cut)), calc(100% - var(--gldex-cut)) 100%, 0 100%);
+}
+.gldex-detail-meta { display: flex; flex: 1 1 auto; flex-direction: column; gap: 3px; min-width: 0; }
 .gldex-detail-kind {
-  color: var(--gl-text-faint);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
+  color: var(--gldex-faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.gldex-forget { margin-left: auto; }
+.gldex-root .gldex-detail-name {
+  overflow: hidden;
+  color: var(--gldex-text);
+  font-size: 22px;
+  font-weight: 750;
+  font-stretch: 104%;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gldex-detail-progress { color: var(--gldex-dim); font-size: 12px; }
+.gldex-lie-count { color: var(--gldex-lie); }
 
-.gldex-scope {
-  margin: var(--gl-sp-5) 0 0;
-  padding: var(--gl-sp-4);
-  border-left: 2px solid var(--gl-teal);
-  background: rgb(var(--gl-tint-light) / 0.04);
-  color: var(--gl-text-dim);
-  font-size: var(--gl-fs-xs);
+.gldex-status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gldex-cut-sm)), calc(100% - var(--gldex-cut-sm)) 100%, 0 100%);
+}
+.gldex-status.is-complete { background: var(--gldex-paper); color: var(--gldex-ink-0); }
+.gldex-status.is-believed { box-shadow: inset 0 0 0 1px var(--gldex-lie); color: var(--gldex-lie); }
+
+.gldex-detail-tools { flex: none; display: flex; gap: 4px; }
+.gldex-root .gldex-tool {
+  height: 28px;
+  padding: 0 10px;
+  background: var(--gldex-ink-3);
+  box-shadow: inset 0 0 0 1px var(--gldex-line);
+  color: var(--gldex-dim);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+@media (hover: hover) and (pointer: fine) {
+  .gldex-root .gldex-tool:hover { background: var(--gldex-ink-4); color: var(--gldex-text); }
+  .gldex-root .gldex-forget:hover { color: var(--gldex-red); }
 }
 
-.gldex-complete {
-  margin: var(--gl-sp-5) 0 0;
-  padding: var(--gl-sp-4);
-  border-left: 2px solid var(--gl-signal);
-  background: rgb(var(--gl-tint-light) / 0.04);
-  color: var(--gl-text-dim);
-  font-size: var(--gl-fs-xs);
+/* ── the index: three tabs that say where the entry stands and jump to it ── */
+.gldex-index {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+  padding: 0 0 10px;
+  margin-bottom: 4px;
+  background: var(--gldex-ink-1);
+  box-shadow: 0 1px 0 var(--gldex-line);
 }
+.gldex-root .gldex-index-item {
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: flex-start;
+  gap: 9px;
+  height: 32px;
+  padding: 0 11px;
+  background: var(--gldex-ink-2);
+  color: var(--gldex-text);
+  font-size: 12px;
+  font-weight: 650;
+}
+.gldex-root .gldex-index-item > span { overflow: hidden; text-overflow: ellipsis; }
+.gldex-root .gldex-index-item .gldex-pip { flex: none; width: 14px; }
+.gldex-root .gldex-index-item[data-state="sealed"] { color: var(--gldex-faint); }
+@media (hover: hover) and (pointer: fine) {
+  .gldex-root .gldex-index-item:hover { background: var(--gldex-ink-3); }
+}
+
+.gldex-note {
+  margin: 10px 0 0;
+  padding: 8px 11px;
+  background: var(--gldex-ink-2);
+  box-shadow: inset 2px 0 0 var(--gldex-note, var(--gldex-steel));
+  color: var(--gldex-dim);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.gldex-note[data-tone="paper"] { --gldex-note: var(--gldex-paper); color: var(--gldex-text); }
+.gldex-note[data-tone="lie"] { --gldex-note: var(--gldex-lie); }
+
+/* ── a section plate ── */
+.gldex-sections { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 
 .gldex-section {
-  --gl-accent: var(--gl-cyan);
-  margin-top: var(--gl-sp-5);
-  padding: var(--gl-sp-5);
-  clip-path: polygon(0 0, calc(100% - var(--gl-cut-sm)) 0, 100% var(--gl-cut-sm), 100% 100%, 0 100%);
-  background: var(--gl-surface-inset);
-  border: 1px solid var(--gl-hair);
-  border-left: 2px solid var(--gl-accent);
+  position: relative;
+  padding: 0 14px 12px 16px;
+  background: var(--gldex-ink-2);
+  box-shadow: inset 2px 0 0 var(--gldex-tone);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gldex-cut)), calc(100% - var(--gldex-cut)) 100%, 0 100%);
 }
-
-/* The book's own three colours, and the hazard table's three alongside them. */
-.gldex-section[data-section="characteristics"],
-.gldex-section[data-section="complexity"] { --gl-accent: var(--gl-good); }
-.gldex-section[data-section="defense"],
-.gldex-section[data-section="disable"] { --gl-accent: var(--gl-cyan); }
-.gldex-section[data-section="offense"],
-.gldex-section[data-section="routine"] { --gl-accent: var(--gl-hazard); }
-
-/* A sealed section keeps its colour but loses its light: the player can see
-   which section they have not bought, which is the whole choice the rule
-   offers, without seeing anything of its shape. */
-.gldex-section[data-state="sealed"] {
-  border-left-color: color-mix(in srgb, var(--gl-accent) 30%, transparent);
-  background: none;
-}
-
 .gldex-section-head {
   display: flex;
   align-items: center;
-  gap: var(--gl-sp-4);
-  margin-bottom: var(--gl-sp-4);
+  gap: 8px;
+  min-height: 38px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--gldex-line);
 }
 .gldex-section-label {
-  color: var(--gl-accent);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-2xs);
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: var(--gl-track-xwide);
+  color: var(--gldex-tone);
+  font-size: 11px;
+  font-weight: 750;
+  font-stretch: 112%;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-/* GM-only, and deliberately loud: the one thing on this screen the player in
-   front of it is not seeing. */
+/* GM-only, and the one thing on this screen the player is not seeing. */
 .gldex-section-lie {
-  padding: 0 var(--gl-sp-3);
-  border: 1px solid color-mix(in srgb, var(--gl-hazard) 50%, transparent);
-  color: var(--gl-hazard);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
+  padding: 3px 6px;
+  box-shadow: inset 0 0 0 1px var(--gldex-lie);
+  color: var(--gldex-lie);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
-.gldex-controls { display: flex; gap: var(--gl-sp-3); margin-left: auto; }
-/* Falsifying is the one destructive-feeling control here — it deliberately puts
-   something untrue on a player's screen — so it carries the hazard hue rather
-   than sitting in the row looking like Reveal's twin. */
-.gldex-falsify {
-  border-color: color-mix(in srgb, var(--gl-hazard) 45%, var(--gl-edge));
-  color: var(--gl-hazard);
+.gldex-section[data-state="false"] {
+  box-shadow: inset 2px 0 0 var(--gldex-lie), inset 0 0 0 1px color-mix(in oklab, var(--gldex-lie) 30%, transparent);
 }
-.gldex-falsify:hover:not(:disabled) { border-color: var(--gl-hazard); }
 
+.gldex-controls { display: flex; gap: 4px; margin-left: auto; }
+.gldex-root .gldex-ctl {
+  height: 26px;
+  padding: 0 9px;
+  background: var(--gldex-ink-3);
+  box-shadow: inset 0 0 0 1px var(--gldex-line);
+  color: var(--gldex-dim);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.gldex-root .gldex-reveal { color: var(--gldex-text); box-shadow: inset 0 0 0 1px var(--gldex-line-strong); }
+/* Falsifying deliberately puts something untrue on a player's screen, so it
+   carries the lie's hue rather than sitting beside Reveal as its twin. */
+.gldex-root .gldex-falsify { color: var(--gldex-lie); }
+@media (hover: hover) and (pointer: fine) {
+  .gldex-root .gldex-ctl:hover { background: var(--gldex-ink-4); color: var(--gldex-text); }
+  .gldex-root .gldex-falsify:hover { box-shadow: inset 0 0 0 1px var(--gldex-lie); color: var(--gldex-lie); }
+}
+
+/* A sealed section keeps its hue as an edge and loses everything else: the
+   player sees which section they have not bought, never its shape. */
+.gldex-section[data-state="sealed"] {
+  padding-bottom: 0;
+  background:
+    repeating-linear-gradient(-45deg, var(--gldex-hatch) 0 6px, transparent 6px 12px),
+    var(--gldex-ink-1);
+  box-shadow:
+    inset 2px 0 0 color-mix(in oklab, var(--gldex-tone) 40%, transparent),
+    inset 0 0 0 1px var(--gldex-line);
+}
+.gldex-section[data-state="sealed"] .gldex-section-head { margin: 0; border-bottom: 0; }
+.gldex-section[data-state="sealed"] .gldex-section-label { color: color-mix(in oklab, var(--gldex-tone) 60%, var(--gldex-faint)); }
 .gldex-sealed {
   display: flex;
   align-items: center;
-  gap: var(--gl-sp-4);
-  padding: var(--gl-sp-5) var(--gl-sp-4);
-  color: var(--gl-text-faint);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
+  gap: 8px;
+  padding: 0 0 12px;
+  color: var(--gldex-faint);
+  font-size: 12px;
 }
+.gldex-sealed > i { font-size: 10px; }
 
+/* ── stat block rows ── */
 .gldex-row {
-  display: flex;
-  gap: var(--gl-sp-4);
-  padding: var(--gl-sp-2) 0;
-  border-top: 1px solid var(--gl-hair);
-  font-size: var(--gl-fs-xs);
-  line-height: var(--gl-lh-normal);
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: 12px;
+  padding: 5px 0;
+  border-top: 1px solid var(--gldex-line);
+  font-size: 12.5px;
+  line-height: 1.45;
 }
 .gldex-row:first-child { border-top: 0; }
 .gldex-row-key {
-  flex: 0 0 116px;
-  color: var(--gl-text-faint);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
+  padding-top: 2px;
+  color: var(--gldex-faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 1.3;
   text-transform: uppercase;
 }
-.gldex-row-val { flex: 1 1 auto; min-width: 0; color: var(--gl-text); }
-.gldex-num,
-.gldex-dmg { font-family: var(--gl-tech); font-variant-numeric: tabular-nums; }
-.gldex-dmg { color: var(--gl-accent); }
-
-.gldex-spell-rank { font-size: var(--gl-fs-xs); }
+.gldex-row-val { min-width: 0; color: var(--gldex-text); overflow-wrap: anywhere; }
+.gldex-row-val strong { font-weight: 700; }
+.gldex-num { font-variant-numeric: tabular-nums; font-weight: 650; }
+.gldex-dmg { color: var(--gldex-tone); font-weight: 600; }
+.gldex-spell-rank { margin-top: 2px; }
 .gldex-spell-rank > span {
-  color: var(--gl-text-faint);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
+  margin-right: 4px;
+  color: var(--gldex-faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.gldex-prose { margin-top: 8px; color: var(--gldex-dim); font-size: 12.5px; line-height: 1.5; }
+.gldex-prose p { margin: 0 0 6px; }
 
-.gldex-prose { margin-top: var(--gl-sp-4); color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
-
-.gldex-ability { margin-top: var(--gl-sp-5); padding-top: var(--gl-sp-4); border-top: 1px solid var(--gl-hair); }
-.gldex-ability-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gl-sp-3); }
-.gldex-ability-name { color: var(--gl-text-bright); font-size: var(--gl-fs-sm); font-weight: var(--gl-weight-bold); }
-.gldex-cost { color: var(--gl-accent); font-size: var(--gl-fs-3xs); }
-.gldex-ability-body { margin-top: var(--gl-sp-3); color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
-
-.gldex-traits { display: flex; flex-wrap: wrap; gap: var(--gl-sp-2); }
+.gldex-ability { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--gldex-line); }
+.gldex-row + .gldex-ability { margin-top: 4px; }
+.gldex-ability-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.gldex-ability-name { color: var(--gldex-text); font-size: 13px; font-weight: 700; }
+.gldex-cost { color: var(--gldex-tone); font-size: 11px; letter-spacing: 0.05em; }
+.gldex-ability-body { margin-top: 4px; color: var(--gldex-dim); font-size: 12.5px; line-height: 1.5; }
+.gldex-ability-body p { margin: 0 0 6px; }
+.gldex-ability-body p:last-child { margin-bottom: 0; }
+.gldex-traits { display: inline-flex; flex-wrap: wrap; gap: 3px; }
 .gldex-trait {
-  padding: 0 var(--gl-sp-3);
-  background: var(--gl-surface-inset);
-  border: 1px solid var(--gl-hair);
-  color: var(--gl-text-faint);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
+  padding: 2px 5px;
+  background: var(--gldex-ink-3);
+  box-shadow: inset 0 0 0 1px var(--gldex-line);
+  color: var(--gldex-dim);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
-.gldex-empty { color: var(--gl-text-faint); font-size: var(--gl-fs-xs); font-style: italic; }
+/* Abilities PF2e left uncategorised, printed once the entry is truly complete. */
+.gldex-section.gldex-section-extra { --gldex-tone: var(--gldex-paper); }
 
-/* ── The reveal notice ─────────────────────────────────────────────────────── */
+.gldex-empty { padding: 12px 10px; color: var(--gldex-faint); font-size: 12px; line-height: 1.5; }
+.gldex-empty[hidden] { display: none; }
+.gldex-pick { max-width: 34ch; text-align: center; }
+
+/* ── motion ── */
+/* Switching entries: the head, the index and the plates rise in, staggered. */
+.gldex-root[data-entering] :is(.gldex-detail-head, .gldex-index, .gldex-note) {
+  animation: gldex-rise var(--gl-d-swift) var(--gl-ease) both;
+}
+.gldex-root[data-entering] .gldex-section {
+  animation: gldex-rise var(--gl-d-swift) var(--gl-ease) both;
+  animation-delay: calc((var(--gldex-i, 0) + 1) * var(--gl-stagger));
+}
+
+/* A section learned while the window is open unseals where it stands: the
+   hatch it wore slides off toward its hue edge and its edge flares once. */
+.gldex-section.is-fresh { animation: gldex-flare var(--gl-d-slow) var(--gl-ease) both; }
+.gldex-section.is-fresh::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform-origin: 100% 50%;
+  background:
+    repeating-linear-gradient(-45deg, var(--gldex-hatch) 0 6px, transparent 6px 12px),
+    linear-gradient(90deg, color-mix(in oklab, var(--gldex-tone) 26%, var(--gldex-ink-1)), var(--gldex-ink-1) 40%);
+  animation: gldex-unseal var(--gl-d-reveal) var(--gl-ease-sharp) both;
+}
+.gldex-section.is-fresh .gldex-section-body {
+  animation: gldex-rise var(--gl-d-swift) var(--gl-ease) both;
+  animation-delay: var(--gl-d-brisk);
+}
+
+/* ── a narrow window: the shelf becomes a strip above the entry ── */
+@container (max-width: 600px) {
+  .gldex-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .gldex-shelf { border-right: 0; border-bottom: 1px solid var(--gldex-line); }
+  .gldex-shelf-list { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 6px; }
+  .gldex-root .gldex-entry { width: 190px; }
+  .gldex-search { margin-bottom: 0; }
+  .gldex-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .gldex-detail-tools .gldex-tool { width: 28px; padding: 0; font-size: 0; }
+  .gldex-detail-tools .gldex-tool i { font-size: 11px; }
+}
+
+/* ═══ The reveal notice (a chat message) ═══════════════════════════════════ */
 
 .gldex-card {
-  --gl-accent: var(--gl-cyan);
-  padding: var(--gl-sp-4);
-  border-left: 2px solid var(--gl-accent);
-  background: rgb(var(--gl-tint-light) / 0.04);
-  font-size: var(--gl-fs-xs);
+  position: relative;
+  padding: 8px 10px 9px 12px;
+  background: var(--gldex-ink-1);
+  box-shadow: inset 2px 0 0 var(--gldex-tone);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gldex-cut)), calc(100% - var(--gldex-cut)) 100%, 0 100%);
+  color: var(--gldex-text);
+  font-size: 13px;
+  line-height: 1.35;
 }
-.gldex-card[data-section="characteristics"],
-.gldex-card[data-section="complexity"] { --gl-accent: var(--gl-good); }
-.gldex-card[data-section="offense"],
-.gldex-card[data-section="routine"] { --gl-accent: var(--gl-hazard); }
-.gldex-card[data-complete="true"] { --gl-accent: var(--gl-signal); }
-.gldex-card-line { margin: 0; color: var(--gl-text); }
-.gldex-card-done {
-  margin: var(--gl-sp-3) 0 0;
-  color: var(--gl-signal);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
+.gldex-card-head { display: flex; align-items: center; gap: 7px; }
+.gldex-card-mark {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: var(--gldex-paper);
+  clip-path: polygon(0 0, 100% 0, 45% 100%, 0 100%);
+}
+.gldex-card-kicker,
+.gldex-card-section {
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
+.gldex-card-kicker { color: var(--gldex-faint); }
+.gldex-card-section { margin-left: auto; color: var(--gldex-tone); }
+.gldex-card-line { margin: 0; color: var(--gldex-text); }
+.gldex-card-head + .gldex-card-line { margin-top: 5px; }
+.gldex-card-done {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 7px 0 0;
+  padding-top: 7px;
+  border-top: 1px solid var(--gldex-line);
+  color: var(--gldex-paper);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.gldex-card-done > i { font-size: 10px; }
 
+/* ═══ The token HUD button ═════════════════════════════════════════════════ */
 
-/* ── The token HUD button ─────────────────────────────────────────────────── */
+/* Foundry styles `.control-icon` itself; this only marks the glyph as ours. */
+.gldex-hud > i { color: var(--gl-good); }
 
-/* Foundry styles `.control-icon` itself; this only carries the accent so the
-   glyph reads as this feature's rather than as one of the core controls. */
-.gldex-hud > i { color: var(--gl-cyan); }
+/* ═══ The Falsify dialog ═══════════════════════════════════════════════════ */
 
-/* ── Authoring a lie ──────────────────────────────────────────────────────── */
-
-/* This window is the last screen that shows a falsehood before a player does,
-   so it reads in the hazard key throughout rather than in the window accent —
-   a GM glancing at it should never mistake it for an ordinary reveal. */
+/* The last screen a lie passes before a player sees it, so it reads in the
+   lie's hue throughout and never like an ordinary reveal. */
 .gldex-lie-root {
-  --gl-accent: var(--gl-hazard);
   display: flex;
   flex-direction: column;
-  gap: var(--gl-sp-4);
-  padding: var(--gl-sp-5);
+  gap: 12px;
+  padding: 14px 16px 16px;
+  background: var(--gldex-ink-1);
+  font-size: 13px;
+  line-height: 1.4;
 }
-.gldex-lie-lead { margin: 0; color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
-.gldex-lie-lead strong { color: var(--gl-accent); font-family: var(--gl-tech); text-transform: uppercase; letter-spacing: var(--gl-track-wide); }
-
-.gldex-lie-modes { display: flex; gap: var(--gl-sp-3); }
-.gldex-lie-mode.is-on { border-color: var(--gl-accent); color: var(--gl-accent); }
-
-.gldex-lie-field { display: flex; align-items: center; gap: var(--gl-sp-4); }
-.gldex-lie-field > span {
-  flex: 0 0 auto;
-  color: var(--gl-text-dim);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
+.gldex-lie-head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px 10px; }
+.gldex-lie-tag {
+  padding: 4px 7px;
+  background: var(--gldex-lie);
+  color: var(--gldex-ink-0);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.gldex-lie-field select { flex: 1 1 auto; min-width: 0; }
+.gldex-lie-root .gldex-lie-title { font-size: 16px; font-weight: 750; letter-spacing: -0.005em; }
+.gldex-lie-for { grid-column: 2; color: var(--gldex-dim); font-size: 12px; }
 
-.gldex-lie-note { margin: 0; color: var(--gl-text-faint); font-size: var(--gl-fs-3xs); line-height: var(--gl-lh-snug); }
-.gldex-lie-actions { display: flex; justify-content: flex-start; }
+.gldex-lie-modes { display: flex; gap: 2px; padding: 2px; background: var(--gldex-ink-2); }
+.gldex-lie-root .gldex-lie-mode {
+  flex: 1 1 0;
+  height: 30px;
+  color: var(--gldex-dim);
+  font-size: 12px;
+  font-weight: 650;
+}
+.gldex-lie-root .gldex-lie-mode.is-on { background: var(--gldex-paper); color: var(--gldex-ink-0); }
+@media (hover: hover) and (pointer: fine) {
+  .gldex-lie-root .gldex-lie-mode:not(.is-on):hover { background: var(--gldex-hover); color: var(--gldex-text); }
+}
 
-.gldex-lie-draft { display: flex; flex-direction: column; gap: var(--gl-sp-3); }
-.gldex-lie-row { display: flex; align-items: center; gap: var(--gl-sp-4); }
+.gldex-lie-field { display: grid; gap: 6px; }
+.gldex-lie-field > span,
+.gldex-lie-cols > span,
 .gldex-lie-key {
-  flex: 0 0 8.5em;
-  color: var(--gl-text-dim);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
+  color: var(--gldex-faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
-.gldex-lie-row input { flex: 1 1 auto; min-width: 0; font-size: var(--gl-fs-xs); }
-.gldex-lie-extras {
-  margin: 0;
-  padding-left: var(--gl-sp-5);
-  color: var(--gl-text-faint);
-  font-size: var(--gl-fs-3xs);
+.gldex-lie-root .gldex-lie-field select {
+  height: 32px;
+  padding: 0 10px;
+  background: var(--gldex-ink-2);
+  box-shadow: inset 0 0 0 1px var(--gldex-line-strong);
+  color: var(--gldex-text);
+  font-size: 12.5px;
 }
-.gldex-lie-foot { display: flex; justify-content: flex-end; }
-.gldex-lie-send { border-color: var(--gl-accent); color: var(--gl-accent); }
+.gldex-lie-root .gldex-lie-field select option { background: var(--gldex-ink-2); color: var(--gldex-text); }
+.gldex-lie-note { color: var(--gldex-dim); font-size: 12px; line-height: 1.45; }
 
-/* ── The GM's per-entry tools ─────────────────────────────────────────────── */
-
-.gldex-detail-tools { display: flex; gap: var(--gl-sp-3); margin-left: auto; }
-
-/* Abilities PF2e left uncategorised, printed once the entry is finished. */
-.gldex-deferred-note {
-  margin: var(--gl-sp-4) 0 0;
-  color: var(--gl-text-faint);
-  font-size: var(--gl-fs-3xs);
-  font-style: italic;
+.gldex-lie-draft { display: flex; flex-direction: column; }
+.gldex-lie-cols,
+.gldex-lie-row {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr) minmax(0, 1.25fr);
+  align-items: center;
+  gap: 10px;
 }
-.gldex-section-extra { --gl-accent: var(--gl-text-dim); }
+.gldex-lie-cols { padding-bottom: 6px; }
+.gldex-lie-row { padding: 4px 0; border-top: 1px solid var(--gldex-line); }
+.gldex-lie-truth { min-width: 0; color: var(--gldex-dim); font-size: 12px; overflow-wrap: anywhere; }
+.gldex-lie-root .gldex-lie-row input {
+  height: 30px;
+  min-width: 0;
+  padding: 0 9px;
+  background: var(--gldex-ink-2);
+  box-shadow: inset 0 0 0 1px var(--gldex-line);
+  color: var(--gldex-text);
+  font-size: 12.5px;
+}
+.gldex-lie-root .gldex-lie-row input::placeholder { color: var(--gldex-faint); font-style: italic; }
+.gldex-lie-row.is-changed .gldex-lie-key { color: var(--gldex-lie); }
+.gldex-lie-root .gldex-lie-row.is-changed input {
+  box-shadow: inset 2px 0 0 var(--gldex-lie), inset 0 0 0 1px color-mix(in oklab, var(--gldex-lie) 45%, transparent);
+}
+.gldex-lie-extras { margin: 8px 0 4px; padding-left: 16px; color: var(--gldex-faint); font-size: 11.5px; }
+.gldex-lie-draft > .gldex-lie-note { margin-top: 6px; }
+.gldex-lie-empty {
+  padding: 18px 14px;
+  background: repeating-linear-gradient(-45deg, var(--gldex-hatch) 0 6px, transparent 6px 12px), var(--gldex-ink-2);
+  color: var(--gldex-faint);
+  font-size: 12px;
+  text-align: center;
+}
+
+.gldex-lie-foot { display: flex; align-items: center; gap: 6px; padding-top: 4px; }
+.gldex-lie-diff {
+  margin-right: auto;
+  color: var(--gldex-faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.gldex-lie-root .gldex-lie-gen,
+.gldex-lie-root .gldex-lie-send {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gldex-cut-sm)), calc(100% - var(--gldex-cut-sm)) 100%, 0 100%);
+}
+.gldex-lie-root .gldex-lie-gen { background: var(--gldex-ink-3); box-shadow: inset 0 0 0 1px var(--gldex-line-strong); color: var(--gldex-text); }
+.gldex-lie-root .gldex-lie-send { background: var(--gldex-lie); color: var(--gldex-ink-0); }
+@media (hover: hover) and (pointer: fine) {
+  .gldex-lie-root .gldex-lie-gen:hover { background: var(--gldex-ink-4); }
+  .gldex-lie-root .gldex-lie-send:hover:not(:disabled) { background: color-mix(in oklab, var(--gldex-lie) 84%, var(--gldex-text)); }
+}
+
+/* ═══ Keyframes (prefixed: keyframe names are global) ══════════════════════ */
+
+@keyframes gldex-rise {
+  from { opacity: 0; translate: 0 6px; }
+  to { opacity: 1; translate: 0 0; }
+}
+@keyframes gldex-unseal {
+  from { transform: scaleX(1); opacity: 1; }
+  70% { opacity: 1; }
+  to { transform: scaleX(0); opacity: 0; }
+}
+@keyframes gldex-flare {
+  from { box-shadow: inset 2px 0 0 var(--gldex-tone), inset 0 0 0 1px var(--gldex-tone), inset 0 0 24px color-mix(in oklab, var(--gldex-tone) 30%, transparent); }
+  to { box-shadow: inset 2px 0 0 var(--gldex-tone), inset 0 0 0 1px transparent, inset 0 0 24px transparent; }
+}
