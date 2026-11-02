@@ -30,11 +30,17 @@ Three options were weighed:
 Option 3. `foundry/sight-backend.mjs` installs `HeightSweepPolygon` for `sight`
 and `light`.
 
-- **Polygons.** `_identifyEdges` adds the outline of all ground above the
-  source's eye (token elevation + 0.9 × creature height; a light's elevation
-  plus the ground under it) as ordinary edges, per source. The crossings with
-  the scene's edges are computed on the clones, because Foundry precomputes
-  `edge.intersections` for scene edges only.
+- **Polygons.** `_identifyEdges` adds the outline of high ground as ordinary
+  edges, per source. For a light that is all ground above its elevation plus
+  the ground under it. For sight it is ground more than a medium creature's
+  height (`SIGHT_REVEAL_DIST`, 6 ft) above the eye (token elevation + 0.9 ×
+  creature height): the polygon reveals ground where a creature standing on it
+  would be seen, not only ground whose floor the eye can see. The strict
+  "floor only" rule hid every terrace a little above the party and everything
+  behind it, about two thirds of a terraced map. Tokens are not revealed by
+  this: detection still marches each target's feet, middle and head in 3D.
+  The crossings with the scene's edges are computed on the clones, because
+  Foundry precomputes `edge.intersections` for scene edges only.
 - **Point tests.** `_testCollision` has a real destination height, so it marches
   the 3D segment over the height field and tests the walls without the 2D
   outline, which cannot express "a head above the lip".

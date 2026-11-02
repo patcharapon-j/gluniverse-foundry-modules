@@ -36,10 +36,19 @@ import { registerWrapper } from "../../../core/wrapper.mjs";
 import { cliffEdges, rayBlocked, rayPoint } from "../terrain/occlusion.mjs";
 import { distToQ } from "../terrain/model.mjs";
 import { creatureHeightDist, eyeQ } from "../rules/creature.mjs";
+import { SIZE_HEIGHT } from "../constants.mjs";
 import { activeContext, t } from "./context.mjs";
 
 /** A light sits at least this far above the ground under it (q). */
 const LIGHT_LIFT_Q = 1;
+/**
+ * A sight polygon reveals ground where a medium creature standing on it would
+ * be seen, not only ground whose floor the eye can see: its outline is the
+ * ground more than this far (distance units) above the eye. Tokens are still
+ * tested in 3D at their own feet, middle and head, so this reveals terrain,
+ * never a creature. Lights keep the exact outline.
+ */
+export const SIGHT_REVEAL_DIST = SIZE_HEIGHT.med;
 /** Where a target is sampled, as fractions of its height: feet, middle, head. */
 export const TARGET_SAMPLES = Object.freeze([0.1, 0.5, 0.95]);
 
@@ -68,6 +77,17 @@ export function polygonEyeQ(poly, live) {
   const ground = terrain.groundAt(o.x ?? 0, o.y ?? 0, grid.size);
   const own = distToQ(Number(o.elevation) || 0, grid.distance);
   return Math.max(own, ground + LIGHT_LIFT_Q);
+}
+
+/**
+ * The height (q) above which ground is outlined into a polygon, or null when
+ * the polygon gets no height edges. Sight reveals SIGHT_REVEAL_DIST above the eye.
+ */
+export function outlineFloorQ(poly, live) {
+  const eye = polygonEyeQ(poly, live);
+  if (eye === null || !Number.isFinite(eye)) return null;
+  const lift = poly.config.type === "sight" ? distToQ(SIGHT_REVEAL_DIST, live.grid.distance) : 0;
+  return Math.floor(eye + lift);
 }
 
 /* ------------------------------------------------------------------ */
@@ -154,9 +174,9 @@ export function createHeightSweepClass(Base, { Edge, Vertex, context }) {
       if (this._dioNoCliffs) return;
       const live = context(this);
       if (!live) return;
-      const eye = polygonEyeQ(this, live);
-      if (eye === null || !Number.isFinite(eye)) return;
-      const list = cliffEdgeObjects(live.terrain, Math.floor(eye), live.grid.size, Edge);
+      const floorQ = outlineFloorQ(this, live);
+      if (floorQ === null) return;
+      const list = cliffEdgeObjects(live.terrain, floorQ, live.grid.size, Edge);
       if (!list.length) return;
       const box = this.config.boundingBox;
       const added = [];

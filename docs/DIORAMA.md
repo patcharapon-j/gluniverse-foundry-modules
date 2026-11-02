@@ -145,9 +145,11 @@ dist (scene units, `q / 4 · grid.distance`).
   as bludgeoning, 20 ft shorter into water). Nothing is applied automatically.
 - **Sight and light.** A custom `ClockwiseSweepPolygon` subclass is installed as
   `CONFIG.Canvas.polygonBackends.sight` and `.light`. For each source it adds the
-  outline of all ground above that source's eye (token elevation + 0.9 × creature
-  height; a light's elevation + ground) as ordinary edges, so the 2D canvas and the
-  3D view draw the same polygons. Point tests (`testCollision`, used by token
+  outline of high ground as ordinary edges, so the 2D canvas and the 3D view draw
+  the same polygons. A light is cut by all ground above it (its elevation +
+  ground). Sight is cut only by ground more than 6 ft (a medium creature) above
+  the eye (token elevation + 0.9 × creature height), so the fog lifts wherever a
+  creature standing there would be seen, not only where the floor itself is. Point tests (`testCollision`, used by token
   detection) instead march the real 3D segment over the height field, because they
   have real target heights; feet, centre and head are tested.
   See [ADR 0002](adr/0002-height-sight-backend.md).
