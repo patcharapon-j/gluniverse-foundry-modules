@@ -18,6 +18,11 @@
  * where every layer is rather than snapping.
  *
  * States: `?states=1` starts with a guard break, a dying creature and a boss.
+ * `?states=all` adds conditions, a delayed card, an ad hoc entry, a defeated
+ * creature and a stable 5e death-save card. `?gm=1` draws the GM's rail (card
+ * controls, visibility markers, turn controls). `?delayed=bottom` moves the
+ * delayed column under the rail (default "side", the setting's default).
+ * `?badges=vertical` draws the condition badges as the vertical strip.
  *
  * Skins: `?skin=aegis` (or the switcher) stamps `data-gl-skin` on the rail
  * root exactly as the feature does, so styles/initiative-aegis.css applies.
@@ -49,7 +54,7 @@ const COMBATANTS = [
   { id: "b", name: "Hollow Knight", initiative: 21, disposition: "hostile", portrait: figure("#3a1d24", "#d66f86") },
   { id: "c", name: "Brakka", initiative: 17, disposition: "friendly", portrait: figure("#1f3a2a", "#78d69a") },
   { id: "d", name: "Goblin Warrior", initiative: 12, disposition: "hostile", portrait: figure("#3a311d", "#d6b46f") },
-  { id: "e", name: "Unnamed Shade", initiative: 9, disposition: "neutral", mystery: true },
+  { id: "e", name: "Unnamed Shade", initiative: 9, disposition: "neutral", mystery: true, portrait: figure("#24262e", "#8a8fa0") },
   { id: "f", name: "Ilsa", initiative: 5, disposition: "friendly", portrait: figure("#2b1d3a", "#a98ad6") }
 ];
 
@@ -109,8 +114,10 @@ const format = (key, data = {}) => localize(key).replace(/{(\\w+)}/g, (_, k) => 
 const params = new URLSearchParams(location.search);
 const skinSelect = document.querySelector("#skin");
 skinSelect.value = params.get("skin") === "aegis" ? "aegis" : "etched";
-const settingValues = { "init.skin": skinSelect.value };
-globalThis.game = { user: { isGM: false, id: "preview" }, system: { id: "none" }, combat: null, modules: { get: () => null }, settings: { get: (_m, key) => settingValues[key] }, i18n: { localize, format } };
+if (params.get("edge") === "left") document.querySelector("#edge").value = "left";
+const isGM = params.get("gm") === "1";
+const settingValues = { "init.skin": skinSelect.value, "init.conditionBadgeLayout": params.get("badges") === "vertical" ? "vertical" : "horizontal" };
+globalThis.game = { user: { isGM, id: "preview" }, system: { id: "none" }, combat: null, modules: { get: () => null }, settings: { get: (_m, key) => settingValues[key] }, i18n: { localize, format } };
 globalThis.Hooks = { on() {}, off() {}, callAll() {} };
 globalThis.ui = { notifications: { warn: console.warn, error: console.error } };
 globalThis.foundry = { applications: { api: {} } };
@@ -126,7 +133,18 @@ overlay.root = root;
 const states = { break: new Set(), dying: new Set(), boss: new Set() };
 // ?states=1 starts with guard break on #3, dying on #4 and a boss on #2, for
 // headless contact sheets of the danger states.
-if (params.get("states") === "1") { states.break.add("c"); states.dying.add("d"); states.boss.add("b"); }
+const allStates = params.get("states") === "all";
+if (params.get("states") === "1" || allStates) { states.break.add("c"); states.dying.add("d"); states.boss.add("b"); }
+// The rest of ?states=all: what the view model hands the card for each.
+const extras = !allStates ? {} : {
+  a: { conditions: [{ name: "Frightened", value: 2, text: "Frightened 2" }, { name: "Off-Guard", value: null, text: "Off-Guard" }] },
+  f: { dying: { kind: "deathsaves", successes: 3, failures: 1, max: 3, stable: true, severity: "low" } },
+  e: { defeated: true }
+};
+const DELAYED = allStates ? [{ id: "g", name: "Varro the Patient", initiative: 14, disposition: "friendly", portrait: ${JSON.stringify(figure("#1d2f3a", "#6fc7d6"))} }] : [];
+const ADHOC = allStates ? { id: "h", name: "Collapsing Ceiling", initiative: 10, disposition: "neutral", adhoc: { type: "hazard", label: "Hazard", icon: "fa-solid fa-triangle-exclamation", oneShot: true, round: 2 } } : null;
+// GM view: one combatant set to Hide and the shade shown as the GM sees it.
+const gmModes = isGM ? { f: "hidden", e: "mystery" } : {};
 // turn counts every turn taken, so the round falls out of it. Keys follow the
 // tracker's own scheme (combatant:<id>:round:<offset>, separator:<round>:offset:<n>).
 let turn = 0;
@@ -147,33 +165,52 @@ function railFor(total) {
       separators.add(offset);
       list.push({ type: "separator", key: "separator:" + (round + offset) + ":offset:" + offset, round: round + offset });
     }
+    const mystery = Boolean(c.mystery) && !isGM;
     list.push({
-      type: "combatant", id: c.id, key: "combatant:" + c.id + ":round:" + offset, active: i === 0, delayed: false,
-      roundOffset: offset, mystery: Boolean(c.mystery), gmVisibilityMode: "auto", defeated: false,
-      disposition: c.disposition, adhoc: null, guardBroken: states.break.has(c.id), breakGauge: null,
+      type: "combatant", id: c.id, key: "combatant:" + c.id + ":round:" + offset, active: i === 0, next: i === 1, delayed: false,
+      roundOffset: offset, mystery, gmVisibilityMode: gmModes[c.id] ?? "auto", defeated: false,
+      disposition: mystery ? "secret" : c.disposition, adhoc: null, guardBroken: states.break.has(c.id),
+      breakGauge: allStates && c.id === "b" ? { value: 2, max: 3, mode: "segmented", ratio: 2 / 3 } : null,
       dying: states.dying.has(c.id) ? { kind: "pf2e", value: 2, max: 4, severity: "high", stable: false } : null,
-      conditions: null, boss: states.boss.has(c.id) ? { tier: "greater" } : null, bossTurn: null, name: c.mystery ? localize("GLUNI.Unknown") : c.name,
-      initiative: c.initiative, portrait: c.mystery ? null : c.portrait,
-      portraitScaleCap: 1, portraitFrame: null, canEndTurn: false
+      conditions: null, boss: states.boss.has(c.id) ? { tier: "greater" } : null, bossTurn: null, name: mystery ? localize("GLUNI.Unknown") : c.name,
+      initiative: c.initiative, portrait: mystery ? null : c.portrait,
+      portraitScaleCap: 1, portraitFrame: null, canEndTurn: i === 0 && c.disposition === "friendly",
+      ...(extras[c.id] ?? {})
     });
+    if (ADHOC && c.id === "d" && offset === 0) {
+      list.push({ type: "combatant", id: ADHOC.id, key: "combatant:" + ADHOC.id + ":round:0", active: false, delayed: false, roundOffset: 0,
+        mystery: false, gmVisibilityMode: "auto", defeated: false, disposition: ADHOC.disposition, adhoc: ADHOC.adhoc,
+        guardBroken: false, breakGauge: null, dying: null, conditions: null, boss: null, bossTurn: null, name: ADHOC.name,
+        initiative: ADHOC.initiative, portrait: null, portraitScaleCap: 1, portraitFrame: null, canEndTurn: false });
+    }
   }
-  return { list, round };
+  const delayed = DELAYED.map(c => ({ type: "combatant", id: c.id, key: "combatant:" + c.id + ":round:0", active: false, delayed: true,
+    roundOffset: 0, mystery: false, gmVisibilityMode: "auto", defeated: false, disposition: c.disposition, adhoc: null,
+    guardBroken: false, breakGauge: null, dying: null, conditions: null, boss: null, bossTurn: null, name: c.name,
+    initiative: c.initiative, portrait: c.portrait, portraitScaleCap: 1, portraitFrame: null, canEndTurn: false }));
+  return { list, round, delayed };
 }
 
 function render(animate, turnAdvanced = true) {
   const edge = document.querySelector("#edge").value;
   settingValues["init.skin"] = skinSelect.value;
-  root.className = "gluni-initiative gluni-initiative--" + edge + " gluni-initiative--player";
+  root.className = ["gluni-initiative", "gluni-initiative--" + edge, isGM ? "gluni-initiative--gm" : "gluni-initiative--player",
+    params.get("delayed") === "bottom" ? "" : "gluni-initiative--delayed-side"].filter(Boolean).join(" ");
   root.style.top = "80px";
+  root.style.right = edge === "right" ? "18px" : "";
+  root.style.left = edge === "left" ? "18px" : "";
   root.style.setProperty("--gl-motion-scale", document.querySelector("#tier").value);
   overlay.applySkin();
-  const { list, round } = railFor(turn);
+  const { list, round, delayed } = railFor(turn);
   // The real renderMarkup: header (round plate) + rail, as the feature draws it.
-  const markup = overlay.renderMarkup({ round, started: true }, { normal: list, delayed: [] }, {});
+  const markup = overlay.renderMarkup({ round, started: true }, { normal: list, delayed }, {});
   const snapshots = animate ? overlay.captureItemRects() : new Map();
   overlay._railMotion.clear();
   root.innerHTML = markup;
+  // The same read and write the feature's render makes after a rebuild.
+  const placement = overlay.measureFloatingControls();
   if (animate) overlay.animateTurnChange(snapshots, { edge, roundDelta: Math.max(0, round - lastRound), turnAdvanced });
+  overlay.applyFloatingControls(placement);
   overlay.lastActiveKey = list.find(item => item.active)?.key ?? null;
   lastRound = round;
 }
@@ -247,6 +284,11 @@ document.querySelector("#tier").onchange = () => root.style.setProperty("--gl-mo
 document.querySelector("#edge").onchange = () => render(false);
 document.querySelector("#window").onchange = () => render(false);
 render(false);
+// ?step=1&seek=0.5 plays one turn change and parks it, for headless stills.
+if (params.has("step")) {
+  window.__initiativeStep(Number(params.get("step")) || 1);
+  if (params.has("seek")) window.__initiativeSeek(Math.min(1, Math.max(0, Number(params.get("seek")) || 0)));
+}
 window.__initiativeReady = true;
 </script>
 </body>

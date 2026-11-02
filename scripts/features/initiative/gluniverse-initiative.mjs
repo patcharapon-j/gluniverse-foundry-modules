@@ -59,7 +59,7 @@ import { TokenOverlayManager, getMarkerSheets, prewarmStatusShaders } from "./to
  */
 import { bossBadge } from "../pf2e-variant-rules/boss/profile.mjs";
 import { turnMarker } from "../pf2e-variant-rules/boss/initiative.mjs";
-import { getPF2eDyingState, getDnd5eDeathState, getDyingState, COVERED_CONDITION_SLUGS, isPrimaryCondition, getConditionBadgeValue, getHiddenConditionKeys, getPrimaryConditionTags, getConditionTags, renderConditionRepeatText, getConditionTone, renderConditionLabels, findPF2eGuardBreakEffects, renderDyingRepeatText, renderGuardBreakRepeatText, getGuardBreakState, getBreakGaugeState, renderBreakGaugeBar, renderDyingPips, renderDeathSavePips, renderDeathSaveRepeatText } from "./conditions.mjs";
+import { getPF2eDyingState, getDnd5eDeathState, getDyingState, COVERED_CONDITION_SLUGS, isPrimaryCondition, getConditionBadgeValue, getHiddenConditionKeys, getPrimaryConditionTags, getConditionTags, getConditionTone, renderConditionLabels, findPF2eGuardBreakEffects, getGuardBreakState, getBreakGaugeState, renderBreakGaugeBar, renderDyingPips, renderDeathSavePips } from "./conditions.mjs";
 
 
 // Exported as a live binding: token-overlay.mjs reads `overlay` (enabled state,
@@ -159,8 +159,9 @@ export function onInit() {
     addGuardBreakTokenHudButton(hud, html, data);
     addBreakGaugeTokenHudButton(hud, html, data);
   });
-  Hooks.on("combatRound", (_combat, updateData) => {
-    if (typeof updateData?.round === "number") overlay?.showRoundSplash(updateData.round);
+  Hooks.on("combatRound", (combat, updateData, updateOptions) => {
+    if (updateOptions?.direction < 0) return;
+    if (typeof updateData?.round === "number") overlay?.showRoundSplash(updateData.round, combat?.id);
   });
   Hooks.on("canvasReady", () => {
     tokenOverlays?.refresh();
@@ -1278,6 +1279,7 @@ export class GLUniverseInitiativeOverlay {
     this.drag = null;
     this.renderTimer = null;
     this.lastRound = game.combat?.round ?? null;
+    this.lastRoundCombatId = game.combat?.id ?? null;
     this.lastRenderedRound = game.combat?.round ?? null;
     this.lastTurnKey = "";
     this.lastActiveId = null;
@@ -1343,7 +1345,7 @@ export class GLUniverseInitiativeOverlay {
     if (data?.type === "refresh") this.renderSoon();
     if (data?.type === "roundSplash") this.showRoundSplash(data.round);
     if (data?.type === "guardBreakImpact") this.queueGuardBreakImpact(data);
-    if (data?.type === "breakSplash") this.showBreakSplash(data.name);
+    if (data?.type === "breakSplash") this.showBreakSplashFor(data.combatId, data.combatantId);
     if (data?.type === "statusAnimation") this.queueStatusAnimation(data);
     if (data?.type === "requestEndTurn") this.onSocketEndTurnRequest(data);
   }
@@ -1407,6 +1409,12 @@ export class GLUniverseInitiativeOverlay {
 
     // A cinematic start already announced the fight: the cards it handed over
     // fly into the rail instead of the round splash playing over them.
+    // The round memory belongs to one encounter. Carried across combats, a fight
+    // that ended in round 1 swallowed the next fight's opening splash.
+    if (this.lastRoundCombatId !== combat?.id) {
+      this.lastRoundCombatId = combat?.id ?? null;
+      this.lastRound = null;
+    }
     const arrival = (changed?.started === true || typeof changed?.round === "number")
       ? this.takeArrival(combat?.id)
       : null;
@@ -1414,14 +1422,16 @@ export class GLUniverseInitiativeOverlay {
       const round = typeof changed?.round === "number" ? changed.round : (combat.round ?? 1);
       this._arrival = arrival;
       this.lastRound = round;
-      this.lastSplashRound = round;
+      this.lastSplashKey = `${combat?.id}:${round}`;
     } else {
       if (changed?.started === true) {
-        this.showRoundSplash(combat.round ?? 1);
+        this.showRoundSplash(combat.round ?? 1, combat.id);
       }
 
       if (typeof changed?.round === "number" && changed.round !== this.lastRound) {
-        this.showRoundSplash(changed.round);
+        // Only a round that moves forward is announced; stepping back to fix a
+        // mistake is not a new round for the table.
+        if (changed.round > (this.lastRound ?? 0)) this.showRoundSplash(changed.round, combat.id);
         this.lastRound = changed.round;
       }
     }
@@ -1965,7 +1975,15 @@ export class GLUniverseInitiativeOverlay {
       added += 1;
     }
 
-    const activeKey = normal.find(item => item.type === "combatant" && item.active)?.key ?? null;
+    const activeIndex = normal.findIndex(item => item.type === "combatant" && item.active);
+    const activeKey = activeIndex >= 0 ? normal[activeIndex].key : null;
+    // "Who is up after this?" is the question the rail is asked most. The answer
+    // is the first card this viewer can see after the active one, so a hidden
+    // creature in between is skipped here exactly as it is skipped on the rail.
+    // The rail starts at the current turn, so when the active creature is the
+    // hidden one, the first card this viewer sees is the one up next.
+    const next = normal.slice(activeIndex + 1).find(item => item.type === "combatant" && item.id !== activeId);
+    if (next) next.next = true;
     return { normal, delayed, activeId, activeKey };
   }
 
@@ -2032,6 +2050,7 @@ export class GLUniverseInitiativeOverlay {
     const classes = [
       "gluni-card",
       card.active ? "gluni-card--active" : "",
+      card.next ? "gluni-card--next" : "",
       this.lastActiveKey === card.key && !card.active ? "gluni-card--outgoing-active" : "",
       card.delayed ? "gluni-card--delayed" : "",
       card.adhoc ? "gluni-card--adhoc" : "",
@@ -2085,63 +2104,30 @@ export class GLUniverseInitiativeOverlay {
         ? (card.boss.tier === "supreme" ? 1.45 : 1) * (card.bossTurn ? 0.6 : 1)
         : 1;
 
+    // One quiet layer per state, never a watermark: the state is said once by its
+    // chip, coloured into the edge, and drawn on the art by the WebGL effect (or,
+    // with no WebGL, by the plain field below the content).
     return `
       <article class="${classes}" data-gluni-key="${escapeAttr(card.key)}" data-combatant-id="${card.id}" data-round-offset="${card.roundOffset}"${style}>
         <div class="gluni-card-surface">
         <div class="gluni-card-accent" aria-hidden="true"></div>
-        <div class="gluni-card-spec" aria-hidden="true"></div>
-        <div class="gluni-card-bracket" aria-hidden="true"></div>
-        <div class="gluni-card-hud" aria-hidden="true"><span class="gluni-card-hud-code">${localize("GLUNI.Hud.Init")}</span></div>
         ${game.user.isGM ? this.renderGMVisibilityMarker(card) : ""}
         ${card.adhoc && !card.mystery
-          ? `
-            <div class="gluni-card-adhoc-repeat" aria-hidden="true">
-              ${renderAdhocRepeatText(card.name)}
-            </div>
-            <div class="gluni-card-adhoc-bg" aria-hidden="true"><i class="${escapeAttr(card.adhoc.icon)}"></i></div>
-          `
+          ? `<div class="gluni-card-adhoc-bg" aria-hidden="true"><i class="${escapeAttr(card.adhoc.icon)}"></i></div>`
           : `<div class="gluni-card-portrait-wrap">
               ${card.mystery
                 ? `<div class="gluni-card-mystery-mark" aria-hidden="true">?</div>`
                 : `<img class="gluni-card-portrait" src="${escapeAttr(card.portrait)}" alt="" decoding="async">`}
               <div class="gluni-card-glass" aria-hidden="true"></div>
             </div>`}
-        ${card.delayed
-          ? `
-            <div class="gluni-card-delayed-bg" aria-hidden="true"></div>
-            <div class="gluni-card-delayed-repeat" aria-hidden="true">
-              ${renderDelayedRepeatText(card.name)}
-            </div>
-          `
-          : ""}
-        ${card.dying
-          ? `
-            ${fxMode === "dying" || fxMode === "scramble" ? "" : `<div class="gluni-card-dying-bg" aria-hidden="true"></div>`}
-            <div class="gluni-card-dying-repeat" aria-hidden="true">
-              ${card.dying.kind === "deathsaves" ? renderDeathSaveRepeatText(card.dying) : renderDyingRepeatText(card.dying)}
-            </div>
-          `
-          : ""}
-        ${card.guardBroken
-          ? `
-            ${fxMode === "break" || fxMode === "scramble" ? "" : `<div class="gluni-card-guard-break-bg" aria-hidden="true"></div>`}
-            <div class="gluni-card-guard-break-repeat" aria-hidden="true">
-              ${renderGuardBreakRepeatText()}
-            </div>
-          `
-          : ""}
-        ${card.conditions
-          ? `
-            <div class="gluni-card-condition-bg" aria-hidden="true"></div>
-            <div class="gluni-card-condition-repeat" aria-hidden="true">
-              ${renderConditionRepeatText(card.conditions)}
-            </div>
-          `
-          : ""}
+        ${card.delayed ? `<div class="gluni-card-delayed-bg" aria-hidden="true"></div>` : ""}
+        ${card.dying && fxMode !== "dying" && fxMode !== "scramble" ? `<div class="gluni-card-dying-bg" aria-hidden="true"></div>` : ""}
+        ${card.guardBroken && fxMode !== "break" && fxMode !== "scramble" ? `<div class="gluni-card-guard-break-bg" aria-hidden="true"></div>` : ""}
         ${fxMode ? `<canvas class="gluni-card-portrait-fx gluni-card-portrait-fx--${fxMode}" data-fx="${fxMode}" data-fx-intensity="${fxIntensity}" aria-hidden="true"></canvas>` : ""}
         <div class="gluni-card-content">
           <div class="gluni-card-kicker">
             ${card.active ? `<span class="gluni-active-tag">${localize("GLUNI.Controls.Turn").toUpperCase()}</span>` : ""}
+            ${card.next ? `<span class="gluni-next-tag">${localize("GLUNI.TurnMarker.Next").toUpperCase()}</span>` : ""}
             ${card.guardBroken ? `<span class="gluni-guard-break-tag">${localize("GLUNI.GuardBreak").toUpperCase()}</span>` : ""}
             ${card.dying ? (card.dying.kind === "deathsaves"
               ? `<span class="gluni-dying-tag${card.dying.stable ? " gluni-dying-tag--stable" : ""}">${(card.dying.stable ? localize("GLUNI.DeathSaves.Stable") : localize("GLUNI.DeathSaves.Label")).toUpperCase()}</span>`
@@ -2211,20 +2197,69 @@ export class GLUniverseInitiativeOverlay {
   // move's own measurements, which cost the rail a second full layout on every
   // turn — the controls sit on the active card, so this runs on exactly the
   // renders that are already the most expensive.
+  //
+  // The same pass places the side column of delayed cards. It belongs on the
+  // screen-edge side of the rail, but the rail sits 18px from that edge by
+  // default, so there the column was drawn entirely off screen. When it does not
+  // fit it moves inward, past the condition badges and the turn controls.
   measureFloatingControls() {
     const shell = this.root?.querySelector(".gluni-shell");
-    const activeCard = this.root?.querySelector(".gluni-card--active");
-    const controls = this.root?.querySelector(".gluni-floating-turn-controls");
-    if (!shell || !activeCard || !controls) return null;
+    if (!shell) return null;
+    const activeCard = shell.querySelector(".gluni-rail .gluni-card--active");
+    const controls = shell.querySelector(".gluni-floating-turn-controls");
+    const section = this.root.classList.contains("gluni-initiative--delayed-side")
+      ? shell.querySelector(".gluni-delayed-section")
+      : null;
+    if (!(activeCard && controls) && !section) return null;
 
     const shellRect = shell.getBoundingClientRect();
-    const cardRect = activeCard.getBoundingClientRect();
-    return { shell, top: Math.max(0, Math.round(cardRect.top - shellRect.top + 32)) };
+    // Visual px per layout px: the interface scale sits on the shell's transform,
+    // and both custom properties written below are read in layout px.
+    const k = shell.offsetWidth && shellRect.width ? shellRect.width / shell.offsetWidth : 1;
+    const right = this.root.classList.contains("gluni-initiative--right");
+    // How far an element reaches past the rail's inner edge, in layout px.
+    const reachOf = (node) => {
+      const rect = node?.getBoundingClientRect();
+      if (!rect?.width) return 0;
+      return Math.max(0, (right ? shellRect.left - rect.left : rect.right - shellRect.right) / k);
+    };
+    const measurement = { shell, top: null, inset: null, side: null };
+    let controlsReach = 0;
+    if (activeCard && controls) {
+      const cardRect = activeCard.getBoundingClientRect();
+      measurement.top = Math.max(0, Math.round((cardRect.top - shellRect.top) / k + 32));
+      // The active card's condition badges stand in the same column as the turn
+      // controls, so the controls step out past them rather than covering one.
+      const badges = reachOf(activeCard.querySelector(".gluni-card-condition-labels"));
+      measurement.inset = badges ? Math.ceil(badges) : 0;
+      controlsReach = CONTROL_SIDE_GAP + measurement.inset + controls.offsetWidth;
+    }
+    if (section) {
+      const viewport = window.innerWidth || document.documentElement.clientWidth || 0;
+      const need = (section.offsetWidth + DELAYED_SIDE_GAP) * k;
+      const room = right ? viewport - shellRect.right : shellRect.left;
+      if (room >= need) {
+        measurement.side = { inner: false, offset: 0 };
+      } else {
+        let reach = controlsReach;
+        for (const node of shell.querySelectorAll(".gluni-rail .gluni-card-condition-labels")) {
+          reach = Math.max(reach, reachOf(node));
+        }
+        measurement.side = { inner: true, offset: Math.ceil(reach) };
+      }
+    }
+    return measurement;
   }
 
   applyFloatingControls(measurement) {
     if (!measurement) return;
-    measurement.shell.style.setProperty("--gluni-control-top", `${measurement.top}px`);
+    const { shell, top, inset, side } = measurement;
+    if (top !== null) shell.style.setProperty("--gluni-control-top", `${top}px`);
+    if (inset !== null) shell.style.setProperty("--gluni-control-inset", `${inset}px`);
+    if (side) {
+      shell.classList.toggle("gluni-shell--delayed-inner", side.inner);
+      shell.style.setProperty("--gluni-delayed-offset", `${side.offset}px`);
+    }
   }
 
   renderGMVisibilityMarker(card) {
@@ -3273,11 +3308,11 @@ export class GLUniverseInitiativeOverlay {
     }
     this.pendingSlideInIds.add(combatant.id);
     this.statusAnimationRecentlyQueued(combatant.id, "guardBreak");
-    this.showBreakSplash(combatant.name);
+    this.showBreakSplashFor(combat.id, combatant.id);
     // The broken card is moved before the active turn, so it falls outside the
     // forward-looking window on other clients and their local detection can't
     // see it. Broadcast the splash + entrance so every player gets the cue.
-    this.broadcastBreakSplash(combatant.name);
+    this.broadcastBreakSplash(combat.id, combatant.id);
     this.broadcastStatusAnimation(combatant.id, "guardBreak");
 
     const payload = {
@@ -3506,9 +3541,24 @@ export class GLUniverseInitiativeOverlay {
     return 1300;
   }
 
-  broadcastBreakSplash(name) {
-    if (!socketReady() || !name) return;
-    emitSocket(FEATURE_ID, { type: "breakSplash", name });
+  // The payload names the combatant, never its name: each client resolves the
+  // name through its own visibility, so a masked creature breaks as "Unknown"
+  // and a hidden one plays no splash at all. A name in the payload reached every
+  // player's console, masked or not.
+  broadcastBreakSplash(combatId, combatantId) {
+    if (!socketReady() || !combatantId) return;
+    emitSocket(FEATURE_ID, { type: "breakSplash", combatId, combatantId });
+  }
+
+  showBreakSplashFor(combatId, combatantId) {
+    const combat = this.getCombatById(combatId) ?? this.combat;
+    const combatant = combat?.combatants?.get?.(combatantId);
+    if (!combatant) return;
+    const card = this.buildCombatantCard(combatant, {
+      active: false, delayed: false, roundOffset: 0,
+      displayRound: Number(combat.round) || 1, key: `splash:${combatantId}`
+    });
+    if (card?.name) this.showBreakSplash(card.name);
   }
 
   queueStatusAnimation(data) {
@@ -3648,6 +3698,9 @@ export class GLUniverseInitiativeOverlay {
     window.removeEventListener("pointermove", this.onPointerMove);
     this.root.classList.remove("gluni-initiative--dragging");
     this.drag = null;
+    // A move changes which side has room for the delayed column; the markup does
+    // not change, so nothing else would place it again.
+    this.applyFloatingControls(this.measureFloatingControls());
 
     const rect = this.root.getBoundingClientRect();
     await game.settings.set(MODULE_ID, SETTINGS.position, {
@@ -3897,6 +3950,13 @@ export class GLUniverseInitiativeOverlay {
       if (menu.contains(closeEvent.target)) return;
       this.closeInitiativeContextMenu();
     };
+    // Escape closes it, as it does the gauge editor this menu opens.
+    menu.addEventListener("keydown", keyEvent => {
+      if (keyEvent.key !== "Escape") return;
+      keyEvent.preventDefault();
+      keyEvent.stopPropagation();
+      this.closeInitiativeContextMenu();
+    });
     window.setTimeout(() => {
       if (this.contextMenu?.element !== menu) return;
       document.addEventListener("pointerdown", closeOnOutside);
@@ -3981,10 +4041,13 @@ export class GLUniverseInitiativeOverlay {
     // transform, so there is nothing to push per-render here.
   }
 
-  showRoundSplash(round) {
+  showRoundSplash(round, combatId = this.combat?.id) {
     if (!this.enabled || !round) return;
-    if (this.lastSplashRound === round) return;
-    this.lastSplashRound = round;
+    // Keyed by encounter: the GM's combatRound hook and every client's
+    // updateCombat both ask for the same round, and must play it once.
+    const key = `${combatId ?? ""}:${round}`;
+    if (this.lastSplashKey === key) return;
+    this.lastSplashKey = key;
 
     const formatted = formatRound(round);
     const digitSpans = Array.from(formatted).map(digit => `<span class="d">${digit}</span>`).join("");
@@ -4341,6 +4404,11 @@ const ARRIVAL_STAGGER_MS = 55;
 const ARRIVAL_PORTRAIT_ZOOM = 0.88;
 // Clearance past the screen edge, so a card's glow is gone too.
 const EDGE_CLEARANCE = 24;
+// The gap between the rail and the side column of delayed cards
+// (styles/initiative.css states the same 8px).
+const DELAYED_SIDE_GAP = 8;
+// Matches the 6px the stylesheet leaves between the rail and its turn controls.
+const CONTROL_SIDE_GAP = 6;
 
 function nearestEdge(rect, fallback) {
   const width = window.innerWidth || document.documentElement.clientWidth || 0;
@@ -4911,8 +4979,8 @@ function computePortraitScaleCap(width, height) {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return 1;
   const pixels = width * height;
   if (pixels <= 0) return 1;
-  const normalArea = 188 * PORTRAIT_MIN_PIXELS.normalHeight;
-  const activeArea = 200 * PORTRAIT_MIN_PIXELS.activeHeight;
+  const normalArea = PORTRAIT_MIN_PIXELS.normalWidth * PORTRAIT_MIN_PIXELS.normalHeight;
+  const activeArea = PORTRAIT_MIN_PIXELS.activeWidth * PORTRAIT_MIN_PIXELS.activeHeight;
   const targetArea = Math.max(normalArea, activeArea);
   const ratio = Math.sqrt(pixels / targetArea);
   return clamp(ratio, 0.22, 1);
@@ -5058,7 +5126,6 @@ function renderPortraitConfigPanel(mode, label, values, portrait, actorName) {
       <article class="${previewClasses}" data-frame-preview="${mode}" style="${escapeAttr(frameStyle)}" title="${localize("GLUNI.PortraitConfig.PreviewHint")}">
         <div class="gluni-card-surface">
         <div class="gluni-card-accent" aria-hidden="true"></div>
-        <div class="gluni-card-bracket" aria-hidden="true"></div>
         <div class="gluni-card-portrait-wrap">
           <img class="gluni-card-portrait" src="${escapeAttr(portrait)}" alt="${escapeAttr(actorName)}" draggable="false">
         </div>
@@ -5340,26 +5407,6 @@ function normalizeAdhocIcon(value) {
   return ADHOC_TYPES[ADHOC_DEFAULT_TYPE].icon;
 }
 
-function renderAdhocRepeatText(name) {
-  const text = escapeHTML(name);
-  const line = Array.from({ length: 5 }, () => `<span>${text}</span>`).join("");
-  return Array.from({ length: 6 }, (_, index) => `
-    <div class="gluni-card-adhoc-repeat-line${index % 2 ? " gluni-card-adhoc-repeat-line--alt" : ""}">
-      ${line}
-    </div>
-  `).join("");
-}
-
-function renderDelayedRepeatText(name) {
-  const text = `${localize("GLUNI.Delayed").toUpperCase()} / ${escapeHTML(name)}`;
-  const line = Array.from({ length: 4 }, () => `<span>${text}</span>`).join("");
-  return Array.from({ length: 4 }, (_, index) => `
-    <div class="gluni-card-delayed-repeat-line${index % 2 ? " gluni-card-delayed-repeat-line--alt" : ""}">
-      ${line}
-    </div>
-  `).join("");
-}
-
 function getAdhocData(combatant) {
   const value = combatant?.getFlag?.(MODULE_ID, FLAGS.adhoc);
   if (!value || typeof value !== "object") return null;
@@ -5475,8 +5522,8 @@ function getPortraitFrame(actor, portrait = actor?.img) {
  * shot with the head up in the overhang.
  */
 const AUTO_PORTRAIT_SHOTS = Object.freeze({
-  normal: { box: [188, PORTRAIT_MIN_PIXELS.normalHeight], frame: { aspect: 188 / PORTRAIT_MIN_PIXELS.normalHeight, headRatio: 0.72, eyeLine: 0.5 } },
-  expanded: { box: [200, PORTRAIT_MIN_PIXELS.activeHeight], frame: { aspect: 200 / PORTRAIT_MIN_PIXELS.activeHeight, headRatio: 0.42, eyeLine: 0.38 } }
+  normal: { box: [PORTRAIT_MIN_PIXELS.normalWidth, PORTRAIT_MIN_PIXELS.normalHeight], frame: { aspect: PORTRAIT_MIN_PIXELS.normalWidth / PORTRAIT_MIN_PIXELS.normalHeight, headRatio: 0.72, eyeLine: 0.5 } },
+  expanded: { box: [PORTRAIT_MIN_PIXELS.activeWidth, PORTRAIT_MIN_PIXELS.activeHeight], frame: { aspect: PORTRAIT_MIN_PIXELS.activeWidth / PORTRAIT_MIN_PIXELS.activeHeight, headRatio: 0.42, eyeLine: 0.38 } }
 });
 const autoFramePending = new Set();
 
@@ -6045,7 +6092,7 @@ export function presentCards(combatId, ids = []) {
   const combat = rail?.getCombatById?.(combatId);
   if (!rail || !combat) return null;
   const settings = rail.getRenderSettings();
-  const width = rail.root?.querySelector(".gluni-rail .gluni-card")?.offsetWidth || 188;
+  const width = rail.root?.querySelector(".gluni-rail .gluni-card:not(.gluni-card--active)")?.offsetWidth || PORTRAIT_MIN_PIXELS.normalWidth;
   const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--gl-ui-scale")) || 1;
   const layer = document.createElement("div");
   layer.className = `gluni-initiative gluni-initiative--${settings.edge} gluni-card-ghost-layer gluni-card-ghost-layer--present`;
