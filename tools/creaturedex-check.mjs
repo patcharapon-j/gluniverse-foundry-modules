@@ -33,7 +33,7 @@
  *   • Dynamic i18n families (`GLDEX.section.*`, `GLDEX.row.*`, `GLDEX.kind.*`,
  *     the notes the model names) render as raw keys when one is missing.
  *
- *   • The scoped skin (docs/adr/0004-creaturedex-skin.md) lives only under the
+ *   • The scoped skin (docs/adr/0005-creaturedex-skin.md) lives only under the
  *     feature's roots, and every suite token it reads exists.
  *
  * Usage: node tools/creaturedex-check.mjs
@@ -644,9 +644,9 @@ for (const m of drawn.matchAll(/data-action="(\w+)"/g)) {
   if (!registeredActions.has(m[1])) fail(`render: data-action="${m[1]}" is drawn and not registered, so that button does nothing`);
 }
 
-/* ── 11. The scoped skin (docs/adr/0004-creaturedex-skin.md) ─────────────── */
+/* ── 11. The scoped skin (docs/adr/0005-creaturedex-skin.md) ─────────────── */
 
-if (!existsSync(join(ROOT, "docs/adr/0004-creaturedex-skin.md"))) fail("docs: the skin's ADR is missing");
+if (!existsSync(join(ROOT, "docs/adr/0005-creaturedex-skin.md"))) fail("docs: the skin's ADR is missing");
 const cssCode = stripComments(css);
 if (/:root/.test(cssCode)) fail("styles: the skin writes to :root, which repaints every feature loaded after it");
 for (const m of cssCode.matchAll(/(--gl-[a-z0-9-]+)\s*:/g)) fail(`styles: ${m[1]} is redeclared — a foundation token belongs to gl-tokens.css alone`);

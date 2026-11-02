@@ -1243,7 +1243,7 @@ both); a player's model carries no `false` state; and the held-back abilities
 are stored only while someone is truly complete, since the store is a world
 setting every client reads. An open dex redraws on `updateSetting`, which is
 also the GM's only redraw after a write. The skin is scoped
-(docs/adr/0004-creaturedex-skin.md). It cannot show you how any of it looks, and
+(docs/adr/0005-creaturedex-skin.md). It cannot show you how any of it looks, and
 the sealed plate can only be judged beside a revealed section:
 
 ```bash

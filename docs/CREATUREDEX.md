@@ -294,7 +294,7 @@ no rows, a player is drawn no GM control, and the notice is whispered to exactly
 the players told. Then it sweeps what was drawn: every key resolves, every class
 has a rule, no `.gl-btn` is drawn, every `data-action` is registered, and the
 anchors PF2e Odds hangs its "observed" line from still exist. It also holds the
-skin to ADR 0004 and every road in from the board to `mayView`.
+skin to ADR 0005 and every road in from the board to `mayView`.
 
 It also pins an **absence**. `chat.mjs`, `reveal.mjs`, a chat-card hook, a socket
 and any read of a roll outcome are all refused outright, because "helpfully"

@@ -1,4 +1,4 @@
-# 0004 · A scoped black skin for the Creaturedex
+# 0005 · A scoped black skin for the Creaturedex
 
 Status: accepted (2026-11-03)
 
@@ -16,8 +16,8 @@ sees. An accent remap (ADR 0001's floor) gives one hue, not three.
 
 ## Decision
 
-The Creaturedex carries a scoped skin, the fourth after the initiative rail,
-Combat Intro and Stream Pacer.
+The Creaturedex carries a scoped skin, the fifth after the initiative rail,
+Combat Intro, Stream Pacer and Resource Trackers.
 
 - Every rule lives under the feature's own roots: `.application.gldex` (the dex
   and Falsify windows), `.gldex-root`, `.gldex-lie-root`, `.gldex-card` (the

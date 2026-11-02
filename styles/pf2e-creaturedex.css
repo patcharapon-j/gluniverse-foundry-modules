@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    Creaturedex — the dex window, the Falsify dialog, the reveal notice.
 
-   A scoped skin (docs/adr/0004-creaturedex-skin.md): the design system's
+   A scoped skin (docs/adr/0005-creaturedex-skin.md): the design system's
    neutral ramp, mirrored as feature-local `--gldex-*` tokens under the
    feature's own roots and never on :root. Black-leaning on purpose: the dex is
    read beside every campaign's art, so it carries no setting of its own, only
