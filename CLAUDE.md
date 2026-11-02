@@ -1234,8 +1234,17 @@ immunities are fair game for the next row shape that carries a number.
 node tools/creaturedex-check.mjs
 ```
 
-Zero problems required. It cannot show you how any of it looks, and the sealed
-plate can only be judged beside a revealed section:
+Zero problems required. Reads and writes are `ledger.mjs`, what each viewer sees
+is `model.mjs` and the markup is `render.mjs`, all pure, so the check drives the
+real writes and draws the real window. It holds three things that only show on
+somebody else's screen: a lie draws byte for byte what the truth draws for its
+holder and posts the same notice (`afterHandover` is the one road to chat, for
+both); a player's model carries no `false` state; and the held-back abilities
+are stored only while someone is truly complete, since the store is a world
+setting every client reads. An open dex redraws on `updateSetting`, which is
+also the GM's only redraw after a write. The skin is scoped
+(docs/adr/0004-creaturedex-skin.md). It cannot show you how any of it looks, and
+the sealed plate can only be judged beside a revealed section:
 
 ```bash
 node tools/creaturedex-preview.mjs --out=.preview/dex.html && node tools/preview-server.mjs 8953
