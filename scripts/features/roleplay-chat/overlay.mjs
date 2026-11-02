@@ -164,6 +164,7 @@ class Overlay {
     this.clearTokens();
     for (const line of this.laneLines) clearTimeout(line.timer);
     this.laneLines = [];
+    this.#watchLane();
     this.layer?.remove();
     this.lane?.remove();
     this.layer = this.lane = null;
@@ -300,6 +301,7 @@ class Overlay {
     this.#markOld(this.laneLines);
     line.timer = setTimeout(() => this.#dropLaneLine(line), line.life);
     this.#placeLane();
+    this.#watchLane();
   }
 
   #dropLaneLine(line, { keepInList = false } = {}) {
@@ -307,6 +309,30 @@ class Overlay {
     if (!keepInList) this.laneLines = this.laneLines.filter((l) => l !== line);
     this.#leave(line.el);
     if (!keepInList) this.#markOld(this.laneLines);
+    this.#watchLane();
+  }
+
+  /**
+   * While a caption is up, a window resize or the sidebar opening, closing or sliding re-places the
+   * lane, so a line never sits off centre or under the sidebar until the next one arrives. The observer
+   * sees every size the sidebar passes through on its transition, the last one included.
+   */
+  #laneWatch = null;
+  #watchLane() {
+    const want = this.laneLines.length > 0 && Boolean(this.lane);
+    if (want === Boolean(this.#laneWatch)) return;
+    if (!want) {
+      this.#laneWatch.observer?.disconnect();
+      removeEventListener("resize", this.#laneWatch.place);
+      this.#laneWatch = null;
+      return;
+    }
+    const place = () => this.lane && this.#placeLane();
+    const sidebar = document.getElementById("sidebar");
+    const observer = sidebar && typeof ResizeObserver === "function" ? new ResizeObserver(place) : null;
+    observer?.observe(sidebar);
+    addEventListener("resize", place);
+    this.#laneWatch = { place, observer };
   }
 
   /**

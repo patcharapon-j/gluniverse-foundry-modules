@@ -299,6 +299,8 @@ eq([M.pickerStep(-1, 3, "ArrowDown"), M.pickerStep(2, 3, "ArrowDown"), M.pickerS
   // A Say stack replaced by a Think stack over the same token stayed in the layer forever.
   const leave = o.match(/this\.#leave\(line\.el, \(\) => \{([\s\S]*?)\}\);/)?.[1] ?? "";
   ok(leave.indexOf("stack.el.remove()") >= 0 && leave.indexOf("stack.el.remove()") < leave.indexOf("this.stacks.get(stack.key) !== stack"), "overlay.mjs: a replaced stack's element is never removed");
+  // A caption stayed off centre, or under the sidebar, until another line arrived.
+  ok(/new ResizeObserver\(place\)/.test(o) && /addEventListener\("resize", place\)/.test(o) && /removeEventListener\("resize"/.test(o), "overlay.mjs: the lane is not re-placed when the window or the sidebar changes size");
   // A whisper chosen mid-sentence left the public "…" up until the next key.
   ok(/clientSettingChanged/.test(sources["index.mjs"]) && /core\.messageMode/.test(sources["index.mjs"]) && /refreshTyping/.test(sources["index.mjs"]), "index.mjs: a message-mode change does not re-decide the typing indicator");
   // A Do line re-parsed the body (losing what an enricher bound) and put the name above a paragraph.
