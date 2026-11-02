@@ -720,7 +720,7 @@ for (const f of readdirSync(join(ROOT, "styles")).filter((f) => /^pf2e-odds.*\.c
   const css = Object.fromEntries(files.map((f) => [f, read(`styles/${f}`).replace(/\/\*[\s\S]*?\*\//g, "")]));
   const all = Object.values(css).join("\n");
   const main = css["pf2e-odds.css"];
-  // A scoped skin lives on the feature's own roots (ADR 0004), never on :root.
+  // A scoped skin lives on the feature's own roots (ADR 0005), never on :root.
   ok(!/:root\b/.test(all), "an odds stylesheet writes to :root");
   const rootBlock = main.match(/:is\(([^)]*)\)\s*\{([\s\S]*?)\n\}/);
   ok(!!rootBlock, "the skin's root block is missing");
