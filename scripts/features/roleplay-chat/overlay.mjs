@@ -27,6 +27,7 @@ import {
   TYPING,
   canView,
   isInCharacter,
+  laneBox,
   lifetimeMs,
   onScreen,
   overlayScale,
@@ -273,8 +274,12 @@ class Overlay {
     clearTimeout(line.timer);
     if (!keepInList) stack.lines = stack.lines.filter((l) => l !== line);
     this.#leave(line.el, () => {
-      if (stack.lines.length || this.stacks.get(stack.key) !== stack) return;
+      if (stack.lines.length) return;
+      // A stack replaced by one of another shape (a Think over a token whose Say is still leaving) is no
+      // longer in the map, but its element is still in the layer: it goes too, or every switch between
+      // Say and Think over one token left an invisible husk behind for the rest of the session.
       stack.el.remove();
+      if (this.stacks.get(stack.key) !== stack) return;
       this.stacks.delete(stack.key);
       this.#listen();
     });
@@ -304,12 +309,22 @@ class Overlay {
     if (!keepInList) this.#markOld(this.laneLines);
   }
 
-  /** Clear of the hotbar, which Foundry moves when the chat notifications open. */
+  /**
+   * Over the hotbar and clear of it, centred where the hotbar is centred (the space left of the
+   * sidebar), never under the sidebar. Foundry moves the hotbar when the chat notifications open and
+   * the sidebar when it collapses, so this is measured on every new line (`laneBox`).
+   */
   #placeLane() {
-    const hotbar = document.getElementById("hotbar");
-    const top = hotbar?.getBoundingClientRect?.().top;
-    const bottom = Number.isFinite(top) && top > 0 ? Math.max(12, innerHeight - top + 14) : 84;
-    this.lane.style.bottom = `${Math.round(bottom)}px`;
+    const rect = (id) => {
+      const r = document.getElementById(id)?.getBoundingClientRect?.();
+      return r && r.width > 0 && r.height > 0 ? r : null;
+    };
+    const hotbar = rect("hotbar");
+    const sidebar = rect("sidebar");
+    const box = laneBox({ width: innerWidth, height: innerHeight, hotbar, sidebarLeft: sidebar ? sidebar.left : null });
+    this.lane.style.left = `${box.center}px`;
+    this.lane.style.width = `${box.width}px`;
+    this.lane.style.bottom = `${box.bottom}px`;
   }
 
   /* ── shared ─────────────────────────────────────────────────────────── */

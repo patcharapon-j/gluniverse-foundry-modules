@@ -11,7 +11,7 @@
  */
 
 import { rpModeOf } from "../../core/rp-mode.mjs";
-import { I18N, hasAsides, isInCharacter, quoteEdges } from "./model.mjs";
+import { I18N, hasAsides, isInCharacter, leadJoint, quoteEdges } from "./model.mjs";
 import { leadHTML, lineHTML, logHeadHTML, oocTagHTML } from "./render.mjs";
 import { identityOf } from "./identity.mjs";
 
@@ -48,9 +48,37 @@ export function restyleMessage(message, html) {
   });
   header.prepend(head);
   content.classList.add("glrp-body");
-  if (mode === "do") content.innerHTML = leadHTML(who.name, content.innerHTML.trim());
-  else trimEdges(content);
+  trimEdges(content);
+  if (mode === "do") addLead(content, who.name);
   if (mode === "say") markAsides(content);
+}
+
+/**
+ * Puts the speaker's bold name at the front of a Do line, as nodes. The body is never re-parsed, so
+ * nothing an enricher bound to it is lost, and when the line is a paragraph the name goes inside it:
+ * set in front of a `<p>`, it stood on a line of its own above the action.
+ */
+export function addLead(el, name) {
+  const opening = [...el.childNodes].find((n) => n.nodeType !== Node.TEXT_NODE || n.textContent.trim());
+  const host = opening?.nodeType === Node.ELEMENT_NODE && opening.matches("p") ? opening : el;
+  // The lead is the same markup the overlays draw, parsed from an escaped string, never from the body.
+  const t = document.createElement("template");
+  t.innerHTML = leadHTML(name, "");
+  const lead = t.content.firstElementChild;
+  const head = host.firstChild;
+  if (head?.nodeType === Node.TEXT_NODE) head.textContent = head.textContent.trimStart();
+  const joint = leadJoint(firstText(host));
+  host.prepend(lead, ...(joint ? [document.createTextNode(joint)] : []));
+}
+
+/** The line's first visible characters, to decide the joint between the name and the action. */
+function firstText(el) {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node.textContent.trimStart();
+    if (text) return text;
+  }
+  return "";
 }
 
 /**
