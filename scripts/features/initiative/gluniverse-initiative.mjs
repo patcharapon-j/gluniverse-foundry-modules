@@ -2197,20 +2197,69 @@ export class GLUniverseInitiativeOverlay {
   // move's own measurements, which cost the rail a second full layout on every
   // turn — the controls sit on the active card, so this runs on exactly the
   // renders that are already the most expensive.
+  //
+  // The same pass places the side column of delayed cards. It belongs on the
+  // screen-edge side of the rail, but the rail sits 18px from that edge by
+  // default, so there the column was drawn entirely off screen. When it does not
+  // fit it moves inward, past the condition badges and the turn controls.
   measureFloatingControls() {
     const shell = this.root?.querySelector(".gluni-shell");
-    const activeCard = this.root?.querySelector(".gluni-card--active");
-    const controls = this.root?.querySelector(".gluni-floating-turn-controls");
-    if (!shell || !activeCard || !controls) return null;
+    if (!shell) return null;
+    const activeCard = shell.querySelector(".gluni-rail .gluni-card--active");
+    const controls = shell.querySelector(".gluni-floating-turn-controls");
+    const section = this.root.classList.contains("gluni-initiative--delayed-side")
+      ? shell.querySelector(".gluni-delayed-section")
+      : null;
+    if (!(activeCard && controls) && !section) return null;
 
     const shellRect = shell.getBoundingClientRect();
-    const cardRect = activeCard.getBoundingClientRect();
-    return { shell, top: Math.max(0, Math.round(cardRect.top - shellRect.top + 32)) };
+    // Visual px per layout px: the interface scale sits on the shell's transform,
+    // and both custom properties written below are read in layout px.
+    const k = shell.offsetWidth && shellRect.width ? shellRect.width / shell.offsetWidth : 1;
+    const right = this.root.classList.contains("gluni-initiative--right");
+    // How far an element reaches past the rail's inner edge, in layout px.
+    const reachOf = (node) => {
+      const rect = node?.getBoundingClientRect();
+      if (!rect?.width) return 0;
+      return Math.max(0, (right ? shellRect.left - rect.left : rect.right - shellRect.right) / k);
+    };
+    const measurement = { shell, top: null, inset: null, side: null };
+    let controlsReach = 0;
+    if (activeCard && controls) {
+      const cardRect = activeCard.getBoundingClientRect();
+      measurement.top = Math.max(0, Math.round((cardRect.top - shellRect.top) / k + 32));
+      // The active card's condition badges stand in the same column as the turn
+      // controls, so the controls step out past them rather than covering one.
+      const badges = reachOf(activeCard.querySelector(".gluni-card-condition-labels"));
+      measurement.inset = badges ? Math.ceil(badges) : 0;
+      controlsReach = CONTROL_SIDE_GAP + measurement.inset + controls.offsetWidth;
+    }
+    if (section) {
+      const viewport = window.innerWidth || document.documentElement.clientWidth || 0;
+      const need = (section.offsetWidth + DELAYED_SIDE_GAP) * k;
+      const room = right ? viewport - shellRect.right : shellRect.left;
+      if (room >= need) {
+        measurement.side = { inner: false, offset: 0 };
+      } else {
+        let reach = controlsReach;
+        for (const node of shell.querySelectorAll(".gluni-rail .gluni-card-condition-labels")) {
+          reach = Math.max(reach, reachOf(node));
+        }
+        measurement.side = { inner: true, offset: Math.ceil(reach) };
+      }
+    }
+    return measurement;
   }
 
   applyFloatingControls(measurement) {
     if (!measurement) return;
-    measurement.shell.style.setProperty("--gluni-control-top", `${measurement.top}px`);
+    const { shell, top, inset, side } = measurement;
+    if (top !== null) shell.style.setProperty("--gluni-control-top", `${top}px`);
+    if (inset !== null) shell.style.setProperty("--gluni-control-inset", `${inset}px`);
+    if (side) {
+      shell.classList.toggle("gluni-shell--delayed-inner", side.inner);
+      shell.style.setProperty("--gluni-delayed-offset", `${side.offset}px`);
+    }
   }
 
   renderGMVisibilityMarker(card) {
@@ -4352,6 +4401,11 @@ const ARRIVAL_STAGGER_MS = 55;
 const ARRIVAL_PORTRAIT_ZOOM = 0.88;
 // Clearance past the screen edge, so a card's glow is gone too.
 const EDGE_CLEARANCE = 24;
+// The gap between the rail and the side column of delayed cards
+// (styles/initiative.css states the same 8px).
+const DELAYED_SIDE_GAP = 8;
+// Matches the 6px the stylesheet leaves between the rail and its turn controls.
+const CONTROL_SIDE_GAP = 6;
 
 function nearestEdge(rect, fallback) {
   const width = window.innerWidth || document.documentElement.clientWidth || 0;
