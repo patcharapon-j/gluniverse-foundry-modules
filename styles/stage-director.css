@@ -667,7 +667,10 @@
 .glstage-dir-fields { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .glstage-dir-form-end { display: flex; justify-content: flex-end; gap: 6px; padding-top: 12px; border-top: 1px solid var(--glstage-line); }
 
-.glstage-dir-lineup { display: flex; flex-direction: column; gap: 8px; }
+/* One horizontal scroller for the figures and their controls, so a label always sits under its figure. */
+.glstage-dir-lineup { display: flex; flex-direction: column; gap: 8px; overflow-x: auto; }
+.glstage-dir-lineup-stage,
+.glstage-dir-lineup-labels { box-sizing: border-box; width: max-content; min-width: 100%; }
 .glstage-dir-lineup-stage {
   position: relative;
   display: flex;
@@ -675,7 +678,6 @@
   gap: 4px;
   height: 340px;
   padding: 0 8px;
-  overflow-x: auto;
   background: linear-gradient(180deg, var(--glstage-ink-2), var(--glstage-ink-0));
   border: 1px solid var(--glstage-line-strong);
   border-radius: var(--glstage-radius);
@@ -692,7 +694,7 @@
 .glstage-dir-lu-box { position: relative; width: 100%; display: flex; justify-content: center; }
 .glstage-dir-lu-box img { height: 100%; width: 100%; object-fit: contain; object-position: 50% 100%; border: 0; }
 .glstage-dir-lu.is-active .glstage-dir-lu-box { outline: 1px solid var(--glstage-paper); outline-offset: 2px; }
-.glstage-dir-lineup-labels { display: flex; gap: 4px; padding: 0 8px; overflow-x: auto; }
+.glstage-dir-lineup-labels { display: flex; gap: 4px; padding: 0 8px; }
 .glstage-dir-lu-label { flex: none; width: var(--glstage-dir-lu-w); display: flex; flex-direction: column; gap: 4px; }
 
 /* ── light ────────────────────────────────────────────────────────────── */
