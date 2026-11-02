@@ -18,6 +18,8 @@
 import { WEATHER_KINDS, PRESETS, PRESET_KEYS, DEFAULT_ENV, normalizeEnv, applyPreset, formatHour } from "../environment.mjs";
 import { readEnvironment, writeEnvironment, environmentSources } from "./environment-source.mjs";
 import { el, isGM, setting, t } from "./util.mjs";
+import { SUITE_ID } from "../../../core/const.mjs";
+import { FLAG_KNOWN } from "../constants.mjs";
 
 /** Throttle for live writes while a slider moves, ms. */
 const WRITE_MS = 200;
@@ -147,6 +149,16 @@ function makeClass() {
         root.append(this.#section(s.name, body));
       }
 
+      // fog of war: the players already know this map's layout
+      const known = !!this.scene?.getFlag?.(SUITE_ID, FLAG_KNOWN);
+      root.append(this.#section("fogOfWar", [
+        el("label", { class: "gldio-env-check" }, [
+          el("input", { type: "checkbox", name: "knownLayout", checked: known }),
+          el("span", { text: t("GLDIO.env.field.knownLayout") }),
+        ]),
+        el("p", { class: "gldio-env-hint", text: t("GLDIO.env.note.knownLayout") }),
+      ]));
+
       const foot = el("footer", { class: "gldio-env-foot" }, [
         el("button", { type: "button", class: "gl-btn gldio-env-btn", dataset: { action: "reset" } }, [el("i", { class: "fa-solid fa-rotate-left" }), el("span", { text: t("GLDIO.env.btn.reset") })]),
         el("button", { type: "button", class: "gl-btn gldio-env-btn", dataset: { action: "done" } }, [el("i", { class: "fa-solid fa-check" }), el("span", { text: t("GLDIO.env.btn.done") })]),
@@ -199,6 +211,13 @@ function makeClass() {
       if (!name) return;
       const E = this.draft;
       let rerender = false;
+      if (name === "knownLayout") {
+        // its own flag, written at once (not part of the environment draft)
+        if (!settled || !this.scene) return;
+        const write = input.checked ? this.scene.setFlag(SUITE_ID, FLAG_KNOWN, true) : this.scene.unsetFlag(SUITE_ID, FLAG_KNOWN);
+        Promise.resolve(write).catch((e) => console.error("GLUniverse Suite | diorama known-layout write failed", e));
+        return;
+      }
       if (name === "tableLight") {
         E.hour = input.checked ? null : 12;
         rerender = true;

@@ -104,10 +104,12 @@ export class Baker {
    * @param {object} o
    * @param {{cols:number, rows:number, size:number}} o.grid
    * @param {() => ("own"|"players"|null)} o.mode   vision mode
+   * @param {() => boolean} [o.known]   the players know the layout: the whole board counts as explored
    * @param {(result:{darkness:number, light:HTMLCanvasElement, vision:HTMLCanvasElement|null, sources:object[]}) => void} o.onBaked
    */
-  constructor({ grid, mode, onBaked }) {
+  constructor({ grid, mode, known = () => false, onBaked }) {
     this.mode = mode;
+    this.known = known;
     this.onBaked = onBaked;
     this.timer = 0;
     this.again = false;
@@ -208,7 +210,10 @@ export class Baker {
     const ctx = this.vision.getContext("2d");
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "rgb(0, 0, 0)";
+    // A known layout is explored everywhere (G), and seen only where sight reaches (R).
+    let known = false;
+    try { known = !!this.known(); } catch { known = false; }
+    ctx.fillStyle = known ? "rgb(0, 255, 0)" : "rgb(0, 0, 0)";
     ctx.fillRect(0, 0, this.vision.width, this.vision.height);
     return ctx;
   }

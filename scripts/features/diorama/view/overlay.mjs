@@ -15,7 +15,7 @@
 
 import { err, SUITE_ID } from "../../../core/const.mjs";
 import { Surfaces } from "../../../core/gl-surfaces.mjs";
-import { FEATURE_ID, SETTINGS, CAMERA, TIMING, snapYawStep, yawStride } from "../constants.mjs";
+import { FEATURE_ID, SETTINGS, CAMERA, TIMING, FLAG_KNOWN, snapYawStep, yawStride } from "../constants.mjs";
 import { TerrainStore, supportsScene } from "../terrain/store.mjs";
 import { liveTerrain, onTerrainChange } from "../terrain/live.mjs";
 import { readWalls, readTokens, backgroundSrc, loadArt } from "./snapshot.mjs";
@@ -206,6 +206,7 @@ async function mount(scene) {
   S.baker = new Baker({
     grid: S.grid,
     mode: visionMode,
+    known: () => !!S.scene?.getFlag?.(SUITE_ID, FLAG_KNOWN),
     onBaked: (res) => { S.lighting = res; mark("lighting"); if (S.asPlayers) mark("tokens"); },
   });
   S.seq = new SequencerMirror({ onChange: () => mark("effects"), groundQ });
@@ -369,6 +370,8 @@ function wireHooks() {
     if (scene !== S.scene) return;
     if ("levels" in changes || "background" in changes || "initialLevel" in changes) mark("background");
     if ("environment" in changes) { S.baker?.request(); mark("environment"); }
+    // a known layout (FLAG_KNOWN) is read off the document by the bake; any flag write re-bakes
+    if (changes?.flags?.[SUITE_ID]) S.baker?.request();
     if (environmentTouched(changes)) mark("environment");
     if (PropStore.touched(changes)) mark("props");
   });

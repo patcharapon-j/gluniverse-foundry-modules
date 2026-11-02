@@ -254,7 +254,7 @@ export default async function check(ctx) {
   const keys = [
     ...E.PRESET_KEYS.map((k) => `GLDIO.env.preset.${k}`),
     ...E.WEATHER_KINDS.map((k) => `GLDIO.env.kind.${k}`),
-    ...["presets", "time", ...App.SECTIONS.map((s) => s.name)].map((s) => `GLDIO.env.section.${s}`),
+    ...["presets", "time", "fogOfWar", ...App.SECTIONS.map((s) => s.name)].map((s) => `GLDIO.env.section.${s}`),
     ...["tableLight", "hour", "kind", ...App.SECTIONS.flatMap((s) => s.rows.map((r) => r.name))].map((k) => `GLDIO.env.field.${k}`),
     ...App.SHORTCUTS.map(([k]) => `GLDIO.env.at.${k}`),
   ];
@@ -263,4 +263,15 @@ export default async function check(ctx) {
   const missing = [...new Set(keys)].filter((k) => typeof lang[k] !== "string" || !lang[k]);
   ctx.ok("every GLDIO.env key the panel builds resolves", !missing.length, missing.join(", "));
   ctx.ok("the toolbar's environment button is labelled", typeof lang["GLDIO.view.environment"] === "string");
+
+  // ── a known layout: the whole board is explored, nothing more ──
+  const { FLAG_KNOWN } = await import(ctx.url("scripts/features/diorama/constants.mjs"));
+  const bakeSrc = read("scripts/features/diorama/view/bake.mjs");
+  const overlaySrc = read("scripts/features/diorama/view/overlay.mjs");
+  ctx.ok("known layout: the panel writes and clears its own flag (not the environment draft)",
+    FLAG_KNOWN === "dio.known" && /setFlag\(SUITE_ID, FLAG_KNOWN, true\)/.test(appSrc) && /unsetFlag\(SUITE_ID, FLAG_KNOWN\)/.test(appSrc));
+  ctx.ok("known layout: the bake starts explored (G) everywhere, never visible (R)",
+    /known \? "rgb\(0, 255, 0\)" : "rgb\(0, 0, 0\)"/.test(bakeSrc));
+  ctx.ok("known layout: the view reads the flag off the scene and re-bakes on a flag write",
+    /known: \(\) => !!S\.scene\?\.getFlag\?\.\(SUITE_ID, FLAG_KNOWN\)/.test(overlaySrc) && /changes\?\.flags\?\.\[SUITE_ID\]\) S\.baker\?\.request\(\)/.test(overlaySrc));
 }

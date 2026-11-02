@@ -29,6 +29,12 @@ export const FLAG_ALTITUDE = "dio.altitude";
 export const FLAG_ENV = "dio.env";
 /** Scene flag: placed props, keyed by Level id like the terrain. terrain/props.mjs owns its shape. */
 export const FLAG_PROPS = "dio.props";
+/**
+ * Scene flag: players already know this map's layout. Ground nobody has seen
+ * yet draws as remembered (dim, grey, under a faint mist) instead of hidden in
+ * the fog. It reveals terrain only: creatures still need sight.
+ */
+export const FLAG_KNOWN = "dio.known";
 
 /** Settings (all keys start with PREFIX so the Control Center routes them). */
 export const SETTINGS = Object.freeze({

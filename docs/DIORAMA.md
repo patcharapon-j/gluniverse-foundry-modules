@@ -173,6 +173,12 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
 - Visible: full colour. Explored, not visible: desaturated and dim, no tokens.
   Unexplored: not drawn. GM: everything, hidden tokens ghosted (40%, hatched);
   a "view as players" toggle applies a player's view.
+- **A known layout** (scene flag `dio.known`, the GM's Scene environment panel,
+  "Players know this map's layout"). The bake starts every square explored, so
+  ground nobody has seen yet takes the remembered look instead of the fog:
+  terrain only, since creatures still need sight. 3D only: Foundry's 2D fog is
+  unchanged. GM's "view as players" honours it too (it has no explored fog of
+  its own otherwise).
 - **Fog of war as dark mist** (`dio.fogStyle` "clouds", client; Low quality
   keeps the flat look). Unexplored ground lies under a bank of slowly drifting
   mist (`render/fog.mjs`): a cool dark slate lit by the sky alone, well below
