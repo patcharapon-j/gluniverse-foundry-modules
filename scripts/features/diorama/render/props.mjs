@@ -10,8 +10,10 @@
  *   .set(PropState[], now, animate)
  *   .animated(fx) → bool          true while something sways (uses the shared uTime)
  *   .frame(t, dt, camera, fx) → bool  true while it needs more frames
- *   .casters                      Object3D[] drawn into the shadow map
  *   .dispose()
+ * Shadows: opaque prop meshes enable SHADOW_LAYER (post.mjs) like the terrain,
+ * and the shadow pass draws them with its depth override. Set
+ * renderer.shadow.dirty when props move (setProps already does).
  */
 
 import * as THREE from "./three.mjs";
@@ -21,7 +23,6 @@ export class PropsLayer {
     this.shared = shared;
     this.group = new THREE.Group();
     this.group.name = "dio.props";
-    this.casters = [];
   }
   setGridSize() {}
   setTerrain() {}

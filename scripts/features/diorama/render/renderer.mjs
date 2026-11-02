@@ -509,7 +509,7 @@ export class DioramaRenderer {
     }
 
     try {
-      if (shadows) this.shadow.render(this.webgl, this.scene, [...this.standees.casters, ...this.props.casters]);
+      if (shadows) this.shadow.render(this.webgl, this.scene, this.standees.casters);
       if (fx.tiltShift) this.tilt.render(this.webgl, this.scene, this.rig.camera);
       else {
         this.webgl.setRenderTarget(null);
