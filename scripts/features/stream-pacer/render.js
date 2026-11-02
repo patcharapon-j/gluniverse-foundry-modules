@@ -102,11 +102,26 @@ function hudButton({ action, label, iconCls, pressed = false, extra = '', cls = 
     + `${pressed ? ' aria-pressed="true"' : ''} title="${esc(t)}">${icon(iconCls)}<span>${esc(t)}</span></button>`;
 }
 
+/** An icon-only toggle: the label lives in the tooltip and the accessible name. */
+function iconToggle({ action, label, iconCls, pressed }, L) {
+  const t = L(label);
+  return `<button type="button" class="sp-hud-icon${pressed ? ' is-on' : ''}" data-sp-action="${action}" aria-pressed="${!!pressed}" title="${esc(t)}" aria-label="${esc(t)}">${icon(iconCls)}</button>`;
+}
+
 function headerHTML(vm, L, chip) {
+  const sound = iconToggle({ action: 'sound', label: vm.sound ? 'STREAM_PACER.Hud.SoundOn' : 'STREAM_PACER.Hud.SoundOff', iconCls: vm.sound ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark', pressed: vm.sound }, L);
+  const desktop = vm.gm || vm.desktop === 'unsupported' ? ''
+    : iconToggle({
+      action: 'desktop',
+      label: vm.desktop === 'on' ? 'STREAM_PACER.Hud.DesktopOn' : vm.desktop === 'blocked' ? 'STREAM_PACER.Hud.DesktopBlocked' : 'STREAM_PACER.Hud.DesktopOff',
+      iconCls: vm.desktop === 'on' ? 'fa-solid fa-bell' : 'fa-regular fa-bell-slash',
+      pressed: vm.desktop === 'on'
+    }, L);
   return `<header class="sp-hud-head" data-sp-drag>`
     + `<span class="sp-hud-mark" aria-hidden="true"></span>`
     + `<span class="sp-hud-title">${esc(L('STREAM_PACER.Hud.Title'))}</span>`
     + (chip ?? '')
+    + sound + desktop
     + `<button type="button" class="sp-hud-icon" data-sp-action="collapse" title="${esc(L(vm.collapsed ? 'STREAM_PACER.Hud.Expand' : 'STREAM_PACER.Hud.Collapse'))}">`
     + icon(vm.collapsed ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-up') + `</button></header>`;
 }
@@ -150,13 +165,17 @@ function gmBody(vm, L) {
   const mood = vm.mood?.kind;
   const presets = COUNTDOWN_PRESETS.map((sec) =>
     `<button type="button" class="sp-seg" data-sp-action="countdown" data-seconds="${sec}" title="${esc(L('STREAM_PACER.Hud.CountdownFor', { m: sec / 60 }))}">${sec / 60}m</button>`).join('');
-  const calls = `<div class="sp-hud-sec"><div class="sp-hud-label">${esc(L('STREAM_PACER.Hud.Calls'))}</div><div class="sp-hud-grid">`
+  // calls and room carry their tone on each button's edge; no section labels
+  const end = call
+    ? `<button type="button" class="sp-hud-icon sp-hud-end" data-sp-action="end-call" title="${esc(L('STREAM_PACER.Action.EndCall'))}" aria-label="${esc(L('STREAM_PACER.Action.EndCall'))}">${icon('fa-solid fa-xmark')}</button>`
+    : '';
+  const calls = `<div class="sp-hud-sec sp-hud-calls" role="group" aria-label="${esc(L('STREAM_PACER.Hud.Calls'))}"><div class="sp-hud-grid${call ? ' has-end' : ''}">`
     + hudButton({ action: 'wrap', label: 'STREAM_PACER.Hud.Wrap', iconCls: 'fa-solid fa-flag-checkered', pressed: call === CALL.WRAP, cls: 'sp-tone-amber' }, L)
     + hudButton({ action: 'ready', label: 'STREAM_PACER.Hud.Ready', iconCls: 'fa-solid fa-circle-question', pressed: call === CALL.READY, cls: 'sp-tone-paper' }, L)
+    + end
     + `<div class="sp-hud-btn sp-hud-split sp-tone-amber${call === CALL.COUNTDOWN ? ' is-pressed' : ''}">${icon('fa-solid fa-stopwatch')}<span>${esc(L('STREAM_PACER.Hud.Countdown'))}</span><span class="sp-segs">${presets}</span></div>`
-    + (call ? hudButton({ action: 'end-call', label: 'STREAM_PACER.Action.EndCall', iconCls: 'fa-solid fa-xmark', cls: 'sp-hud-end' }, L) : '')
     + `</div></div>`;
-  const room = `<div class="sp-hud-sec"><div class="sp-hud-label">${esc(L('STREAM_PACER.Hud.Room'))}</div><div class="sp-hud-grid sp-hud-grid-2">`
+  const room = `<div class="sp-hud-sec sp-hud-room" role="group" aria-label="${esc(L('STREAM_PACER.Hud.Room'))}"><div class="sp-hud-grid sp-hud-grid-2">`
     + hudButton({ action: 'campfire', label: 'STREAM_PACER.Hud.Campfire', iconCls: 'fa-solid fa-fire', pressed: mood === MOOD.CAMPFIRE, cls: 'sp-tone-ember' }, L)
     + hudButton({ action: 'peril', label: 'STREAM_PACER.Hud.Peril', iconCls: 'fa-solid fa-skull', pressed: mood === MOOD.PERIL, cls: 'sp-tone-red' }, L)
     + `</div></div>`;
@@ -173,28 +192,27 @@ function gmBody(vm, L) {
   return calls + room + tableSec + foot;
 }
 
+/**
+ * A player's panel is two rows: their status, and their traffic light. The
+ * sound and desktop toggles live in the header, and the lamps are dots with the
+ * current answer beside them, so the panel sits small over the map all session.
+ */
 function playerBody(vm, L) {
-  const status = `<div class="sp-hud-sec"><div class="sp-hud-grid sp-hud-grid-2 sp-hud-big">`
+  const status = `<div class="sp-hud-sec"><div class="sp-hud-grid sp-hud-grid-2">`
     + hudButton({ action: 'status', label: vm.status === STATUS.HAND ? 'STREAM_PACER.Action.Lower' : 'STREAM_PACER.Hud.RaiseHand', iconCls: 'fa-solid fa-hand', pressed: vm.status === STATUS.HAND, extra: ` data-status="${vm.status === STATUS.HAND ? STATUS.ENGAGED : STATUS.HAND}"`, cls: 'sp-tone-paper' }, L)
     + hudButton({ action: 'status', label: vm.status === STATUS.HOLD ? 'STREAM_PACER.Action.ImGood' : 'STREAM_PACER.Hud.NeedTime', iconCls: 'fa-solid fa-hourglass-half', pressed: vm.status === STATUS.HOLD, extra: ` data-status="${vm.status === STATUS.HOLD ? STATUS.ENGAGED : STATUS.HOLD}"`, cls: 'sp-tone-steel' }, L)
     + `</div></div>`;
+  const privacy = `${L('STREAM_PACER.Hud.Safety')}: ${L('STREAM_PACER.Hud.SafetyPrivate')}`;
   const lamps = vm.showSafety
-    ? `<div class="sp-hud-sec sp-hud-safety"><div class="sp-hud-label">${esc(L('STREAM_PACER.Hud.Safety'))}<span class="sp-hud-hint">${esc(L('STREAM_PACER.Hud.SafetyPrivate'))}</span></div>`
-      + `<div class="sp-lamps">${[LIGHT.GREEN, LIGHT.YELLOW, LIGHT.RED].map((l) =>
-        `<button type="button" class="sp-lamp sp-lamp-${l}${vm.light === l ? ' is-pressed' : ''}" data-sp-action="light" data-light="${l}" aria-pressed="${vm.light === l}" title="${esc(L(`STREAM_PACER.Light.${l}`))}">`
-        + `<span class="sp-lamp-dot" aria-hidden="true"></span><span>${esc(L(`STREAM_PACER.Light.${l}`))}</span></button>`).join('')}</div></div>`
+    ? `<div class="sp-hud-sec sp-hud-safety"><div class="sp-lamps" role="group" aria-label="${esc(privacy)}">${[LIGHT.GREEN, LIGHT.YELLOW, LIGHT.RED].map((l) => {
+      const t = L(`STREAM_PACER.Light.${l}`);
+      return `<button type="button" class="sp-lamp sp-lamp-${l}${vm.light === l ? ' is-pressed' : ''}" data-sp-action="light" data-light="${l}" aria-pressed="${vm.light === l}" title="${esc(t)}" aria-label="${esc(t)}">`
+        + `<span class="sp-lamp-dot" aria-hidden="true"></span></button>`;
+    }).join('')}</div>`
+      + `<span class="sp-lamp-now">${esc(L(`STREAM_PACER.Light.${vm.light}`))}</span>`
+      + `<i class="fa-solid fa-lock sp-lamp-lock" title="${esc(privacy)}" aria-hidden="true"></i></div>`
     : '';
-  const desktop = vm.desktop === 'unsupported' ? ''
-    : hudButton({
-      action: 'desktop',
-      label: vm.desktop === 'on' ? 'STREAM_PACER.Hud.DesktopOn' : vm.desktop === 'blocked' ? 'STREAM_PACER.Hud.DesktopBlocked' : 'STREAM_PACER.Hud.DesktopOff',
-      iconCls: vm.desktop === 'on' ? 'fa-solid fa-bell' : 'fa-regular fa-bell-slash',
-      pressed: vm.desktop === 'on', cls: 'sp-hud-small'
-    }, L);
-  const foot = `<footer class="sp-hud-foot">`
-    + hudButton({ action: 'sound', label: vm.sound ? 'STREAM_PACER.Hud.SoundOn' : 'STREAM_PACER.Hud.SoundOff', iconCls: vm.sound ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark', pressed: vm.sound, cls: 'sp-hud-small' }, L)
-    + desktop + `</footer>`;
-  return status + lamps + foot;
+  return status + lamps;
 }
 
 /** The whole HUD. */
