@@ -86,6 +86,31 @@ export async function runStageInitiativeMotionChecks() {
     initiative.playSplashMotion(instant, 'round');
     await wait(80);
     check(!instant.isConnected && !initiative._splashes.size, 'Initiative zero duration releases the splash');
+    // Each client resolves the broken creature's name through its own view, so
+    // the payload must not carry one: a masked name sent over the socket is on
+    // every player's console.
+    const source = await fetch('/scripts/features/initiative/gluniverse-initiative.mjs').then(r => r.text());
+    const payload = source.match(/emitSocket\(FEATURE_ID, \{ type: "breakSplash"[^}]*\}/)?.[0] ?? '';
+    check(payload && !/\bname\b/.test(payload), 'Initiative break splash broadcasts ids, never a name');
+    // A rail 18px from the screen edge has no room there for the side column of
+    // delayed cards, so it moves inward; the turn controls step out past the
+    // active card's badges, and the column clears both. Nothing reports either
+    // overlap, so the boxes are measured.
+    initiative.root.className = 'gluni-initiative gluni-initiative--right gluni-initiative--delayed-side';
+    Object.assign(initiative.root.style, { position: 'fixed', top: '40px', right: '18px', left: 'auto', width: '220px' });
+    initiative.root.innerHTML = '<div class="gluni-shell"><div class="gluni-rail"><article class="gluni-card gluni-card--active"><div class="gluni-card-surface"></div>'
+      + '<div class="gluni-card-condition-labels"><span class="gluni-card-condition-label">FRIGHTENED 2</span><span class="gluni-card-condition-label">OFF-GUARD</span></div></article></div>'
+      + '<section class="gluni-delayed-section"><article class="gluni-card"><div class="gluni-card-surface"></div></article></section>'
+      + '<div class="gluni-floating-turn-controls"><button type="button" style="width:80px;height:24px">End</button></div></div>';
+    initiative.applyFloatingControls(initiative.measureFloatingControls());
+    const box = selector => initiative.root.querySelector(selector).getBoundingClientRect();
+    const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    check(initiative.root.querySelector('.gluni-shell').classList.contains('gluni-shell--delayed-inner') && box('.gluni-delayed-section').right <= innerWidth,
+      'Initiative side delayed column moves inward when the screen edge has no room');
+    check(!overlaps(box('.gluni-floating-turn-controls'), box('.gluni-card-condition-labels')),
+      'Initiative turn controls step out past the active card badges');
+    check(!overlaps(box('.gluni-delayed-section'), box('.gluni-floating-turn-controls')) && !overlaps(box('.gluni-delayed-section'), box('.gluni-card-condition-labels')),
+      'Initiative inward delayed column clears the badges and the turn controls');
   } finally {
     initiative.clearPresentationMotion();
     initiative.root.remove();
