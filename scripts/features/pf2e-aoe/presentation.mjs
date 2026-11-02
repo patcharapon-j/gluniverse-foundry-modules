@@ -41,19 +41,26 @@ export function presentationStyle(region, options = {}) {
     classification: { resolveUuid, item: options.item, aura: region?.glAoeAuraRenderer },
   });
   if (resolved.native) return null;
-  const semantics = resolved.semantics;
-  const look = composeLook({
+  const look = lookFor(resolved.semantics, resolved.appearance);
+  return Object.freeze({ resolved, look, color: look.body, label: resolved.label });
+}
+
+/**
+ * The look for resolved semantics and appearance — the one place a Region on
+ * the canvas and a swatch in a GM form are composed, so the two cannot drift.
+ */
+export function lookFor(semantics = {}, appearance = {}) {
+  return composeLook({
     fn: semantics.function,
     secondary: semantics.secondaryFunction,
     material: semantics.material,
     accentMaterial: semantics.accent,
     behavior: semantics.behavior,
-    treatment: resolved.appearance.treatment,
-    intensity: resolved.appearance.intensity ?? get(SETTINGS.intensity, "balanced"),
-    palette: resolved.appearance.palette,
+    treatment: appearance?.treatment,
+    intensity: appearance?.intensity ?? get(SETTINGS.intensity, "balanced"),
+    palette: appearance?.palette,
     hotFrom: (body) => lighten(body, 0.58),
   });
-  return Object.freeze({ resolved, look, color: look.body, label: resolved.label });
 }
 
 export function materialDescriptor(id) {

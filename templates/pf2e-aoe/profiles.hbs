@@ -1,26 +1,49 @@
 <div class="gl-aoe-style-body">
-  <p class="gl-aoe-style-intro">{{intro}}</p>
-  <div class="gl-aoe-profile-toolbar">
-    <button type="button" class="gl-btn" data-action="add"><i class="fa-solid fa-plus"></i> {{add}}</button>
-    <button type="button" class="gl-btn" data-action="import"><i class="fa-solid fa-file-import"></i> {{import}}</button>
-    <button type="button" class="gl-btn" data-action="export"><i class="fa-solid fa-file-export"></i> {{export}}</button>
-  </div>
+  <header class="gl-aoe-profile-head">
+    <p class="gl-aoe-style-intro">{{intro}}</p>
+    <div class="gl-aoe-profile-toolbar">
+      <button type="button" class="gl-btn" data-action="add"><i class="fa-solid fa-plus"></i> {{add}}</button>
+      <button type="button" class="gl-btn" data-action="import"><i class="fa-solid fa-file-import"></i> {{import}}</button>
+      <button type="button" class="gl-btn" data-action="export"><i class="fa-solid fa-file-export"></i> {{export}}</button>
+    </div>
+  </header>
   <div class="gl-aoe-profile-list">
     {{#each profiles as |profile index|}}
-      <article class="gl-aoe-profile-card" data-profile-id="{{profile.id}}">
-        <input type="hidden" name="profiles.{{index}}.id" value="{{profile.id}}">
-        <input type="text" name="profiles.{{index}}.name" value="{{profile.name}}" maxlength="80">
-        <select name="profiles.{{index}}.function">{{selectOptions ../functions selected=profile.semantics.function valueAttr="id" labelAttr="label"}}</select>
-        <select name="profiles.{{index}}.material">{{selectOptions ../materials selected=profile.semantics.material valueAttr="id" labelAttr="label"}}</select>
-        <select name="profiles.{{index}}.behavior">{{selectOptions ../behaviors selected=profile.semantics.behavior valueAttr="id" labelAttr="label"}}</select>
-        <select name="profiles.{{index}}.colorMode">{{selectOptions ../colorModes selected=profile.colorMode valueAttr="id" labelAttr="label"}}</select>
-        <input type="color" name="profiles.{{index}}.color" value="{{profile.appearance.palette.body}}">
-        <select name="profiles.{{index}}.intensity">{{selectOptions ../intensities selected=profile.appearance.intensity valueAttr="id" labelAttr="label"}}</select>
-        <select name="profiles.{{index}}.treatment">{{selectOptions ../treatments selected=profile.appearance.treatment valueAttr="id" labelAttr="label"}}</select>
-        <button type="button" class="gl-btn" data-action="duplicate"><i class="fa-solid fa-copy"></i></button>
-        <button type="button" class="gl-btn gl-btn-danger" data-action="remove"><i class="fa-solid fa-trash"></i></button>
+      <article class="gl-aoe-profile" data-profile-id="{{profile.id}}">
+        <canvas class="gl-aoe-swatch" data-swatch data-size="72" aria-hidden="true"></canvas>
+        <div class="gl-aoe-profile-main">
+          <div class="gl-aoe-profile-title">
+            <input type="hidden" name="profiles.{{index}}.id" value="{{profile.id}}">
+            <input type="text" class="gl-aoe-profile-name" name="profiles.{{index}}.name" value="{{profile.name}}" maxlength="80" aria-label="{{../labels.name}}">
+            <button type="button" class="gl-btn gl-aoe-icon-btn" data-action="duplicate" data-tooltip="{{../labels.duplicate}}" aria-label="{{../labels.duplicate}}"><i class="fa-solid fa-copy"></i></button>
+            <button type="button" class="gl-btn gl-btn-danger gl-aoe-icon-btn" data-action="remove" data-tooltip="{{../labels.remove}}" aria-label="{{../labels.remove}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div class="gl-aoe-profile-fields">
+            <label class="gl-aoe-field"><span>{{../labels.function}}</span>
+              <select name="profiles.{{index}}.function">{{selectOptions ../functions selected=profile.semantics.function valueAttr="id" labelAttr="label"}}</select></label>
+            <label class="gl-aoe-field"><span>{{../labels.material}}</span>
+              <select name="profiles.{{index}}.material">{{selectOptions ../materials selected=profile.semantics.material valueAttr="id" labelAttr="label"}}</select></label>
+            <label class="gl-aoe-field"><span>{{../labels.behavior}}</span>
+              <select name="profiles.{{index}}.behavior">{{selectOptions ../behaviors selected=profile.semantics.behavior valueAttr="id" labelAttr="label"}}</select></label>
+            <label class="gl-aoe-field"><span>{{../labels.intensity}}</span>
+              <select name="profiles.{{index}}.intensity">{{selectOptions ../intensities selected=profile.appearance.intensity valueAttr="id" labelAttr="label"}}</select></label>
+            <label class="gl-aoe-field"><span>{{../labels.treatment}}</span>
+              <select name="profiles.{{index}}.treatment">{{selectOptions ../treatments selected=profile.appearance.treatment valueAttr="id" labelAttr="label"}}</select></label>
+            <div class="gl-aoe-field gl-aoe-field-color"><span>{{../labels.color}}</span>
+              <div class="gl-aoe-color-pair">
+                <select name="profiles.{{index}}.colorMode" aria-label="{{../labels.color}}">{{selectOptions ../colorModes selected=profile.colorMode valueAttr="id" labelAttr="label"}}</select>
+                <input type="color" name="profiles.{{index}}.color" value="{{profile.appearance.palette.body}}" aria-label="{{../labels.color}}">
+              </div>
+            </div>
+          </div>
+        </div>
       </article>
+    {{else}}
+      <p class="gl-aoe-profile-empty">{{empty}}</p>
     {{/each}}
   </div>
-  <footer class="form-footer"><button type="submit" class="gl-btn gl-btn-primary"><i class="fa-solid fa-floppy-disk"></i> {{save}}</button></footer>
+  <footer class="gl-aoe-profile-foot">
+    <span class="gl-aoe-profile-dirty" data-dirty hidden>{{unsaved}}</span>
+    <button type="submit" class="gl-btn gl-btn-primary"><i class="fa-solid fa-floppy-disk"></i> {{save}}</button>
+  </footer>
 </div>
