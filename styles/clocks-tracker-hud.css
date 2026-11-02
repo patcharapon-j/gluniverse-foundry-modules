@@ -61,11 +61,11 @@
    static layer beneath the bar (see below). */
 #glct-hud .bar{position:relative;border-radius:15px;overflow:hidden;isolation:isolate;
   clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
-  background:linear-gradient(180deg, rgb(var(--gl-tint-light) / .10), rgb(var(--gl-tint-light) / 0) 34%),
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / .02), rgb(var(--gl-tint-dark) / .20)),
-    linear-gradient(98deg, var(--tint2), var(--gl-ink-1) 64%);
-  border:1px solid var(--edge);
-  box-shadow:inset 0 1px 0 rgb(var(--gl-tint-light) / .16), inset 0 -12px 28px rgb(var(--gl-tint-dark) / .38);
+  /* A black slab: the watch's dark tint only leans into the left edge, the rest
+     is ink. One paper hairline on the top edge is the only highlight. */
+  background:linear-gradient(98deg, color-mix(in srgb, var(--tint2) 42%, var(--gl-ink-0)), var(--gl-ink-0) 58%);
+  border:1px solid var(--hair);
+  box-shadow:inset 0 1px 0 rgb(var(--gl-tint-light) / .09);
   backdrop-filter:blur(var(--gl-blur)) saturate(var(--gl-saturation));
   transition:background var(--gl-d-slow) ease, box-shadow var(--gl-d-slow) ease, width var(--gl-d-swift) var(--gl-ease-inout);}
 /* The bar's shadow caster. JS (GlctHud._frameBar) wraps .bar in .bar-frame; the
@@ -83,15 +83,15 @@
 #glct-hud .bar-frame{position:relative;display:flex;flex-direction:column}
 #glct-hud .bar-frame::before{content:"";position:absolute;inset:0;pointer-events:none;border-radius:15px;
   clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
-  box-shadow:0 18px 64px rgb(var(--gl-tint-dark) / .55), 0 2px 0 rgb(var(--gl-tint-dark) / .4), 0 20px 64px rgb(var(--gl-tint-dark) / .22),
-    0 0 46px var(--glowsoft), 0 18px 79px color-mix(in srgb, var(--glowsoft) 55%, transparent);
+  /* a plain contact shadow; the coloured bloom is gone with the glass */
+  box-shadow:0 14px 40px rgb(var(--gl-tint-dark) / .55), 0 2px 0 rgb(var(--gl-tint-dark) / .45);
   transition:box-shadow var(--gl-d-slow) ease}
 #glct-hud .bar-frame:has(> .bar.collapsed)::before{clip-path:none}
 /* the collapsed pill is too small to carry the cut cleanly — full radius there */
 #glct-hud .bar.collapsed{clip-path:none}
 #glct-hud .bar.collapsed .main::after{display:none}
 #glct-hud .bar::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;
-  background:radial-gradient(70% 150% at 50% -50%, var(--glow), transparent 66%);opacity:.22;transition:var(--gl-d-slow)}
+  background:radial-gradient(70% 150% at 50% -50%, var(--glow), transparent 66%);opacity:.08;transition:var(--gl-d-slow)}
 #glct-hud .sweep{position:absolute;top:0;bottom:0;width:38%;z-index:4;pointer-events:none;
   background:linear-gradient(100deg,transparent,rgb(var(--gl-tint-light) / .14),transparent);
   transform:translateX(-160%) skewX(-12deg);opacity:0}
@@ -105,7 +105,7 @@
 #glct-hud .main::after{content:"";position:absolute;top:-1px;right:-1px;width:21px;height:1px;z-index:6;pointer-events:none;
   background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--tint) 85%,rgb(var(--gl-tint-light))));
   transform-origin:100% 0;transform:rotate(45deg) translateX(1.5px);
-  box-shadow:0 0 8px var(--glow);opacity:.85;transition:background var(--gl-d-slow) ease,box-shadow var(--gl-d-slow) ease}
+  opacity:.85;transition:background var(--gl-d-slow) ease}
 #glct-hud .cell{display:flex;flex-direction:column;justify-content:center;padding:0 12px;position:relative;gap:2px}
 #glct-hud .cell + .cell::before{content:"";position:absolute;left:0;top:11px;bottom:11px;width:1px;
   background:linear-gradient(180deg,transparent,var(--hair) 22%,var(--hair) 78%,transparent)}
@@ -137,7 +137,7 @@
 #glct-hud .date .wxstack > .wxmini{z-index:1}
 #glct-hud .date .wd{font:700 8px/1.45 var(--gl-tech);letter-spacing:.24em;text-transform:uppercase;color:var(--muted)}
 #glct-hud .date .m{font-size:16px;font-weight: var(--gl-weight-heavy);letter-spacing:.2px;line-height:1.05;white-space:nowrap;
-  background:linear-gradient(180deg,rgb(var(--gl-tint-light)),#ccd5e8);-webkit-background-clip:text;background-clip:text;color:transparent}
+  color:var(--gl-text-bright)}
 #glct-hud .date .m sup{font-size:8px;font-weight: var(--gl-weight-medium);-webkit-text-fill-color:var(--muted)}
 /* the day/month line carries the moon + season inline beside it */
 #glct-hud .date .dline{display:flex;align-items:center;gap:7px}
@@ -169,8 +169,8 @@
 /* the clock is the hero; the day-quarter shift strip sits tight beneath it */
 #glct-hud .clock-cell{align-items:center;justify-content:center;gap:1px;padding:0 18px}
 #glct-hud .clock{font-family:var(--clock-font);font-variant-numeric:tabular-nums;font-size:26px;font-weight: var(--gl-weight-medium);
-  letter-spacing:.01em;line-height:1;display:flex;align-items:center;gap:9px;color:rgb(var(--gl-tint-light));
-  text-shadow:0 0 16px var(--glowsoft),0 1px 0 rgb(var(--gl-tint-dark) / .35)}
+  letter-spacing:.01em;line-height:1;display:flex;align-items:center;gap:9px;color:var(--gl-text-bright);
+  text-shadow:0 1px 2px rgb(var(--gl-tint-dark) / .6)}
 /* slot-reel clock: each digit is its own vertical wheel that rotates in place */
 #glct-hud .reelclock{display:inline-flex;align-items:center;height:1.18em;line-height:1.18em;font-variant-numeric:tabular-nums}
 #glct-hud .reelclock .reel{display:inline-block;height:1.18em;width:.62em;overflow:hidden;text-align:center}
@@ -300,29 +300,30 @@
 #glct-hud .event-badge .events{display:flex;flex-wrap:wrap;gap:4px}
 #glct-hud .hud-root.is-collapsed .event-badge,
 #glct-hud .event-badge.empty{display:none}
-#glct-hud .event{font-size:9.5px;color:var(--gl-signal-pale);
-  background:linear-gradient(180deg,color-mix(in srgb,var(--gl-signal) 16%,transparent),color-mix(in srgb,var(--gl-signal) 5%,transparent));
-  border:1px solid color-mix(in srgb,var(--gl-signal) 30%,transparent);border-radius:99px;padding:4px 9px;display:inline-flex;gap:5px;align-items:center;
+/* An event is an ink tab with the signal colour carried by one left rule. */
+#glct-hud .event{font-size:9.5px;color:var(--gl-text);
+  background:color-mix(in srgb, var(--gl-ink-0) 92%, transparent);
+  border:1px solid var(--hair);border-left:2px solid var(--gl-signal);border-radius:2px;padding:4px 9px 4px 8px;display:inline-flex;gap:6px;align-items:center;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
-  box-shadow:0 6px 16px rgb(var(--gl-tint-dark) / .4),inset 0 1px 0 rgb(var(--gl-tint-light) / .1);backdrop-filter:blur(calc(8px * var(--gl-glass-k)))}
-#glct-hud .event .dot{width:5px;height:5px;border-radius:99px;background:var(--gl-signal);box-shadow:0 0 9px var(--gl-signal);flex:none}
+  box-shadow:0 6px 16px rgb(var(--gl-tint-dark) / .4)}
+#glct-hud .event .dot{width:5px;height:5px;border-radius:1px;background:var(--gl-signal);flex:none}
 #glct-hud .event span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#glct-hud .event.today{background:linear-gradient(180deg,color-mix(in srgb,var(--gl-signal) 26%,transparent),color-mix(in srgb,var(--gl-signal) 9%,transparent));
-  box-shadow:0 8px 18px rgb(var(--gl-tint-dark) / .4),0 0 16px color-mix(in srgb,var(--gl-signal) 28%,transparent)}
+#glct-hud .event.today{color:var(--gl-text-bright);
+  background:linear-gradient(90deg,color-mix(in srgb,var(--gl-signal) 16%,var(--gl-ink-0)),color-mix(in srgb, var(--gl-ink-0) 92%, transparent) 70%)}
 /* GM-pinned events: brighter rim so they read as "kept on screen on purpose" */
 #glct-hud .event.pinned{border-color:color-mix(in srgb,var(--gl-signal) 55%,transparent)}
-#glct-hud .event.pinned .dot{box-shadow:0 0 9px var(--gl-signal-hot),0 0 4px rgb(var(--gl-tint-light))}
+#glct-hud .event.pinned .dot{background:var(--gl-signal-hot)}
 
 /* small concise GM control dock — detached, floats just beneath the bar */
-#glct-hud .gmdock{display:inline-flex;flex-wrap:wrap;justify-content:center;gap:2px;margin:7px auto 0;padding:3px;border-radius:10px;max-width:min(96vw,720px);
-  background:linear-gradient(180deg,rgba(22,27,37,.92),rgba(14,18,26,.92));
-  border:1px solid var(--hair);box-shadow:0 8px 22px rgb(var(--gl-tint-dark) / .5),inset 0 1px 0 rgb(var(--gl-tint-light) / .08);
-  backdrop-filter:blur(calc(10px * var(--gl-glass-k)));transition:opacity var(--gl-d-swift) ease}
+#glct-hud .gmdock{display:inline-flex;flex-wrap:wrap;justify-content:center;gap:2px;margin:6px auto 0;padding:3px;border-radius:4px;max-width:min(96vw,720px);
+  background:color-mix(in srgb, var(--gl-ink-0) 94%, transparent);
+  border:1px solid var(--hair);box-shadow:0 8px 22px rgb(var(--gl-tint-dark) / .5);
+  transition:opacity var(--gl-d-swift) ease}
 #glct-hud .gmwrap{display:flex;justify-content:center}
-#glct-hud .c{font-size:10.5px;font-weight: var(--gl-weight-bold);padding:4px 8px;border-radius:7px;cursor:pointer;white-space:nowrap;user-select:none;
+#glct-hud .c{font-size:10.5px;font-weight: var(--gl-weight-bold);padding:4px 8px;border-radius:2px;cursor:pointer;white-space:nowrap;user-select:none;
   appearance:none;font-family:inherit;margin:0;
-  color:var(--ink);background:transparent;border:1px solid transparent;transition:background var(--gl-d-tap),transform var(--gl-d-tap),box-shadow var(--gl-d-tap)}
-#glct-hud .c:hover{background:rgb(var(--gl-tint-light) / .08);box-shadow:0 0 10px var(--glowsoft)}
+  color:var(--gl-text-dim);background:transparent;border:1px solid transparent;transition:background var(--gl-d-tap),color var(--gl-d-tap),transform var(--gl-d-tap)}
+#glct-hud .c:hover{background:rgb(var(--gl-tint-light) / .07);color:var(--gl-text-bright)}
 #glct-hud .c:active{transform:translateY(var(--gl-press))}
 #glct-hud .c.rw{box-shadow:inset 0 0 0 1.5px rgba(255,140,120,.7)}
 #glct-hud .c.sep{color:var(--muted)}
@@ -347,11 +348,9 @@
 #glct-hud .pill .pring{flex:none}
 #glct-hud .pill .ptxt{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:0;line-height:1.04}
 #glct-hud .pill .pw{font-family:var(--gl-display);
-  font-size:12.5px;font-weight: var(--gl-weight-heavy);letter-spacing:.06em;white-space:nowrap;
-  background:linear-gradient(180deg,rgb(var(--gl-tint-light)),#d6deec);-webkit-background-clip:text;background-clip:text;
-  -webkit-text-fill-color:transparent;color:transparent;text-shadow:0 0 16px var(--glowsoft)}
+  font-size:12.5px;font-weight: var(--gl-weight-heavy);letter-spacing:.06em;white-space:nowrap;color:var(--gl-text-bright)}
 #glct-hud .pill .pc{font-family:var(--clock-font);font-variant-numeric:tabular-nums;font-size:25px;font-weight: var(--gl-weight-bold);
-  letter-spacing:.01em;line-height:1.04;color:rgb(var(--gl-tint-light));text-shadow:0 0 15px var(--glowsoft),0 1px 0 rgb(var(--gl-tint-dark) / .35)}
+  letter-spacing:.01em;line-height:1.04;color:var(--gl-text-bright);text-shadow:0 1px 2px rgb(var(--gl-tint-dark) / .6)}
 #glct-hud .pill .pd{font-size:9.5px;color:#aab4c8;white-space:nowrap;letter-spacing:.04em}
 /* watch mode hides the clock; promote the watch name to clock-size so it owns
    the readout, and grow the inner pie to fill the whole footprint. */
@@ -382,8 +381,7 @@
 #glct-hud .shift-hero .sinfo{display:flex;flex-direction:column;gap:1px}
 #glct-hud .shift-hero .name{font-family:var(--gl-display);
   font-size:15.5px;font-weight: var(--gl-weight-heavy);letter-spacing:.03em;white-space:nowrap;line-height:1.1;
-  text-shadow:0 0 16px var(--glowsoft);background:linear-gradient(180deg,rgb(var(--gl-tint-light)),#d6deec);
-  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+  color:var(--gl-text-bright)}
 #glct-hud .shift-hero .row{display:flex;align-items:center;gap:8px;margin-top:0}
 #glct-hud .shift-hero .of{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:#69748c;font-weight: var(--gl-weight-bold)}
 /* GM-only compact time readout: exact clock + a slim stretch-progress bar.

@@ -6,80 +6,49 @@
    scales the dread as the resource worsens. Matches the "Arcane Glass" look.
    ============================================================ */
 
-/* ---- delving diorama: washes the bar's RIGHT edge (behind the turn/resource
-   cell), coexisting with the weather wash on the LEFT. Mirrors the weather
-   diorama exactly, just anchored to the opposite rim via delve-scoped vars so the
-   two never fight over a shared colour. A tint wash sits behind the particles so
-   the gaps read as a solid pane; the right→transparent mask confines it. ---- */
+/* ---- delving atmosphere: the RIGHT side of the bar (behind the turn/resource
+   cell), beside the weather on the LEFT. Same shared renderer as the weather, no
+   CSS colour wash under it; delve-scoped vars keep the two colours apart. ---- */
 #glct-hud .bar-dx{
   position:absolute; inset:0; z-index:1; pointer-events:none;
-  border-radius:inherit; overflow:hidden; opacity:1; mix-blend-mode:normal;
-  background:linear-gradient(260deg,
-    color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 30%,transparent) 0%,
-    color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 18%,transparent) 12%,
-    color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 7%,transparent) 24%,
-    transparent 40%);
-  -webkit-mask-image:linear-gradient(270deg,#000 0,#000 4%,transparent 34%,transparent 100%);
-  mask-image:linear-gradient(270deg,#000 0,#000 4%,transparent 34%,transparent 100%);
+  border-radius:inherit; overflow:hidden; opacity:1;
+  -webkit-mask-image:linear-gradient(270deg,#000 0,#000 26%,rgb(0 0 0 / .3) 52%,transparent 74%);
+  mask-image:linear-gradient(270deg,#000 0,#000 26%,rgb(0 0 0 / .3) 52%,transparent 74%);
   transition:opacity var(--gl-d-reveal) ease;
 }
 #glct-hud .bar-dx.off{ opacity:0; }
 #glct-hud .bar-dx .glct-wx-canvas{ position:absolute; inset:0; }
 
-/* Legibility scrim anchored to the RIGHT edge — a soft dark wash that darkens the
-   bright effect so the turn counter / resource text stays readable, plus a thin
-   tinted rim. Sits above the diorama, below .main. Toggled with the diorama. */
+/* Legibility: an ink pool under the turn counter and one hairline of the
+   resource's glow on the right rim. */
 #glct-hud .bar-dx-scrim{
   position:absolute; inset:0; z-index:1; pointer-events:none;
   border-radius:inherit; overflow:hidden; opacity:1; transition:opacity var(--gl-d-reveal) ease;
   background:
-    linear-gradient(270deg, color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 22%,transparent) 0, transparent 7px),
-    linear-gradient(260deg, color-mix(in srgb, var(--gl-ink-1) 50%, transparent) 0%, color-mix(in srgb, var(--gl-ink-1) 26%, transparent) 12%, transparent 30%);
+    linear-gradient(270deg, color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 70%,transparent) 0, color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 70%,transparent) 1px, transparent 1px),
+    linear-gradient(270deg, rgb(var(--gl-tint-dark) / .42) 0%, rgb(var(--gl-tint-dark) / .26) 22%, transparent 46%);
 }
 #glct-hud .bar-dx-scrim.off{ opacity:0; }
 #glct-hud .bar.dx-ominous .bar-dx-scrim{
   background:
-    linear-gradient(270deg, color-mix(in srgb,var(--gl-hazard) 30%,transparent) 0, transparent 7px),
-    linear-gradient(260deg, rgba(14,8,9,.54) 0%, rgba(14,8,9,.3) 12%, rgba(14,8,9,0) 30%);
+    linear-gradient(270deg, var(--gl-hazard) 0, var(--gl-hazard) 1px, transparent 1px),
+    linear-gradient(270deg, color-mix(in srgb, var(--gl-hazard) 16%, rgb(var(--gl-tint-dark) / .5)) 0%, rgb(var(--gl-tint-dark) / .3) 22%, transparent 46%);
 }
 
-/* Liquid-glass edge refraction on the RIGHT rim, mirroring the weather edge. The
-   bar's ::after is already claimed by weather (left), so the delving rim rides on
-   the scrim element instead: an inset ring + top highlight + a bloom feathering in
-   from the right, masked to the right third. */
-#glct-hud .bar.has-dx .bar-dx-scrim{
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 55%,transparent),
-    inset 0 1px 0 color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 62%,rgb(var(--gl-tint-light))),
-    inset 0 0 14px -2px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 42%,transparent),
-    inset -7px 0 16px -10px color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 75%,transparent);
-  -webkit-mask-image:linear-gradient(270deg,#000 0,#000 4%,transparent 26%,transparent 100%);
-  mask-image:linear-gradient(270deg,#000 0,#000 4%,transparent 26%,transparent 100%);
-}
-
-/* ---- the depleted END: the worst it gets. The liquid-glass edge refraction on
-   the right rim is pushed much harder — a brighter inset ring, a thicker bloom
-   feathering further in, and a slow pulse — so a finished pool reads as a serious,
-   glowing terminal state. Applies on top of .has-dx (defined later, so it wins). */
+/* ---- the depleted END: the atmosphere takes more of the bar, and a glow
+   breathes in from the right rim. The breath is an OPACITY pulse on its own
+   layer: it used to animate `filter` on the scrim, which repainted the bar every
+   frame for as long as a pool sat empty. ---- */
 #glct-hud .bar.dx-terminal .bar-dx{
-  background:linear-gradient(260deg,
-    color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 46%,transparent) 0%,
-    color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 26%,transparent) 14%,
-    color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 10%,transparent) 28%,
-    transparent 46%);
+  -webkit-mask-image:linear-gradient(270deg,#000 0,#000 40%,rgb(0 0 0 / .4) 64%,transparent 86%);
+  mask-image:linear-gradient(270deg,#000 0,#000 40%,rgb(0 0 0 / .4) 64%,transparent 86%);
 }
-#glct-hud .bar.dx-terminal .bar-dx-scrim{
-  box-shadow:
-    inset 0 0 0 1.5px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 85%,rgb(var(--gl-tint-light))),
-    inset 0 1px 0 color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 80%,rgb(var(--gl-tint-light))),
-    inset 0 0 22px -1px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 62%,transparent),
-    inset -22px 0 40px -16px color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 85%,transparent),
-    inset -12px 0 26px -12px color-mix(in srgb,var(--glct-delve-tint,#ff9a3c) 95%,transparent);
-  -webkit-mask-image:linear-gradient(270deg,#000 0,#000 6%,transparent 38%,transparent 100%);
-  mask-image:linear-gradient(270deg,#000 0,#000 6%,transparent 38%,transparent 100%);
+#glct-hud .bar.dx-terminal .bar-dx-scrim::after{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(270deg, color-mix(in srgb,var(--glct-delve-glow,#ffd27a) 34%,transparent) 0%, transparent 28%);
   animation:glctDxTerminalPulse var(--gl-breathe) var(--gl-ease-inout) infinite;
 }
-@keyframes glctDxTerminalPulse{ 0%,100%{ filter:brightness(1) saturate(1); } 50%{ filter:brightness(1.4) saturate(1.25); } }
+@keyframes glctDxTerminalPulse{ 0%,100%{ opacity:.35; } 50%{ opacity:1; } }
 
 /* ---- mode swap: hide the clock/meter/shift cells, reveal the delving cell. The
    date cell (with the weather chip + left-edge weather wash) stays put, so weather
