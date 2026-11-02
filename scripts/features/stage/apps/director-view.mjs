@@ -13,7 +13,7 @@
  * is markup.
  *
  * The look is the console skin (styles/stage-director.css,
- * docs/adr/0004-stage-theatre-console.md): black slabs, paper type, and one
+ * docs/adr/0008-stage-theatre-console.md): black slabs, paper type, and one
  * red for what the players can see right now.
  */
 

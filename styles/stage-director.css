@@ -1,7 +1,7 @@
 /* ==========================================================================
    Stage — the Director (GM control panel). Prefix glstage-dir-.
 
-   The console skin (docs/adr/0004-stage-theatre-console.md): the design
+   The console skin (docs/adr/0008-stage-theatre-console.md): the design
    system's neutral ramp and status hues, mirrored as feature-local
    `--glstage-*` tokens on this window's own root and never on :root. Theatre's
    apps carry the same values as `--glth-*`; theatre-check holds the two ramps

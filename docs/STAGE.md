@@ -187,7 +187,7 @@ node tools/director-preview.mjs        # then /.preview/director.html?tab=stage|
 The Director has no template. `director-view.mjs` builds its model and its
 markup as a string, the app sets it and binds events, and the director preview
 draws the same markup over `styles/stage-director.css`. Its look is the console
-skin shared with Theatre's apps (docs/adr/0004-stage-theatre-console.md).
+skin shared with Theatre's apps (docs/adr/0008-stage-theatre-console.md).
 
 The check drives the normalizers, the migration, the rig across every mood ×
 darkness × probe, the backdrop pipeline, the director (entrance, rapid

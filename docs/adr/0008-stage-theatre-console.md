@@ -1,4 +1,4 @@
-# 0004 · A scoped console skin for the Stage and Theatre GM apps
+# 0008 · A scoped console skin for the Stage and Theatre GM apps
 
 Status: accepted (2026-11-03)
 

@@ -732,7 +732,7 @@ section = "seams";
   const apps = read("styles/theatre-apps.css");
   ok("theatre-apps.css sizes the buttons it ships (.gl-btn declares no font-size)",
     /\.gl-btn[^{]*\{[^}]*font-size/.test(apps));
-  // The console skin (docs/adr/0004-stage-theatre-console.md): one ramp, stated twice, under each feature's
+  // The console skin (docs/adr/0008-stage-theatre-console.md): one ramp, stated twice, under each feature's
   // own roots. A value that drifts makes the two GM panels a GM keeps side by side two shades of black.
   const ramp = (css, prefix) => {
     const block = css.replace(/\/\*[\s\S]*?\*\//g, "").match(/\{([^}]*--[a-z]+-ink-0[^}]*)\}/)?.[1] ?? "";

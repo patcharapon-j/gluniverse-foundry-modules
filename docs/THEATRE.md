@@ -307,5 +307,5 @@ apps set it and bind events. `node tools/theatre-apps-preview.mjs` writes
 `.preview/theatre-apps.html` (`app=filmstrip|editor`, `tab=scene`, `dirty=1`,
 `collapsed=1`, `black=1`, `empty=1`), which draws the shipped markup over
 `styles/theatre-apps.css`. The skin is shared with Stage's Director
-(docs/adr/0004-stage-theatre-console.md), and `theatre-check` holds the two
+(docs/adr/0008-stage-theatre-console.md), and `theatre-check` holds the two
 ramps equal.

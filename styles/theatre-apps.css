@@ -1,7 +1,7 @@
 /* ==========================================================================
    Theatre — GM apps (filmstrip, shot editor, their two prompts). Prefix glth-.
 
-   The console skin (docs/adr/0004-stage-theatre-console.md): the design
+   The console skin (docs/adr/0008-stage-theatre-console.md): the design
    system's neutral ramp and status hues, mirrored as feature-local `--glth-*`
    tokens on these apps' own roots and never on :root. Stage's Director carries
    the same values as `--glstage-*`; theatre-check holds the two ramps equal.
