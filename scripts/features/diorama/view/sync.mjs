@@ -53,7 +53,7 @@ export function sendHold(sceneId, doc, pose) {
   if (!recipients.length || !doc?.id) return;
   emitSocket(FEATURE_ID, {
     type: MSG.hold, sceneId, tokenId: doc.id, phase: pose.phase,
-    x: pose.x, y: pose.y, footQ: pose.footQ, groundQ: pose.groundQ,
+    x: pose.x, y: pose.y, footQ: pose.footQ, groundQ: pose.groundQ, tone: pose.tone ?? "info",
   }, { recipients });
 }
 

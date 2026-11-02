@@ -133,10 +133,13 @@ export const TIMING = Object.freeze({
   linkGlint: 2400,      // a glint's run along a target line, source to target
   inviteTimeout: 30000,
   bakeThrottle: 50,  // light / vision bake coalescing
-  liftUp: 180,       // a picked-up miniature rising off the table
-  liftDrop: 240,     // and falling back onto its square
+  liftUp: 260,       // a picked-up miniature rising off the table (past its height and back)
+  liftDrop: 260,     // and falling onto the square it is set down on
+  holdBob: 1700,     // one slow rise and fall of a miniature held in the hand
   holdSend: 50,      // a held miniature's pose, at most this often to the table
   holdStale: 4000,   // a remote hold with no word for this long is dropped
+  holdKeep: 1000,    // a hand held still says it is still holding this often (well inside holdStale)
+  holdAwait: 1500,   // a miniature just set down waits this long for Foundry's move before going back
   reachDebounce: 60, // reach recompute coalescing
   flickerStep: 170,  // one noise step of a torch's flicker at Foundry speed 5
   flickerGentle: 900, // one noise step of a warm light with no animation

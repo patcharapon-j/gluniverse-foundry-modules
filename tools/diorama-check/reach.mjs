@@ -81,8 +81,19 @@ export default async function check(ctx) {
   ctx.ok("hold: the drag sees through the token in the hand", /exclude: drag\.tok\.id/.test(input));
   ctx.ok("hold: a carried flyer reads the pointer at its altitude", /pickPlane\?\.\(ev\.clientX, ev\.clientY, drag\.elevQ\)/.test(input));
   ctx.ok("hold: a cancelled lift sets the figure back down", /clearDrag\(\{ keepHold = false \}/.test(input) && /drag\.start\.j \+ drag\.w \/ 2/.test(input));
+  // Warn, never block: the drop is placed (no walk) and nothing Foundry would refuse refuses it.
+  ctx.ok("drop: placed in one move, walls and cost ignored, no walk",
+    /animate: false/.test(input) && /constrainOptions: \{ ignoreWalls: true, ignoreCost: true \}/.test(input));
+  ctx.ok("drop: out of reach is warned in red, and still set down", /this\.drag\.tone = "peril"/.test(input)
+    && /GLDIO\.move\.anyway/.test(input) && !/if \(!(drag|this\.drag)\.routed\)[^{]*return/.test(input.slice(input.indexOf("async commitDrag"))));
+  const moveKeys = ["GLDIO.move.noRoute", "GLDIO.move.beyond", "GLDIO.move.anyway", "GLDIO.move.up", "GLDIO.move.down", "GLDIO.move.offBoard"];
+  const moveLang = JSON.parse(src("lang/diorama.en.json"));
+  ctx.ok("drop: every warning line resolves", moveKeys.every((k) => k in moveLang && input.includes(`"${k}"`)));
+  ctx.ok("hold: a still hand keeps telling the table it holds (inside holdStale)",
+    /setInterval\([\s\S]{0,160}sendHold[\s\S]{0,40}TIMING\.holdKeep/.test(input) && /clearInterval\(drag\.keep\)/.test(input));
   const sync = src("scripts/features/diorama/view/sync.mjs");
   ctx.ok("hold: a hidden token's pose goes to GMs only", /doc\?\.hidden \? all\.filter/.test(sync));
+  ctx.ok("hold: the landing tone travels with the pose and is read back", /tone: pose\.tone/.test(sync) && /tone: typeof p\.tone === "string"/.test(overlay));
   ctx.ok("hold: a pose is drawn only for a token on this viewer's board, from its owner",
     /S\.tokenIds\.has\(doc\.id\)/.test(overlay) && /testUserPermission\(sender, "OWNER"\)/.test(overlay));
   const { validPayload } = await import(ctx.url("scripts/features/diorama/view/sync.mjs")).catch(() => ({}));
@@ -95,7 +106,9 @@ export default async function check(ctx) {
   /* ---------------- options and lang ---------------- */
   const { OPTIONS } = await import(ctx.url("scripts/features/diorama/options.mjs"));
   const lang = JSON.parse(src("lang/diorama.en.json"));
-  for (const name of ["moveStyle", "reach"]) {
+  ctx.ok("options: one way to move (pick up and set down), no move style left over",
+    !OPTIONS.some((x) => x.name === "moveStyle") && !Object.keys(lang).some((k) => k.startsWith("GLDIO.settings.moveStyle")));
+  for (const name of ["reach"]) {
     const o = OPTIONS.find((x) => x.name === name);
     ctx.ok(`options: ${name} is a client option`, o?.scope === "client");
     const keys = [`GLDIO.settings.${name}.name`, `GLDIO.settings.${name}.hint`, ...(o?.choices ?? []).map((c) => `GLDIO.settings.${name}.${c}`)];

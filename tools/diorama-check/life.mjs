@@ -21,7 +21,9 @@ export default async function check(ctx) {
   const { planMove, poseAt, squashAt, hoverPose, FALL_STEP, HOVER } = L;
   const { TIMING, SHED_ORDER } = await import(ctx.url("scripts/features/diorama/constants.mjs"));
   const { DustLayer, DUST_PUFFS, DUST_MOTES } = await import(ctx.url(`${RENDER}/dust.mjs`));
-  const { StandeesLayer } = await import(ctx.url(`${RENDER}/standees.mjs`));
+  const { StandeesLayer, HOLD_LIFT } = await import(ctx.url(`${RENDER}/standees.mjs`));
+  const { PALETTE } = await import(ctx.url("scripts/core/theme.mjs"));
+  const rgb = (hex) => { const n = parseInt(String(hex).replace("#", "").slice(0, 6), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
   const { createShared } = await import(ctx.url(`${RENDER}/materials.mjs`));
   const { CameraRig } = await import(ctx.url(`${RENDER}/camera.mjs`));
   const near = (a, b, e = 1e-9) => Math.abs(a - b) <= e;
@@ -262,28 +264,69 @@ export default async function check(ctx) {
   ctx.ok("hover: shed, it fades out (no snap) and the layer goes idle", idle && H.hoverW === 0 && H.root.position.y === 3);
   fy.dispose();
 
-  // the miniature in the hand: no bob, no hover; set down, it lands in dust
-  const hd = new StandeesLayer(createShared(), () => {});
+  // the miniature in the hand: picked up clearly, no walk, no hover; set down, it lands in dust
+  {
+  const hd =new StandeesLayer(createShared(), () => {});
   hd.setGridSize(100);
   hd.set([tok("c", {}), tok("k", { x: 250, footQ: 8, groundQ: 0 })], 0, false);
   hd.frame(0, cam, 0, false, ON);
-  hd.setHold("c", { x: 50, y: 50, footQ: 0, groundQ: 0, phase: "carry" }, 1);
+  hd.setHold("c", { x: 50, y: 50, footQ: 0, groundQ: 0, phase: "carry", tone: "peril" }, 1);
   hd.setHold("k", { x: 250, y: 50, footQ: 8, groundQ: 0, phase: "carry" }, 1);
-  let bob = false;
+  let walked = false, stretched = false, settled = true, peak = 0;
+  const ys = [];
   const C = hd.entries.get("c"), K = hd.entries.get("k");
   for (let t = 16; t <= 1200; t += 16) {
-    hd.set([tok("c", { x: 150 }), tok("k", { x: 350, footQ: 8, groundQ: 0 })], t, true);   // Foundry moves it while held
-    hd.setHold("c", { x: 50 + t / 12, y: 50, footQ: 0, groundQ: 0, phase: "carry" }, t);
+    hd.set([tok("c", {}), tok("k", { x: 250, footQ: 8, groundQ: 0 })], t, true);   // refreshes of where it stood
+    hd.setHold("c", { x: 50 + t / 12, y: 50, footQ: 0, groundQ: 0, phase: "carry", tone: "peril" }, t);
     hd.frame(t, cam, 0, false, ON);
-    if (C.body.position.y !== 0 || C.body.scale.y !== 1 || C.move || K.body.scale.y !== 1 || C.pose.lift !== 0) bob = true;
+    if (C.body.position.y !== 0 || C.move || C.pose.lift !== 0 || K.move || K.body.position.y !== 0) walked = true;
+    if (t < TIMING.liftUp && C.body.scale.y > 1.02) stretched = true;
+    if (t > TIMING.liftUp * 1.5 && Math.abs(C.body.scale.y - 1) > 1e-6) settled = false;
+    if (t <= TIMING.liftUp + 16) peak = Math.max(peak, C.hold.lift);
+    if (t > TIMING.liftUp + 32) ys.push(C.root.position.y);
   }
-  ctx.ok("hold: a held figure does not bob, squash or walk", !bob);
+  ctx.ok("hold: a held figure never walks or hops, whatever Foundry says meanwhile", !walked);
+  ctx.ok("hold: picked up, it stretches off the table and rises past its height before settling",
+    stretched && settled && peak > HOLD_LIFT * 1.03 && Math.abs(C.hold.lift - HOLD_LIFT) < 1e-9);
+  ctx.ok("hold: it rides clear of the table and bobs a little in the hand",
+    Math.min(...ys) > HOLD_LIFT * 0.9 && Math.max(...ys) - Math.min(...ys) > 0.02 && Math.max(...ys) - Math.min(...ys) < 0.1);
+  const red = rgb(PALETTE.peril);
+  const fu = C.footprint.material.uniforms.uColor.value;
+  const cu = C.column.material.uniforms.uColor.value;
+  ctx.ok("hold: it hangs over where it lands: a tether down to the spot and its squares, in its hold's tone",
+    C.stand.visible && C.column.visible && C.foot.visible && near(fu.x, red[0], 1e-6) && near(fu.y, red[1], 1e-6) && near(fu.z, red[2], 1e-6)
+    && near(cu.x, red[0], 1e-6) && C.column.scale.y > HOLD_LIFT * 0.8);
   ctx.ok("hold: a held flyer stops hovering", K.hoverW === 0);
   const before = hd.dust.live;
   hd.setHold("c", { x: 150, y: 50, footQ: 0, groundQ: 0, phase: "drop" }, 1216);
-  for (let t = 1216; t <= 1216 + TIMING.liftDrop + 32; t += 16) hd.frame(t, cam, 0, false, ON);
+  for (let t = 1216; t <= 1216 + TIMING.liftDrop + 32; t += 16) {
+    hd.set([tok("c", {}), tok("k", { x: 250, footQ: 8, groundQ: 0 })], t, true);   // Foundry has not answered yet
+    hd.frame(t, cam, 0, false, ON);
+  }
   ctx.ok("hold: a drop onto the table ends in a landing (dust and squash)", !C.hold && hd.dust.live > before && C.squash.amp > 0);
+  ctx.ok("hold: its landing squares go back to being the flight stand's", !C.stand.visible);
+  // set down before the move comes back: the old position arriving meanwhile does not walk it back
+  let back = false;
+  const t1 = 1216 + TIMING.liftDrop + 48;
+  for (let t = t1; t < t1 + TIMING.holdAwait - 100; t += 16) {
+    hd.set([tok("c", {}), tok("k", { x: 250, footQ: 8, groundQ: 0 })], t, true);
+    hd.frame(t, cam, 0, false, ON);
+    if (C.move || Math.abs(C.root.position.x - 1.5) > 1e-6) back = true;
+  }
+  ctx.ok("drop: until Foundry answers, the old position does not walk it back", !back);
+  hd.set([tok("c", { x: 150 }), tok("k", { x: 250, footQ: 8, groundQ: 0 })], t1 + TIMING.holdAwait - 80, true);
+  hd.frame(t1 + TIMING.holdAwait - 80, cam, 0, false, ON);
+  ctx.ok("drop: the move arriving where it was set down is no step at all", !C.move && C.root.position.x === 1.5 && !C.awaitMove);
+  // a move Foundry never makes: after the wait it goes back to where the token is
+  hd.setHold("c", { x: 150, y: 50, footQ: 0, groundQ: 0, phase: "carry" }, 3000);
+  hd.setHold("c", { x: 350, y: 50, footQ: 0, groundQ: 0, phase: "drop" }, 3200);
+  let t2 = 3200;
+  for (; t2 <= 3200 + TIMING.liftDrop + 32; t2 += 16) { hd.set([tok("c", { x: 150 })], t2, true); hd.frame(t2, cam, 0, false, ON); }
+  const held = C.root.position.x;
+  for (; t2 <= 3200 + TIMING.liftDrop + TIMING.holdAwait + 2000; t2 += 16) hd.frame(t2, cam, 0, false, ON);
+  ctx.ok("drop: a move that never comes sends it back to its token", held === 3.5 && Math.abs(C.root.position.x - 1.5) < 1e-6);
   hd.dispose();
+  }
 
   /* ---------------- wiring ---------------- */
   const rsrc = src(`${RENDER}/renderer.mjs`);

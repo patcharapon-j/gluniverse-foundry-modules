@@ -102,10 +102,6 @@
   "GLDIO.settings.grade.hint": "A light film grade over the 3D view. Off shows the map's colours as painted.",
   "GLDIO.settings.gridStrength.name": "Grid strength",
   "GLDIO.settings.gridStrength.hint": "How strongly the square grid is drawn on the 3D ground, when it is on.",
-  "GLDIO.settings.moveStyle.name": "Moving a token",
-  "GLDIO.settings.moveStyle.hint": "Trace the path: drag the route square by square. Pick up and set down: lift the miniature, carry it, and let go on its square; the route is found for you around walls and difficult terrain. Hold Alt while you start a drag to use the other one.",
-  "GLDIO.settings.moveStyle.path": "Trace the path",
-  "GLDIO.settings.moveStyle.lift": "Pick up and set down",
   "GLDIO.settings.reach.name": "Movement range",
   "GLDIO.settings.reach.hint": "Shade the squares a token can reach in one, two and three Strides (PF2e), counting walls, difficult terrain and cliffs.",
   "GLDIO.settings.reach.selected": "When a token is selected",
@@ -201,6 +197,12 @@
   "GLDIO.menu.altDown": "Fly down {step} {units}",
 
   "GLDIO.move.stopped": "The move stopped short. Something on the way blocks it.",
+  "GLDIO.move.noRoute": "No walking route this turn",
+  "GLDIO.move.beyond": "More than a turn's movement",
+  "GLDIO.move.anyway": "You can still set it down here",
+  "GLDIO.move.offBoard": "Off the map: it goes back where it was",
+  "GLDIO.move.up": "{distance} {units} higher",
+  "GLDIO.move.down": "{distance} {units} lower",
   "GLDIO.path.climb": "Climb {distance} {units}",
 
   "GLDIO.cover.noSight": "No line of sight",

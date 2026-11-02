@@ -60,7 +60,7 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   the target is, and a cover chip (none, standard +2, greater +4 AC, or no line
   of sight; `rules/los.mjs`). Nothing is drawn to a token `token.isVisible` says
   the viewer cannot see, and nothing at all under "view as players". While
-  dragging a walker (trace or lift), every step that drops off a ledge previews
+  carrying a walker along a route it can walk, every step that drops off a ledge previews
   the fall: a dashed drop from the lip and "Drop 10 ft · 5 bludgeoning, lands
   prone" (PF2e, `rules/fall.mjs`), with the water note when it lands in water.
   Display only: no damage, no prone, no cover is ever applied.
@@ -70,20 +70,26 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   token's elevation) and cliffs. Solver: `rules/reach.mjs` (pure Dijkstra with the
   scene's diagonal rule); world adapter: `view/reach.mjs`. Per player
   (`dio.reach`): when selected, only while moving, or never.
-- **Two ways to move** (`dio.moveStyle`, Alt swaps for one drag). *Trace the
-  path*: the drag is the route. *Pick up and set down*: the miniature lifts off the
-  table, follows the hand leaning into its motion, and drops onto the square under
-  it; the route is the reach's cheapest one, and the landing square is coloured by
-  what the move costs. The carried pose reaches everyone watching the scene (socket
-  `hold`, throttled; a hidden token's goes to GMs only; drawn only by a viewer whose
-  board shows that token). Foundry still decides the move: a stopped move walks
-  the figure to where the token really is.
+- **Pick up and set down.** Dragging a token you own lifts the miniature clear of
+  the table (it overshoots a little, stretches as it leaves, bobs in the hand and
+  leans into the motion) and drops it onto the square under the hand when you let
+  go: one `TokenDocument#move`, placed with `animate: false`, so it never walks. The
+  carried pose, and the colour of the squares it will land on, reach everyone
+  watching the scene live (socket `hold`, throttled, re-sent every
+  `TIMING.holdKeep` while the hand is still; a hidden token's goes to GMs only;
+  drawn only by a viewer whose board shows that token).
+  **Warn, never block.** Out of reach, up a cliff or past a wall is shown, never
+  refused: the landing squares and the route turn red, the readout says why
+  ("No walking route this turn", "More than a turn's movement") and that it can
+  still be set down. The move is made with `constrainOptions: {ignoreWalls,
+  ignoreCost}` and records the reach's cheapest route when one exists (so its cost
+  is kept), else the straight line. Foundry's pause still applies to players.
 - **Flyers** are grabbable by the figure, its glass stand or its foot and squares
   on the ground. By the figure they move at their altitude (the pointer is read on
   the level plane at their feet); by the foot, the pointer's square is the square.
 - **Options.** Every graphics and handling choice is a per-client setting in the
   view's Graphics panel (`options.mjs`: quality preset and its overrides, adaptive
-  shedding, day/night, grade, grid strength, move style, range, token animation). The table's rules
+  shedding, day/night, grade, grid strength, range, token animation). The table's rules
   (where time and weather come from, whether props block) are world settings.
 - **Environment and props.** Time of day, weather and air per scene
   (`docs/DIORAMA_ENVIRONMENT.md`); primitive props placed in the editor or a layout

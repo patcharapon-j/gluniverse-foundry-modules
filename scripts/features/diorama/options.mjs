@@ -69,9 +69,6 @@ export const OPTIONS = Object.freeze([
   { key: "dio.grade", name: "grade", scope: "client", type: "boolean", default: true },
   { key: "dio.gridStrength", name: "gridStrength", scope: "client", type: "number", range: Object.freeze({ min: 0.1, max: 0.8, step: 0.05 }), default: 0.3 },
   // ── handling: this player ──
-  // path: drag traces the route square by square. lift: pick the miniature up
-  // and set it down, the route found for you. Alt+drag uses the other one.
-  { key: "dio.moveStyle", name: "moveStyle", scope: "client", type: "string", choices: choice("path", "lift"), default: "path" },
   // Squares reachable in one, two and three Strides (PF2e) or Close (Daggerheart).
   { key: "dio.reach", name: "reach", scope: "client", type: "string", choices: choice("selected", "moving", "off"), default: "selected" },
   // Figures hop step by step, fall off ledges, raise dust where they land and

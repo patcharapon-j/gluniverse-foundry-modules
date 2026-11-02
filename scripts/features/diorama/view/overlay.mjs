@@ -252,7 +252,6 @@ function bindInput() {
     onHover: () => mark("tokens"),
     asPlayers: () => S.asPlayers,
     cameraMoved: () => trackLabels(0),
-    moveStyle: () => setting("dio.moveStyle", "path"),
     reach: () => S.reach,
     dragging: (tok) => { S.dragTok = tok ?? null; computeReach(); },
     sendHold: (doc, pose) => { if (S.scene) sendHold(S.scene.id, doc, pose); },
@@ -304,7 +303,8 @@ export function applyHold(p, sender) {
   if (!doc) return false;
   if (!sender.isGM && !doc.testUserPermission(sender, "OWNER")) return false;
   if (!S.tokenIds.has(doc.id)) return false; // not on this viewer's board (hidden, unseen)
-  const pose = { x: Number(p.x), y: Number(p.y), footQ: Number(p.footQ), groundQ: Number(p.groundQ), phase: p.phase === "drop" ? "drop" : "carry" };
+  const pose = { x: Number(p.x), y: Number(p.y), footQ: Number(p.footQ), groundQ: Number(p.groundQ),
+    phase: p.phase === "drop" ? "drop" : "carry", tone: typeof p.tone === "string" ? p.tone : "info" };
   if (![pose.x, pose.y, pose.footQ].every(Number.isFinite)) return false;
   clearTimeout(S.holds.get(doc.id));
   S.holds.delete(doc.id);
