@@ -10,6 +10,8 @@ const queue = [];
 
 /** @type {HTMLElement|null} the stage on screen, or null */
 let current = null;
+/** The id of the card being rendered or shown, or null. */
+let activeId = null;
 let active = false;
 
 /**
@@ -19,7 +21,7 @@ let active = false;
 export function enqueue(data) {
   if (!data.id) data.id = `insight-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   // The same message twice (a GM's double click, a re-sent payload) is one card.
-  if (queue.some((q) => q.id === data.id) || current?.dataset?.id === data.id) return;
+  if (queue.some((q) => q.id === data.id) || activeId === data.id) return;
   queue.push(data);
   if (!active) next();
   else if (current) setPending(current, queue.length);
@@ -27,12 +29,14 @@ export function enqueue(data) {
 
 function next() {
   current = null;
+  activeId = null;
   if (!queue.length) {
     active = false;
     return;
   }
   active = true;
   const data = queue.shift();
+  activeId = data.id;
   renderNotification({ ...data, pending: queue.length }, () => {
     current = null;
     setTimeout(next, QUEUE_GAP);
