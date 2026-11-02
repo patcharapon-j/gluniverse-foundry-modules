@@ -59,7 +59,10 @@ const html = `<!doctype html>
   .message-metadata { margin-left: auto; font-size: 11px; color: #7d8292; }
   .chat-form { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-top: 1px solid rgb(var(--gl-tint-light) / .08); }
   /* Foundry v14's <prose-mirror id="chat-message">, as foundry2.css lays it out */
-  #chat-message { position: relative; display: flex; flex-direction: column; height: 84px; overflow: hidden; }
+  #chat-message { position: relative; display: flex; flex-direction: column; height: 118px; overflow: hidden; }
+  /* the ProseMirror menu Foundry draws at the top of the sidebar's box */
+  #chat-message > .mock-menu { flex: none; display: flex; gap: 2px; margin: 0 0 4px; padding: 0; list-style: none; }
+  #chat-message > .mock-menu i { width: 24px; height: 22px; background: #24262f; border-radius: 3px; }
   #chat-message > .editor-container { flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column; margin: 0; padding: 0; border: 2px solid #3a3d4a; background: #24262f; border-radius: 6px; }
   #chat-message > .editor-container .editor-content { position: absolute; inset: 0; overflow: hidden auto; padding: 4px 8px 4px 8px; color: #e6e7ec; font-size: 14px; outline: 0; }
   #chat-message > .editor-container .editor-content p { margin: 0; }
@@ -106,30 +109,42 @@ const A = {
   ardo: portrait("#555a68", "#16181d", "#d1a383", "#7f7f86")
 };
 const L = {
-  switchLabel: "Out of character or in character", subLabel: "How the line is delivered", ooc: "OOC", ic: "In character",
+  switchLabel: "Out of character or in character", ooc: "OOC", narrate: "Narrate", as: "As",
   sub: { say: "Say", do: "Do", think: "Think" }, source: { auto: "AUTO", pinned: "PINNED" }, chipTitle: "Choose who you are speaking as",
   pickerLabel: "Speakers", toggleHint: "OOC / IC", cycleHint: "Say, Do, Think",
   noSpeaker: "No character assigned. Ask your GM to assign one to speak in character."
 };
+const KEYS = { toggle: "Alt+Q", cycle: "Alt+W" };
 const LABEL = { say: "Says", do: "Does", think: "Thinks", narrator: "Narrator" };
 const PLACEHOLDER = { say: "Speak as {name}…", do: "What does {name} do?", think: "{name} thinks…", narrator: "Narrate the scene…", ooc: "Out of character…" };
 
 /* ── the composer, as composer.mjs mounts it ── */
-function composer(form, { state, speaker, gm = false, pickerOpen = false, picker = null, typed = "" }) {
+function composer(form, { state, speaker, gm = false, pickerOpen = false, picker = null, typed = "", slideFrom = null }) {
   const mode = M.composerMode(state, speaker ? (speaker.narrator ? "narrator" : "actor") : null);
   const bar = h('<div class="glrp-bar gl-type"></div>');
-  bar.innerHTML = R.barHTML({ mode, canIc: Boolean(speaker), sub: state.sub, speaker: speaker && { ...speaker, source: gm ? speaker.source : null }, pickerOpen, picker }, L);
+  bar.innerHTML = R.barHTML({ mode, canIc: Boolean(speaker), sub: state.sub, speaker: speaker && { ...speaker, source: gm ? speaker.source : null }, pickerOpen, picker, keys: KEYS }, L);
   bar.dataset.glrpMode = mode;
-  const input = h('<div id="chat-message" class="chat-input"><div class="editor-container"><div class="editor-content"><p><br></p></div></div></div>');
+  // composer.mjs's slide, frozen part way so a still can show it (?slide=0..1, default 0.12).
+  if (slideFrom) {
+    const ink = $(".glrp-ink", bar);
+    const at = Number($(".glrp-modes", bar).dataset.at);
+    const from = ["ooc", "say", "do", "think"].indexOf(slideFrom);
+    ink.style.setProperty("--glrp-from", String(from - at));
+    ink.style.setProperty("--glrp-from-tone", "var(--glrp-" + slideFrom + ")");
+    ink.classList.add("glrp-ink-slide");
+    const pressed = $('.glrp-mode[aria-pressed="true"]', bar);
+    for (const el of [ink, pressed]) {
+      el.style.animationPlayState = "paused";
+      el.style.animationDelay = "calc(var(--gl-d-brisk) * -" + (Number(qs.get("slide")) || 0.12) + ")";
+    }
+  }
+  const input = h('<div id="chat-message" class="chat-input"><menu class="mock-menu">' + "<i></i>".repeat(6) + '</menu><div class="editor-container"><div class="editor-content"><p><br></p></div></div></div>');
   input.dataset.glrpMode = mode;
   input.style.setProperty("--chat-message-placeholder", M.cssString(PLACEHOLDER[mode].replace("{name}", speaker?.name ?? "")));
   input.style.setProperty("--glrp-head", M.cssString(M.composerHead({ mode, name: speaker?.name, label: LABEL[mode] })));
   input.style.setProperty("--glrp-speaker", M.cssString(speaker?.name ?? ""));
   if (typed) $(".editor-content > p", input).textContent = typed;
-  const hint = h('<div class="glrp-hint gl-type"></div>');
-  hint.dataset.glrpMode = mode;
-  hint.innerHTML = R.hintHTML({ canIc: Boolean(speaker), toggle: "Alt+Q", cycle: "Alt+W" }, L);
-  form.append(bar, input, hint);
+  form.append(bar, input);
 }
 
 /* ── the log, as log.mjs restyles Foundry's element ── */
@@ -234,6 +249,8 @@ state("Player · IC Say, empty", { state: { ic: true, sub: "say" }, speaker: SER
 state("Player · IC Do, empty", { state: { ic: true, sub: "do" }, speaker: SERI });
 state("Player · no character assigned", { state: { ic: true, sub: "say" }, speaker: null });
 state("GM · Narrator, pinned", { state: { ic: true, sub: "say" }, speaker: { name: "Narrator", img: null, narrator: true, source: "pinned" }, gm: true });
+state("Say to Think, the slab mid-slide", { state: { ic: true, sub: "think" }, speaker: SERI, slideFrom: "say" });
+state("GM · Narrator, out of character", { state: { ic: false, sub: "say" }, speaker: { name: "Narrator", img: null, narrator: true, source: "auto" }, gm: true, typed: "Five minute break" });
 state("GM · speaker picker open", {
   state: { ic: true, sub: "say" }, gm: true, pickerOpen: true,
   speaker: { name: "Ogre Warrior", img: A.ogre, source: "auto" },

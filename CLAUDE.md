@@ -1760,8 +1760,10 @@ line are one rule in `core/rp-mode.mjs` (`splitAsides` / `asideRuns`) shared wit
 the stream card, which builds them from text nodes, never markup.
 
 **The bar must read over anything.** A collapsed sidebar moves the box into
-`#chat-notifications`, a grid with no background, over the canvas; the bar and
-hint carry their own glass, and the grid rule gives them rows. Model and markup
+`#chat-notifications`, a grid with no background, over the canvas; the bar
+carries its own glass (on `::before`, so its clip never clips the picker), and the
+grid rule gives it a row. It repaints only when its markup changes, or every hook
+storm replays the tone slab's slide. Model and markup
 are pure (`model.mjs`, `render.mjs`), which is what the preview drives:
 `node tools/roleplay-chat-preview.mjs && node tools/preview-server.mjs`, then
 `/.preview/roleplay-chat.html`. Foundry's own log and box need a live session.

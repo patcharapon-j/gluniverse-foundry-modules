@@ -11,21 +11,32 @@ thought can be shown without anyone saying it aloud.
 
 ## What the player sees
 
-**The switch.** A bar above the chat box: `OOC | In character`, the speaker chip,
-and, in character, `Say | Do | Think`, each with its own icon and hue (Say blue,
-Do gold, Think violet). The pressed delivery is filled with its hue and the bar
-carries a hue line along its top. Under the box, a hint names the two keys.
+**The look.** Black plates with paper type and the suite's chamfer on the lower
+right corner, quiet enough for any campaign. The only colour is the tone of the
+line: Say is paper, Do amber, Think lilac, the Narrator and table talk steel.
+Every line carries its tone the same way, as a spine down its left edge, in the
+box, the log, the balloon and the caption lane alike: solid for Say, a heavier
+bar for Do, dashed for Think.
 
-**The box** takes the shape of what is being written, so the mode reads at a
-glance without colour too:
+**The switch.** One plate above the chat box. The top row is the speaker chip
+("AS Seri Valen"), or, for somebody with nobody to speak as, why the strip is
+locked. The bottom row is the mode strip: `OOC | Say | Do | Think` for a
+character, `OOC | Narrate` for the Narrator, each tab with its own icon. The
+pressed tab sits on a slab of its tone, and when the mode changes the slab slides
+from the old tab to the new one, carrying its colour across. Out of character the
+chip steps back. The keys are on each tab's tooltip; there is no hint line under
+the box any more, which gives the sidebar's log that row back.
+
+**The box** reads like the line it will become, so the mode shows without colour
+too:
 
 | Mode | Box |
 | --- | --- |
-| Say | A rounded balloon with a tail |
-| Do | A square stage direction with a heavy rule down its left side |
-| Think | A dashed cloud with two puffs |
-| Narrator | A plain tinted box |
-| OOC | Foundry's own box, with a quiet border |
+| Say | A solid spine, the line between quotation marks |
+| Do | A heavier amber spine, the speaker's bold name in front, the narrated serif |
+| Think | A dashed spine, the narrated serif in lilac |
+| Narrator | A steel spine, the narrated serif |
+| OOC | No spine, only the box's hairline |
 
 In character, a header inside the box names who is speaking and how ("SERI VALEN
 · SAYS"), and the box sets the line the way the log will print it: Say between
@@ -75,9 +86,9 @@ in-character line is narration.
 
 | Mode | Drawn as |
 | --- | --- |
-| Say | A glass balloon over the token, with the name |
-| Do | A caption under the token, in serif italic, led by the name |
-| Think | A cloud over the token, trailing two puffs, in serif italic |
+| Say | A black plate over the token with a tail onto it, the name above the line |
+| Do | A caption under the token, in serif italic, led by the name in amber |
+| Think | A plate with a dashed spine, trailing two beads, in lilac serif italic |
 | Narrator | A film subtitle in the caption lane above the hotbar |
 | OOC | Nothing. The log only |
 
@@ -87,14 +98,18 @@ lives 4 s plus 60 ms per character, capped at 12 s. Up to two lines stack on a
 token and three in the lane; an older line dims, the oldest leaves.
 
 Bubbles scale with the square root of the canvas zoom, clamped to 0.8 to 1.15, so
-they stay legible zoomed out and do not swamp the map zoomed in. The lane follows
-the suite's Interface Scale.
+they stay legible zoomed out and do not swamp the map zoomed in. They carry no
+backdrop blur: they move with every pan, and a blur under a moving element is
+redrawn on every frame. The lane is centred over the hotbar, never under an open
+sidebar (`laneBox`), and follows the suite's Interface Scale.
 
 **The chat log.** An in-character entry keeps Foundry's element (timestamp,
 delete button, anything another module added) and swaps the sender line for a
-head: portrait, name, and what kind of line it is (Says, Does, Thinks). Say is
-quoted, Do and Think are in the narrated voice, the Narrator is centred between
-thin rules like a line of a book. An out-of-character entry keeps Foundry's look
+head on one line: portrait, name, and what kind of line it is (Says, Does,
+Thinks). Say is quoted, Do and Think are in the narrated voice, the Narrator is
+centred between hairlines like a line of a book, with no spine. A Do line's name
+is put in front as nodes, inside the line's first paragraph when it has one, so
+the body Foundry rendered is never re-parsed. An out-of-character entry keeps Foundry's look
 and gains an OOC tag beside the name.
 
 ## What it posts
@@ -192,7 +207,7 @@ scripts/features/roleplay-chat/
   settings.mjs     settings and keybindings
   speaker.mjs      who is speaking, the picker
   identity.mjs     a message's shown name and art, hidden-name rule
-  composer.mjs     the bar, the hint, the box's keys
+  composer.mjs     the bar, the box's keys, the picker's keys
   send.mjs         intercepting a typed line, /think
   log.mjs          the chat log entry
   overlay.mjs      bubbles, captions, the lane, the typing pill
@@ -220,15 +235,32 @@ Foundry's own error is what they see and their text stays in the box rather than
 being silently eaten.
 
 **The notification area is a grid.** With the sidebar collapsed, Foundry moves the
-chat box into `#chat-notifications`, a two-row grid. The bar and the hint are given
-rows of their own there (`#chat-notifications:has(> .glrp-bar)`); without it they
-land in the message row and push the box off screen. The bar carries its own glass
-for the same reason: there is no sidebar behind it, and several systems make the
-sidebar transparent anyway.
+chat box into `#chat-notifications`, a two-row grid. The bar is given a row of its
+own there (`#chat-notifications:has(> .glrp-bar)`); without it it lands in the
+message row and pushes the box off screen. The bar carries its own glass for the
+same reason: there is no sidebar behind it, and several systems make the sidebar
+transparent anyway. The glass and the chamfer are on the bar's `::before`, because
+a clip-path on the bar itself would clip the picker that opens above it.
 
 **`renderChatInput` fires every time the box moves** (sidebar, popout,
-notifications). The bar and the hint are single elements, moved to sit beside
-whichever box Foundry just rendered.
+notifications). The bar is a single element, moved to sit before whichever box
+Foundry just rendered.
+
+**The bar repaints only when its markup changes.** A dozen hooks ask for a render.
+Rebuilding on every one reset the picker's scroll, dropped the hover and would
+replay the slab's slide for a mode that never moved. When the pressed tab does
+move, `composer.mjs` hands the new slab the old position and tone (`--glrp-from`,
+`--glrp-from-tone`) and `glrp-ink-slide` takes it there; the label it is heading
+for keeps its tone until the slab arrives (`glrp-tab-on`), or it would be ink on
+black for a moment.
+
+**Foundry's message mode is a client setting.** It fires `clientSettingChanged`,
+not `updateSetting`. A writer who switches to a whisper mid-sentence takes the
+"…" down there and then (`refreshTyping`), rather than at the next keystroke.
+
+**A stack replaced by another shape still has an element.** A Think arriving over
+a token whose Say is still leaving builds a new stack under the same key; the old
+one's element is removed when its last line has left, map or no map.
 
 **Bubbles are placed on the PIXI ticker** from `canvas.stage.worldTransform`, the
 pattern pf2e-odds' line badges use. They are DOM, so they stay crisp at any zoom

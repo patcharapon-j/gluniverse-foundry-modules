@@ -11,13 +11,13 @@
  */
 
 import { escapeHTML } from "../../core/util.mjs";
-import { asideRuns, leadJoint, quoteEdges } from "./model.mjs";
+import { asideRuns, leadJoint, modeTabs, quoteEdges } from "./model.mjs";
 
 const esc = (value) => escapeHTML(value ?? "");
 
 /* ── shared pieces ─────────────────────────────────────────────────────────── */
 
-/** A round portrait, or a monogram where there is none (the Narrator, a creature with no art). */
+/** A cut-corner portrait, or a monogram where there is none (the Narrator, a creature with no art). */
 export function avatarHTML({ img, name, cls = "glrp-avatar" }) {
   if (img) return `<img class="${cls}" src="${esc(img)}" alt="" draggable="false">`;
   const initial = String(name ?? "").trim().charAt(0).toUpperCase() || "·";
@@ -52,46 +52,54 @@ export function leadHTML(name, restHTML) {
 
 /* ── the switch ────────────────────────────────────────────────────────────── */
 
-/** One glyph per delivery, so the three read apart at a glance and without colour. */
+/** One glyph per tab, so the deliveries read apart at a glance and without colour. */
 export const SUB_ICONS = Object.freeze({ say: "fa-comment", do: "fa-hand", think: "fa-cloud" });
+export const MODE_ICONS = Object.freeze({ ...SUB_ICONS, ooc: "fa-mug-hot", narrator: "fa-feather" });
 
 /**
- * The composer bar that sits above Foundry's chat box.
+ * The composer: one plate above Foundry's chat box. The top row is who is speaking (the chip, or why
+ * nobody can be); the bottom row is the mode strip, one tab per thing a line can be. The pressed tab
+ * sits on a slab of the mode's tone (`.glrp-ink`, placed under tab `--glrp-at`), which the composer
+ * slides from the old tab when the mode changes.
  *
  * @param {object} s
  * @param {string} s.mode              the effective mode: say | do | think | narrator | ooc
- * @param {boolean} s.canIc            false locks the switch to OOC (no speaker)
+ * @param {boolean} s.canIc            false locks the strip to OOC (no speaker)
  * @param {string} s.sub               say | do | think
- * @param {object|null} s.speaker      `{ name, img, source: "auto"|"pinned"|null, narrator, offScene }`
+ * @param {object|null} s.speaker      `{ name, img, source: "auto"|"pinned"|null, narrator }`
  * @param {boolean} s.pickerOpen
  * @param {object|null} s.picker       from `pickerModel`
+ * @param {{toggle?: string, cycle?: string}} [s.keys]   the configured bindings, humanized
  * @param {object} L                   localized strings
  */
 export function barHTML(s, L) {
-  const ic = s.mode !== "ooc";
-  const segs = `<div class="glrp-seg" role="group" aria-label="${esc(L.switchLabel)}">`
-    + `<button type="button" class="glrp-seg-btn" data-glrp-action="ooc" aria-pressed="${!ic}">${esc(L.ooc)}</button>`
-    + `<button type="button" class="glrp-seg-btn" data-glrp-action="ic" aria-pressed="${ic}" ${s.canIc ? "" : "disabled"}>${esc(L.ic)}</button>`
-    + `</div>`;
-  const chip = ic && s.speaker ? speakerChipHTML(s.speaker, L, s.pickerOpen) : "";
-  const picker = ic && s.pickerOpen && s.picker ? pickerHTML(s.picker, L) : "";
-  // Narrator speaks in one voice; the Say / Do / Think row is a character's.
-  const subs = ic && !s.speaker?.narrator
-    ? `<div class="glrp-seg glrp-sub" role="group" aria-label="${esc(L.subLabel)}">${["say", "do", "think"]
-      .map((m) => `<button type="button" class="glrp-seg-btn" data-glrp-action="sub" data-glrp-sub="${m}" aria-pressed="${s.sub === m}">`
-        + `<i class="glrp-ico fa-solid ${SUB_ICONS[m]}" aria-hidden="true"></i>${esc(L.sub[m])}</button>`)
-      .join("")}</div>`
-    : "";
-  return `<div class="glrp-row">${segs}${chip}${picker}</div>${subs}`;
+  const tabs = modeTabs({ mode: s.mode, canIc: s.canIc, narrator: Boolean(s.speaker?.narrator) });
+  const keys = s.keys ?? {};
+  const top = s.canIc && s.speaker
+    ? speakerChipHTML(s.speaker, L, s.pickerOpen) + (s.pickerOpen && s.picker ? pickerHTML(s.picker, L) : "")
+    : `<p class="glrp-locked"><i class="fa-solid fa-lock" aria-hidden="true"></i><span>${esc(L.noSpeaker)}</span></p>`;
+  const at = tabs.findIndex((t) => t.pressed);
+  const strip = tabs.map((t) => {
+    const key = t.id === "ooc" || t.id === "narrator" ? keys.toggle : keys.cycle;
+    const hint = t.id === "ooc" || t.id === "narrator" ? L.toggleHint : L.cycleHint;
+    const tip = key ? `${key} · ${hint}` : hint;
+    const action = t.id === "ooc" ? "ooc" : t.id === "narrator" ? "ic" : "sub";
+    return `<button type="button" class="glrp-mode" data-glrp-action="${action}"${action === "sub" ? ` data-glrp-sub="${t.id}"` : ""}`
+      + ` data-glrp-tone="${t.id}" aria-pressed="${t.pressed}"${t.disabled ? " disabled" : ""}`
+      + ` data-tooltip="${esc(tip)}"${key ? ` aria-keyshortcuts="${esc(key.replace(/\s/g, ""))}"` : ""}>`
+      + `<i class="glrp-ico fa-solid ${MODE_ICONS[t.id]}" aria-hidden="true"></i><span>${esc(t.id === "narrator" ? L.narrate : t.id === "ooc" ? L.ooc : L.sub[t.id])}</span></button>`;
+  }).join("");
+  const ink = at >= 0 ? `<span class="glrp-ink" style="--glrp-at: ${at}" aria-hidden="true"></span>` : "";
+  return `<div class="glrp-row">${top}</div>`
+    + `<div class="glrp-modes" role="group" aria-label="${esc(L.switchLabel)}" data-at="${at}" style="--glrp-tabs: ${tabs.length}">${ink}${strip}</div>`;
 }
 
 function speakerChipHTML(speaker, L, open) {
-  // The GM's AUTO / PINNED sits under the name: beside it, a 300px sidebar has no room left for the name.
   const tag = speaker.source ? `<small class="glrp-chip-tag">${esc(L.source[speaker.source] ?? "")}</small>` : "";
   return `<button type="button" class="glrp-chip" data-glrp-action="picker" aria-haspopup="listbox" aria-expanded="${Boolean(open)}"`
-    + ` title="${esc(L.chipTitle)}">${avatarHTML({ img: speaker.img, name: speaker.name })}`
-    + `<span class="glrp-chip-text"><span class="glrp-chip-name">${esc(speaker.name)}</span>${tag}</span>`
-    + `<i class="glrp-chip-caret fa-solid fa-caret-down" aria-hidden="true"></i></button>`;
+    + ` data-tooltip="${esc(L.chipTitle)}" aria-label="${esc(L.chipTitle)}">${avatarHTML({ img: speaker.img, name: speaker.name })}`
+    + `<span class="glrp-chip-as">${esc(L.as)}</span><span class="glrp-chip-name">${esc(speaker.name)}</span>${tag}`
+    + `<i class="glrp-chip-caret fa-solid fa-chevron-up" aria-hidden="true"></i></button>`;
 }
 
 /**
@@ -108,19 +116,11 @@ export function pickerHTML(picker, L) {
   return `<div class="glrp-picker" role="listbox" aria-label="${esc(L.pickerLabel)}">${body}</div>`;
 }
 
-/** The line under the chat box: the shortcuts, or why the switch is locked. */
-export function hintHTML({ canIc, toggle, cycle }, L) {
-  if (!canIc) return esc(L.noSpeaker);
-  const parts = [];
-  if (toggle) parts.push(`<kbd>${esc(toggle)}</kbd> ${esc(L.toggleHint)}`);
-  if (cycle) parts.push(`<kbd>${esc(cycle)}</kbd> ${esc(L.cycleHint)}`);
-  return parts.join(" · ");
-}
-
 /* ── the chat log ──────────────────────────────────────────────────────────── */
 
 /**
- * The head of an in-character entry in the chat log, which replaces Foundry's sender line.
+ * The head of an in-character entry in the chat log, which replaces Foundry's sender line: the
+ * portrait, then the name and what kind of line it is on one line.
  *
  * @param {object} v
  * @param {string} v.mode    say | do | think | narrator
@@ -155,7 +155,7 @@ export function bubbleLineHTML({ mode, name, text }) {
   return `<div class="glrp-balloon"><span class="glrp-balloon-who">${esc(name)}</span><span class="glrp-balloon-txt">${lineHTML(mode, text)}</span></div>`;
 }
 
-/** What hangs under a stack of balloons: a tail for Say, two puffs for Think. */
+/** What hangs under a stack of balloons: a tail for Say, two beads for Think. */
 export function bubbleTailHTML(mode) {
   if (mode === "think") return `<div class="glrp-puffs" aria-hidden="true"><i></i><i></i></div>`;
   if (mode === "say") return `<div class="glrp-tail" aria-hidden="true"></div>`;

@@ -17,7 +17,7 @@ import { Suite } from "../../core/registry.mjs";
 import { registerPanelSection } from "../stream/extensions.mjs";
 import { CSS, FEATURE_ID, PREFIX } from "./constants.mjs";
 import { registerKeybindings, registerSettings } from "./settings.mjs";
-import { cycle, mountComposer, render, scheduleRender, toggle } from "./composer.mjs";
+import { cycle, mountComposer, refreshTyping, render, scheduleRender, toggle } from "./composer.mjs";
 import { onChatMessage, registerThinkCommand } from "./send.mjs";
 import { restyleMessage } from "./log.mjs";
 import { overlay } from "./overlay.mjs";
@@ -61,6 +61,9 @@ Suite.register({
     Hooks.on("updateToken", (doc, change) => { if ("name" in change || "hidden" in change) scheduleRender(); });
     Hooks.on("updateActor", (doc, change) => { if ("ownership" in change || "name" in change || "img" in change) scheduleRender(); });
     Hooks.on("updateUser", (user, change) => { if (user.id === game.user.id && "character" in change) scheduleRender(); });
+    // Foundry's message mode is a client setting, announced here rather than on updateSetting. A line
+    // switched to a whisper mid-sentence takes its "…" down now, not at the next keystroke.
+    Hooks.on("clientSettingChanged", (key) => { if (key === "core.messageMode") refreshTyping(); });
 
     Hooks.on("createChatMessage", (message) => overlay.show(message));
     Hooks.on("deleteChatMessage", (message) => overlay.forget(message.id));

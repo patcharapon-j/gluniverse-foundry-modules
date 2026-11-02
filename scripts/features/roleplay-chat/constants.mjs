@@ -40,7 +40,6 @@ export const HOOKS = Object.freeze({
 export const CSS = Object.freeze({
   prefix: "glrp-",
   bar: "glrp-bar",
-  hint: "glrp-hint",
   layer: "glrp-layer",
   lane: "glrp-lane",
   bodyOn: "glrp-on"
