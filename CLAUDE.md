@@ -89,9 +89,10 @@ etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
   add the matching lang keys. Do NOT localize stored data values or
   parse/format vocabulary (e.g. statsblock parsing tokens).
 - **CSS** — read `docs/DESIGN_SYSTEM.md`. Etched Glass is the suite's ONLY
-  theme (the one exception is the scoped Aegis skin of the initiative rail and
-  Combat Intro, docs/adr/0001-scoped-skins.md — it lives only under those
-  features' own skinned roots and never on `:root`); `styles/gl-tokens.css` is the single source of truth and
+  theme (the exceptions are the scoped Aegis skin of the initiative rail and
+  Combat Intro, docs/adr/0001-scoped-skins.md, and Stream Pacer's black skin,
+  docs/adr/0003-stream-pacer-skin.md — each lives only under its features' own
+  roots and never on `:root`); `styles/gl-tokens.css` is the single source of truth and
   `styles/gl-motion.css` the single keyframe pool. Use the `--gl-*` tokens and
   the `.gl-*` utilities. The non-negotiables:
   - Never redeclare a foundation token outside `gl-tokens.css`. Custom
@@ -282,24 +283,48 @@ the imports stripped and the collaborators injected (the technique
 of the wiring above can be proved by reading the file: it drives a trackers-only
 world, then both halves in **both orders**, and asks what was actually wired.
 
-**When touching Stream Pacer's safety lights or its exempt-users form**
-(`features/stream-pacer/`, `templates/stream-pacer/`), re-run the exemption
-check. A safety-exempt user is normally the login whose screen is being captured,
-so every miss here fails *silently* — it looks correct on your own screen and
-appears on the recording. It covers the four sites each exemption column must
-agree on (registration, save branch, form context, `name=` attribute), that every
-enumerated safety surface in `module.js` sits inside the exemption gate, that the
-HUD template's safety branches are keyed on `showSafetyLights` rather than
-`isGM`, the two deliberately different liveness rules (local snapshot vs per-call
-roster read), and that the hint still warns that exempting a real person removes
-their means of signalling distress:
+**When touching Stream Pacer** (`features/stream-pacer/`, `styles/stream-pacer.css`,
+`templates/stream-pacer/`, `assets/stream-pacer/`), re-run its check. Two of its
+failures happen on somebody else's screen: a safety signal that reaches the
+capture login is on the recording, and a call that never reaches a player who is
+away from the tab is the exact problem the feature exists for.
 
 ```bash
-node tools/stream-pacer-safety-check.mjs
+node tools/stream-pacer-check.mjs
 ```
 
-Zero problems required. It is a source-shape check and cannot prove the rendered
-result — only a session with the capture login signed in can do that.
+Zero problems required. Four things are worth knowing before you change it.
+
+**The whole safety tool is one object.** `SafetyDesk` is constructed only inside
+`if (!isSafetySurfaceExempt)` in `onReady`; without it the snapshot says
+`safety: { show: false }`, and the model draws no safety lane, check-in, lamp,
+row light, cue or red frame from that. Lights are never stored: they ride the
+socket with `recipients` read live (`safeGMs()`, `isSafetyExempt`), and a GM files
+one under `meta.attested` only. The check drives every fixture with the desk off.
+
+**State lives where every client converges.** A player's hand, hold, seen and
+answer are one undotted User flag (`flags[SUITE_ID].spPacer`), always written
+whole; the GM's call, the mood and the spotlight marks are world settings.
+Presence, nudges, lights and check-ins are the socket's. So a reload or a late
+join draws the truth, and `arrivals()` keeps it quiet when the item is older than
+`TIMING.lateQuiet`. The table resets only on `updateScene` with
+`changes.active === true`, by `game.users.activeGM`. Hands and holds count only
+players who are online.
+
+**The model and the renderer are pure.** `model.js`, `render.js` and `const.js`
+reach no world and no DOM; text leaves the model as `{ k, d }` refs so the check
+can resolve every key, including the runtime-built families (`Band.Call.*`,
+`Band.SafetyLight.*`, `State.*`, `Light.*`, `Status.*`, `Notify.*`). `band.js`
+and `hud.js` touch the DOM and no `game`. That is what the preview drives:
+`node tools/pacer-preview.mjs && node tools/preview-server.mjs`, then
+`/.preview/pacer.html?scene=gm|ready|player|checkin|peril|calm`.
+
+**The band is keyed.** A lane that keeps its key keeps its element, so its
+arrival never replays; a changed `stamp` flares it; a missing key plays its exit.
+A fresh lane must be inserted even when its slot is last (`nextElementSibling`
+is null for an element that is not in the list yet), which
+`clocks-pacer-browser-check` pins. The skin is scoped to the feature's roots
+(docs/adr/0003-stream-pacer-skin.md). See `docs/STREAM_PACER.md`.
 
 **When touching Reflavor** (`features/statsblock-import/reflavor*.js`,
 `styles/statsblock-import-reflavor.css`), re-run its consistency check. The payload

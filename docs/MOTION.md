@@ -14,7 +14,7 @@ One system must own a given element/property while it animates. Suppress conflic
 | Stage | Visibility, slot content, layout and exit have separate cancellable channels; new actor assignments invalidate pending swaps. |
 | Initiative | Rail movement uses existing FLIP variables and round continuity; collect ghosts and per-kind splashes own cleanup. |
 | Clocks Tracker | Delving reels land on stored results before discard reveal; HUD width animation releases intrinsic sizing after settling. |
-| Stream Pacer | Dire Peril title cascade, stage fade and indicator handoff share a timeline; dismissal invalidates pending rendering immediately. |
+| Stream Pacer | Each band lane owns its arrival (drop, wipe, sweep), flare and exit; a kept lane never replays its arrival. The Dire Peril splash is one owner that ends once, by its own lift or a click. Running text and the countdown hairline are CSS on the compositor. |
 | Critical | One paused, seekable Anime.js beat sheet drives both portrait and video presentation from their existing renderer clocks; watchdogs release the queue in hidden tabs. |
 | Destiny Dice | Fresh results reveal once; repeat/historical renders remain static, with body motion tiers available before chat DOM attachment. |
 | Timer | Entrance, urgency emphasis and expiry accents are decorative. Remaining time, pause and expiry continue to derive from authoritative state. |
@@ -29,7 +29,7 @@ Run the normal repository syntax and JSON/manifest checks, then:
 node tools/clocks-pacer-motion-check.mjs
 node tools/critical-timer-motion-check.mjs
 node tools/insight-destiny-motion-check.mjs
-node tools/stream-pacer-safety-check.mjs
+node tools/stream-pacer-check.mjs
 node tools/insight-preview.mjs
 node tools/preview-server.mjs 8937
 ```

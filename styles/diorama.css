@@ -58,17 +58,74 @@
 /* A vertical column beside Foundry's scene controls. The top centre belongs to
    the suite's time HUD and the initiative rail, and the right edge to the chat
    notifications, so a toolbar in either sits under them. `--gldio-left` is the
-   controls' right edge, written by the overlay on open, resize and re-render. */
-.gldio-toolbar {
+   controls' right edge, written by the overlay on open, resize and re-render.
+   The rail stacks the "Not set up" chip, the bar and the labelled way out. */
+.gldio-rail {
   position: absolute;
   top: 50%;
   left: calc(var(--gldio-left, 88px) + var(--gl-sp-6));
   translate: 0 -50%;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: var(--gl-sp-4);
+}
+
+.gldio-toolbar {
+  display: flex;
+  flex-direction: column;
   align-items: stretch;
   gap: var(--gl-sp-2);
   padding: var(--gl-sp-3) var(--gl-sp-2);
+}
+
+/* ── The doors: "Exit 3D" under the bar, "3D view" on the 2D board ──
+   Labelled, in the accent, one look for the way in and the way out. */
+.gldio-door.gl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+  height: var(--gl-sp-11);
+  min-height: 0;
+  margin: 0;
+  padding: 0 var(--gl-sp-7) 0 var(--gl-sp-6);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 26%, transparent), color-mix(in srgb, var(--gl-accent) 8%, transparent)),
+    var(--gl-ink-2);
+  box-shadow: inset 0 0 var(--gl-sp-8) color-mix(in srgb, var(--gl-accent) 22%, transparent), 0 var(--gl-sp-2) var(--gl-sp-6) var(--gl-shadow);
+  font-size: var(--gl-fs-sm);
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: var(--gl-track-wide);
+  line-height: 1;
+  white-space: nowrap;
+}
+.gldio-door > i {
+  font-size: var(--gl-fs-md);
+  color: var(--gl-text-bright);
+}
+.gldio-door.gl-btn:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 40%, transparent), color-mix(in srgb, var(--gl-accent) 14%, transparent)),
+    var(--gl-ink-2);
+}
+
+/* The way out sits under the bar, a little apart, so it never reads as one more tool. */
+.gldio-exit.gl-btn { margin-top: var(--gl-sp-2); }
+
+/* The 2D board's way in: beside the scene controls, at the height the 3D
+   toolbar uses, on the board's layer so Foundry's interface stays in front. */
+.gldio-entry.gl-btn {
+  position: fixed;
+  top: 50%;
+  left: calc(var(--gldio-left, 88px) + var(--gl-sp-6));
+  translate: 0 -50%;
+  z-index: var(--gl-z-base);
+  animation: gl-fade-in var(--gl-d-swift) var(--gl-ease) both;
+}
+.gldio-entry[hidden] { display: none; }
+.gldio-entry:focus-visible {
+  outline: var(--gl-focus-outline);
+  outline-offset: 2px;
 }
 
 .gldio-sep {
@@ -103,7 +160,7 @@
   box-shadow: var(--gl-ring), inset 0 0 var(--gl-sp-6) color-mix(in srgb, var(--gl-accent) 28%, transparent);
 }
 
-.gldio-view :is(button, [role="menuitem"]):focus-visible,
+.gldio-view button:focus-visible,
 .gldio-toast button:focus-visible {
   outline: var(--gl-focus-outline);
   outline-offset: 2px;
@@ -111,16 +168,13 @@
 
 /* The stream capture in stream mode: the broadcast shows the diorama and none
    of its chrome (stream's own "restore" brings the controls back). */
-body.gluniverse-stream-active:not(.gluniverse-stream-restore) :is(.gldio-toolbar, .gldio-chip, .gldio-menu, .gldio-toast) {
+body.gluniverse-stream-active:not(.gluniverse-stream-restore) :is(.gldio-toolbar, .gldio-rail, .gldio-chip, .gldio-marquee, .gldio-toast, .gldio-peek, .gldio-entry) {
   display: none;
 }
 
-/* ── "Not set up" chip (GM) ── */
+/* ── "Not set up" chip (GM), at the top of the rail ── */
 .gldio-chip {
   --gl-accent: var(--gl-warn);
-  position: absolute;
-  bottom: calc(50% + var(--gl-sp-12) * 6);
-  left: calc(var(--gldio-left, 88px) + var(--gl-sp-6));
   display: flex;
   align-items: center;
   gap: var(--gl-sp-4);
@@ -133,6 +187,89 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) :is(.gldio-toolbar
 }
 .gldio-chip[hidden] { display: none; }
 .gldio-chip-text { white-space: nowrap; }
+
+/* ── The 2D map window ──
+   A frame around a hole cut in the view (the root's clip-path, view/peek.mjs):
+   the live 2D canvas shows through the hole and takes every click and wheel
+   in it. Only the header, the rim and the grip are drawn; inside the hole
+   nothing of ours paints or hit-tests. `--gldio-peek-head` and
+   `--gldio-peek-rim` are written by peek.mjs, which owns the geometry. */
+.gldio-peek {
+  position: absolute;
+  pointer-events: none;
+  animation: gl-fade-in var(--gl-d-quick) var(--gl-ease) both;
+}
+
+.gldio-peek-rim {
+  position: absolute;
+  inset: var(--gldio-peek-head) 0 0 0;
+  border: var(--gldio-peek-rim) solid color-mix(in srgb, var(--gl-accent) 75%, transparent);
+  border-top: 0;
+  box-shadow: 0 var(--gl-sp-3) var(--gl-sp-10) var(--gl-shadow);
+  pointer-events: auto;
+}
+
+.gldio-peek-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--gldio-peek-head);
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  padding: 0 var(--gl-sp-6) 0 var(--gl-sp-8);
+  border-radius: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--gl-accent) 75%, transparent);
+  color: var(--gl-text-bright);
+  font-size: var(--gl-fs-xs);
+  font-weight: var(--gl-weight-medium);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  pointer-events: auto;
+}
+.gldio-peek[data-gesture="move"] .gldio-peek-head { cursor: grabbing; }
+.gldio-peek-icon { color: var(--gl-accent); }
+.gldio-peek-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* .gl-btn declares no font-size; sized here. */
+.gldio-peek-btn.gl-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--gl-sp-10);
+  height: var(--gl-sp-10);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  font-size: var(--gl-fs-xs);
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* The free corner: the window docks bottom-right, so it grows up and left. */
+.gldio-peek-grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: var(--gl-z-raised);
+  width: var(--gl-sp-6);
+  height: var(--gl-sp-6);
+  border-top: 2px solid var(--gl-accent);
+  border-left: 2px solid var(--gl-accent);
+  cursor: nwse-resize;
+  touch-action: none;
+  pointer-events: auto;
+}
 
 /* ── Floating labels (path, ruler, hover) ── */
 .gldio-labels {
@@ -166,52 +303,32 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) :is(.gldio-toolbar
 }
 .gldio-label-sub { color: var(--gl-text-dim); }
 
-/* ── Token menu ── */
-.gldio-menu {
+/* ── Drag-select box ── */
+/* A hairline in the accent over a faint wash of it, cut at the corners like the
+   rest of the glass. Client px from view/hud.mjs marquee(). */
+.gldio-marquee {
   position: absolute;
   left: 0;
   top: 0;
-  z-index: 1;
+  width: var(--gldio-w, 0);
+  height: var(--gldio-h, 0);
   transform: translate(var(--gldio-x, 0), var(--gldio-y, 0));
-  display: flex;
-  flex-direction: column;
-  min-width: calc(var(--gl-sp-11) * 6);
-  padding: var(--gl-sp-2);
-  animation: gl-fade-in var(--gl-d-quick) var(--gl-ease) both;
+  /* a solid accent edge with an ink hairline either side, so it reads over any map paint */
+  border: 2px solid var(--gl-accent);
+  background: color-mix(in srgb, var(--gl-accent) 16%, transparent);
+  box-shadow:
+    0 0 0 1px rgb(var(--gl-tint-dark) / 0.7),
+    inset 0 0 0 1px rgb(var(--gl-tint-dark) / 0.5);
+  pointer-events: none;
 }
 
-.gldio-menu-item {
-  display: flex;
-  align-items: center;
-  gap: var(--gl-sp-4);
-  width: 100%;
-  height: auto;
-  min-height: 0;
-  margin: 0;
-  padding: var(--gl-sp-3) var(--gl-sp-5);
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--gl-text);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-xs);
-  line-height: var(--gl-lh-snug);
-  letter-spacing: var(--gl-track-normal);
-  text-align: left;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease);
-}
-.gldio-menu-item > i {
-  width: var(--gl-sp-8);
-  color: var(--gl-accent);
-  text-align: center;
-}
-.gldio-menu-item:hover,
-.gldio-menu-item:focus-visible {
-  background: rgb(var(--gl-tint-light) / 0.06);
-  color: var(--gl-text-bright);
-}
+/* ── Foundry's Token HUD over the view (view/token-hud.mjs) ──
+   #hud sits before #board at the board's layer, so the view (after #board, the
+   same layer) covers it. While the Token HUD is open in 3D, #hud is lifted one
+   step above the view, and everything else in it (chat bubbles, the 2D ruler's
+   labels, placed for the hidden 2D board) is hidden. */
+#hud.gldio-hud-3d { z-index: calc(var(--gl-z-base) + 1); }
+#hud.gldio-hud-3d > :not(#token-hud) { visibility: hidden; }
 
 /* ── Invite toast ── */
 .gldio-toast {

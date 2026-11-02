@@ -2,7 +2,7 @@
  * GLUniverse Suite — lifecycle for the suite's own WebGL surfaces.
  *
  * Beside Foundry's canvas the suite holds several WebGL contexts of its own
- * (stream-pacer ×2, stage, arcane-surge, initiative, the weather and critical
+ * (stage, arcane-surge, initiative, the weather and critical
  * PIXI apps). A browser caps live contexts at around sixteen and drops the
  * oldest SILENTLY when it runs out — which, on a table running a few other
  * modules, can be Foundry's own canvas. Every one of them also costs GPU memory

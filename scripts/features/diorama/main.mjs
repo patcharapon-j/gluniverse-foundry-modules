@@ -8,7 +8,8 @@
  *
  *   init   the height rules (sight/light backend, movement), keybindings,
  *          the suite scene-control buttons, terrain cache invalidation.
- *   ready  the rules' ready half, the invite / summon socket.
+ *   ready  the rules' ready half, the invite / summon socket, the "3D view"
+ *          entry chip on the 2D board (view/entry.mjs).
  */
 
 import { SUITE_ID, warn, err } from "../../core/const.mjs";
@@ -21,16 +22,23 @@ import { wireSocket } from "./view/sync.mjs";
 import { watchTargetLines } from "./integrations/target-lines.mjs";
 import { registerReadout } from "../perf/readouts.mjs";
 import { readoutRows } from "./view/readout.mjs";
+import { wireStandee } from "./view/standee-app.mjs";
+import { EntryChip } from "./view/entry.mjs";
 
 export const TOOL_VIEW = "gldio-view";
 export const TOOL_EDIT = "gldio-edit";
 
 let _viewP = null;
 let _view = null;
+/** The "3D view" chip on the 2D board, built at ready. */
+let _entry = null;
 
 /** The overlay module, imported on first use. */
 function loadView() {
-  _viewP ??= import("./view/overlay.mjs").then((m) => (_view = m));
+  _viewP ??= import("./view/overlay.mjs").then((m) => {
+    m.onOpenChange?.(() => refreshEntry());
+    return (_view = m);
+  });
   return _viewP;
 }
 
@@ -73,12 +81,28 @@ const once = (name, fn) => () => {
 
 const toggleOnce = once(TOOL_VIEW, () => api.toggle());
 const editOnce = once(TOOL_EDIT, async () => (await loadView()).editTerrain(globalThis.canvas?.scene));
+/* Foundry also calls a tool's onChange with active = false when it is
+   deactivated; only a press may open or close anything, so a layer or tool
+   switch never closes the view. */
+const pressed = (fn) => (_event, active) => { if (active !== false) fn(); };
 
 /** May this client see the view's button on the viewed scene? */
 function offeredHere() {
   const scene = globalThis.canvas?.scene;
   if (!scene || !supportsScene(scene)) return false;
   return game.user.isGM || !TerrainStore.isOff(scene);
+}
+
+/**
+ * The 2D entry chip: shown where the view is offered, the scene is not
+ * switched off (the GM keeps the scene-control button there), and the view is
+ * not already open.
+ */
+function refreshEntry() {
+  if (!_entry) return;
+  const scene = globalThis.canvas?.scene;
+  const show = !!globalThis.canvas?.ready && offeredHere() && !TerrainStore.isOff(scene) && !isOpen();
+  _entry.set(show);
 }
 
 function onGetSceneControlButtons(controls) {
@@ -92,7 +116,7 @@ function onGetSceneControlButtons(controls) {
     order: Object.keys(group.tools).length,
     button: true,
     visible: true,
-    onChange: toggleOnce,
+    onChange: pressed(toggleOnce),
   };
   if (game.user.isGM) {
     group.tools[TOOL_EDIT] = {
@@ -102,13 +126,15 @@ function onGetSceneControlButtons(controls) {
       order: Object.keys(group.tools).length,
       button: true,
       visible: true,
-      onChange: editOnce,
+      onChange: pressed(editOnce),
     };
   }
 }
 
 function onRenderSceneControls(_app, html) {
   bindSuiteToolClicks(html, { [TOOL_VIEW]: toggleOnce, [TOOL_EDIT]: editOnce });
+  // the controls change width with the active tool set
+  _entry?.place();
 }
 
 function registerKeybindings() {
@@ -119,6 +145,14 @@ function registerKeybindings() {
     editable: [{ key: "KeyV", modifiers: ["Shift"] }],
     restricted: false,
     onDown: () => { toggleOnce(); return true; },
+  });
+  // The 2D map window inside the 3D view. Acts only while the view is open.
+  game.keybindings.register(SUITE_ID, "dio.peek", {
+    name: "GLDIO.keys.peek",
+    hint: "GLDIO.keys.peekHint",
+    editable: [{ key: "KeyM", modifiers: ["Shift"] }],
+    restricted: false,
+    onDown: () => _view?.togglePeek() ?? false,
   });
   // The camera keys act only while the view is open; returning false hands
   // the key on to whatever else is bound to it.
@@ -154,6 +188,8 @@ function registerKeybindings() {
 }
 
 function onUpdateScene(scene, changes) {
+  // the grid type or the "3D off" switch may have moved: re-gate the 2D chip
+  if (scene === globalThis.canvas?.scene) refreshEntry();
   // Props are part of the rules terrain (stamped while dio.propsBlock is on),
   // so a props save drops the same cache a terrain save does.
   if (!TerrainStore.touched(changes) && !PropStore.touched(changes)) return;
@@ -175,6 +211,12 @@ function onUpdateSetting(setting) {
 function onCanvasReady() {
   invalidate();
   _view?.onCanvasReady();
+  refreshEntry();
+}
+
+/** The scene is going away: no chip until the next one is drawn and gated. */
+function onCanvasTearDown() {
+  _entry?.set(false);
 }
 
 /** A Level's elevation sets where its terrain stands: a Level change drops the scene's cache. */
@@ -192,12 +234,14 @@ export function onInit() {
   }
   registerKeybindings();
   watchTargetLines();
+  wireStandee();
   Hooks.on("getSceneControlButtons", onGetSceneControlButtons);
   Hooks.on("renderSceneControls", onRenderSceneControls);
   Hooks.on("updateScene", onUpdateScene);
   Hooks.on("updateSetting", onUpdateSetting);
   Hooks.on("canvasReady", onCanvasReady);
   for (const h of ["createLevel", "updateLevel", "deleteLevel"]) Hooks.on(h, onLevelChange);
+  Hooks.on("canvasTearDown", onCanvasTearDown);
 }
 
 export function onReady() {
@@ -214,4 +258,7 @@ export function onReady() {
     const r = _view?.isOpen?.() ? _view.viewRenderer?.() : null;
     return r ? readoutRows(r.profile(), (k) => game.i18n.localize(k)) : null;
   });
+  // The way in, labelled, on the 2D board (the scene-control button and Shift+V stay).
+  _entry = new EntryChip({ onOpen: toggleOnce });
+  refreshEntry();
 }

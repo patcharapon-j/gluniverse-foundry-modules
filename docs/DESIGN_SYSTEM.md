@@ -176,7 +176,7 @@ Six easings cover every gesture — pick by gesture, not by feel:
 
 - Reuse a `gl-*` keyframe from `gl-motion.css` when one fits.
 - A genuinely feature-specific motion gets the feature's prefix (`glinv-shatter`,
-  `sp-campfire-flames`), **never** a bare `gl-` name.
+  `sp-ticker`), **never** a bare `gl-` name.
 
 Entrances: `gl-fade-in` `gl-cascade` `gl-rise-in` `gl-drop-in` `gl-pop-in`
 `gl-stamp` · Exits: `gl-fade-out` `gl-sink-out` `gl-pop-out` · Ambient:

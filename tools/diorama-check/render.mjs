@@ -418,6 +418,17 @@ async function checkStandees(ctx, sources, rig) {
   ctx.ok("the reticle is up only under a targeted token", E("target").reticle.visible && !E("ground").reticle.visible && layer.targeted);
   ctx.ok("the card is drawn FIGURE_SCALE tall; the rules height is not",
     Math.abs(E("ground").cardH - 1.5 * FIGURE_SCALE) < 1e-9 && E("ground").heightCells === 1.5);
+  const { cardLayout, cardMarks } = S;
+  const plain = cardLayout({ aspect: 0.5 }, 1.5, 1);
+  ctx.ok("art marks: an unmarked card is the whole height, sunk nowhere",
+    Math.abs(plain.h - 1.5 * FIGURE_SCALE) < 1e-9 && plain.foot === 0 && E("ground").cardFoot === 0
+    && Math.abs(cardLayout({ aspect: 3 }, 1.5, 1).w - 1.25 * FIGURE_SCALE) < 1e-9);
+  const marked = cardLayout({ aspect: 3, figure: 0.6, foot: 0.02 }, 1.5, 1);
+  ctx.ok("art marks: the head-to-feet span is the height, the feet on the base, never narrowed",
+    Math.abs(marked.h * 0.6 - 1.5 * FIGURE_SCALE) < 1e-9 && Math.abs(marked.foot - 0.02 * marked.h) < 1e-9 && Math.abs(marked.w - 3 * marked.h) < 1e-9);
+  ctx.ok("art marks: a TokenState's marks are read only when both are usable",
+    JSON.stringify(cardMarks({ artTop: 0.123456, artBottom: 0.9 })) === JSON.stringify({ top: 0.1235, bottom: 0.9 })
+    && cardMarks({ artTop: null, artBottom: 0.9 }) === null && cardMarks({ artTop: 0.9, artBottom: 0.1 }) === null && cardMarks({}) === null);
   const m = E("ground").margin.value;
   ctx.ok("the card margin is sized from device pixels", m.x > 0 && m.y > 0 && Math.abs(m.y * E("ground").cardH - 12.5 * 0.01) < 1e-6);
   ctx.ok("halo mode: chips capped at 12, none on the plate",
@@ -453,6 +464,23 @@ async function checkStandees(ctx, sources, rig) {
   ctx.ok("a link to a token not on the board is not drawn", drawn && vis.filter(Boolean).length === 1);
   const lm = [...links.entries.values()][0].mesh;
   ctx.ok("target lines draw over the board (no depth test)", lm.material.depthTest === false && lm.material.depthWrite === false);
+  // The arrowhead: its tip on the target's base, turned along the arc's landing
+  // (the Bézier's end tangent), and wide enough to hide where the ribbon stops.
+  const le = [...links.entries.values()][0], lu = lm.material.uniforms;
+  const near3 = (v, arr) => Math.abs(v.x - arr[0]) < 1e-6 && Math.abs(v.y - arr[1]) < 1e-6 && Math.abs(v.z - arr[2]) < 1e-6;
+  const A0 = { x: le.a[0], y: le.a[1], z: le.a[2] }, B0 = { x: le.b[0], y: le.b[1], z: le.b[2] };
+  const dEnd = L.arcEndDir(A0, B0, {}), pre = L.arcPoint(A0, B0, 0.999, {});
+  const chord = [B0.x - pre.x, B0.y - pre.y, B0.z - pre.z], cl = Math.hypot(...chord);
+  ctx.ok("the arrowhead's tip is the target's base anchor", near3(lu.uTip.value, le.b));
+  ctx.ok("the arrowhead turns along the arc's end tangent",
+    chord.every((c, i) => Math.abs(c / cl - [dEnd.x, dEnd.y, dEnd.z][i]) < 1e-3)
+    && Math.abs(lu.uTip.value.distanceTo(lu.uTipFrom.value) - 0.25) < 1e-6);
+  ctx.ok("the arrowhead is device px, longer than wide, and covers the ribbon where it stops",
+    lu.uHead.value.x === L.LINK_PX.headLength && lu.uHead.value.y === L.LINK_PX.headHalf && lu.uWidth.value === L.LINK_PX.half
+    && L.LINK_PX.headLength > 2 * L.LINK_PX.headHalf && L.LINK_PX.headHalf * 0.6 > L.LINK_PX.half
+    && /vHead\.x < uHead\.x \* 0\.6/.test(PROGRAMS.link.fragment));
+  ctx.ok("the arrowhead is drawn after the ribbon (last in the index)", lm.geometry.index.count === L.LINK_SEGS * 6 + 6
+    && lm.geometry.attributes.aHead.getZ(lm.geometry.index.getX(lm.geometry.index.count - 1)) === 1);
   ctx.ok("the renderer has setLinks and claims motion for lines and reticles",
     typeof (await import(ctx.url(`${RENDER_DIR}/renderer.mjs`))).DioramaRenderer.prototype.setLinks === "function"
     && /this\.links\.frame\(/.test(rsrc) && /this\.standees\.targeted && fx\.markers/.test(rsrc));

@@ -22,6 +22,7 @@ import { readWalls, readTokens, backgroundSrc, loadArt } from "./snapshot.mjs";
 import { Baker } from "./bake.mjs";
 import { Input } from "./input.mjs";
 import { Hud } from "./hud.mjs";
+import { PEEK, Peek, pivotToShow, sceneAt } from "./peek.mjs";
 import { sendHold, sendInvite, sendSummon } from "./sync.mjs";
 import { reachOf } from "./reach.mjs";
 import { loadSeams, heightDist, groundDist } from "./seams.mjs";
@@ -55,7 +56,7 @@ const fresh = () => ({
   root: null, canvas: null, r: null, Renderer: null, surface: null,
   hooks: [], unTerrain: null, unLines: null, keyFn: null, resizeObs: null, tokenIds: new Set(),
   dirty: new Set(), raf: 0, labelUntil: 0, labelRaf: 0,
-  baker: null, input: null, hud: null, seq: null,
+  baker: null, input: null, hud: null, seq: null, peek: null,
   lighting: null, bg: null, bgSeq: 0, cellSeq: 0,
   overlays: emptyOverlays(),
   asPlayers: false, cutaway: true, savedCamera: null,
@@ -67,12 +68,23 @@ const fresh = () => ({
 
 const S = fresh();
 let _opening = null;
+/** main.mjs's listener for the view opening and closing (it gates the 2D entry chip). */
+let _onOpenChange = null;
 
 /* ═══════════════════════════ public ═══════════════════════════ */
 
 export const isOpen = () => S.open;
 /** The live renderer, or null while the view is closed (the cost readouts read it). */
 export const viewRenderer = () => S.r ?? null;
+
+/** Tell `fn(open)` whenever the view opens or closes. One listener: main.mjs. */
+export function onOpenChange(fn) {
+  _onOpenChange = typeof fn === "function" ? fn : null;
+}
+
+function announce() {
+  try { _onOpenChange?.(S.open); } catch (e) { err("diorama: open listener", e); }
+}
 
 /** Whether this client may open the view on a scene; notifies why not. */
 export function mayOpen(scene, notify = false) {
@@ -100,9 +112,25 @@ export function openView() {
   return _opening;
 }
 
-export function closeView() {
+/**
+ * Close the view. The 2D canvas is first panned to centre what the 3D camera
+ * was looking at (or `at`, a scene point), so leaving keeps the player's place;
+ * never on the stream capture, whose camera owns the 2D view.
+ * @param {{keepPlace?: boolean, at?: {x:number, y:number}}} [o]
+ */
+export function closeView({ keepPlace = true, at = null } = {}) {
   if (!S.open && !S.root) return false;
+  if (keepPlace && S.open) {
+    try { placeCanvas(at ?? cameraTarget()); } catch (e) { err("diorama: could not keep the place in 2D", e); }
+  }
   teardown();
+  return true;
+}
+
+/** Shift+M and the toolbar: open or close the 2D map window. False while the view is closed. */
+export function togglePeek() {
+  if (!S.open || !S.peek) return false;
+  setPeek(!S.peek.open);
   return true;
 }
 
@@ -157,7 +185,7 @@ export async function editTerrain(scene = globalThis.canvas?.scene) {
 export function onCanvasReady() {
   if (!S.open) return;
   const scene = globalThis.canvas?.scene;
-  if (!mayOpen(scene, true)) { closeView(); return; }
+  if (!mayOpen(scene, true)) { closeView({ keepPlace: false }); return; }
   if (scene !== S.scene) {
     S.scene = scene;
     S.bg = null;
@@ -169,6 +197,8 @@ export function onCanvasReady() {
     readTerrain();
     S.baker?.setGrid(S.grid);
     initialCamera();
+    // a new scene's 2D canvas starts wherever Foundry put it: line it up in the window again
+    if (S.peek?.open) centrePeek(false);
   } else if (liveTerrain(scene)?.levelId !== S.levelId) {
     // Foundry switched the viewed Level (it redraws the canvas): a new board, the same camera.
     S.bg = null;
@@ -223,6 +253,12 @@ async function mount(scene) {
   });
 
   S.hud = new Hud(root, { isGM: isGM(), actions: hudActions() });
+  S.peek = new Peek(root, {
+    onCentre: () => centrePeek(true),
+    onSwitch: () => closeView({ at: peekCentreScene() }),
+    onClose: () => setPeek(false),
+    avoid: foundryEdges,
+  });
   bindInput();
   S.baker = new Baker({
     grid: S.grid,
@@ -246,7 +282,10 @@ async function mount(scene) {
   try { S.baker.bake(); } catch (e) { err("diorama: first bake failed", e); }
   markAll();
   queueReach();
+  // The stream capture never shows the 2D map window: the hole would put the 2D canvas on the broadcast.
+  S.hooks.push([STREAM_HOOKS.streamModeChanged, Hooks.on(STREAM_HOOKS.streamModeChanged, () => { if (streamOwnsView()) setPeek(false); })]);
   if (isGM()) sendInvite(scene.id);
+  announce();
 }
 
 function createRenderer() {
@@ -279,6 +318,8 @@ function bindInput() {
     sendHold: (doc, pose) => { if (S.scene) sendHold(S.scene.id, doc, pose); },
     tokensChanged: () => mark("tokens"),
     tactics: () => setting("dio.tactics", true) !== false,
+    boardTokens: () => S.tokenIds,
+    anchor: (id) => tokenAnchor(id),
   });
 }
 
@@ -354,6 +395,7 @@ function teardown() {
   S.resizeObs?.disconnect();
   const safe = (fn) => { try { fn(); } catch (e) { err("diorama: teardown", e); } };
   safe(() => S.input?.dispose());
+  safe(() => S.peek?.dispose());
   safe(() => S.hud?.dispose());
   safe(() => S.baker?.dispose());
   safe(() => S.seq?.dispose());
@@ -362,6 +404,7 @@ function teardown() {
   safe(() => releaseFloorArt());
   S.root?.remove();
   Object.assign(S, fresh());
+  announce();
 }
 
 /* ═══════════════════════════ hooks ═══════════════════════════ */
@@ -411,6 +454,10 @@ function wireHooks() {
   on("updateUser", (_u, changes) => { if ("color" in changes) mark("tokens"); });
   // The stream capture: its camera moves the 2D canvas; the 3D camera follows.
   on("canvasPan", (_c, pos) => followCanvas(pos));
+  // #hud follows the 2D stage (HeadsUpDisplayContainer#align): an open Token HUD is re-placed in it.
+  on("canvasPan", () => S.input?.hudFollow());
+  // Selecting and Foundry's own token keys (Delete, the movement keys, Tab) act on the active layer.
+  on("canvasReady", (c) => { if (c?.tokens && !c.tokens.active) c.tokens.activate(); });
   on(STREAM_HOOKS.streamModeChanged, () => followCanvas());
   // A client-scope setting never becomes a Setting document, so it never fires
   // updateSetting: Foundry announces it on clientSettingChanged instead.
@@ -439,6 +486,8 @@ function wireHooks() {
 
 function onKey(ev) {
   if (!S.open || typingTarget(ev)) return;
+  // Over the 2D map window the keys are Foundry's canvas's (T targets there, Escape cancels there).
+  if (S.peek?.hovered) return;
   const consume = () => { ev.preventDefault(); ev.stopImmediatePropagation(); };
   if (ev.code === "KeyT" && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
     if (!ev.repeat) S.input?.targetHovered(ev.shiftKey);
@@ -446,8 +495,12 @@ function onKey(ev) {
     return;
   }
   if (ev.code === "Escape") {
-    if (S.hud?.closeMenu() || S.input?.cancel()) { consume(); return; }
-    if (!windowsOpen()) { closeView(); consume(); }
+    if (S.input?.closeHud() || S.input?.cancel()) { consume(); return; }
+    if (windowsOpen()) return;
+    // the 2D map window first, then the view
+    if (S.peek?.open) setPeek(false);
+    else closeView();
+    consume();
   }
 }
 
@@ -661,6 +714,7 @@ function placeBesideControls() {
 
 function resize() {
   placeBesideControls();
+  S.peek?.layout();
   if (!S.root || !S.r) return;
   const w = S.root.clientWidth || globalThis.innerWidth, h = S.root.clientHeight || globalThis.innerHeight;
   S.r.resize(w, h);
@@ -704,11 +758,17 @@ function focusOn(pt) {
 function initialCamera() {
   if (!S.r || !S.grid) return;
   const layer = globalThis.canvas?.tokens;
-  const tok = layer?.controlled?.[0]
-    ?? (isGM() ? null : layer?.placeables?.find((t) => t.isOwner && t.isVisible && t.actor?.hasPlayerOwner))
-    ?? currentCombatantToken();
+  const own = layer?.controlled?.[0]
+    ?? (isGM() ? null : layer?.placeables?.find((t) => t.isOwner && t.isVisible && t.actor?.hasPlayerOwner));
   const r = S.grid.sceneRect;
-  const p = tok?.center ? { x: tok.center.x, y: tok.center.y } : { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  // Then what the 2D canvas was showing, when it is on the map (closing pans 2D to
+  // the 3D camera, so a round trip keeps the place); then the current combatant.
+  const pivot = globalThis.canvas?.stage?.pivot;
+  const onMap = pivot && pivot.x >= r.x && pivot.x <= r.x + r.width && pivot.y >= r.y && pivot.y <= r.y + r.height;
+  const tok = own ?? (onMap ? null : currentCombatantToken());
+  const p = tok?.center ? { x: tok.center.x, y: tok.center.y }
+    : onMap ? { x: pivot.x, y: pivot.y }
+      : { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   S.r.setGrid(gridArg());
   S.r.setCamera({ yawStep: 0, pitchIndex: CAMERA.defaultPitch, zoom: 1, target: { ...p, zQ: groundQ(p.x, p.y) } }, { animate: false });
   followCanvas();
@@ -725,6 +785,8 @@ export const VIEW_CELLS = 12;
  */
 function followCanvas(pos = null) {
   if (!S.open || !S.r || !S.grid || !streamOwnsView()) return;
+  // While the 2D map window is open, a 2D pan is the user's own, inside it.
+  if (S.peek?.open) return;
   const c = globalThis.canvas;
   const x = Number(pos?.x ?? c?.stage?.pivot?.x), y = Number(pos?.y ?? c?.stage?.pivot?.y);
   const scale = Number(pos?.scale ?? c?.stage?.scale?.x);
@@ -797,11 +859,79 @@ export function toggleRoofs() {
   mark("roofs");
 }
 
+/* ═══════════════════════════ the 2D map window ═══════════════════════════ */
+
+/**
+ * Open or close the 2D map window (view/peek.mjs): a hole in this overlay
+ * through which Foundry's own canvas shows and takes input. Never on the
+ * stream capture, where the hole would put the 2D canvas on the broadcast.
+ */
+function setPeek(on) {
+  const p = S.peek;
+  if (!p || !S.open) return;
+  if (on && !p.open && !streamOwnsView()) {
+    p.show();
+    centrePeek(false);
+  } else if (!on && p.open) {
+    p.hide();
+  }
+  S.hud?.setPressed("peek", p.open);
+}
+
+/** Pan the 2D canvas so what the 3D camera looks at sits in the middle of the window. */
+function centrePeek(animate) {
+  const c = globalThis.canvas;
+  const at = S.peek?.open ? S.peek.centre() : null;
+  const pt = cameraTarget();
+  if (!at || !pt || !c?.ready || !c.stage || c.scene !== S.scene || streamOwnsView()) return;
+  const pv = pivotToShow(pt, at, { x: c.stage.position.x, y: c.stage.position.y }, c.stage.scale.x || 1);
+  if (animate) c.animatePan({ x: pv.x, y: pv.y });
+  else c.pan({ x: pv.x, y: pv.y });
+}
+
+/** The scene point in the middle of the 2D map window, or null while it is shut. */
+function peekCentreScene() {
+  const c = globalThis.canvas;
+  const at = S.peek?.open ? S.peek.centre() : null;
+  if (!at || !c?.ready || !c.stage) return null;
+  return sceneAt(at, c.stage.position, c.stage.pivot, c.stage.scale.x || 1);
+}
+
+/** What the 3D camera is looking at, scene px (the saved camera while the context is released). */
+function cameraTarget() {
+  const tg = (S.r?.getCamera?.() ?? S.savedCamera)?.target;
+  const x = Number(tg?.x), y = Number(tg?.y);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+/** Centre the 2D canvas on a scene point (leaving the view). Never moves the stream capture's camera. */
+function placeCanvas(pt) {
+  const c = globalThis.canvas;
+  if (!pt || streamOwnsView() || !c?.ready || c.scene !== S.scene) return;
+  c.pan({ x: pt.x, y: pt.y });
+}
+
+/**
+ * Where Foundry's own UI starts, for the window's first position: the
+ * sidebar's left edge, and the hotbar's top when the two would share columns.
+ */
+function foundryEdges() {
+  const out = {};
+  const vw = globalThis.innerWidth || 1280;
+  const sb = document.getElementById("sidebar")?.getBoundingClientRect?.();
+  if (sb && sb.width > 0 && sb.left > 0) out.right = sb.left;
+  const hb = document.getElementById("hotbar")?.getBoundingClientRect?.();
+  const left = (out.right ?? vw) - vw * PEEK.widthFrac - 2 * PEEK.margin;
+  if (hb && hb.height > 0 && hb.right > left) out.bottom = hb.top;
+  return out;
+}
+
 /* ═══════════════════════════ HUD ═══════════════════════════ */
 
 function syncHud() {
   const h = S.hud;
   if (!h) return;
+  h.setPressed("peek", !!S.peek?.open);
   h.setPressed("grid", !!setting(SETTINGS.grid, true));
   h.setPressed("tiltShift", !!setting(SETTINGS.tiltShift, false));
   h.setPressed("cutaway", S.cutaway);
@@ -845,6 +975,7 @@ function hudActions() {
     graphics: () => import("./graphics-app.mjs").then((m) => m.openGraphics()).catch((e) => err("diorama: graphics", e)),
     environment: () => import("./environment-app.mjs").then((m) => m.openEnvironment(S.scene)).catch((e) => err("diorama: environment", e)),
     autoSetup: () => editTerrain(S.scene),
+    peek: () => setPeek(!S.peek?.open),
     close: () => closeView(),
   };
 }

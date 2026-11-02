@@ -671,6 +671,7 @@ export class DioramaRenderer {
     // world units per device px: outlines and margins are sized in screen px
     const ratio0 = this.pixelRatio * fx.renderScale;
     this.links.viewport.value.set((this._w * ratio0) / 2, (this._h * ratio0) / 2);
+    this.links.setPixelScale(ratio0);
     const sf = this._standeeFrame;
     sf.pxWorld = VIEW_CELLS / Math.max(1e-3, this.rig.view.zoom) / Math.max(1, this._h * ratio0);
     this.atmosphere.pxWorld = sf.pxWorld;

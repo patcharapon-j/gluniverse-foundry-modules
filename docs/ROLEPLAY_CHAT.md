@@ -235,6 +235,21 @@ pattern pf2e-odds' line badges use. They are DOM, so they stay crisp at any zoom
 and take the suite's type, but they must be re-placed every frame the canvas
 moves; a token that becomes hidden hides its bubble on the next frame.
 
+**The 3D view covers the board.** While Diorama's view is open, the stage
+transform names a spot on a board nobody can see, so bubbles are placed from
+Diorama's api (`api.features.diorama`: `isOpen`, `tokenAnchor`, `project`)
+instead. Say and Think hang over the standee's head, Do sits at its feet on the
+3D ground (the token's centre projected at its elevation), the typing pill beside
+the head. The scale is the view's screen px per scene px around the token, fed
+through the same `overlayScale` clamp. Placement runs on animation frames while
+the view is open and something is up, because the 3D camera and a hopping standee
+move with no canvas frame behind them; each loop notices the view opening or
+closing and hands over. A token Foundry hides from the viewer, or one with no
+standee on their board (`tokenAnchor` null), gets no bubble and no pill, and a new
+line for it goes to the caption lane. The bubble layer is `--gl-z-sticky`, above
+the view's `--gl-z-base`. Every access is guarded, so the feature runs the same
+with Diorama off or absent.
+
 **The leave animation is timed in JS.** A line is removed `LEAVE_MS` after it
 starts leaving, which must cover `--gl-d-glide`. The check compares the two.
 

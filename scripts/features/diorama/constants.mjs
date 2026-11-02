@@ -21,8 +21,17 @@ export const FLAG_TERRAIN = "dio.terrain";
 export const FLAG_OFF = "dio.off";
 /** Actor flag: GM-chosen standee art (a path). */
 export const FLAG_STANDEE = "dio.standee";
-/** Actor flag: creature height override in distance units. */
+/** Actor flag: creature height override in distance units. Legacy: read, never written (FLAG_HEIGHT_CM wins). */
 export const FLAG_CREATURE_HEIGHT = "dio.height";
+/** Actor flag: creature height in centimetres, the canonical store (rules/creature.mjs converts to scene units). */
+export const FLAG_HEIGHT_CM = "dio.heightCm";
+/**
+ * Actor flag: where the standee art's top of the head and soles of the feet are,
+ * `{ top, bottom, src }`: fractions 0..1 of the art's height, and the art they
+ * were marked on (marks on any other art are ignored). rules/creature.mjs
+ * `standeeMarks` reads it.
+ */
+export const FLAG_ART_MARKS = "dio.artMarks";
 /** Token flag: altitude above the ground (flying), distance units. */
 export const FLAG_ALTITUDE = "dio.altitude";
 /** Scene flag: the scene's environment (time of day, weather, atmosphere). environment.mjs owns its shape. */

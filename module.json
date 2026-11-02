@@ -75,6 +75,7 @@
     "styles/diorama-editor.css",
     "styles/diorama-env.css",
     "styles/diorama-props.css",
+    "styles/diorama-standee.css",
     "styles/perf.css"
   ],
   "languages": [

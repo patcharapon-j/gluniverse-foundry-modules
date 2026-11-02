@@ -112,7 +112,8 @@ function createHarness({ users, calm = true }) {
       // `placeables` is what `visibleTokens()` walks for the every-source modes.
       tokens: { get: id => tokens.get(id), get placeables() { return [...tokens.values()]; } }
     },
-    Hooks: { on: (name, fn) => hooks.set(name, [...(hooks.get(name) ?? []), fn]) },
+    // `callAll` announces the drawn lines to the Diorama view; nothing here listens.
+    Hooks: { on: (name, fn) => hooks.set(name, [...(hooks.get(name) ?? []), fn]), callAll: () => {} },
     requestAnimationFrame: fn => frames.push(fn),
     getActiveSceneCombat: () => combat,
     getActiveCombatant: c => c.combatant,

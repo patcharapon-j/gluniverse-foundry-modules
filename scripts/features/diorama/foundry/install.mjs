@@ -4,7 +4,9 @@
  *   installRules()  at init: the sight / light backend, the detection wrapper
  *                   and the two Token movement wrappers. Does nothing when the
  *                   world setting `dio.rules` is off (it requires a reload).
- *   readyRules()    at ready: elevation sync on `updateToken`, and on a terrain
+ *   readyRules()    at ready: elevation sync on `updateToken`, the altitude
+ *                   re-derived from an elevation edit on `preUpdateToken`, a
+ *                   new token seated on `preCreateToken`, and on a terrain
  *                   change the edge cache drop, the perception refresh and the
  *                   active GM's batched resync.
  *
@@ -17,7 +19,7 @@ import { levelIdOf } from "../terrain/store.mjs";
 import { levelsOf } from "../terrain/levels.mjs";
 import { activeContext, anyContext, isFlatCached, rulesSetting, setRulesOn } from "./context.mjs";
 import { installSightBackend, clearSightCache, refreshPerception, reportBackendConflicts } from "./sight-backend.mjs";
-import { installMovement, onUpdateToken, resyncScene } from "./movement.mjs";
+import { installMovement, onPreCreateToken, onPreUpdateToken, onUpdateToken, resyncScene } from "./movement.mjs";
 
 let _installed = false;
 let _ready = false;
@@ -93,6 +95,8 @@ export function readyRules() {
     remember(doc.parent);
     onUpdateToken(doc, changes, options);
   });
+  Hooks.on("preUpdateToken", (doc, changes, options) => { onPreUpdateToken(doc, changes, options); });
+  Hooks.on("preCreateToken", (doc, data, options) => { onPreCreateToken(doc, data, options); });
   _unsubscribe = onTerrainChange(onChange);
 }
 

@@ -4,7 +4,8 @@
  * Everything here runs in a browser only (it draws on 2D canvases), but nothing
  * runs at import, so the module loads under Node.
  *
- * Art is loaded once per URL. A WebGL upload of a tainted canvas throws a
+ * Art is loaded once per URL (the card made from it is per URL and marks, in
+ * render/standees.mjs). A WebGL upload of a tainted canvas throws a
  * SecurityError inside the render, so every image is drawn on a scratch canvas
  * and read back first: a tainted or failed image falls back to a plain card
  * with a silhouette, never to an exception.
@@ -134,20 +135,70 @@ function fallbackFigure(name) {
 }
 
 /**
+ * Where the art's opaque pixels start and end, as fractions 0..1 of its height
+ * (the lines an unmarked standee is sized by), or null when nothing is opaque.
+ * @param {HTMLCanvasElement} c  a readable drawable
+ */
+export function artBounds(c) {
+  const b = c && c.height ? opaqueBounds(c) : null;
+  return b ? { top: b.y / c.height, bottom: (b.y + b.h) / c.height } : null;
+}
+
+/**
+ * The part of marked art that goes on the card, in source px: everything above
+ * the feet line (art below it is cut off), trimmed of clear columns and of clear
+ * rows above both the art and the head line. Null when the marks cannot be used.
+ * @returns {{x:number, y:number, w:number, h:number, top:number}|null}  top: the head line, px from y
+ */
+function markedCrop(src, marks) {
+  const H0 = src.height;
+  const foot = Math.round(marks.bottom * H0);
+  const head = Math.round(marks.top * H0);
+  if (foot - head < 2 || foot > H0) return null;
+  const above = canvas(src.width, foot);
+  above.getContext("2d").drawImage(src, 0, 0, src.width, foot, 0, 0, src.width, foot);
+  const b = opaqueBounds(above);
+  if (!b) return null;
+  const y = Math.min(b.y, head);
+  return { x: b.x, y, w: b.w, h: foot - y, top: head - y };
+}
+
+/**
  * Compose the card: the art, trimmed to its opaque bounds, on a clear border.
+ *
+ * With marks (`{top, bottom}`, fractions of the art's height: the top of the
+ * head and the soles of the feet), the art below the feet line is cut off, so
+ * the feet line is the card's art bottom, and the card reports `figure`, the
+ * fraction of its height from the feet line to the head line, and `foot`, the
+ * feet line's height above the card's bottom edge (the clear border). The
+ * standee sizes the card so `figure` is the creature's height and lowers it by
+ * `foot`, so the feet stand on the base; art above the head line (a raised
+ * sword, a hat) draws above the height. Without marks (or on the fallback
+ * figure) the card is exactly what it always was, and both are absent.
  * @param {HTMLCanvasElement|null} art  a readable drawable, or null for the fallback
  * @param {string} [name]
- * @returns {{canvas:HTMLCanvasElement, aspect:number, mask:{w:number,h:number,data:Uint8Array}, fallback:boolean}}
+ * @param {{top:number, bottom:number}|null} [marks]
+ * @returns {{canvas:HTMLCanvasElement, aspect:number, mask:{w:number,h:number,data:Uint8Array}, fallback:boolean,
+ *   figure?:number, foot?:number}}
  */
-export function composeCard(art, name) {
+export function composeCard(art, name, marks = null) {
   const fallback = !art;
   let src = art ?? fallbackFigure(name);
-  // Trim transparent padding so the feet sit on the base.
-  const b = opaqueBounds(src);
-  if (b && (b.w < src.width || b.h < src.height)) {
-    const c = canvas(b.w, b.h);
-    c.getContext("2d").drawImage(src, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+  const crop = !fallback && marks ? markedCrop(src, marks) : null;
+  let headPx = 0;
+  if (crop) {
+    const c = canvas(crop.w, crop.h);
+    c.getContext("2d").drawImage(src, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
     src = c;
+    headPx = crop.top;
+  } else {
+    // Trim transparent padding so the feet sit on the base.
+    const b = opaqueBounds(src);
+    if (b && (b.w < src.width || b.h < src.height)) {
+      const c = canvas(b.w, b.h);
+      c.getContext("2d").drawImage(src, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+      src = c;
+    }
   }
   const H = CARD_PX;
   const pad = Math.max(4, Math.round(H * PAD));
@@ -157,6 +208,7 @@ export function composeCard(art, name) {
   const out = canvas(W, H);
   const g = out.getContext("2d");
   g.drawImage(src, pad, pad, artW, artH);
+  const marked = crop ? { figure: ((src.height - headPx) / src.height) * (artH / H), foot: pad / H } : {};
   // A coarse alpha mask for picking.
   const mw = 48, mh = Math.max(8, Math.round((48 * H) / W));
   const m = canvas(mw, mh);
@@ -165,7 +217,7 @@ export function composeCard(art, name) {
   const md = mg.getImageData(0, 0, mw, mh).data;
   const data = new Uint8Array(mw * mh);
   for (let i = 0; i < data.length; i++) data[i] = md[i * 4 + 3];
-  return { canvas: out, aspect: W / H, mask: { w: mw, h: mh, data }, fallback };
+  return { canvas: out, aspect: W / H, mask: { w: mw, h: mh, data }, fallback, ...marked };
 }
 
 /** True when uv (0..1, v up) lands on the card's paper. */
