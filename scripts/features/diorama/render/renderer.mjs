@@ -12,8 +12,9 @@
  *   r.setWalls(WallState[]);
  *   r.setTokens(TokenState[]);
  *   r.setHold(id, {x, y, footQ, groundQ, phase} | null);   // a miniature in a hand
- *   r.setLighting({ darkness, light, vision });  // world-space canvases
- *   r.setOverlays({ path, cells, ruler, pings, hover, reach });   // shapes: overlays.mjs
+ *   r.setLighting({ darkness, light, vision, sources });  // world-space canvases; sources: torches.mjs
+ *   r.setOverlays({ path, cells, ruler, pings, hover, reach, los, falls });   // shapes: overlays.mjs
+ *   r.setAreas(AreaState[]);                     // spell areas as volumes: areas.mjs
  *   r.setEffects(EffectState[]);
  *   r.setLinks([{ sourceId, targetId, color:[r,g,b] }]);   // target lines, chest → base
  *   r.setCamera({ yawStep, pitchIndex, zoom, target }, { animate });
@@ -48,12 +49,15 @@ import { TerrainLayer } from "./terrain.mjs";
 import { WallsLayer } from "./walls.mjs";
 import { StandeesLayer } from "./standees.mjs";
 import { OverlaysLayer } from "./overlays.mjs";
+import { AreasLayer } from "./areas.mjs";
 import { EffectsLayer } from "./effects.mjs";
 import { LinksLayer } from "./links.mjs";
 import { CameraRig, VIEW_CELLS } from "./camera.mjs";
 import { ShadowPass, TiltShift } from "./post.mjs";
 import { PropsLayer } from "./props.mjs";
 import { AtmosphereLayer } from "./atmosphere.mjs";
+import { TorchesLayer } from "./torches.mjs";
+import { FogLayer } from "./fog.mjs";
 import { DEFAULT_GRAPHICS } from "../options.mjs";
 
 /** Under load (the fpsCap rung shed) the cap drops to this. */
@@ -119,15 +123,20 @@ export class DioramaRenderer {
     this.walls = new WallsLayer(this.shared);
     this.standees = new StandeesLayer(this.shared, () => this.requestRender());
     this.overlays = new OverlaysLayer(this.shared);
+    this.areas = new AreasLayer(this.shared);
     this.effects = new EffectsLayer(this.shared);
     this.links = new LinksLayer(this.shared);
     this.props = new PropsLayer(this.shared, () => this.requestRender());
     this.atmosphere = new AtmosphereLayer(this.shared);
+    this.torches = new TorchesLayer(this.shared);
+    this.fog = new FogLayer(this.shared, { height: this.atmosphere.height, heightInfo: this.atmosphere.heightInfo });
+    // flames sit on the rules ground (a brazier prop's top included)
+    this.torches.setGround((x, z) => { const m = this.rulesModel(); return m ? m.groundAt(x * this.grid.size, z * this.grid.size, this.grid.size) / 4 : 0; });
     for (const l of this.layers()) this.scene.add(l.group);
     /** The shadow pass's own-material casters: standee cards, then props. */
     this._casters = [this.standees.casters, this.props.casters];
     /** Reused every frame: what the standees need from the view. */
-    this._standeeFrame = { pxWorld: 0.01, markers: true };
+    this._standeeFrame = { pxWorld: 0.01, markers: true, life: true, dust: true, hover: true };
 
     this.rig = new CameraRig();
     this.shadow = new ShadowPass(this.shared);
@@ -167,9 +176,16 @@ export class DioramaRenderer {
 
     // Overlays and picks stand on the RULES ground: the terrain with solid
     // props stamped in (props.rules), where a token actually stands.
+    // A walk follows the same ground, so it climbs stairs and falls off ledges where they are.
+    this.standees.setGround((x, z) => { const m = this.rulesModel(); return m ? m.groundAt(x * this.grid.size, z * this.grid.size, this.grid.size) / 4 : NaN; });
     this.overlays.setGround({
       ground: (x, z) => { const m = this.rulesModel(); return m ? m.groundAt(x * this.grid.size, z * this.grid.size, this.grid.size) / 4 : 0; },
       cellTopQ: (i, j) => { const m = this.rulesModel(); return m ? m.cellTop(i, j) : 0; },
+    });
+    // Spell areas stand on the same ground; a new ground under them rebuilds them.
+    this.areas.setGround({
+      cellTopQ: (i, j) => { const m = this.rulesModel(); return m ? m.cellTop(i, j) : 0; },
+      model: () => this.rulesModel(),
     });
 
     const w = canvas?.clientWidth || canvas?.width || 1, h = canvas?.clientHeight || canvas?.height || 1;
@@ -183,7 +199,7 @@ export class DioramaRenderer {
 
   /** Every layer, in draw-group order. */
   layers() {
-    return [this.terrain, this.props, this.walls, this.standees, this.overlays, this.effects, this.links, this.atmosphere];
+    return [this.terrain, this.props, this.walls, this.standees, this.overlays, this.areas, this.effects, this.links, this.atmosphere, this.torches, this.fog];
   }
 
   /* ------------------------------------------------------------ state in */
@@ -196,7 +212,8 @@ export class DioramaRenderer {
     if (Number(rows) > 0) g.rows = Math.round(Number(rows));
     if (sceneRect) g.sceneRect = { ...sceneRect };
     this.shared.uWorldSize.value.set(g.cols, g.rows);
-    for (const l of [this.walls, this.standees, this.overlays, this.effects, this.props, this.atmosphere, this.rig]) l.setGridSize(g.size);
+    for (const l of [this.walls, this.standees, this.overlays, this.areas, this.effects, this.props, this.atmosphere, this.torches, this.fog, this.rig]) l.setGridSize(g.size);
+    this.torches.relayout();
     this.updateMapRect();
     this.updateShadowBounds();
     if (!this._camSet) {
@@ -212,6 +229,7 @@ export class DioramaRenderer {
     this.terrain.set(this.terrainModel);
     this.props.setTerrain(this.terrainModel);
     this.atmosphere.setTerrain(this.terrainModel, this.terrain.mesh);
+    this.torches.relayout();
     this.updateShadowBounds();
     this.requestRender();
   }
@@ -289,9 +307,13 @@ export class DioramaRenderer {
   }
 
   /**
-   * @param {{darkness?:number, light?:HTMLCanvasElement|null, vision?:HTMLCanvasElement|null}} o
+   * `sources`: the lights in the bake, as plain data (view/bake.mjs
+   * lightData): what flickers, burns and shades (render/torches.mjs).
+   * @param {{darkness?:number, light?:HTMLCanvasElement|null, vision?:HTMLCanvasElement|null, sources?:object[]}} o
    */
-  setLighting({ darkness = 0, light = null, vision = null } = {}) {
+  setLighting({ darkness = 0, light = null, vision = null, sources = null } = {}) {
+    this.torches.setSources(sources, this.grid);
+    this.fog.setVision(vision);
     const d = Math.max(0, Math.min(1, Number(darkness) || 0));
     this._darkness = d;
     // the darker of Foundry's darkness and the hour's
@@ -314,6 +336,15 @@ export class DioramaRenderer {
   setOverlays(o = {}) {
     this.overlays.set(o ?? {}, clock());
     this.requestRender();
+  }
+
+  /**
+   * Spell areas as volumes over their covered squares (render/areas.mjs).
+   * An unchanged list rebuilds nothing.
+   * @param {object[]} areas
+   */
+  setAreas(areas) {
+    if (this.areas.set(areas ?? [])) this.requestRender();
   }
 
   /**
@@ -368,6 +399,7 @@ export class DioramaRenderer {
   /** @param {object[]} props PropState[] (render/props.mjs) */
   setProps(props) {
     this.props.set(props ?? [], clock(), this._drawn);
+    this.torches.setProps(props ?? []);
     this.shadow.dirty = true;
     this.updateShadowBounds();
     this.requestRender();
@@ -442,11 +474,18 @@ export class DioramaRenderer {
       propDetail: allows("propDetail"),
       shadows: allows("shadows"),
       water: allows("water"),
+      standeeDust: allows("standeeDust"),
       standeeSway: allows("standeeSway"),
       markerMotion: allows("markerMotion"),
+      areaMotion: allows("areaMotion"),
       effectLights: allows("effectLights"),
       renderScale: allows("renderScale"),
       fpsCap: allows("fpsCap"),
+      // living light and the fog of war's clouds (torches.mjs, fog.mjs)
+      embers: allows("embers"),
+      fogDrift: allows("fogDrift"),
+      torchShadows: allows("torchShadows"),
+      torchFlicker: allows("torchFlicker"),
     };
   }
 
@@ -469,11 +508,26 @@ export class DioramaRenderer {
       dayNight: g.dayNight,
       grade: g.grade,
       tiltShift: this.options.tiltShift && shed.tiltShift,
-      sway: shed.standeeSway,
+      // token life (dio.tokenLife): walk bob, falls, landing dust, flyer hover, idle sway
+      life: g.tokenLife !== false,
+      dust: g.tokenLife !== false && shed.standeeDust,
+      hover: g.tokenLife !== false && shed.standeeSway,
+      sway: g.tokenLife !== false && shed.standeeSway,
       markers: shed.markerMotion,
+      // spell areas (dio.areaVolumes): the volumes, and the glow rising through them
+      areaVolumes: g.areaVolumes !== false,
+      areaMotion: g.areaVolumes !== false && shed.areaMotion,
       effectLights: shed.effectLights,
       renderScale: Math.max(0.25, Math.min(1, g.renderScale)) * (shed.renderScale ? 1 : RENDER_SCALE),
       frameMs: !shed.fpsCap ? FPS_CAP_MS : g.fps > 0 ? 1000 / g.fps : 0,
+      // living light (dio.lightFx): flicker and flames, embers, torch shading and figure shadows
+      lightFx: g.lightFx !== false,
+      flicker: g.lightFx !== false && shed.torchFlicker,
+      embers: g.lightFx !== false && shed.embers,
+      torchShadows: g.lightFx !== false && shed.torchShadows,
+      // the fog of war (dio.fogStyle): 1 clouds, 0 flat; clouds hold still when fogDrift is shed
+      fog: g.fog ?? 1,
+      fogDrift: shed.fogDrift,
     };
   }
 
@@ -503,12 +557,14 @@ export class DioramaRenderer {
     sf.pxWorld = VIEW_CELLS / Math.max(1e-3, this.rig.view.zoom) / Math.max(1, this._h * ratio0);
     this.atmosphere.pxWorld = sf.pxWorld;
     sf.markers = fx.markers;
+    sf.life = fx.life; sf.dust = fx.dust; sf.hover = fx.hover;
     if (this.standees.frame(t, this.rig.camera, yaw, sway, sf)) active = true;
     if (this.standees.castersDirty) { this.standees.castersDirty = false; this.shadow.dirty = true; }
     if (sway) active = true;
     if (this.standees.targeted && fx.markers) active = true;
     if (this.links.frame(t, this.standees, fx.markers) && fx.markers) active = true;
     if (this.overlays.frame(t)) active = true;
+    if (this.areas.frame(t, fx)) active = true;
     this.effects.frame(this.rig.camera);
     this.effects.writeLights(fx.effectLights);
     if (this.effects.animated) active = true;
@@ -523,6 +579,8 @@ export class DioramaRenderer {
     if (this.props.frame(t, dt, this.rig.camera, fx)) active = true;
     if (this.props.castersDirty) { this.props.castersDirty = false; this.shadow.dirty = true; }
     if (this.atmosphere.frame(t, dt, this.rig.camera, fx, this.rig.view)) active = true;
+    if (this.torches.frame(t, dt, fx, this.rig.view, this.standees, sf.pxWorld)) active = true;
+    if (this.fog.frame(dt, fx)) active = true;
     if (isVideo(this.bg.source) && !this.bg.source.paused) active = true;
 
     const shadows = fx.shadows > 0;

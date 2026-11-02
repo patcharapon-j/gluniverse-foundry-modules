@@ -31,12 +31,16 @@ export const QUALITY = Object.freeze(["low", "medium", "high", "ultra"]);
  *   atmosphere fog, haze, light shafts, cloud shadows
  *   renderScale fraction of device pixels drawn
  *   fps        frame cap; 0 = the display's own rate
+ *   lightFx    off | on   (torches flicker, fires burn with embers, figures
+ *              take shading and shadows from the lights near them)
+ *   fogStyle   flat | clouds   (the fog of war: dimmed and cut away, or
+ *              drifting cloud over what nobody has seen)
  */
 export const PRESETS = Object.freeze({
-  low: Object.freeze({ shadows: "off", ao: false, water: "simple", detail: "low", weather: "reduced", atmosphere: false, renderScale: 0.67, fps: 30 }),
-  medium: Object.freeze({ shadows: "hard", ao: true, water: "full", detail: "low", weather: "reduced", atmosphere: true, renderScale: 0.85, fps: 60 }),
-  high: Object.freeze({ shadows: "soft", ao: true, water: "full", detail: "high", weather: "full", atmosphere: true, renderScale: 1, fps: 60 }),
-  ultra: Object.freeze({ shadows: "soft", ao: true, water: "full", detail: "high", weather: "full", atmosphere: true, renderScale: 1, fps: 0 }),
+  low: Object.freeze({ shadows: "off", ao: false, water: "simple", detail: "low", weather: "reduced", atmosphere: false, renderScale: 0.67, fps: 30, lightFx: "off", fogStyle: "flat" }),
+  medium: Object.freeze({ shadows: "hard", ao: true, water: "full", detail: "low", weather: "reduced", atmosphere: true, renderScale: 0.85, fps: 60, lightFx: "on", fogStyle: "clouds" }),
+  high: Object.freeze({ shadows: "soft", ao: true, water: "full", detail: "high", weather: "full", atmosphere: true, renderScale: 1, fps: 60, lightFx: "on", fogStyle: "clouds" }),
+  ultra: Object.freeze({ shadows: "soft", ao: true, water: "full", detail: "high", weather: "full", atmosphere: true, renderScale: 1, fps: 0, lightFx: "on", fogStyle: "clouds" }),
 });
 
 const choice = (...keys) => Object.freeze(keys);
@@ -57,6 +61,8 @@ export const OPTIONS = Object.freeze([
   { key: "dio.detail", name: "detail", scope: "client", type: "string", choices: choice("preset", "low", "high"), default: "preset" },
   { key: "dio.weatherFx", name: "weatherFx", scope: "client", type: "string", choices: choice("preset", "off", "reduced", "full"), default: "preset" },
   { key: "dio.atmosphere", name: "atmosphere", scope: "client", type: "string", choices: choice("preset", "off", "on"), default: "preset" },
+  { key: "dio.lightFx", name: "lightFx", scope: "client", type: "string", choices: choice("preset", "off", "on"), default: "preset" },
+  { key: "dio.fogStyle", name: "fogStyle", scope: "client", type: "string", choices: choice("preset", "flat", "clouds"), default: "preset" },
   { key: "dio.renderScale", name: "renderScale", scope: "client", type: "number", numeric: true, choices: choice(0, 50, 67, 75, 85, 100), default: 0 },
   { key: "dio.fps", name: "fps", scope: "client", type: "number", numeric: true, choices: choice(-1, 30, 60, 0), default: -1 },
   { key: "dio.dayNight", name: "dayNight", scope: "client", type: "boolean", default: true },
@@ -68,6 +74,14 @@ export const OPTIONS = Object.freeze([
   { key: "dio.moveStyle", name: "moveStyle", scope: "client", type: "string", choices: choice("path", "lift"), default: "path" },
   // Squares reachable in one, two and three Strides (PF2e) or Close (Daggerheart).
   { key: "dio.reach", name: "reach", scope: "client", type: "string", choices: choice("selected", "moving", "off"), default: "selected" },
+  // Figures hop step by step, fall off ledges, raise dust where they land and
+  // hover on their flight stands. Off: they slide with a plain bounce and stand still.
+  { key: "dio.tokenLife", name: "tokenLife", scope: "client", type: "boolean", default: true },
+  // Line of sight, cover and 3D distance to a hovered or targeted creature, and
+  // the drop and falling damage where a move goes off a ledge. Shown, never applied.
+  { key: "dio.tactics", name: "tactics", scope: "client", type: "boolean", default: true },
+  // Spell areas stand up as volumes (domes, wedges, shells, slabs) over their squares.
+  { key: "dio.areaVolumes", name: "areaVolumes", scope: "client", type: "boolean", default: true },
   // ── the table: GM ──
   { key: "dio.envSource", name: "envSource", scope: "world", type: "string", choices: choice("scene", "darkness", "calendar"), default: "scene" },
   { key: "dio.weatherSource", name: "weatherSource", scope: "world", type: "string", choices: choice("scene", "calendar"), default: "scene" },
@@ -100,9 +114,10 @@ export function sanitizeOption(name, value) {
  * @param {Record<string, any>} raw  name → stored value; missing reads as default
  * @returns {{quality:string, adaptive:boolean, shadows:0|1|2, ao:boolean, water:0|1, detail:0|1,
  *   weather:0|1|2, atmosphere:boolean, dayNight:boolean, grade:boolean, renderScale:number,
- *   fps:number, gridStrength:number}}
+ *   fps:number, gridStrength:number, lightFx:boolean, fog:0|1, tokenLife:boolean, areaVolumes:boolean}}
  *   shadows 0 off / 1 hard / 2 soft; water 0 simple / 1 full; detail 0 low / 1 high;
- *   weather 0 off / 1 reduced / 2 full; renderScale 0..1; fps 0 = uncapped
+ *   weather 0 off / 1 reduced / 2 full; renderScale 0..1; fps 0 = uncapped;
+ *   fog 0 flat / 1 clouds
  */
 export function resolveGraphics(raw = {}) {
   const get = (n) => sanitizeOption(n, raw?.[n]);
@@ -126,6 +141,10 @@ export function resolveGraphics(raw = {}) {
     renderScale: scale > 0 ? scale / 100 : p.renderScale,
     fps: fps < 0 ? p.fps : fps,
     gridStrength: get("gridStrength"),
+    lightFx: pick("lightFx", p.lightFx) === "on",
+    fog: pick("fogStyle", p.fogStyle) === "clouds" ? 1 : 0,
+    tokenLife: get("tokenLife"),
+    areaVolumes: get("areaVolumes"),
   };
 }
 

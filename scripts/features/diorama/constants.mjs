@@ -99,14 +99,20 @@ export const PF2E_WATER_FALL_REDUCTION = 20;
 export const SHED_ORDER = Object.freeze([
   "tiltShift",
   "atmosphere",       // fog, haze, light shafts, cloud shadows
+  "embers",           // the sparks rising off fires (render/torches.mjs)
   "weatherParticles", // full → reduced particle counts first, then none
+  "fogDrift",         // the fog of war's clouds hold still (they stay opaque)
   "ambientOcclusion",
   "softShadows",
+  "torchShadows",     // figures' shadows away from torches, torch-side shading
   "propDetail",       // prop and cliff relief, foliage sway
   "shadows",
+  "torchFlicker",     // lights burn steady, flames hold their shape
   "water",
-  "standeeSway",
+  "standeeDust",      // the puff where a standee lands (walk, fall, drop)
+  "standeeSway",      // idle sway, and a flyer's hover on its stand
   "markerMotion",    // the target reticle's breathe and the target lines' glint
+  "areaMotion",      // the slow glow rising through a spell area's volume (render/areas.mjs)
   "effectLights",
   "renderScale",
   "fpsCap",
@@ -118,6 +124,10 @@ export const TIMING = Object.freeze({
   door: 360,         // door leaf swing
   wallCut: 260,      // camera-facing wall lowering
   standeeStep: 140,  // standee hop per grid step while moving
+  standeeSettle: 200, // a landed standee's card springing back from its squash
+  standeeFall: 300,  // a standee dropping one cell off a ledge (gravity: longer drops take √ as long)
+  dustLife: 560,     // a landing's dust puff, from the footfall to gone
+  hoverLoop: 6400,   // a flyer's hover: two breaths and one sway per loop
   ping: 1600,
   reticleBreathe: 1800, // one in-and-out of a target reticle's arrows
   linkGlint: 2400,      // a glint's run along a target line, source to target
@@ -128,6 +138,14 @@ export const TIMING = Object.freeze({
   holdSend: 50,      // a held miniature's pose, at most this often to the table
   holdStale: 4000,   // a remote hold with no word for this long is dropped
   reachDebounce: 60, // reach recompute coalescing
+  flickerStep: 170,  // one noise step of a torch's flicker at Foundry speed 5
+  flickerGentle: 900, // one noise step of a warm light with no animation
+  lightPulse: 2600,  // one breath of a "pulse" light at Foundry speed 5
+  torchFade: 450,    // a light joining or leaving the few lights that shade figures
+  flameLick: 620,    // a flame's tongues rising through its own height
+  emberRise: 2400,   // one spark's life, from the fire to gone
+  fogDrift: 40000,   // the fog of war's clouds drifting one cloud (about 2.4 cells) across
+  areaDrift: 7200,   // one glow band rising through a spell area, floor to crown
 });
 
 /**

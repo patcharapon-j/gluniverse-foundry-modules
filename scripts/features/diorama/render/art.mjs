@@ -359,3 +359,40 @@ export function shadowCanvas() {
   g.fillRect(0, 0, 128, 128);
   return c;
 }
+
+/**
+ * The wide, soft half of a raised figure's shadow: no core, a long falloff.
+ * Faded in with altitude under the contact shadow, so the shadow of a flyer
+ * reads softer the higher it is.
+ */
+export function shadowSoftCanvas() {
+  if (!hasDom()) return null;
+  const c = canvas(128, 128);
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 63);
+  grad.addColorStop(0, withAlpha(PALETTE.ink0, 0.42));
+  grad.addColorStop(0.4, withAlpha(PALETTE.ink0, 0.3));
+  grad.addColorStop(0.75, withAlpha(PALETTE.ink0, 0.1));
+  grad.addColorStop(1, withAlpha(PALETTE.ink0, 0));
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  return c;
+}
+
+/**
+ * One mote of landing dust: a soft white disc with a slightly denser core,
+ * tinted and faded by its material. Clean and round, never photographic grain.
+ */
+export function dustCanvas() {
+  if (!hasDom()) return null;
+  const c = canvas(64, 64);
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 31);
+  grad.addColorStop(0, "rgba(255,255,255,0.95)");
+  grad.addColorStop(0.45, "rgba(255,255,255,0.82)");
+  grad.addColorStop(0.75, "rgba(255,255,255,0.32)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return c;
+}

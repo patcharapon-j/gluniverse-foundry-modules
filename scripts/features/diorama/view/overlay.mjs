@@ -28,7 +28,7 @@ import { loadSeams, heightDist, groundDist } from "./seams.mjs";
 import { el, isGM, setting, setSetting, streamOwnsView, t, typingTarget } from "./util.mjs";
 import { HOOKS as STREAM_HOOKS } from "../../stream/constants.js";
 import { turnState, currentCombatantToken } from "../integrations/turns.mjs";
-import { templateCells } from "../integrations/templates.mjs";
+import { templateAreas } from "../integrations/templates.mjs";
 import { SequencerMirror } from "../integrations/sequencer.mjs";
 import { currentLines, linksOn, onLinesChanged } from "../integrations/target-lines.mjs";
 import { OPTIONS, resolveGraphics } from "../options.mjs";
@@ -257,6 +257,7 @@ function bindInput() {
     dragging: (tok) => { S.dragTok = tok ?? null; computeReach(); },
     sendHold: (doc, pose) => { if (S.scene) sendHold(S.scene.id, doc, pose); },
     tokensChanged: () => mark("tokens"),
+    tactics: () => setting("dio.tactics", true) !== false,
   });
 }
 
@@ -477,8 +478,11 @@ function flush() {
         halo: haloLayout(),
       });
       r.setTokens(tokens);
+      const was = S.tokenIds;
       S.tokenIds = new Set(tokens.map((tk) => tk.id));
       d.add("links");
+      // who is on the board decides which attached areas (auras) show
+      if (was.size !== S.tokenIds.size || [...was].some((id) => !S.tokenIds.has(id))) d.add("cells");
     }
     // A line whose end is not standing on the board is dropped here, not drawn to nowhere.
     if (d.has("links")) r.setLinks?.(linksOn(currentLines(), S.tokenIds));
@@ -532,10 +536,14 @@ async function loadBackground() {
 
 async function loadCells() {
   const seq = ++S.cellSeq;
-  let cells = [];
-  try { cells = await templateCells({ grid: S.grid, isGM: isGM() && !S.asPlayers }); } catch (e) { err("diorama: templates", e); }
+  let cells = [], areas = [];
+  try {
+    // an area attached to a creature shows only while that creature is on this viewer's board
+    ({ cells, areas } = await templateAreas({ grid: S.grid, isGM: isGM(), asPlayers: S.asPlayers, tokenSeen: (id) => S.tokenIds.has(id) }));
+  } catch (e) { err("diorama: templates", e); }
   if (!S.open || seq !== S.cellSeq) return;
   S.overlays.cells = cells;
+  S.r?.setAreas?.(areas);
   mark("overlays");
 }
 
