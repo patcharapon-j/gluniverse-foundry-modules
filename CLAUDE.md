@@ -94,8 +94,9 @@ etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
   docs/adr/0003-stream-pacer-skin.md, Resource Trackers' skin,
   docs/adr/0004-resource-trackers-skin.md, the Creaturedex's skin,
   docs/adr/0005-creaturedex-skin.md, PF2e Odds' ink skin,
-  docs/adr/0006-odds-and-line-skin.md, and the stream view's skin,
-  docs/adr/0007-stream-view-skin.md — each lives only under its features' own
+  docs/adr/0006-odds-and-line-skin.md, the stream view's skin,
+  docs/adr/0007-stream-view-skin.md, and the Stage and Theatre GM console,
+  docs/adr/0008-stage-theatre-console.md — each lives only under its features' own
   roots and never on `:root`); `styles/gl-tokens.css` is the single source of truth and
   `styles/gl-motion.css` the single keyframe pool. Use the `--gl-*` tokens and
   the `.gl-*` utilities. The non-negotiables:
@@ -205,6 +206,12 @@ node tools/stage-preview.mjs --assets=<dir of portraits and backdrops> && node t
 
 (`/.preview/stage.html`; `view=1..5` are the shader's debug views.) See
 `docs/STAGE.md` for the light dials, the frame's passes and the choreography.
+
+The Director has no template: `apps/director-view.mjs` is pure and returns its
+markup as a string, which `node tools/director-preview.mjs` draws over the
+shipped sheet (`/.preview/director.html?tab=…`). Every `data-action` it draws
+needs a handler in `director-app.mjs`, and `stage-check` pins that. Its console
+skin is shared with Theatre's apps (docs/adr/0008-stage-theatre-console.md).
 
 **When touching calendar events** (`features/clocks-tracker/calendar/events.js`,
 `apps/events-editor.js`, `apps/calendar-view.js`), re-run the identity check.
@@ -1816,6 +1823,13 @@ family is declared in `gl-fonts.css`, and every dynamic family (`GLTH.style/
 face/cue.*`) resolves. To see it: `node tools/theatre-preview.mjs && node
 tools/preview-server.mjs`, then `/.preview/theatre.html` (URL params `style`,
 `face`, `seek` for headless frames). See `docs/THEATRE.md`.
+
+The filmstrip and the shot editor are pure views too (`apps/filmstrip-view.mjs`,
+`apps/editor-view.mjs`; no templates), drawn by `node
+tools/theatre-apps-preview.mjs` at `/.preview/theatre-apps.html`. The check pins
+every `data-action` to a handler, every form name to `patchFromForm`, and the
+`--glth-*` ramp equal to Stage's `--glstage-*` one. The focus picker binds once
+per render; a new source swaps only its media.
 
 **When touching Roleplay Chat** (`features/roleplay-chat/`, `core/rp-mode.mjs`,
 `stream-cards/text/read-text.js`, `styles/roleplay-chat.css`), re-run its check,

@@ -40,6 +40,7 @@ const ok = (name, cond, extra = "") => {
 };
 
 function walk(dir, out = []) {
+  if (!existsSync(join(ROOT, dir))) return out;
   for (const name of readdirSync(join(ROOT, dir))) {
     const rel = `${dir}/${name}`;
     if (statSync(join(ROOT, rel)).isDirectory()) walk(rel, out);
@@ -73,6 +74,12 @@ section = "model";
   ok("letterbox null survives (scene default)", M.normalizeShot({ treatment: { letterbox: null } }).treatment.letterbox === null);
   ok("NEUTRAL_TREATMENT is neutral", M.isNeutralTreatment(M.NEUTRAL_TREATMENT));
   ok("a shot's shake is clamped", M.normalizeShot({ shake: 5 }).shake === 1);
+  {
+    // Number(null) is 0: a stored null saturation drew a grey shot, a null focus the top-left corner.
+    const s = M.normalizeShot({ focus: { x: null, y: false }, treatment: { exposure: null, saturation: null, vignette: null, blur: true, tintAmount: null } });
+    ok("a null or boolean shot field is missing, never 0", s.focus.x === 0.5 && s.focus.y === 0.5 && s.treatment.saturation === 1
+      && s.treatment.exposure === 0 && s.treatment.vignette === M.DEFAULT_TREATMENT.vignette && s.treatment.blur === 0 && s.treatment.tintAmount === 0);
+  }
   ok("a shot's shake null survives (the GM's default)", M.normalizeShot({ shake: null }).shake === null && M.normalizeShot({}).shake === null);
   ok("a face key off the prototype is refused", M.normalizeShot({ face: "toString" }).face === null && M.normalizeConfig({ face: "toString", v: M.CONFIG_VERSION }).face === null);
 
@@ -316,7 +323,8 @@ section = "wiring";
 /* ── Purity: the renderer and the overlay never read the world ───────── */
 section = "purity";
 {
-  const pure = [...walk(`${FEAT}/render`), ...walk(`${FEAT}/overlay`), `${FEAT}/constants.mjs`, `${FEAT}/model.mjs`, `${FEAT}/timeline.mjs`];
+  const pure = [...walk(`${FEAT}/render`), ...walk(`${FEAT}/overlay`), `${FEAT}/constants.mjs`, `${FEAT}/model.mjs`, `${FEAT}/timeline.mjs`,
+    `${FEAT}/apps/filmstrip-view.mjs`, `${FEAT}/apps/editor-view.mjs`];
   for (const f of pure) {
     const src = stripComments(read(f));
     const hit = src.match(/\b(game|canvas|foundry|ui|Hooks)\s*[.?[]/);
@@ -329,6 +337,53 @@ section = "purity";
   const overlay = stripComments(read(`${FEAT}/overlay/title-overlay.mjs`));
   const clear = /_clearTitleDom\(\)\s*\{([\s\S]*?)\n  \}/.exec(overlay)?.[1] ?? "";
   ok("a new cue wipes the title node's committed inline styles (else every later title stays blurred)", /\$\.title\.style\.cssText\s*=\s*""/.test(clear));
+}
+
+/* ── Apps: one view each, every control wired ────────────────────────── */
+section = "apps";
+{
+  const FV = await imp(`${FEAT}/apps/filmstrip-view.mjs`);
+  const EV = await imp(`${FEAT}/apps/editor-view.mjs`);
+  const L = (k, d) => (d ? `${k}${JSON.stringify(d)}` : k);
+  const folders = M.normalizeFolders([{ id: "f1", name: "<b>Act I</b>", color: "#ff0000" }]);
+  const shots = M.orderShots([
+    M.normalizeShot({ id: "a", src: "a.png", title: "<i>Dock</i>", notes: "<script>x</script>", folder: "f1" }),
+    M.normalizeShot({ id: "b", src: "b.webm", eyebrow: "Night" }),
+    M.normalizeShot({ id: "c", src: "" }),
+  ], folders);
+  const config = M.normalizeConfig({});
+  const state = M.normalizeState({ shotId: "a", cue: { kind: "shot" } });
+  const film = (sel, extra = {}) => FV.renderFilmstrip(FV.filmstripModel({ shots, folders, config, state, selectedId: sel, face: C.DEFAULT_FACE, canFreePan: true, ...extra }, L), L);
+  const ed = (tab, extra = {}) => EV.renderEditor(EV.editorModel({ shots, folders, config, state, selectedId: "a", tab, stage: true, face: C.DEFAULT_FACE, shake: 0.3, ...extra }, L), L);
+  const html = film("a") + film("b") + film(null, { collapsed: true }) + ed("shot") + ed("scene")
+    + ed("shot", { draft: { id: "a", values: { title: "<u>Draft</u>" } } });
+  ok("a typed title, note or folder name never reaches an app as markup", !/<b>Act|<i>Dock|<script>|<u>Draft/.test(html) && html.includes("&lt;i&gt;Dock"));
+  ok("the draft wins over the stored shot in the editor", html.includes("&lt;u&gt;Draft"));
+  for (const [file, src] of [["filmstrip", film("a") + film(null, { collapsed: true })], ["editor", ed("shot") + ed("scene")]]) {
+    const app = stripComments(read(`${FEAT}/apps/${file}.mjs`));
+    for (const a of new Set([...src.matchAll(/data-action="([A-Za-z]+)"/g)].map((m) => m[1]))) {
+      ok(`${file}: data-action="${a}" has a handler`, new RegExp(`\\b${a}: (TheatreFilmstrip|TheatreEditor)\\.#on|\\b${a}: function`).test(app));
+    }
+  }
+  const edSrc = ed("shot");
+  const patch = stripComments(read(`${FEAT}/apps/editor.mjs`));
+  const body = patch.slice(patch.indexOf("function patchFromForm"), patch.indexOf("function readForm"));
+  for (const name of ["src", "eyebrow", "title", "subtitle", "notes", "style", "face", "hold", "focus.x", "focus.y", "shakeOn", "shake",
+    "treatment.exposure", "treatment.saturation", "treatment.tint", "treatment.tintAmount", "treatment.vignette", "treatment.blur", "treatment.letterboxOn", "treatment.letterbox"]) {
+    ok(`the shot form carries name="${name}"`, edSrc.includes(`name="${name}"`));
+    const leaf = name.split(".").pop();
+    ok(`patchFromForm reads ${name}`, new RegExp(`\\b${leaf}\\b`).test(body));
+  }
+  for (const out of new Set([...edSrc.matchAll(/data-fmt="([a-z]+)"/g)].map((m) => m[1]))) ok(`data-fmt="${out}" has a formatter`, typeof EV.FMT[out] === "function");
+  for (const hook of ["data-focus", "data-focus-crop", "data-focus-dot", "data-specimen", "data-spec-title", "data-spec-sub", "data-folder-select", "data-search", "data-no-match", "data-keep-scroll"]) {
+    ok(`the editor draws ${hook}`, edSrc.includes(hook));
+  }
+  const fs = film("a");
+  for (const hook of ["data-go-style", "data-search", "data-count", "data-slate", "data-drop-folder", "data-haystack", "data-no-match", "data-keep-scroll"]) ok(`the filmstrip draws ${hook}`, fs.includes(hook));
+  ok("the frame on air is marked on air, the cued frame as preview", /glth-frame is-on-air is-selected/.test(fs) && /glth-frame is-selected" data-id="b"/.test(film("b")));
+  const app = stripComments(read(`${FEAT}/apps/editor.mjs`));
+  ok("the focus picker binds once per form (a new source swaps only the media)", /#swapFocusMedia\(form\)/.test(app) && !/#bindFocus\(form, true\)/.test(app));
+  ok("the apps render no template", walk(`${FEAT}/apps`).every((f) => !/HandlebarsApplicationMixin|\.hbs/.test(stripComments(read(f)))) && !existsSync(join(ROOT, "templates/theatre")));
 }
 
 /* ── Writes: one path, forced replacement ────────────────────────────── */
@@ -589,7 +644,7 @@ section = "canvas-mode";
   const idx = read(`${FEAT}/index.mjs`);
   const at = idx.indexOf("SETTINGS.defaultMode,");
   ok("th.defaultMode is registered (world) with every mode as a choice", at >= 0 && /scope:\s*"world"/.test(idx.slice(at, idx.indexOf("});", at))) && /MODES\.map/.test(idx.slice(at, idx.indexOf("});", at))));
-  const tpl = read("templates/theatre/editor.hbs");
+  const tpl = read(`${FEAT}/apps/editor-view.mjs`);
   ok("the Scene tab carries the mode control", /<select name="mode"/.test(tpl));
   ok("the editor sends the mode with the scene config", /mode:\s*f\.mode/.test(stripComments(read(`${FEAT}/apps/editor.mjs`))));
 }
@@ -677,6 +732,18 @@ section = "seams";
   const apps = read("styles/theatre-apps.css");
   ok("theatre-apps.css sizes the buttons it ships (.gl-btn declares no font-size)",
     /\.gl-btn[^{]*\{[^}]*font-size/.test(apps));
+  // The console skin (docs/adr/0008-stage-theatre-console.md): one ramp, stated twice, under each feature's
+  // own roots. A value that drifts makes the two GM panels a GM keeps side by side two shades of black.
+  const ramp = (css, prefix) => {
+    const block = css.replace(/\/\*[\s\S]*?\*\//g, "").match(/\{([^}]*--[a-z]+-ink-0[^}]*)\}/)?.[1] ?? "";
+    return Object.fromEntries([...block.matchAll(new RegExp(`--${prefix}-([a-z0-9-]+)\\s*:\\s*([^;]+);`, "g"))].map((m) => [m[1], m[2].trim()]));
+  };
+  const thRamp = ramp(apps, "glth"), stRamp = ramp(read("styles/stage-director.css"), "glstage");
+  const RAMP = ["ink-0", "ink-1", "ink-2", "ink-3", "ink-4", "ink-5", "ink-6", "text", "dim", "faint", "line", "line-strong", "hover", "shade", "paper", "live", "cue", "amber", "steel", "font", "radius"];
+  const drift = RAMP.filter((k) => !thRamp[k] || thRamp[k] !== stRamp[k]);
+  ok("the Theatre apps and the Stage Director share one console ramp", drift.length === 0, drift.map((k) => `${k}: ${thRamp[k]} vs ${stRamp[k]}`).join("; "));
+  const rootSkin = /(^|[},\s]):root\b[^{]*\{[^}]*--glth-/.test(apps.replace(/\/\*[\s\S]*?\*\//g, ""));
+  ok("the console skin is never written on :root", !rootSkin);
   const ov = read("styles/theatre.css");
   ok("the overlay sits above Stage's overlay (z-index 1)", /z-index:\s*calc\(var\(--gl-z-base\)\s*\+\s*[1-9]/.test(ov) || /z-index:\s*([2-9]|[1-9]\d)\b/.test(ov));
   ok("the overlay never takes the pointer", /pointer-events:\s*none/.test(ov));

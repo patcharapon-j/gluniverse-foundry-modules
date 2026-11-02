@@ -35,6 +35,8 @@ export const NAMEPLATES = Object.freeze(["off", "close", "focus"]);
 export const COMMS_EDGES = Object.freeze(["right", "left"]);
 export const COMMS_ALIGN = Object.freeze(["top", "center", "bottom"]);
 export const COMMS_STYLES = Object.freeze(["holo", "radio", "clean"]);
+/** A world that never picked a comms style gets the quiet one. A stored "holo" stays holo. */
+export const DEFAULT_COMMS_STYLE = "clean";
 
 /** Most characters on stage at once; past this the marks are too tight to read. */
 export const MAX_ON_STAGE = 8;
@@ -299,7 +301,7 @@ export function normalizeCommsLayout(raw) {
   return {
     edge: oneOf(r.edge, COMMS_EDGES, "right"),
     align: oneOf(r.align, COMMS_ALIGN, "center"),
-    style: oneOf(r.style, COMMS_STYLES, "holo"),
+    style: oneOf(r.style, COMMS_STYLES, DEFAULT_COMMS_STYLE),
     width: num(r.width, 120, 320, 188),
     inset: num(r.inset, 0, 240, 20),
     shift: num(r.shift, -40, 40, 0),

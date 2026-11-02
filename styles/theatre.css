@@ -33,7 +33,8 @@
   overflow: hidden;
   contain: strict;
   color: var(--gl-text-bright);
-  font-family: var(--gl-display);
+  /* The neutral sans the console skin reads in; each title face sets its own inline. */
+  font-family: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
 }
 .glth-overlay.glth-overlay--live {
   z-index: calc(var(--gl-z-splash) - 1);
@@ -145,7 +146,7 @@
   width: clamp(80px, 8.5vw, 160px);
   height: 2px;
   margin: 0.7em 0 0;
-  background: var(--gl-accent);
+  background: rgb(var(--gl-tint-light) / 0.9);
   transform-origin: 0 50%;
 }
 .glth-title__piece {
@@ -180,9 +181,9 @@
   left: clamp(72px, 5vw, 120px);
   top: calc(clamp(56px, 7vh, 96px) + var(--glth-lb) * 100vh);
   opacity: 0;
-  font-family: var(--gl-display);
   font-size: var(--gl-fs-sm);
-  letter-spacing: 0.35em;
+  font-weight: 500;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
   white-space: nowrap;
   color: rgb(var(--gl-tint-light) / 0.75);
@@ -195,5 +196,5 @@
   height: 1px;
   margin-right: 10px;
   vertical-align: middle;
-  background: var(--gl-accent);
+  background: rgb(var(--gl-tint-light) / 0.75);
 }

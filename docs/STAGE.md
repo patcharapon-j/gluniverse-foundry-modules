@@ -31,12 +31,14 @@ scripts/features/stage/
     dom-fallback.mjs    the lite renderer: the same frame as plain images
     assets.mjs          prepares art and backdrops for upload
   comms/comms-overlay.mjs   the call-in stack (pure DOM)
-  apps/director-app.mjs     the GM's panel
+  apps/director-app.mjs     the GM's panel (ApplicationV2, events and writes)
+  apps/director-view.mjs    pure: the panel's model and markup
   search.mjs                finding a character, casting an Actor, bringing them in
 ```
 
-`render/`, `light/`, `comms/`, `director.mjs`, `model.mjs`, `stage-dom.mjs` and
-`timing.mjs` read no Foundry global. The preview page drives those exact files.
+`render/`, `light/`, `comms/`, `director.mjs`, `model.mjs`, `stage-dom.mjs`,
+`timing.mjs` and `apps/director-view.mjs` read no Foundry global. The preview
+pages drive those exact files.
 
 ## Stored values
 
@@ -46,7 +48,7 @@ scripts/features/stage/
 | `stage.state` | world | shown or not, who is on which mark (and whether as a silhouette), focus, wide/close, push/cut |
 | `stage.layout` | world | figure height, floor line, mark span, when name cards show |
 | `stage.comms` | world | open calls, who is speaking |
-| `stage.commsLayout` | world | edge, alignment, style (holo / radio / clean), size |
+| `stage.commsLayout` | world | edge, alignment, style (holo / radio / clean; clean when never picked), size |
 | `stage.quality` | client | full (lit) or lite (plain pictures) |
 | `stage.breath` | world | an idle breathing sway on the cast (off by default) |
 | scene flag `stage.light` | scene | the scene's light: mood, dials, picture override |
@@ -179,7 +181,13 @@ renderer draws plain pictures and needs no pixels.
 ```bash
 node tools/stage-check.mjs
 node tools/stage-preview.mjs --assets=<dir> && node tools/preview-server.mjs
+node tools/director-preview.mjs        # then /.preview/director.html?tab=stage|cast|light|comms
 ```
+
+The Director has no template. `director-view.mjs` builds its model and its
+markup as a string, the app sets it and binds events, and the director preview
+draws the same markup over `styles/stage-director.css`. Its look is the console
+skin shared with Theatre's apps (docs/adr/0008-stage-theatre-console.md).
 
 The check drives the normalizers, the migration, the rig across every mood ×
 darkness × probe, the backdrop pipeline, the director (entrance, rapid

@@ -27,14 +27,15 @@
  * Bound to the scene it opened on: switching the viewed scene closes it.
  */
 
-import { FRAME, TIMING } from "../constants.mjs";
-import { coverRect, groupShots, matchesQuery, normalizeShot, resolveFace, resolveHold, resolveStyle, searchText } from "../model.mjs";
+import { FRAME } from "../constants.mjs";
+import { coverRect, matchesQuery, normalizeShot } from "../model.mjs";
 import { escapeHTML } from "../../../core/util.mjs";
 import { TheatreAppBase } from "./base.mjs";
+import { FMT, editorModel, fillOf, renderEditor } from "./editor-view.mjs";
 import {
-  FOLDER_MIME, L, SHOT_MIME, browseMedia, confirmDialog, currentStore, dragLooksUseful, dropSlot, faceKeys, faceLabel,
-  faceSecondaryStyle, faceSpecimenStyle, folderNameFromPath, folderOf, folderStyle, gmFace, gmShake, guarded, isVideoSrc, loadStore,
-  overrideOptions, partialFromSrc, pathsFromDrop, pickFile, pickFolder, plainOptions, promptFolder, stageEnabled, styleKeys, styleLabel, modeKeys, modeLabel, tpl,
+  FOLDER_MIME, L, SHOT_MIME, browseMedia, confirmDialog, currentStore, dragLooksUseful, dropSlot,
+  faceSecondaryStyle, faceSpecimenStyle, folderNameFromPath, folderOf, gmFace, gmShake, guarded, isVideoSrc, loadStore,
+  partialFromSrc, pathsFromDrop, pickFile, pickFolder, promptFolder, stageEnabled,
 } from "./shared.mjs";
 
 export const EDITOR_ID = "glth-editor";
@@ -50,15 +51,6 @@ const collapsedSet = (sceneId) => {
   return collapsedFolders.get(sceneId);
 };
 
-const sec = (ms) => Math.round((ms / 1000) * 10) / 10;
-const fmt = {
-  exposure: (v) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}`,
-  saturation: (v) => `×${Number(v).toFixed(2)}`,
-  pct: (v) => `${Math.round(Number(v) * 100)}%`,
-  letterbox: (v) => `${(Number(v) * 100).toFixed(1)}%`,
-};
-/** Which formatter each range output uses (data-fmt). */
-const FMT_OF = { exposure: fmt.exposure, saturation: fmt.saturation, pct: fmt.pct, letterbox: fmt.letterbox };
 
 /** Every field the detail form edits — the patch Save writes is exactly these. */
 function patchFromForm(f, base) {
@@ -130,7 +122,7 @@ function EditorApp() {
       },
     };
 
-    static PARTS = { main: { template: tpl("editor"), scrollable: [".glth-ed-list", ".glth-ed-detail"] } };
+    /* The list and the detail keep their scroll across a re-render (data-keep-scroll in the view). */
 
     /** Selected shot id. */
     selectedId = null;
@@ -157,128 +149,30 @@ function EditorApp() {
     async _prepareContext(options) {
       const context = await super._prepareContext(options);
       const store = this.store;
-      if (!store) return { ...context, empty: true };
+      if (!store) return { ...context, model: { empty: true } };
       this._lastStore = store;
-      const { shots, folders, config, state } = store;
+      const shots = store.shots;
       if (!this.selectedId || !store.shot(this.selectedId)) this.selectedId = shots[0]?.id ?? null;
       if (this._draft && !store.shot(this._draft.id)) this._draft = null;
-
-      const row = (s, i, folderName) => ({
-        id: s.id,
-        pos: i,
-        folder: s.folder ?? "",
-        search: searchText(s, folderName),
-        src: s.src,
-        hasSrc: !!s.src,
-        video: isVideoSrc(s.src),
-        label: s.title || s.eyebrow || s.subtitle || L("GLTH.app.untitled"),
-        untitled: !(s.title || s.eyebrow || s.subtitle),
-        sub: styleLabel(resolveStyle(s, config)),
-        selected: s.id === this.selectedId,
-        onAir: s.id === state.shotId,
-        dirty: this._draft?.id === s.id,
-      });
-
-      const collapsed = collapsedSet(this.sceneId);
-      const hasFolders = folders.length > 0;
-      const groups = groupShots(shots, folders).map((g) => {
-        const folder = g.folder?.id ?? "";
-        return {
-          folder,
-          name: g.folder ? (g.folder.name || L("GLTH.folders.untitled")) : L("GLTH.folders.unfiled"),
-          style: g.folder ? folderStyle(g.folder.color) : "",
-          unfiled: !g.folder,
-          showHead: hasFolders,
-          collapsed: hasFolders && collapsed.has(folder),
-          count: g.shots.length,
-          rows: g.shots.map(({ shot, index }) => row(shot, index, g.folder?.name ?? "")),
-        };
-      });
-      const rows = groups.flatMap((g) => g.rows);
-
-      const stage = stageEnabled();
-      const stored = this.selectedId ? store.shot(this.selectedId) : null;
-      let detail = null;
-      if (stored) {
-        // The draft wins over the stored shot for everything the form edits; grade is never drafted.
-        const d = this.dirty ? normalizeShot({ ...stored, ...this._draft.values, id: stored.id, grade: stored.grade }) : stored;
-        const sceneFace = config.face ?? gmFace();
-        const face = resolveFace(d, config, gmFace());
-        const shake = d.shake ?? gmShake();
-        const t = d.treatment;
-        detail = {
-          id: d.id,
-          src: d.src,
-          hasSrc: !!d.src,
-          video: isVideoSrc(d.src),
-          eyebrow: d.eyebrow,
-          title: d.title,
-          subtitle: d.subtitle,
-          notes: d.notes,
-          onAir: d.id === state.shotId,
-          styles: overrideOptions(styleKeys(), styleLabel, d.style, config.style),
-          faces: overrideOptions(faceKeys(), faceLabel, d.face, sceneFace),
-          hold: d.hold == null ? "" : sec(d.hold),
-          holdDefault: sec(config.hold),
-          focusX: d.focus.x,
-          focusY: d.focus.y,
-          shakeOn: d.shake != null,
-          shakeValue: shake,
-          shakeOut: fmt.pct(shake),
-          shakeDefault: fmt.pct(gmShake()),
-          t,
-          out: {
-            exposure: fmt.exposure(t.exposure),
-            saturation: fmt.saturation(t.saturation),
-            tintAmount: fmt.pct(t.tintAmount),
-            vignette: fmt.pct(t.vignette),
-            blur: fmt.pct(t.blur),
-            letterbox: fmt.letterbox(t.letterbox ?? config.letterbox),
-          },
-          letterboxOn: t.letterbox != null,
-          letterboxValue: t.letterbox ?? config.letterbox,
-          letterboxDefault: fmt.letterbox(config.letterbox),
-          titleStyle: faceSpecimenStyle(face),
-          secondaryStyle: faceSecondaryStyle(face),
-          specimen: d.title || L("GLTH.editor.specimen"),
-          hasGrade: !!stored.grade,
-          resolvedHold: sec(resolveHold(d, config)),
-          folders: [
-            { value: "", label: L("GLTH.folders.unfiled"), selected: !stored.folder },
-            ...folders.map((f) => ({ value: f.id, label: f.name || L("GLTH.folders.untitled"), selected: f.id === stored.folder })),
-          ],
-        };
-      }
-
-      return {
-        ...context,
-        empty: false,
-        tab: lastTab,
-        isShotTab: lastTab === "shot",
-        isSceneTab: lastTab === "scene",
-        rows,
-        groups,
+      const model = editorModel({
+        shots,
+        folders: store.folders,
+        config: store.config,
+        state: store.state,
+        selectedId: this.selectedId,
+        draft: this._draft,
+        collapsed: collapsedSet(this.sceneId),
         query,
-        count: rows.length,
-        detail,
-        dirty: this.dirty,
-        stage,
-        holdMin: sec(TIMING.holdMin),
-        holdMax: sec(TIMING.holdMax),
-        config: {
-          modes: plainOptions(modeKeys(), modeLabel, config.mode),
-          modeHint: L(`GLTH.mode.${config.mode}.hint`),
-          styles: plainOptions(styleKeys(), styleLabel, config.style),
-          faces: overrideOptions(faceKeys(), faceLabel, config.face, gmFace(), "GLTH.editor.gmDefault"),
-          hold: sec(config.hold),
-          letterbox: config.letterbox,
-          letterboxOut: fmt.letterbox(config.letterbox),
-          tag: config.tag,
-          styleHint: L(`GLTH.style.${config.style}.hint`),
-          titleStyle: faceSpecimenStyle(config.face ?? gmFace()),
-          secondaryStyle: faceSecondaryStyle(config.face ?? gmFace()),
-        },
-      };
+        tab: lastTab,
+        stage: stageEnabled(),
+        face: gmFace(),
+        shake: gmShake(),
+      }, L);
+      return { ...context, model };
+    }
+
+    _renderView(context) {
+      return renderEditor(context.model, L);
     }
 
     async _onRender(context, options) {
@@ -483,9 +377,9 @@ function EditorApp() {
         }
         this.#liveOutputs(form, ev.target);
         capture();
-        if (ev.target?.name === "src") this.#bindFocus(form, true);
+        if (ev.target?.name === "src") this.#swapFocusMedia(form);
       });
-      this.#bindFocus(form, false);
+      this.#bindFocus(form);
       this.#bindPicDrop(form);
     }
 
@@ -493,8 +387,9 @@ function EditorApp() {
     #liveOutputs(form, el) {
       if (el?.type === "range") {
         const out = form.querySelector(`output[data-for="${CSS.escape(el.name)}"]`);
-        const f = FMT_OF[out?.dataset.fmt];
+        const f = FMT[out?.dataset.fmt];
         if (out && f) out.textContent = f(el.value);
+        el.style.setProperty("--fill", `${fillOf(el.value, el.min, el.max)}%`);
       }
       if (el?.name === "treatment.letterboxOn") {
         const range = form.querySelector('input[name="treatment.letterbox"]');
@@ -521,34 +416,26 @@ function EditorApp() {
      * The focus picker: the whole image, the point kept in frame, and the 16:9
      * crop the players actually see (coverRect against FRAME — the same maths
      * the renderer uses). Click or drag to move the point.
+     *
+     * Bound ONCE per rendered form. A new source swaps only the media element
+     * (`#swapFocusMedia`); the box keeps its one pointer listener, and the paint
+     * reads whichever media is in it now. Rebinding on every source change
+     * stacked a listener per change, so one click set the point N times.
      */
-    #bindFocus(form, srcChanged) {
+    #bindFocus(form) {
       const box = form.querySelector("[data-focus]");
       if (!box) return;
-      const media = box.querySelector("img, video");
       const dot = box.querySelector("[data-focus-dot]");
       const crop = box.querySelector("[data-focus-crop]");
       const fx = form.elements["focus.x"], fy = form.elements["focus.y"];
-      if (srcChanged) {
-        const src = form.elements.src?.value?.trim() ?? "";
-        const isVid = isVideoSrc(src);
-        const fresh = document.createElement(isVid ? "video" : "img");
-        if (isVid) Object.assign(fresh, { muted: true, loop: true, autoplay: true, playsInline: true });
-        else fresh.alt = "";
-        fresh.className = "glth-focus-media";
-        fresh.src = src;
-        if (media) media.replaceWith(fresh); else box.prepend(fresh);
-        box.classList.toggle("is-blank", !src);
-        this.#bindFocus(form, false);
-        return;
-      }
-      if (!media) return;
-      const size = () => (media.tagName === "VIDEO" ? [media.videoWidth, media.videoHeight] : [media.naturalWidth, media.naturalHeight]);
+      const mediaOf = () => box.querySelector(".glth-focus-media");
+      const size = (m) => (m.tagName === "VIDEO" ? [m.videoWidth, m.videoHeight] : [m.naturalWidth, m.naturalHeight]);
       const paint = () => {
         const x = Number(fx.value), y = Number(fy.value);
         dot.style.left = `${x * 100}%`;
         dot.style.top = `${y * 100}%`;
-        const [iw, ih] = size();
+        const media = mediaOf();
+        const [iw, ih] = media ? size(media) : [0, 0];
         if (!(iw > 0 && ih > 0)) { crop.hidden = true; return; }
         box.style.setProperty("--glth-ar", String(iw / ih));
         const r = coverRect(iw, ih, FRAME.width, FRAME.height, { x, y });
@@ -558,7 +445,9 @@ function EditorApp() {
         crop.style.width = `${(FRAME.width / r.scale / iw) * 100}%`;
         crop.style.height = `${(FRAME.height / r.scale / ih) * 100}%`;
       };
-      media.addEventListener(media.tagName === "VIDEO" ? "loadedmetadata" : "load", paint);
+      // load / loadedmetadata do not bubble; a capturing listener on the box hears every media it will hold.
+      box.addEventListener("load", paint, true);
+      box.addEventListener("loadedmetadata", paint, true);
       paint();
       this._paintFocus = paint;
 
@@ -571,7 +460,7 @@ function EditorApp() {
         paint();
       };
       box.addEventListener("pointerdown", (ev) => {
-        if (ev.button !== 0) return;
+        if (ev.button !== 0 || !mediaOf()) return;
         ev.preventDefault();
         box.setPointerCapture(ev.pointerId);
         set(ev);
@@ -586,6 +475,24 @@ function EditorApp() {
         box.addEventListener("pointerup", up);
         box.addEventListener("pointercancel", up);
       });
+    }
+
+    /** The source field changed: put the new picture in the picker, keep its listeners. */
+    #swapFocusMedia(form) {
+      const box = form.querySelector("[data-focus]");
+      if (!box) return;
+      const src = form.elements.src?.value?.trim() ?? "";
+      const old = box.querySelector(".glth-focus-media");
+      box.classList.toggle("is-blank", !src);
+      if (!src) { old?.remove(); this._paintFocus?.(); return; }
+      const isVid = isVideoSrc(src);
+      const fresh = document.createElement(isVid ? "video" : "img");
+      if (isVid) Object.assign(fresh, { muted: true, loop: true, autoplay: true, playsInline: true });
+      else Object.assign(fresh, { alt: "", draggable: false });
+      fresh.className = "glth-focus-media";
+      fresh.src = src;
+      if (old) old.replaceWith(fresh); else box.prepend(fresh);
+      this._paintFocus?.();
     }
 
     /** Dropping an image onto the detail picture replaces this shot's source. */
@@ -635,8 +542,9 @@ function EditorApp() {
         const el = ev.target;
         if (el?.type === "range") {
           const out = form.querySelector(`output[data-for="${CSS.escape(el.name)}"]`);
-          const f = FMT_OF[out?.dataset.fmt];
+          const f = FMT[out?.dataset.fmt];
           if (out && f) out.textContent = f(el.value);
+          el.style.setProperty("--fill", `${fillOf(el.value, el.min, el.max)}%`);
         }
       });
       form.addEventListener("change", async (ev) => {

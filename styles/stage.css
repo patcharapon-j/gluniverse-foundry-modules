@@ -49,8 +49,12 @@
 }
 
 /* ── name card ──────────────────────────────────────────────────────── */
+/* Broadcast lower third: a short paper rule, the name in a heavy neutral sans,
+   the title tracked thin beneath it. No hue and no glow: the cast's art carries
+   the colour, and the card must read over any of it. */
 
 .glstage-plate {
+  --glstage-plate-face: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
   position: absolute;
   display: flex;
   flex-direction: column;
@@ -58,7 +62,8 @@
   gap: 6px;
   opacity: 0;
   transform: translateX(calc((1 - var(--glstage-plate-in, 0)) * -18px));
-  text-shadow: 0 1px 2px var(--gl-shadow), 0 0 18px rgb(var(--gl-tint-dark) / 0.5);
+  color: var(--gl-text-bright);
+  text-shadow: 0 1px 2px var(--gl-shadow), 0 0 24px rgb(var(--gl-tint-dark) / 0.55);
 }
 
 /* Close-up: lower left, sitting on the bottom letterbox bar. */
@@ -76,30 +81,32 @@
 
 .glstage-plate-rule {
   display: block;
-  width: calc(56px * var(--glstage-plate-in, 0));
-  height: 2px;
-  background: var(--gl-accent);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--gl-accent) 60%, transparent);
+  width: calc(40px * var(--glstage-plate-in, 0));
+  height: 3px;
+  background: rgb(var(--gl-tint-light) / 0.92);
+  box-shadow: 0 1px 2px var(--gl-shadow);
 }
 
 .glstage-plate-name {
-  font-family: var(--gl-display);
-  font-weight: 700;
+  font-family: var(--glstage-plate-face);
+  font-weight: 800;
   font-size: clamp(22px, 2.5vw, 46px);
   line-height: 1;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
 .glstage-plate[data-mode="focus"] .glstage-plate-name {
   font-size: clamp(14px, 1.2vw, 22px);
-  letter-spacing: 0.2em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .glstage-plate-title {
-  font-family: var(--gl-tech);
+  font-family: var(--glstage-plate-face);
+  font-weight: 400;
   font-size: clamp(11px, 0.9vw, 16px);
-  letter-spacing: 0.24em;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
   color: var(--gl-text-dim);
 }

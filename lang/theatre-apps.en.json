@@ -26,6 +26,7 @@
   "GLTH.filmstrip.collapse": "Collapse the filmstrip",
   "GLTH.filmstrip.expand": "Expand the filmstrip",
   "GLTH.filmstrip.preview": "Preview of the cued-up shot, seen only by you",
+  "GLTH.filmstrip.previewTag": "Preview",
   "GLTH.filmstrip.noNotes": "No notes for this shot.",
   "GLTH.filmstrip.nothingSelected": "Select a frame to cue it up.",
   "GLTH.filmstrip.reel": "Reel",

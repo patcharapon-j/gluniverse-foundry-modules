@@ -26,12 +26,12 @@
  * store; free pan is the local camera host's, not world data.
  */
 
-import { FACES } from "../constants.mjs";
-import { groupShots, matchesQuery, resolveFace, resolveStyle, searchText } from "../model.mjs";
+import { matchesQuery } from "../model.mjs";
 import { TheatreAppBase } from "./base.mjs";
+import { ALL, filmstripModel, renderFilmstrip } from "./filmstrip-view.mjs";
 import {
-  L, SHOT_MIME, cameraHost, currentStore, dragLooksUseful, dropSlot, faceSecondaryStyle, faceSpecimenStyle, folderOf, folderStyle, gmFace,
-  guarded, isVideoSrc, loadHost, loadStore, partialFromSrc, pathsFromDrop, promptCardText, styleKeys, styleLabel, tpl,
+  L, SHOT_MIME, cameraHost, currentStore, dragLooksUseful, dropSlot, folderOf, gmFace,
+  guarded, loadHost, loadStore, partialFromSrc, pathsFromDrop, promptCardText,
 } from "./shared.mjs";
 
 export const FILMSTRIP_ID = "glth-filmstrip";
@@ -44,7 +44,6 @@ let goStyle = "";
 let query = "";
 /** Folder filter per scene: ALL, UNFILED ("") or a folder id. */
 const filters = new Map();
-const ALL = "*";
 
 let _Filmstrip = null;
 
@@ -75,7 +74,7 @@ function FilmstripApp() {
       },
     };
 
-    static PARTS = { main: { template: tpl("filmstrip"), scrollable: [".glth-strip-reel"] } };
+    /* The reel keeps its scroll across a re-render (data-keep-scroll in the view). */
 
     _onAir = null;
     _onResize = null;
@@ -111,100 +110,28 @@ function FilmstripApp() {
     async _prepareContext(options) {
       const context = await super._prepareContext(options);
       const store = this.store;
-      if (!store) return { ...context, empty: true };
-      const { shots, folders, config, state } = store;
-      const selectedId = this.selectedId;
-      this._onAir = state.shotId;
-      const hasFolders = folders.length > 0;
-      const filter = this.filter;
-
-      const frame = (s, i, folderName) => ({
-        id: s.id,
-        index: i + 1,
-        pos: i,
-        folder: s.folder ?? "",
-        search: searchText(s, folderName),
-        src: s.src,
-        hasSrc: !!s.src,
-        video: isVideoSrc(s.src),
-        label: s.title || s.eyebrow || s.subtitle || L("GLTH.app.untitled"),
-        untitled: !(s.title || s.eyebrow || s.subtitle),
-        style: styleLabel(resolveStyle(s, config)),
-        styleOverride: s.style != null,
-        onAir: s.id === state.shotId,
-        selected: s.id === selectedId,
-        hasNotes: !!s.notes.trim(),
-        hasGrade: !!s.grade,
-      });
-
-      // The reel in play order; with folders, each group opens with a slate.
-      const groups = groupShots(shots, folders);
-      const frames = [];
-      const reel = [];
-      const chips = [{ value: ALL, label: L("GLTH.folders.all"), count: shots.length, all: true, active: filter === ALL }];
-      for (const g of groups) {
-        const name = g.folder ? (g.folder.name || L("GLTH.folders.untitled")) : L("GLTH.folders.unfiled");
-        const style = g.folder ? folderStyle(g.folder.color) : "";
-        const value = g.folder?.id ?? "";
-        if (hasFolders) {
-          chips.push({ value, label: name, count: g.shots.length, style, unfiled: !g.folder, droppable: true, active: filter === value });
-          if (g.shots.length) {
-            reel.push({ slate: true, folder: value, name, style, unfiled: !g.folder, count: g.shots.length, countLabel: L("GLTH.filmstrip.count", { n: g.shots.length }) });
-          }
-        }
-        for (const { shot, index } of g.shots) {
-          const f = frame(shot, index, g.folder?.name ?? "");
-          frames.push(f);
-          reel.push(f);
-        }
-      }
-
-      const sel = selectedId ? store.shot(selectedId) : null;
-      const face = resolveFace(sel, config, gmFace());
-      const onAirShot = state.shotId ? store.shot(state.shotId) : null;
-      const cue = state.cue;
+      if (!store) return { ...context, model: { empty: true } };
       const host = cameraHost();
-
-      return {
-        ...context,
-        empty: false,
-        collapsed,
-        frames,
-        reel,
-        chips,
-        hasFolders,
+      const model = filmstripModel({
+        shots: store.shots,
+        folders: store.folders,
+        config: store.config,
+        state: store.state,
+        selectedId: this.selectedId,
+        filter: this.filter,
         query,
-        count: frames.length,
-        countLabel: L("GLTH.filmstrip.count", { n: frames.length }),
-        sel: sel ? {
-          id: sel.id,
-          src: sel.src,
-          hasSrc: !!sel.src,
-          video: isVideoSrc(sel.src),
-          eyebrow: sel.eyebrow,
-          title: sel.title,
-          subtitle: sel.subtitle,
-          hasTitle: !!(sel.eyebrow || sel.title || sel.subtitle),
-          notes: sel.notes,
-          onAir: sel.id === state.shotId,
-          style: styleLabel(resolveStyle(sel, config)),
-          titleStyle: faceSpecimenStyle(face),
-          secondaryStyle: faceSecondaryStyle(face),
-          faceKnown: !!FACES[face],
-          focus: `${Math.round(sel.focus.x * 100)}% ${Math.round(sel.focus.y * 100)}%`,
-        } : null,
-        onAir: onAirShot ? (onAirShot.title || onAirShot.eyebrow || L("GLTH.app.untitled")) : null,
-        isBlack: !state.shotId,
-        lastCue: cue ? L(`GLTH.cue.${cue.kind}`) : null,
-        goStyles: [
-          { value: "", label: L("GLTH.filmstrip.goShotStyle"), selected: !goStyle },
-          ...styleKeys().map((k) => ({ value: k, label: styleLabel(k), selected: goStyle === k })),
-        ],
+        collapsed,
+        goStyle,
         freePan: !!host?.freePan,
         canFreePan: !!host?.setFreePan,
-        canPrev: !!state.shotId && store.indexOf(state.shotId) > 0,
-        canNext: frames.length > 0 && (!state.shotId || store.indexOf(state.shotId) < frames.length - 1),
-      };
+        face: gmFace(),
+      }, L);
+      this._onAir = store.state.shotId;
+      return { ...context, model };
+    }
+
+    _renderView(context) {
+      return renderFilmstrip(context.model, L);
     }
 
     async _onRender(context, options) {
