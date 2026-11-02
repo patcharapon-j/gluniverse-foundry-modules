@@ -3,17 +3,21 @@ import { crackRenderer } from "../fx/crack-renderer.js";
 import { isFocus, placement } from "../framing/focus-math.js";
 import { quoteSize } from "../text/read-text.js";
 import {
-  CSS_SNAP,
   CSS_UNFOLD,
   EASE_EXIT,
   EASE_OUT,
   EASE_POP,
   EASE_SNAP,
+  PLATE_CLIP,
+  PLATE_CLIP_FOLDED,
   countUp,
   el,
+  sideOf,
+  timing,
   tween,
   waapi,
-  wait
+  wait,
+  collapse
 } from "./card-motion.js";
 
 /**
@@ -26,12 +30,13 @@ import {
  * duality die, an outcome named by key, chips, a feature's price) are all optional, so a PF2e model draws
  * exactly as it always did.
  *
- * The look is setting-neutral: a rounded glass strip with a 1px inner rule, tone carried by a top rule
- * that fades out to the right and a quiet wash behind the result. Its motion is plain fade and rise, with
- * no text decode, scan line or light sweep. Only the crit crack is effect, and it is shared with core.
+ * The look is the stream view's black skin (docs/adr/0004-stream-view-skin.md): a chamfered slab, paper
+ * type, and one tone carried by a solid verdict tag and a rule along the top edge. Its motion is fade,
+ * rise and unfold, with no text decode, scan line or light sweep. Only the crit crack is effect, and it is
+ * shared with core.
  *
  * The card always animates. It deliberately ignores reduced-motion preferences: it only renders on the
- * stream client, and its motion is the point of it.
+ * stream client, and its motion is the point of it. Every length comes from CARD_MOTION.
  *
  * Most motion runs on the module's anime.js engine. The Web Animations API is used only where anime.js
  * cannot help: clip-path shapes with calc() (the strip unfold, the damage row drop) and the result
@@ -39,14 +44,12 @@ import {
  */
 
 /*
- * The strip unfolds downwards inside its own rounded box. Both shapes carry the strip's radius
- * (`.glus-rc-main` in stream-cards.css): a clip with square corners, or a polygon, re-cuts the corners
- * for as long as the entrance runs and the card visibly changes shape when it is cleared.
+ * The strip unfolds downwards inside its own slab. Both shapes are the slab's own polygon
+ * (`PLATE_CLIP`, the one `.glus-rc-main` is clipped to in stream-cards.css), so the chamfer is there for
+ * the whole entrance and the card does not change shape when the clip is cleared.
  */
-const STRIP_RADIUS = "calc(.34*var(--u))";
-const STRIP_CLIP = `inset(0 0 0% 0 round ${STRIP_RADIUS})`;
-const STRIP_CLIP_FOLDED = `inset(0 0 100% 0 round ${STRIP_RADIUS})`;
-const DAMAGE_RADIUS = "0 0 calc(.3*var(--u)) calc(.3*var(--u))";
+const STRIP_CLIP = PLATE_CLIP;
+const STRIP_CLIP_FOLDED = PLATE_CLIP_FOLDED;
 
 const DEGREE_TONES = ["crit-failure", "failure", "success", "crit-success"];
 const DEGREE_LABEL_KEYS = ["CritFailure", "Failure", "Success", "CritSuccess"];
@@ -545,58 +548,54 @@ export class RollCard {
     const root = this.element;
     const main = this.main;
     const u = this.unit();
+    const d = timing(root);
+    // In from the edge the stack hugs: a card in a right-hand corner arrives from the right.
+    const side = sideOf(root);
 
-    tween(root, { opacity: [0, 1], translateX: [-1.2 * u, 0], duration: 520, ease: EASE_OUT });
-    tween(this.q(".glus-rc-hair"), { scaleX: [0, 1], duration: 320, ease: EASE_SNAP });
+    tween(root, { opacity: [0, 1], translateX: [side * 1.2 * u, 0], duration: d("cardIn"), ease: EASE_OUT });
+    tween(this.q(".glus-rc-hair"), { scaleX: [0, 1], duration: d("ruleIn"), ease: EASE_SNAP });
     main.style.clipPath = STRIP_CLIP_FOLDED;
-    await wait(180);
+    await wait(d("stripDelay"));
     if (!this.alive(version)) return;
 
-    waapi(main, [{ clipPath: STRIP_CLIP_FOLDED }, { clipPath: STRIP_CLIP }], { duration: 420, easing: CSS_UNFOLD }).then(() => {
+    waapi(main, [{ clipPath: STRIP_CLIP_FOLDED }, { clipPath: STRIP_CLIP }], { duration: d("unfold"), easing: CSS_UNFOLD }).then(() => {
       main.style.clipPath = "";
       main.getAnimations?.().forEach((a) => a.cancel());
     });
     tween(this.q(".glus-rc-art-frame"), {
       opacity: [0, 1],
-      translateX: ["-10%", "0%"],
-      scale: [1.06, 1],
-      duration: 760,
-      delay: 80,
+      translateX: ["-8%", "0%"],
+      scale: [1.05, 1],
+      duration: d("artIn"),
+      delay: d("artDelay"),
       ease: EASE_OUT
     });
 
-    // Identity: player, name, then action, each fading up into place.
-    tween(this.q(".glus-rc-player"), { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 320, delay: 120, ease: EASE_OUT });
-    tween(this.q(".glus-rc-name"), { opacity: [0, 1], translateY: [0.4 * u, 0], duration: 420, delay: 170, ease: EASE_OUT });
-    tween(this.q(".glus-rc-action"), { opacity: [0, 1], translateY: [0.5 * u, 0], duration: 380, delay: 300, ease: EASE_OUT });
+    // Identity: player, name, then action, each rising into place.
+    tween(this.q(".glus-rc-player"), { opacity: [0, 1], translateY: [0.3 * u, 0], duration: d("playerIn"), delay: d("playerDelay"), ease: EASE_OUT });
+    tween(this.q(".glus-rc-name"), { opacity: [0, 1], translateY: [0.4 * u, 0], duration: d("nameIn"), delay: d("nameDelay"), ease: EASE_OUT });
+    tween(this.q(".glus-rc-action"), { opacity: [0, 1], translateY: [0.4 * u, 0], duration: d("actionIn"), delay: d("actionDelay"), ease: EASE_OUT });
 
     waapi(this.q(".glus-rc-result"), [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }], {
-      duration: 360,
-      delay: 220,
-      easing: CSS_SNAP,
+      duration: d("dividerIn"),
+      delay: d("dividerDelay"),
+      easing: CSS_UNFOLD,
       pseudoElement: "::before"
     });
-    tween(this.q(".glus-rc-degree-meta"), { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 320, delay: 380, ease: EASE_OUT });
-    tween(this.q(".glus-rc-spell-name"), { opacity: [0, 1], translateY: [0.5 * u, 0], duration: 460, delay: 260, ease: EASE_OUT });
-    tween(this.q(".glus-rc-spell-line"), { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 320, delay: 380, ease: EASE_OUT });
-    tween(this.q(".glus-rc-quote"), { opacity: [0, 1], translateY: [0.4 * u, 0], duration: 420, delay: 300, ease: EASE_OUT });
+    tween(this.q(".glus-rc-degree-meta"), { opacity: [0, 1], translateY: [0.3 * u, 0], duration: d("metaIn"), delay: d("metaDelay"), ease: EASE_OUT });
+    tween(this.q(".glus-rc-spell-name"), { opacity: [0, 1], translateY: [0.45 * u, 0], duration: d("headlineIn"), delay: d("headlineDelay"), ease: EASE_OUT });
+    tween(this.q(".glus-rc-spell-line"), { opacity: [0, 1], translateY: [0.3 * u, 0], duration: d("metaIn"), delay: d("metaDelay"), ease: EASE_OUT });
+    tween(this.q(".glus-rc-quote"), { opacity: [0, 1], translateY: [0.4 * u, 0], duration: d("quoteIn"), delay: d("quoteDelay"), ease: EASE_OUT });
 
-    this.rollDie(160);
+    this.rollDie(d("dieDelay"), d);
     const total = this.q(".glus-rc-total");
     if (total) {
-      tween(total, {
-        opacity: [0, 1],
-        translateY: [0.6 * u, 0],
-        filter: [`blur(${0.3 * u}px)`, "blur(0px)"],
-        duration: 420,
-        delay: 300,
-        ease: EASE_OUT
-      });
-      await wait(300);
-      countUp(total, this.headlineValue(), 560);
-      await wait(620);
+      tween(total, { opacity: [0, 1], translateY: [0.5 * u, 0], duration: d("totalIn"), delay: d("totalDelay"), ease: EASE_OUT });
+      await wait(d("totalDelay"));
+      countUp(total, this.headlineValue(), d("count"));
+      await wait(d("countHold"));
     } else {
-      await wait(700);
+      await wait(d("noTotalHold"));
     }
     if (!this.alive(version)) return;
 
@@ -607,22 +606,24 @@ export class RollCard {
     return !this.destroyed && this.version === version && this.element.isConnected;
   }
 
-  /** The outcome lands: colour, degree label, die tint, then the climax. */
+  /** The outcome lands: the verdict tag, the tone on the rule and the die, then the climax. */
   async reveal(version) {
     const m = this.model;
     const u = this.unit();
+    const d = timing(this.element);
     this.setPending(false);
     const label = this.q(".glus-rc-degree-label");
-    if (label) tween(label, { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 320, ease: EASE_OUT });
+    // The tag slides in from the name's side, along its own wedge, as the slab of tone it is.
+    if (label) tween(label, { opacity: [0, 1], translateX: [-0.5 * u, 0], duration: d("labelIn"), ease: EASE_OUT });
     // The rule takes its tone now; a gradient cannot transition, so the new colour fades up instead.
-    tween(this.q(".glus-rc-hair"), { opacity: [0.3, 1], duration: 600, ease: EASE_OUT });
+    tween(this.q(".glus-rc-hair"), { opacity: [0.3, 1], duration: d("ruleTone"), ease: EASE_OUT });
     const die = this.q(".glus-rc-die");
     if (die && m.visibility !== "ownBlind" && (m.roll?.natural === 20 || m.roll?.natural === 1 || m.duality?.out === "crit")) {
-      tween(die, { scale: [{ from: 1, to: 1.18, duration: 150 }, { to: 1, duration: 230 }], ease: EASE_POP });
+      tween(die, { scale: [{ from: 1, to: 1.16, duration: d("diePopUp") }, { to: 1, duration: d("diePopDown") }], ease: EASE_POP });
     }
     const total = this.q(".glus-rc-total");
-    if (total && !m.fx) tween(total, { scale: [1.12, 1], duration: 320, ease: EASE_POP });
-    await wait(180);
+    if (total && !m.fx) tween(total, { scale: [1.1, 1], duration: d("totalPop"), ease: EASE_POP });
+    await wait(d("climaxDelay"));
     if (!this.alive(version)) return;
     this.climax();
   }
@@ -632,73 +633,77 @@ export class RollCard {
     const total = this.q(".glus-rc-total");
     const glow = this.q(".glus-rc-glow");
     const u = this.unit();
+    const d = timing(this.element);
     if (m.fx === "gold" || m.fx === "red") {
       const color = m.visibility === "ownBlind" ? "violet" : m.fx;
       this.crack = crackRenderer.add(this.q(".glus-rc-fx"), { color });
       const glowRest = this.crack ? 0.35 : 0.8;
-      tween(glow, { opacity: [{ from: 0, to: 1, duration: 220 }, { to: glowRest, duration: 880 }], ease: EASE_OUT });
-      tween(total, { scale: [1.5, 1], filter: ["brightness(2)", "brightness(1)"], duration: 560, ease: EASE_POP });
+      tween(glow, { opacity: [{ from: 0, to: 1, duration: d("glowIn") }, { to: glowRest, duration: d("glowRest") }], ease: EASE_OUT });
+      tween(total, { scale: [1.45, 1], filter: ["brightness(1.8)", "brightness(1)"], duration: d("critPop"), ease: EASE_POP });
       if (m.fx === "red") {
         tween(this.main, {
           translateX: [
-            { from: 0, to: 0.25 * u, duration: 80 },
-            { to: -0.2 * u, duration: 80 },
-            { to: 0.1 * u, duration: 80 },
-            { to: 0, duration: 80 }
+            { from: 0, to: 0.22 * u, duration: d("shakeStep") },
+            { to: -0.18 * u, duration: d("shakeStep") },
+            { to: 0.08 * u, duration: d("shakeStep") },
+            { to: 0, duration: d("shakeStep") }
           ],
           ease: "linear"
         });
       }
     } else if (m.fx === "pop") {
-      tween(total, { scale: [1.6, 1], filter: ["brightness(2.2)", "brightness(1)"], duration: 600, ease: EASE_POP });
-      tween(glow, { opacity: [{ from: 0, to: 0.8, duration: 300 }, { to: 0, duration: 600 }], ease: EASE_OUT });
+      tween(total, { scale: [1.5, 1], filter: ["brightness(2)", "brightness(1)"], duration: d("pop"), ease: EASE_POP });
+      tween(glow, { opacity: [{ from: 0, to: 0.8, duration: d("popGlowIn") }, { to: 0, duration: d("popGlowOut") }], ease: EASE_OUT });
     }
   }
 
-  rollDie(delay = 0) {
+  rollDie(delay = 0, d = timing(this.element)) {
     const die = this.q(".glus-rc-die");
     if (!die) return;
     tween(die, {
       opacity: [0, 1],
-      rotate: [{ from: -200, to: 12, duration: 434 }, { to: 0, duration: 186 }],
-      scale: [{ from: 0.3, to: 1.1, duration: 434 }, { to: 1, duration: 186 }],
+      rotate: [{ from: -180, to: 10, duration: d("dieSpin") }, { to: 0, duration: d("dieSettle") }],
+      scale: [{ from: 0.4, to: 1.08, duration: d("dieSpin") }, { to: 1, duration: d("dieSettle") }],
       delay,
       ease: EASE_OUT
     });
     if (this.model.duality) {
       // Each half spins through its own die's faces and lands on what that die rolled.
       for (const value of die.querySelectorAll(".glus-rc-dd-value")) {
-        this.spinValue(value, this.model.duality[value.dataset.side], Number(value.dataset.faces) || 12, delay);
+        this.spinValue(value, this.model.duality[value.dataset.side], Number(value.dataset.faces) || 12, delay, d);
       }
       return;
     }
-    this.spinValue(die.querySelector(".glus-rc-die-value"), this.model.roll?.natural, 20, delay);
+    this.spinValue(die.querySelector(".glus-rc-die-value"), this.model.roll?.natural, 20, delay, d);
   }
 
   /** Flicker a die's numeral through random faces, then settle it on the face it actually rolled. */
-  spinValue(value, natural, faces, delay = 0) {
+  spinValue(value, natural, faces, delay = 0, d = timing(this.element)) {
     if (!value) return;
     const id = (value._spin = (value._spin ?? 0) + 1);
     const t0 = performance.now() + delay;
+    const flicker = d("dieFlicker");
+    const step = Math.max(1, d("dieFlickerStep"));
     let lastStep = -1;
     const frame = (now) => {
       if (value._spin !== id) return;
       const elapsed = now - t0;
-      if (elapsed >= 460) {
+      if (elapsed >= flicker) {
         value.textContent = natural;
         return;
       }
-      const step = Math.floor(Math.max(0, elapsed) / 50);
-      if (step !== lastStep) {
-        lastStep = step;
+      const at = Math.floor(Math.max(0, elapsed) / step);
+      if (at !== lastStep) {
+        lastStep = at;
         value.textContent = 1 + Math.floor(Math.random() * faces);
       }
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
+    // A background tab runs no frames; the face it rolled lands on a timer regardless.
     setTimeout(() => {
       if (value._spin === id) value.textContent = natural;
-    }, delay + 520);
+    }, delay + flicker + d("settleSlack"));
   }
 
   clearCrack() {
@@ -720,11 +725,12 @@ export class RollCard {
   async update(model, { reroll = false } = {}) {
     const version = ++this.version;
     const u = this.unit();
+    const d = timing(this.element);
     this.clearCrack();
     const result = this.q(".glus-rc-result");
     const previous = Number(this.q(".glus-rc-total")?.textContent);
     const chipsBefore = this.chipStamp;
-    await tween(result, { opacity: [1, 0], translateY: [0, -0.5 * u], duration: 180, ease: EASE_EXIT });
+    await tween(result, { opacity: [1, 0], translateY: [0, -0.4 * u], duration: d("updateOut"), ease: EASE_EXIT });
     if (!this.alive(version)) return;
 
     // A claim that landed during the fade (the GM's Fear) is newer than this model's chips: keep it.
@@ -738,13 +744,13 @@ export class RollCard {
       const chip = el("span", "glus-rc-chip", this.label("Reroll"));
       chip.dataset.chip = "reroll";
       this.q(".glus-rc-player").append(chip);
-      tween(chip, { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 300, ease: EASE_OUT });
+      tween(chip, { opacity: [0, 1], translateY: [0.3 * u, 0], duration: d("chipIn"), ease: EASE_OUT });
     }
-    tween(this.q(".glus-rc-hair"), { scaleX: [0, 1], duration: 420, ease: EASE_SNAP });
-    tween(result, { opacity: [0, 1], translateY: [0.5 * u, 0], duration: 320, ease: EASE_OUT });
-    this.rollDie();
-    if (total) countUp(total, this.headlineValue(), 620);
-    await wait(700);
+    tween(this.q(".glus-rc-hair"), { scaleX: [0, 1], duration: d("updateRuleIn"), ease: EASE_SNAP });
+    tween(result, { opacity: [0, 1], translateY: [0.4 * u, 0], duration: d("updateIn"), ease: EASE_OUT });
+    this.rollDie(0, d);
+    if (total) countUp(total, this.headlineValue(), d("updateCount"));
+    await wait(d("updateHold"));
     if (!this.alive(version)) return;
     await this.reveal(version);
   }
@@ -769,11 +775,12 @@ export class RollCard {
       else node.remove();
     }
     const u = this.unit();
+    const d = timing(this.element);
     const before = player.querySelector('[data-chip="reroll"]');
     for (const chip of want.values()) {
       const node = this.buildChip(chip);
       player.insertBefore(node, before);
-      tween(node, { opacity: [0, 1], translateY: [0.3 * u, 0], duration: 300, ease: EASE_OUT });
+      tween(node, { opacity: [0, 1], translateY: [0.3 * u, 0], duration: d("chipIn"), ease: EASE_OUT });
     }
   }
 
@@ -805,26 +812,29 @@ export class RollCard {
     row.append(total);
     this.element.append(row);
 
+    const d = timing(this.element);
+    // The row drops out from under the strip, unfolding on the same plate polygon it rests on.
     await waapi(
       row,
       [
-        { clipPath: `inset(0 0 100% 0 round ${DAMAGE_RADIUS})`, transform: `translateY(${-u}px)` },
-        { clipPath: `inset(0 0 0% 0 round ${DAMAGE_RADIUS})`, transform: "none" }
+        { clipPath: PLATE_CLIP_FOLDED, transform: `translateY(${-0.6 * u}px)` },
+        { clipPath: PLATE_CLIP, transform: "none" }
       ],
-      { duration: 380, easing: CSS_SNAP }
+      { duration: d("damageDrop"), easing: CSS_UNFOLD }
     );
     row.getAnimations?.().forEach((a) => a.cancel());
     row.style.clipPath = "";
     if (this.destroyed) return;
 
+    const stagger = d("damagePartStagger");
     [...row.querySelectorAll(".glus-rc-damage-part, .glus-rc-damage-crit")].forEach((chip, index) =>
-      tween(chip, { opacity: [0, 1], translateY: [0.4 * u, 0], duration: 300, delay: index * 70, ease: EASE_OUT })
+      tween(chip, { opacity: [0, 1], translateY: [0.3 * u, 0], duration: d("damagePartIn"), delay: index * stagger, ease: EASE_OUT })
     );
-    countUp(total, damage.total ?? "?", 640);
-    await wait(640);
+    countUp(total, damage.total ?? "?", d("damageCount"));
+    await wait(d("damageCount"));
     if (this.destroyed || version !== this.version) return;
     if (damage.crit) {
-      tween(total, { scale: [1.5, 1], filter: ["brightness(2)", "brightness(1)"], duration: 520, ease: EASE_POP });
+      tween(total, { scale: [1.4, 1], filter: ["brightness(1.8)", "brightness(1)"], duration: d("damageCritPop"), ease: EASE_POP });
       if (this.crack) {
         this.damageCrack = crackRenderer.add(canvas, {
           color: this.crack.color,
@@ -844,16 +854,19 @@ export class RollCard {
     this.damageCrack = null;
   }
 
-  /** Slides the card out and collapses its height so the stack closes up. Resolves once it is gone. */
+  /**
+   * Slides the card out toward the edge its stack hugs, then closes the gap it leaves: its height and
+   * its share of the stack's spacing together, so the cards behind it move once and never jump.
+   * Resolves once it is gone.
+   */
   async exit() {
     this.version++;
     const root = this.element;
     if (!root.isConnected) return this.destroy();
     const u = this.unit();
-    await tween(root, { opacity: [1, 0], translateX: [0, -2 * u], duration: 320, ease: EASE_EXIT });
-    const height = root.getBoundingClientRect().height;
-    root.style.overflow = "hidden";
-    await tween(root, { height: [`${height}px`, "0px"], duration: 260, ease: EASE_OUT });
+    const d = timing(root);
+    await tween(root, { opacity: [1, 0], translateX: [0, sideOf(root) * 1.6 * u], duration: d("exitSlide"), ease: EASE_EXIT });
+    await collapse(root, d("exitCollapse"));
     this.destroy();
   }
 
