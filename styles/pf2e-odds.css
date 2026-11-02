@@ -48,8 +48,10 @@
 
   --glod-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
   --glod-cut: 9px;
-  /* the line this odds belongs to; the badge layer sets it from the line's own colour */
-  --glod-line: var(--glod-paper);
+  /* `--glod-line` is NOT declared here: the badge layer sets it on each
+     `.glod-line` from the line's own colour, and a declaration on `.glod-tag`
+     (one of these roots) would override what it inherits. Read it with a
+     paper fallback. */
 }
 
 /* ---- the layer ---------------------------------------------- */
@@ -123,7 +125,7 @@
   white-space: nowrap;
   color: var(--glod-paper);
   background: color-mix(in oklab, var(--glod-ink-1) 92%, transparent);
-  box-shadow: inset 2px 0 0 var(--glod-line), 0 0 0 1px rgb(var(--gl-tint-dark) / 0.55), 0 2px 8px rgb(var(--gl-tint-dark) / 0.45);
+  box-shadow: inset 2px 0 0 var(--glod-line, var(--glod-paper)), 0 0 0 1px rgb(var(--gl-tint-dark) / 0.55), 0 2px 8px rgb(var(--gl-tint-dark) / 0.45);
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%);
 }
 
@@ -145,7 +147,7 @@
 .glod-tag[data-state="oor"] .glod-tag-n { color: var(--glod-faint); }
 .glod-tag[data-state="unknown"] {
   box-shadow:
-    inset 2px 0 0 color-mix(in oklab, var(--glod-line) 45%, transparent),
+    inset 2px 0 0 color-mix(in oklab, var(--glod-line, var(--glod-paper)) 45%, transparent),
     0 0 0 1px rgb(var(--gl-tint-dark) / 0.55), 0 2px 8px rgb(var(--gl-tint-dark) / 0.45);
 }
 
