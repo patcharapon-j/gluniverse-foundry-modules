@@ -151,16 +151,23 @@ export const scrub = () => writeAll(scrubDeferred(readAll(), partyMode()));
  */
 export async function settleDeferred() {
   await scrub();
+  // Read the creatures first. The lookups are async, and the dex or the rule
+  // can change under them, so nothing read before them is written after.
+  const found = new Map();
+  const before = readAll();
+  for (const subject of Object.keys(before)) {
+    const meta = metaIn(before, subject);
+    // Cheap test first: a write that would be refused needs no actor lookup.
+    if (!meta?.uuid || !applyDeferred(before, subject, [{}], partyMode())) continue;
+    const actor = await fromUuid(meta.uuid).catch(() => null);
+    if (actor) found.set(subject, buildSections(actor).deferred);
+  }
+  if (!found.size) return false;
   const party = partyMode();
   let data = readAll();
   let changed = false;
-  for (const subject of Object.keys(data)) {
-    const meta = metaIn(data, subject);
-    if (!meta?.uuid || meta.deferred?.length) continue;
-    // Cheap test first: a write that would be refused needs no actor lookup.
-    if (!applyDeferred(data, subject, [{}], party)) continue;
-    const actor = await fromUuid(meta.uuid).catch(() => null);
-    const next = actor ? applyDeferred(data, subject, buildSections(actor).deferred, party) : null;
+  for (const [subject, deferred] of found) {
+    const next = applyDeferred(data, subject, deferred, party);
     if (next) {
       data = next;
       changed = true;

@@ -402,6 +402,13 @@ const {
   if (!/applyDeferred\(/.test(storeSrc) || !/settleDeferred\(\)/.test(src["index.mjs"])) {
     fail("index/store: nothing restores held-back abilities when Party Knowledge earns them again");
   }
+  // The actor lookups are async. A dex or a rule read before them and written
+  // after undoes whatever the GM did meanwhile (a redaction, the setting itself).
+  const settle = storeSrc.slice(storeSrc.indexOf("export async function settleDeferred"));
+  const lastAwait = settle.lastIndexOf("await fromUuid");
+  if (lastAwait < 0 || settle.lastIndexOf("readAll()") < lastAwait || settle.lastIndexOf("partyMode()") < lastAwait) {
+    fail("store: settleDeferred writes a dex or a Party Knowledge value it read before the actor lookups");
+  }
 
   // Refresh re-takes only what is held, and never a lie.
   const fresh = { ...fx.snapshots, defense: { ...fx.snapshots.defense, rows: [{ key: "ac", value: "99" }] }, offense: { key: "offense", rows: [] } };
