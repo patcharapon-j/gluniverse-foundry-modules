@@ -8,7 +8,8 @@
  * tool can see exactly which keys a readout reaches for.
  */
 
-import { DH_BANDS, PF2E_WATER_FALL_REDUCTION } from "../constants.mjs";
+import { DH_BANDS } from "../constants.mjs";
+import { pf2eFall, PF2E_FALL } from "./fall.mjs";
 
 export const PF2E = "pf2e";
 /** Daggerheart system ids: this suite's own system, and Foundryborne's. */
@@ -17,7 +18,7 @@ export const DAGGERHEART = Object.freeze(["gluniverse-daggerheart", "daggerheart
 /** Daggerheart: one move inside an action reaches Close. */
 const DH_FREE_SQUARES = 6;
 /** PF2e: a fall of this many feet or less does no damage. */
-const PF2E_SAFE_FALL = 5;
+const PF2E_SAFE_FALL = PF2E_FALL.safe;
 
 const keyOnly = (key) => key;
 const isDH = (id) => DAGGERHEART.includes(id);
@@ -97,19 +98,20 @@ export function distanceReadout({ systemId, distance = 0, gridDistance = 5, unit
 
 /**
  * A hint for a drop, never applied.
- * PF2e: half the fall as bludgeoning (and prone) when it is more than 5 ft;
- * into water the fall counts as 20 ft shorter.
+ * PF2e (rules/fall.mjs, Player Core p. 420): half the fall as bludgeoning (and
+ * prone) when it is more than 5 ft; into water the fall counts as 20 ft
+ * shorter (no deeper than the water; the terrain does not know the depth, so
+ * the water is taken as deep enough).
  * @returns {string|null}
  */
-export function fallHint({ systemId, dropDist = 0, intoWater = false, units = "", t = keyOnly } = {}) {
+export function fallHint({ systemId, dropDist = 0, intoWater = false, depth = Infinity, units = "", t = keyOnly } = {}) {
   const drop = Number(dropDist);
   if (!(drop > 0)) return null;
   const data = { distance: fmtDist(drop), units };
   if (systemId === PF2E) {
-    const effective = intoWater ? Math.max(0, drop - PF2E_WATER_FALL_REDUCTION) : drop;
-    if (effective <= PF2E_SAFE_FALL) return t("GLDIO.rules.fallSafe", data);
-    const damage = Math.floor(effective / 2);
-    return t(intoWater ? "GLDIO.rules.fallPf2eWater" : "GLDIO.rules.fallPf2e", { ...data, damage });
+    const f = pf2eFall(drop, { soft: intoWater, depth });
+    if (f.effective <= PF2E_SAFE_FALL || f.damage <= 0) return t("GLDIO.rules.fallSafe", data);
+    return t(intoWater ? "GLDIO.rules.fallPf2eWater" : "GLDIO.rules.fallPf2e", { ...data, damage: f.damage });
   }
   return t("GLDIO.rules.fall", data);
 }

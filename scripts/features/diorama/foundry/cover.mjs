@@ -10,7 +10,9 @@
 import { coverBetween as terrainCover } from "../terrain/occlusion.mjs";
 import { distToQ } from "../terrain/model.mjs";
 import { creatureHeightDist, eyeQ } from "../rules/creature.mjs";
-import { activeContext } from "./context.mjs";
+import { lineOfSight } from "../rules/los.mjs";
+import { pf2eDistance, PF2E_SPACE_FT } from "../rules/distance3d.mjs";
+import { activeContext, anyContext } from "./context.mjs";
 
 const docOf = (t) => t?.document ?? t ?? null;
 
@@ -48,3 +50,79 @@ export function coverBetween(attackerToken, targetToken) {
 
 /** The i18n key for a cover value (GLDIO.cover.none / standard / greater). */
 export const coverKey = (cover) => `GLDIO.cover.${cover}`;
+
+/**
+ * Walls that stop sight outright, px: Foundry's own edges (canvas.edges) of
+ * walls with normal sight. An open door has no edge; limited, proximity and
+ * one-way walls are left to Foundry's own vision, which already decided
+ * whether the target is visible at all.
+ */
+export function sightWalls() {
+  const NORMAL = globalThis.CONST?.EDGE_SENSE_TYPES?.NORMAL ?? 20;
+  const out = [];
+  const edges = globalThis.canvas?.edges;
+  if (!edges?.values) return out;
+  for (const e of edges.values()) {
+    if (!e?.a || !e?.b || e.type !== "wall" || e.direction) continue;
+    if ((e.sight ?? 0) !== NORMAL) continue;
+    out.push({ ax: e.a.x, ay: e.a.y, bx: e.b.x, by: e.b.y });
+  }
+  return out;
+}
+
+/**
+ * Distance between two tokens in distance units, the way the system measures
+ * it: PF2e's own TokenPF2e#distanceTo (3D, creature boxes), else PF2e's rule
+ * restated (rules/distance3d.mjs), else Foundry's measurePath centre to centre
+ * with elevation (3D under the scene's diagonal rule).
+ */
+export function tokenDistance(attackerToken, targetToken, { systemId = globalThis.game?.system?.id ?? "" } = {}) {
+  const a = docOf(attackerToken), b = docOf(targetToken);
+  if (!a || !b) return null;
+  const ta = a.object ?? attackerToken, tb = b.object ?? targetToken;
+  const size = globalThis.canvas?.grid?.size ?? 100, distance = globalThis.canvas?.grid?.distance ?? 5;
+  if (systemId === "pf2e") {
+    try {
+      const d = ta?.distanceTo?.(tb);
+      if (Number.isFinite(d)) return d;
+    } catch { /* fall through */ }
+    const boxOf = (doc) => ({
+      x: doc.x ?? 0, y: doc.y ?? 0, w: (doc.width ?? 1) * size, h: (doc.height ?? 1) * size,
+      elevation: Number(doc.elevation) || 0, actor: !!doc.actor,
+      height: Number(doc.actor?.dimensions?.height) || PF2E_SPACE_FT[doc.actor?.system?.traits?.size?.value] || (doc.width ?? 1) * distance,
+    });
+    return pf2eDistance(boxOf(a), boxOf(b), { size, distance }).distance;
+  }
+  try {
+    const ca = centerOf(a, size), cb = centerOf(b, size);
+    return globalThis.canvas.grid.measurePath([
+      { x: ca.x, y: ca.y, elevation: Number(a.elevation) || 0 },
+      { x: cb.x, y: cb.y, elevation: Number(b.elevation) || 0 },
+    ]).distance;
+  } catch { return null; }
+}
+
+/**
+ * Everything the 3D view shows between an attacker and a target: the centre
+ * line of sight with where the ground or a wall breaks it, the cover badge,
+ * and the distance. Display only.
+ * @returns {null|ReturnType<typeof lineOfSight> & {distance:number|null, rise:number}}
+ *   rise: the target's feet above the attacker's, distance units
+ */
+export function tacticsBetween(attackerToken, targetToken) {
+  const a = docOf(attackerToken), b = docOf(targetToken);
+  if (!a || !b || a === b) return null;
+  const scene = a.parent ?? b.parent;
+  if (a.parent && b.parent && a.parent !== b.parent) return null;
+  const live = activeContext(scene) ?? null;
+  const any = live ?? anyContext(scene);
+  const grid = any?.grid ?? { size: globalThis.canvas?.grid?.size ?? 100, distance: globalThis.canvas?.grid?.distance ?? 5 };
+  const ca = centerOf(a, grid.size), cb = centerOf(b, grid.size);
+  const heightQ = distToQ(creatureHeightDist(b.actor ?? null, b), grid.distance);
+  const r = lineOfSight(live?.terrain ?? null,
+    { x: ca.x, y: ca.y, eyeQ: eyeQ(a, grid) },
+    { x: cb.x, y: cb.y, footQ: distToQ(Number(b.elevation) || 0, grid.distance), heightQ,
+      radiusPx: (Math.min(b.width ?? 1, b.height ?? 1) * grid.size) / 2 },
+    grid.size, { walls: sightWalls() });
+  return { ...r, distance: tokenDistance(attackerToken, targetToken), rise: (Number(b.elevation) || 0) - (Number(a.elevation) || 0) };
+}

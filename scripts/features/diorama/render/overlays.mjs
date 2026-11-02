@@ -13,6 +13,8 @@
  *   hover   { i, j, zQ?, color? } or null.
  *   reach   { cells:[{i,j,band}], start?:{i,j,w,h}, colors? } or null: one
  *           creature's squares by Strides (band 1..3), drawn under the rest.
+ *   los     [{ id, a, b, pieces, color, strength? }]: lines of sight (render/tactics.mjs)
+ *   falls   [{ id, a, b, pieces, color, cap? }]: drops off a ledge on the path, same shape
  */
 
 import * as THREE from "./three.mjs";
@@ -20,6 +22,7 @@ import { TIMING } from "../constants.mjs";
 import { PALETTE } from "../../../core/theme.mjs";
 import { MATERIALS, cssRgb } from "./materials.mjs";
 import { clamp01, ease } from "./tween.mjs";
+import { tacticsMeshes } from "./tactics.mjs";
 
 const LIFT = 0.035;
 const PATH_W = 0.11;
@@ -106,6 +109,9 @@ export class OverlaysLayer {
       const col = h.color ?? PALETTE.textBright;
       this.static.add(this.cellsMesh([{ i: h.i, j: h.j, zQ: h.zQ, color: col, alpha: 0.12 }], col, 0.07));
     }
+    // line of sight and drops (render/tactics.mjs): device-px lines over everything
+    const tactical = [...(Array.isArray(o.los) ? o.los : []), ...(Array.isArray(o.falls) ? o.falls : [])];
+    if (tactical.length) for (const m of tacticsMeshes(tactical, S)) this.static.add(m);
     // pings
     const seen = new Set();
     for (const p of Array.isArray(o.pings) ? o.pings : []) {

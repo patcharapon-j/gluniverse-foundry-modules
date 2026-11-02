@@ -17,7 +17,9 @@
  *   long press / Alt+click    ping
  *   Ctrl+drag ground          ruler
  *   right / middle drag       pan; wheel = zoom
- *   hover a token             distance + terrain cover from the controlled one
+ *   hover a token             distance + terrain cover from the controlled one; with
+ *                             dio.tactics, the line of sight to it and to every target,
+ *                             and a drop line with its falling damage on a dragged path
  */
 
 import { SUITE_ID } from "../../../core/const.mjs";
@@ -26,6 +28,7 @@ import { CAMERA, FLAG_ALTITUDE, TIMING } from "../constants.mjs";
 import { distToQ, qToDist } from "../terrain/model.mjs";
 import { pathCellsTo } from "./snapshot.mjs";
 import * as Seam from "./seams.mjs";
+import { sightReadouts, fallReadouts, isFlying, linesKey } from "./tactics.mjs";
 import { t, isGM, userColor } from "./util.mjs";
 
 /** Pointer travel (client px) before a press becomes a drag. */
@@ -186,6 +189,7 @@ export class Input {
 
   cancel() {
     const had = !!(this.drag || this.ruler || this.down);
+    this.losKey = null;
     this.down = null;
     this.clearLong();
     this.clearDrag();
@@ -500,10 +504,18 @@ export class Input {
       color: toneColor(k ? tones[k - 1] : tones[0]),
     }));
     const an = Seam.analyze(this.ctx.terrain(), cells, g);
+    // A flyer (in the air, or moving by flying) does not fall off a ledge.
+    const falls = isFlying(Seam.altitude(doc), wps[0].action) ? [] : an.falls;
     const marks = [
       ...an.climbs.map((c) => ({ i: c.i, j: c.j, color: PALETTE.warn, alpha: 0.45 })),
-      ...an.falls.map((f) => ({ i: f.i, j: f.j, color: PALETTE.hazard, alpha: 0.45 })),
+      ...falls.map((f) => ({ i: f.i, j: f.j, color: PALETTE.hazard, alpha: 0.45 })),
     ];
+    // The drop off each ledge, drawn down the cliff with what the landing costs (shown, never applied).
+    const tactics = this.ctx.tactics?.() !== false;
+    const fr = tactics
+      ? fallReadouts({ terrain: this.ctx.terrain(), cells, falls, grid: g, w: this.drag.w, h: this.drag.h, systemId, t })
+      : { lines: [], labels: [] };
+    this.showFalls(fr.labels);
     const total = result ? read(result.distance, result.cost) : null;
     // Lifted: the squares it will land on, in the colour of what the move costs.
     if (this.drag.lift && cells.length > 1) {
@@ -513,11 +525,12 @@ export class Input {
         marks.push({ i: end.i + di, j: end.j + dj, color: col, alpha: 0.42 });
       }
     }
-    this.ctx.setOverlays({ path: { points, color: toneColor(tones[0]) }, marks });
+    this.ctx.setOverlays({ path: { points, color: toneColor(tones[0]) }, marks, falls: fr.lines });
 
     const lines = total ? [total.text] : [];
     for (const c of an.climbs) lines.push(t("GLDIO.path.climb", { distance: Math.round(c.riseDist * 10) / 10, units: g.units }));
-    for (const f of an.falls) {
+    // with the readouts on, each fall is labelled at its own ledge instead
+    for (const f of tactics ? [] : falls) {
       const s = Seam.fallText({ systemId, dropDist: f.dropDist, intoWater: f.intoWater, units: g.units, t });
       if (s) lines.push(s);
     }
@@ -562,8 +575,17 @@ export class Input {
       this.drag = null;
     }
     this.ctx.dragging?.(null);
-    this.ctx.setOverlays({ path: null, marks: [] });
+    this.ctx.setOverlays({ path: null, marks: [], falls: [] });
     this.unplace("path");
+    this.showFalls([]);
+  }
+
+  /** The fall labels of the path being dragged (view/tactics.mjs fallReadouts). */
+  showFalls(labels) {
+    const ids = new Set();
+    for (const l of labels) { this.place(l.id, l.world, l.lines, l.tone); ids.add(l.id); }
+    for (const id of this.fallIds ?? []) if (!ids.has(id)) this.unplace(id);
+    this.fallIds = ids;
   }
 
   /* ──────────────────────────── hover ──────────────────────────── */
@@ -596,8 +618,47 @@ export class Input {
     this.ctx.setOverlays({ hover: cell });
   }
 
+  /**
+   * From the controlled token to the hovered one and to this user's targets:
+   * the line of sight (broken where it is stopped), the cover and the 3D
+   * distance (view/tactics.mjs). Only to tokens Foundry shows this viewer.
+   */
+  sightLabels() {
+    const from = globalThis.canvas?.tokens?.controlled?.[0] ?? null;
+    const hovered = this.token(this.hoverId);
+    const scene = this.ctx.scene();
+    const targets = [...(globalThis.game?.user?.targets ?? [])].filter((tk) => tk?.document?.parent === scene);
+    const g = this.ctx.grid();
+    let out = { lines: [], labels: [] };
+    try {
+      out = sightReadouts({ from, hovered, targets, grid: g, asPlayers: this.ctx.asPlayers(), systemId: sysId(), t });
+    } catch (e) { console.error(e); }
+    const ids = new Set();
+    for (const l of out.labels) {
+      const tok = this.token(l.tokenId);
+      if (!tok) continue;
+      const zTop = distToQ(Number(tok.document.elevation) || 0, g.distance) + Seam.heightQ(tok, g.distance);
+      this.place(l.id, { x: tok.center.x, y: tok.center.y, zQ: zTop + 1 }, l.lines, l.tone);
+      ids.add(l.id);
+    }
+    for (const id of this.sightIds ?? []) if (!ids.has(id)) this.unplace(id);
+    this.sightIds = ids;
+    const key = linesKey(out.lines);
+    // an unchanged readout rebuilds nothing (null after cancel: write it once again)
+    if (key !== this.losKey) { this.losKey = key; this.ctx.setOverlays({ los: out.lines }); }
+  }
+
+  /** The readouts switched off (dio.tactics): drop their lines and target labels. */
+  clearSight() {
+    for (const id of this.sightIds ?? []) if (id !== "hover") this.unplace(id);
+    this.sightIds = new Set();
+    if (this.losKey) { this.losKey = ""; this.ctx.setOverlays({ los: [] }); }
+  }
+
   /** Distance and terrain cover from the controlled token to the hovered one. */
   hoverLabel() {
+    if (this.ctx.tactics?.() !== false) { this.sightLabels(); return; }
+    this.clearSight();
     const target = this.token(this.hoverId);
     const from = globalThis.canvas?.tokens?.controlled?.[0] ?? null;
     if (!target || !from || from === target || this.ctx.asPlayers()) { this.unplace("hover"); return; }
@@ -633,7 +694,7 @@ export class Input {
 
   /** Re-project every live label (the camera or a token moved). */
   relabel() {
-    if (this.hoverId) this.hoverLabel();
+    if (this.hoverId || this.sightIds?.size || this.losKey || globalThis.game?.user?.targets?.size) this.hoverLabel();
     for (const [id, a] of this.anchors) this.ctx.hud.label(id, this.r?.project(a.world.x, a.world.y, a.world.zQ) ?? null, a.lines, a.tone);
   }
 
