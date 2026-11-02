@@ -246,7 +246,65 @@ for (const m of cssBare.matchAll(/([^{}]+)\{[^}]*content:\s*(?:"\\201[CD]"|var\(
   const L0 = { sub: { say: "Say", do: "Do", think: "Think" }, source: {} };
   for (const sub of M.SUB_MODES) ok(new RegExp(`data-glrp-sub="${sub}"[^>]*>\\s*<i class="glrp-ico fa-solid ${R.SUB_ICONS[sub]}"`).test(R.barHTML({ mode: sub, canIc: true, sub, speaker: { name: "S" } }, L0)), `barHTML: ${sub} has no icon`);
 }
-ok(new Set(Object.values(R.SUB_ICONS)).size === M.SUB_MODES.length, "SUB_ICONS: two deliveries share a glyph");
+ok(new Set(Object.values(R.MODE_ICONS)).size === Object.keys(R.MODE_ICONS).length, "MODE_ICONS: two tabs share a glyph");
+for (const id of ["ooc", ...M.SUB_MODES, "narrator"]) ok(R.MODE_ICONS[id], `MODE_ICONS: tab ${id} has no glyph`);
+
+/* ── the mode strip ──────────────────────────────────────────────────────── */
+// One tab per thing a line can be, the pressed one under the tone slab. A tab missing from the strip is
+// a mode nobody can reach by mouse; two pressed tabs are a slab drawn under one and a label lit on both.
+eq(M.modeTabs({ mode: "say", canIc: true }).map((t) => t.id), ["ooc", "say", "do", "think"], "modeTabs: a character's strip");
+eq(M.modeTabs({ mode: "narrator", canIc: true, narrator: true }).map((t) => t.id), ["ooc", "narrator"], "modeTabs: the Narrator's strip");
+eq(M.modeTabs({ mode: "ooc", canIc: false }).map((t) => t.disabled), [false, true, true, true], "modeTabs: nobody to speak as disables the in-character tabs, never OOC");
+for (const mode of RP_MODES) {
+  const tabs = M.modeTabs({ mode, canIc: true, narrator: mode === "narrator" });
+  eq(tabs.filter((t) => t.pressed).length, 1, `modeTabs: exactly one tab pressed in ${mode}`);
+  const html = R.barHTML({ mode, canIc: true, sub: "say", speaker: { name: "S", narrator: mode === "narrator" }, keys: { toggle: "Alt+Q", cycle: "Alt+W" } }, L0strip());
+  const at = Number(html.match(/data-at="(-?\d+)"/)?.[1]);
+  eq(Number(html.match(/class="glrp-ink" style="--glrp-at: (\d+)"/)?.[1]), at, `barHTML: the slab sits under the pressed tab in ${mode}`);
+  eq(Number(html.match(/--glrp-tabs: (\d+)/)?.[1]), tabs.length, `barHTML: the strip is laid out for its own tab count in ${mode}`);
+  ok(/data-tooltip="Alt\+Q · /.test(html), `barHTML: the OOC tab does not name its key in ${mode}`);
+}
+function L0strip() {
+  return { sub: { say: "Say", do: "Do", think: "Think" }, source: {}, ooc: "OOC", narrate: "Narrate", toggleHint: "OOC / IC", cycleHint: "Say, Do, Think", noSpeaker: "n" };
+}
+ok(/data-glrp-action="ic"/.test(R.barHTML({ mode: "ooc", canIc: true, sub: "say", speaker: { name: "N", narrator: true } }, L0strip())), "barHTML: the Narrator's tab does not go in character");
+{
+  const c = sources["composer.mjs"];
+  // The bar is repainted only when its markup changes: hook storms otherwise reset the picker's scroll
+  // and the hover, and replay the slide for a mode that never moved.
+  ok(/html !== lastHTML/.test(c), "composer.mjs: the bar is rebuilt on every render, not only when its markup changes");
+  ok(/--glrp-from"/.test(c) && /glrp-ink-slide/.test(c), "composer.mjs: the slab no longer slides from the old tab");
+  ok(/@keyframes glrp-ink-slide\s*\{[^}]*--glrp-from/.test(cssBare), "roleplay-chat.css: glrp-ink-slide does not start from --glrp-from");
+  ok(/glrp-ink-slide\s*~\s*\.glrp-mode\[aria-pressed="true"\]\s*\{[^}]*glrp-tab-on/.test(cssBare), "roleplay-chat.css: the pressed label is ink on black until the slab reaches it");
+  // The glass is on ::before: a clip-path on the bar itself clips the picker that opens above it.
+  ok(!/\.glrp-bar\s*\{[^}]*clip-path/.test(cssBare), "roleplay-chat.css: the bar is clipped, and so is its picker");
+  ok(/pickerStep\(/.test(c), "composer.mjs: the picker has no arrow keys");
+}
+eq([M.pickerStep(-1, 3, "ArrowDown"), M.pickerStep(2, 3, "ArrowDown"), M.pickerStep(0, 3, "ArrowUp"), M.pickerStep(1, 3, "End"), M.pickerStep(1, 3, "a"), M.pickerStep(0, 0, "ArrowDown")], [0, 0, 2, 2, null, null], "pickerStep");
+
+/* ── the caption lane ────────────────────────────────────────────────────── */
+{
+  // Centred over the hotbar and never under an open sidebar, however narrow the window.
+  const box = M.laneBox({ width: 1440, height: 900, hotbar: { left: 420, right: 920, top: 840 }, sidebarLeft: 1140 });
+  eq(box.center, 670, "laneBox: centred on the hotbar");
+  ok(box.center + box.width / 2 <= 1140 - M.LANE.gutter, "laneBox: the lane runs under the sidebar");
+  eq(box.bottom, 900 - 840 + M.LANE.gap, "laneBox: clear above the hotbar");
+  eq(M.laneBox({ width: 1000, height: 700, hotbar: null, sidebarLeft: null }), { center: 500, width: 760, bottom: M.LANE.fallbackBottom }, "laneBox: no hotbar, centred in the window");
+  ok(/laneBox\(/.test(sources["overlay.mjs"]) && /getElementById\("sidebar"\)|rect\("sidebar"\)/.test(sources["overlay.mjs"]), "overlay.mjs: the lane is placed without laneBox and the sidebar");
+}
+
+/* ── bugs that once shipped ──────────────────────────────────────────────── */
+{
+  const o = sources["overlay.mjs"];
+  // A Say stack replaced by a Think stack over the same token stayed in the layer forever.
+  const leave = o.match(/this\.#leave\(line\.el, \(\) => \{([\s\S]*?)\}\);/)?.[1] ?? "";
+  ok(leave.indexOf("stack.el.remove()") >= 0 && leave.indexOf("stack.el.remove()") < leave.indexOf("this.stacks.get(stack.key) !== stack"), "overlay.mjs: a replaced stack's element is never removed");
+  // A whisper chosen mid-sentence left the public "…" up until the next key.
+  ok(/clientSettingChanged/.test(sources["index.mjs"]) && /core\.messageMode/.test(sources["index.mjs"]) && /refreshTyping/.test(sources["index.mjs"]), "index.mjs: a message-mode change does not re-decide the typing indicator");
+  // A Do line re-parsed the body (losing what an enricher bound) and put the name above a paragraph.
+  const l = sources["log.mjs"];
+  ok(!/content\.innerHTML\s*=/.test(l) && /addLead\(/.test(l), "log.mjs: a Do line's lead re-parses the body");
+}
 // A hue set under a selector list holding #chat-message outweighs `[data-glrp-mode]`: the box goes grey.
 for (const m of cssBare.matchAll(/([^{}]+)\{[^}]*--glrp-hue\s*:/g)) {
   if (/:is\([^)]*#chat-message/.test(m[1])) fail(`roleplay-chat.css: --glrp-hue is set under ${m[1].trim().slice(0, 60)}…, whose ID weight beats every mode hue`);
@@ -361,7 +419,7 @@ eq(M.cssString('say "hi"\\'), '"say \\"hi\\"\\\\"', "cssString escapes quotes an
 
 /* ── markup ──────────────────────────────────────────────────────────────── */
 const L = {
-  switchLabel: "s", subLabel: "s", ooc: "OOC", ic: "In character", sub: { say: "Say", do: "Do", think: "Think" },
+  switchLabel: "s", ooc: "OOC", narrate: "Narrate", as: "As", sub: { say: "Say", do: "Do", think: "Think" },
   source: { auto: "AUTO", pinned: "PINNED" }, chipTitle: "t", pickerLabel: "p", toggleHint: "t", cycleHint: "c", noSpeaker: "n"
 };
 const evil = `<img src=x onerror=alert(1)>`;
@@ -375,10 +433,11 @@ const markup = [
   R.logHeadHTML({ mode: "say", name: evil, img: null, label: evil, hiddenFromPlayers: true, hiddenHint: evil })
 ];
 for (const html of markup) ok(!/<img src=x/.test(html), "render.mjs: a name or a line reaches markup unescaped");
-ok(!/data-glrp-action="ic"[^>]*disabled/.test(R.barHTML({ mode: "say", canIc: true, sub: "say", speaker: null }, L)), "barHTML: IC is disabled with a speaker");
-ok(/data-glrp-action="ic"[^>]*disabled/.test(R.barHTML({ mode: "ooc", canIc: false, sub: "say", speaker: null }, L)), "barHTML: IC is live with no speaker");
-ok(!/glrp-sub/.test(R.barHTML({ mode: "narrator", canIc: true, sub: "say", speaker: { name: "Narrator", narrator: true } }, L)), "barHTML: the Narrator is offered Say/Do/Think");
-ok(/glrp-sub/.test(R.barHTML({ mode: "do", canIc: true, sub: "do", speaker: { name: "Seri" } }, L)), "barHTML: a character is not offered Say/Do/Think");
+ok(!/data-glrp-action="sub"[^>]*disabled/.test(R.barHTML({ mode: "say", canIc: true, sub: "say", speaker: { name: "S" } }, L)), "barHTML: Say/Do/Think are disabled with a speaker");
+ok(/data-glrp-action="sub"[^>]*disabled/.test(R.barHTML({ mode: "ooc", canIc: false, sub: "say", speaker: null }, L)), "barHTML: Say/Do/Think are live with no speaker");
+ok(/glrp-locked/.test(R.barHTML({ mode: "ooc", canIc: false, sub: "say", speaker: null }, L)), "barHTML: a locked strip does not say why");
+ok(!/data-glrp-sub=/.test(R.barHTML({ mode: "narrator", canIc: true, sub: "say", speaker: { name: "Narrator", narrator: true } }, L)), "barHTML: the Narrator is offered Say/Do/Think");
+ok(/data-glrp-sub="think"/.test(R.barHTML({ mode: "do", canIc: true, sub: "do", speaker: { name: "Seri" } }, L)), "barHTML: a character is not offered Say/Do/Think");
 
 // Every class the renderers emit has a rule. A class with none is a balloon drawn as bare text.
 {
@@ -388,7 +447,8 @@ ok(/glrp-sub/.test(R.barHTML({ mode: "do", canIc: true, sub: "do", speaker: { na
     R.bubbleTailHTML("think"),
     R.logHeadHTML({ mode: "narrator", name: "N", label: "Narrator" }),
     R.oocTagHTML("OOC"),
-    R.hintHTML({ canIc: true, toggle: "Alt+Q", cycle: "Alt+W" }, L),
+    R.barHTML({ mode: "ooc", canIc: false, sub: "say", speaker: null }, L),
+    R.barHTML({ mode: "narrator", canIc: true, sub: "say", speaker: { name: "N", narrator: true, source: "pinned" } }, L),
     R.avatarHTML({ img: "a.webp", name: "A" }),
     R.typingHTML(),
     R.lineHTML("say", "a *b* c"),
