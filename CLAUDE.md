@@ -612,6 +612,16 @@ to watch the move, `node tools/initiative-preview.mjs` and serve it
 (`node tools/preview-server.mjs`). The page exposes `__initiativeSeek(fraction)`,
 which pauses the live move so a frame can be inspected; the Browser pane
 throttles animation frames, so judge timing there by seeking, not by waiting.
+For headless stills it takes `states=all`, `gm=1`, `edge=left`, `skin=aegis`,
+`delayed=bottom`, `badges=vertical` and `step=1&seek=<0..1>`.
+
+Two more things on the rail fail silently. The break splash sends combatant
+ids, never a name: each client resolves the name through its own view, so a
+masked creature breaks as Unknown on a player's screen. And everything beside
+the rail is placed by one measured pass (`measureFloatingControls`): the turn
+controls step out past the active card's badges, and the side column of
+delayed cards moves inward when the screen edge has no room for it. The motion
+check pins both.
 
 **When touching Arcane Surge** (`features/pf2e-arcane-surge/`,
 `styles/pf2e-arcane-surge.css`), re-run its consistency check. Everything it

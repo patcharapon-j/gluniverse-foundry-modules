@@ -219,8 +219,6 @@ const card = ({ name, cls, tags, init, fx }) => \`
 <article class="gluni-card \${cls}">
   <div class="gluni-card-surface">
     <div class="gluni-card-accent" aria-hidden="true"></div>
-    <div class="gluni-card-spec" aria-hidden="true"></div>
-    <div class="gluni-card-bracket" aria-hidden="true"></div>
     <div class="gluni-card-portrait-wrap">
       <img class="gluni-card-portrait" src="\${PORTRAIT}" alt="">
       <div class="gluni-card-glass" aria-hidden="true"></div>

@@ -100,11 +100,11 @@ of the round's rail is the truth about it. Its extra turns are deliberately
 smaller than its own initial turn and still larger than an ordinary card, because
 the initial turn is the one that clears Downfalls.
 
-**Shape.** The silhouette is cut at two opposite corners, deeper for Supreme; the
-frame is doubled, a rim and a second faint rule inside a dark gutter; it is
-struck as corner brackets at the two corners the cut does not touch; and the
-bottom edge is a measured rule rather than a plain line. All of it is
-recognisable with the colour taken away.
+**Shape.** The silhouette is cut at two opposite corners, deeper for Supreme,
+and mirrored on a left rail; the frame is doubled, a rim and a second faint rule
+inside a dark gutter. Both are recognisable with the colour taken away. The
+corner brackets and the measured bottom rule it once carried went with the rail
+remake, which took every card down to one quiet layer per state.
 
 **Material.** A slow, viscous liquid fills the whole card, pale filaments folding
 through it, and it is drawn *underneath* the portrait: the boss's portrait is
