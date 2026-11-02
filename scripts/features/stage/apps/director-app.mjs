@@ -225,11 +225,14 @@ function DirectorApp() {
     _replaceHTML(result, content) {
       const keep = new Map();
       content.querySelectorAll("[data-keep-scroll]").forEach((n) => keep.set(n.dataset.keepScroll, n.scrollTop));
+      // A named field keeps focus across the swap, as HandlebarsApplicationMixin did.
+      const focus = content.querySelector(":focus");
       content.innerHTML = result;
       content.querySelectorAll("[data-keep-scroll]").forEach((n) => {
         const top = keep.get(n.dataset.keepScroll);
         if (top) n.scrollTop = top;
       });
+      if (focus?.name) content.querySelector(`${focus.tagName}[name="${CSS.escape(focus.name)}"]`)?.focus();
     }
 
     /* ── lifecycle ── */

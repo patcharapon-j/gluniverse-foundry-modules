@@ -72,11 +72,15 @@ export function TheatreAppBase() {
     _replaceHTML(result, content) {
       const keep = new Map();
       content.querySelectorAll("[data-keep-scroll]").forEach((n) => keep.set(n.dataset.keepScroll, [n.scrollLeft, n.scrollTop]));
+      // A named field keeps focus across the swap, as HandlebarsApplicationMixin did: a slider
+      // nudged with the arrow keys re-renders the app and must still take the next press.
+      const focus = content.querySelector(":focus");
       content.innerHTML = result;
       content.querySelectorAll("[data-keep-scroll]").forEach((n) => {
         const at = keep.get(n.dataset.keepScroll);
         if (at) [n.scrollLeft, n.scrollTop] = at;
       });
+      if (focus?.name) content.querySelector(`${focus.tagName}[name="${CSS.escape(focus.name)}"]`)?.focus();
     }
 
     /** The frame is drawn before context resolves; restate a computed title once rendered. */
