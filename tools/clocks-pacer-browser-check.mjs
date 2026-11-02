@@ -1,7 +1,8 @@
 /** Run from the browser harness with its Foundry ApplicationV2 stub in place. */
 export async function runClocksPacerBrowserChecks() {
   const { DiceSlot } = await import('../scripts/features/clocks-tracker/delving/dice-slot.js');
-  const { PerilOverlay } = await import('../scripts/features/stream-pacer/PerilOverlay.js');
+  const { SignalBand, playPerilSplash } = await import('../scripts/features/stream-pacer/band.js');
+  const { perilHTML } = await import('../scripts/features/stream-pacer/render.js');
   const checks = [];
   const assert = (condition, label) => { if (!condition) throw new Error(label); checks.push(label); };
   const capture = owner => {
@@ -36,30 +37,28 @@ export async function runClocksPacerBrowserChecks() {
     assert(settled === 1 && !host.querySelector('.glct-slot'), 'destroy is idempotent and removes overlay');
     host.remove();
   }
-  const peril = new PerilOverlay();
-  peril._createStageContainer();
-  peril._createIndicatorContainer();
-  peril._stageEl.style.setProperty('--gl-motion-scale', '1');
-  peril._stageEl.innerHTML = '<span class="pk-line-1"><span class="pk-l">D</span></span><span class="pk-line-2"><span class="pk-l">P</span></span>';
-  peril._stageEl.classList.add('playing');
-  peril._activationToken = 1;
-  let handoffs = 0;
-  peril._renderIndicator = () => ++handoffs;
-  const latest = capture(peril._stageMotion);
-  peril._scheduleHandoff(1);
-  let timeline = latest(); timeline.pause();
-  timeline.seek(3600, false);
-  assert(handoffs === 1, 'peril timeline hands off once');
-  timeline.seek(4300, false);
-  assert(!peril._stageEl.classList.contains('playing') && !peril._stageEl.childElementCount, 'peril stage unmounts at endpoint');
-  peril._activationToken = 2;
-  peril._scheduleHandoff(2);
-  timeline = latest(); timeline.pause();
-  peril._hideIndicator();
-  timeline.seek(4300, false);
-  assert(handoffs === 1, 'dismissed peril never hands off from a stale timeline');
-  assert(!peril._indicatorEl.classList.contains('visible'), 'dismiss hides indicator immediately');
-  peril.destroy();
-  assert(!peril._stageEl && !peril._indicatorEl, 'destroy releases both containers');
+  // Stream Pacer: the Dire Peril splash ends once, by click or by its own lift
+  let done = 0;
+  const splash = playPerilSplash({ html: perilHTML({ dire: 'Dire', peril: 'Peril', subtitle: 'Sub' }), onDone: () => ++done });
+  assert(splash.el.isConnected && splash.el.querySelectorAll('.sp-peril-ch').length === 9, 'peril splash mounts one span per letter');
+  splash.el.click();
+  splash.finish();
+  assert(done === 1 && !splash.el.isConnected, 'peril splash ends exactly once and leaves the DOM');
+
+  // Stream Pacer: the band keeps lane order across arrivals, departures and moves.
+  // A fresh lane whose slot is last has nextElementSibling === null like an
+  // inserted one, and used to be skipped, so the next insert threw.
+  const L = (k) => k;
+  const lane = (key, kind) => ({ key, stamp: '', kind, tone: 'paper', icon: 'fa-solid fa-hand', label: { raw: key }, title: { raw: key }, ticker: [{ raw: key }], clock: null, count: null, people: [], actions: [], urgent: false, calm: false });
+  const band = new SignalBand({ L, onAction() {} });
+  const order = () => Array.from(band.list.children, (el) => el.dataset.key).filter((k) => !band.items.get(k)?.leaving);
+  band.update([lane('a', 'safety'), lane('b', 'call'), lane('c', 'hands')], 0);
+  assert(order().join() === 'a,b,c', 'band draws lanes in the order given');
+  band.update([lane('b', 'call'), lane('d', 'mine'), lane('c', 'hands')], 0);
+  assert(order().join() === 'b,d,c', 'band inserts, keeps and drops lanes in order');
+  band.update([lane('e', 'safety'), lane('c', 'hands'), lane('b', 'call')], 0);
+  assert(order().join() === 'e,c,b', 'band reorders kept lanes');
+  band.destroy();
+  assert(!document.getElementById('sp-band'), 'band destroy removes its root');
   return checks;
 }

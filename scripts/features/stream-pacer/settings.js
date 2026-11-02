@@ -1,70 +1,76 @@
-import { ThemeManager } from './ThemeManager.js';
+// Stream Pacer — settings, the exemption form and the Dire Peril wording form.
+//
+// Reaches `foundry.applications.api` at module scope, so this file is never
+// imported by the pure modules or the check tools (which read it as text).
+
 import { featurePath } from '../../core/const.mjs';
+import { FEATURE_ID, MODULE_ID } from './const.js';
 
-export const FEATURE_ID = 'stream-pacer';
+export { FEATURE_ID, MODULE_ID };
 
-// Ported into GLUniverse Suite: the package id is the suite, and every setting
-// key is prefixed with the feature prefix "sp." to avoid cross-feature
-// collisions on the shared namespace.
-export const MODULE_ID = 'gluniverse-foundry-modules';
-
-export const PLAYER_STATUS = {
-  ENGAGED: 'engaged',
-  HAND_RAISED: 'hand_raised',
-  NEED_TIME: 'need_time',
-  READY: 'ready'
-};
-
-export const GM_SIGNAL = {
-  NONE: 'none',
-  SOFT: 'soft',
-  COUNTDOWN: 'countdown',
-  // Replaced "open the floor": the GM asks whether the table is ready to move
-  // on, and each player answers Ready or raises a hand.
-  READY_CHECK: 'ready_check'
-};
+/** The controller registers here so a world setting changing redraws every screen. */
+let refresher = null;
+export function setRefresher(fn) { refresher = fn; }
+const refresh = () => refresher?.();
 
 /**
- * Coerce a stored or received signal onto the live set. A world saved while
- * the retired 'floor_open' signal was up (or any value this build does not
- * know) loads as no signal rather than as a state nothing can render or clear.
- */
-export function normalizeSignal(signal) {
-  return Object.values(GM_SIGNAL).includes(signal) ? signal : GM_SIGNAL.NONE;
-}
-
-/**
- * Is this user hidden from the general pacer UI (the bars and signal panels)?
- * Read live, like isSafetyExempt: the GM asks it about other people while
- * building the ready-check tally, and a capture login that never sees the
- * panel can never answer it, so it must not be counted as someone to wait on.
+ * Is this user hidden from the pacer UI (the band and the HUD)? Read live: the
+ * GM asks it about other people while counting a ready check, and a capture
+ * login that never sees the band can never answer one.
  */
 export function isBarsExempt(userId) {
   const list = game.settings.get(MODULE_ID, 'sp.exemptUsers');
   return Array.isArray(list) && list.includes(userId);
 }
 
-// A short-lived, GM-initiated table check-in. These values deliberately live
-// outside the normal pacing statuses: they are private, session-only safety
-// responses and must never be persisted with the player's public HUD status.
-export const SAFETY_STATUS = {
-  GREEN: 'green',
-  YELLOW: 'yellow',
-  RED: 'red'
-};
+/** Is this user hidden from the Dire Peril splash and its lane? Read live. */
+export function isPerilExempt(userId) {
+  const list = game.settings.get(MODULE_ID, 'sp.perilExemptUsers');
+  return Array.isArray(list) && list.includes(userId);
+}
 
-// Configuration app for selecting exempt users.
-// Defined before registerSettings() so registerMenu can reference it without
-// hitting the class-declaration temporal dead zone.
+/**
+ * Is this user hidden from every part of the traffic-light safety tool?
+ *
+ * The setting is read on EVERY call, deliberately. This is the "is user X
+ * exempt?" question, asked by a GM client about someone else while building the
+ * safety roster: a GM that connected before the list changed has no reload of
+ * its own to refresh a snapshot, and would otherwise count a capture login as
+ * an unanswered player forever. `game.settings.get` is an in-memory lookup and
+ * the roster is table-sized; a cache here is exactly what would bring the
+ * staleness back.
+ */
+export function isSafetyExempt(userId) {
+  const list = game.settings.get(MODULE_ID, 'sp.safetyExemptUsers');
+  return Array.isArray(list) && list.includes(userId);
+}
+
+// The local client's own answer to "am *I* exempt?", captured once during
+// onReady. Deliberately a snapshot rather than a live read: it decides whether
+// the safety surfaces are ever constructed, so every consumer must agree on one
+// boundary, which is that client's next reload.
+let localSafetyExempt = false;
+
+/** Called once from onReady, before any safety surface is constructed. */
+export function captureLocalSafetyExemption() {
+  localSafetyExempt = isSafetyExempt(game.user.id);
+  return localSafetyExempt;
+}
+
+/** The snapshot taken by captureLocalSafetyExemption(). */
+export function isLocallySafetyExempt() {
+  return localSafetyExempt;
+}
+
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 async function saveExemptUsers(_event, _form, formData) {
   const data = formData?.object ?? {};
-  // Three independent exemption lists share one form. "bars-" checkboxes drive
-  // the general pacer UI; "peril-" the Dire Peril splash; "safety-" the whole
-  // traffic-light safety tool. A prefix added here without a matching column in
-  // exempt-users.hbs (or vice versa) stores nothing and fails silently, so
-  // tools/stream-pacer-safety-check.mjs asserts the four sites agree.
+  // Three independent exemption lists share one form. "bars-" checkboxes hide
+  // the band and the HUD; "peril-" the Dire Peril splash; "safety-" the whole
+  // traffic-light tool. A prefix added here without a matching column in
+  // exempt-users.hbs (or the reverse) stores nothing and fails silently, so
+  // tools/stream-pacer-check.mjs asserts the four sites agree.
   const exemptUsers = [];
   const perilExemptUsers = [];
   const safetyExemptUsers = [];
@@ -83,71 +89,25 @@ async function saveExemptUsers(_event, _form, formData) {
   await game.settings.set(MODULE_ID, 'sp.safetyExemptUsers', safetyExemptUsers);
 }
 
-/**
- * Is this user hidden from every part of the traffic-light safety tool?
- *
- * The setting is read on EVERY call, deliberately. This is the "is user X
- * exempt?" question, asked by a GM client about someone else while building the
- * safety roster — a GM that connected before the list changed has no reload of
- * its own to refresh a snapshot, and would otherwise count a capture login as
- * an unanswered player forever. `game.settings.get` is an in-memory map lookup
- * and the roster is table-sized; a cache here is exactly what would reintroduce
- * the staleness. See design.md — "Two questions, one setting".
- */
-export function isSafetyExempt(userId) {
-  const list = game.settings.get(MODULE_ID, 'sp.safetyExemptUsers');
-  return Array.isArray(list) && list.includes(userId);
-}
-
-// The local client's own answer to "am *I* exempt?", captured once during
-// onReady. Deliberately a snapshot rather than a live read: it decides whether
-// imperative DOM surfaces are ever constructed, so every consumer must agree on
-// one boundary — that client's next reload — exactly like the two sibling
-// exemptions. See design.md — "Two questions, one setting".
-let localSafetyExempt = false;
-
-/** Called once from onReady, before any safety surface is constructed. */
-export function captureLocalSafetyExemption() {
-  localSafetyExempt = isSafetyExempt(game.user.id);
-  return localSafetyExempt;
-}
-
-/** The snapshot taken by captureLocalSafetyExemption(). */
-export function isLocallySafetyExempt() {
-  return localSafetyExempt;
-}
-
 class ExemptUsersConfig extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
     id: 'stream-pacer-exempt-users',
     classes: ['stream-pacer-exempt-users'],
     tag: 'form',
-    window: {
-      title: 'STREAM_PACER.Settings.ExemptUsers',
-      icon: 'fas fa-users-slash'
-    },
-    position: {
-      // Three exemption columns need more room than the original two.
-      width: 480,
-      height: 'auto'
-    },
-    form: {
-      handler: saveExemptUsers,
-      closeOnSubmit: true
-    }
+    window: { title: 'STREAM_PACER.Settings.ExemptUsers', icon: 'fas fa-users-slash' },
+    position: { width: 480, height: 'auto' },
+    form: { handler: saveExemptUsers, closeOnSubmit: true }
   };
 
   static PARTS = {
-    form: {
-      template: featurePath(FEATURE_ID, 'templates/exempt-users.hbs')
-    }
+    form: { template: featurePath(FEATURE_ID, 'templates/exempt-users.hbs') }
   };
 
   async _prepareContext() {
     const exemptUsers = game.settings.get(MODULE_ID, 'sp.exemptUsers');
     const perilExemptUsers = game.settings.get(MODULE_ID, 'sp.perilExemptUsers');
     const safetyExemptUsers = game.settings.get(MODULE_ID, 'sp.safetyExemptUsers');
-    const users = game.users.map(u => ({
+    const users = game.users.map((u) => ({
       id: u.id,
       name: u.name,
       isExempt: exemptUsers.includes(u.id),
@@ -158,221 +118,129 @@ class ExemptUsersConfig extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 }
 
-async function saveAppearance(_event, _form, formData) {
+const PERIL_TEXT = ['sp.perilTextDire', 'sp.perilTextPeril', 'sp.perilTextTag', 'sp.perilTextSubtitle'];
+
+async function savePerilText(_event, _form, formData) {
+  if (!game.user.isGM) return;
   const data = formData?.object ?? {};
-  await game.settings.set(MODULE_ID, 'sp.perilWebGLEnabled', data.perilWebGLEnabled === true);
-
-  // Dire Peril text is world-scoped — only GMs may write it.
-  if (game.user.isGM) {
-    await game.settings.set(MODULE_ID, 'sp.perilTextDire', (data.perilTextDire ?? '').trim());
-    await game.settings.set(MODULE_ID, 'sp.perilTextPeril', (data.perilTextPeril ?? '').trim());
-    await game.settings.set(MODULE_ID, 'sp.perilTextTag', (data.perilTextTag ?? '').trim());
-    await game.settings.set(MODULE_ID, 'sp.perilTextSubtitle', (data.perilTextSubtitle ?? '').trim());
+  for (const key of PERIL_TEXT) {
+    const field = key.slice('sp.'.length);
+    await game.settings.set(MODULE_ID, key, String(data[field] ?? '').trim().slice(0, 80));
   }
-
-  ThemeManager.apply();
 }
 
-class AppearanceConfig extends HandlebarsApplicationMixin(ApplicationV2) {
+class PerilTextConfig extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
-    id: 'stream-pacer-appearance',
-    classes: ['stream-pacer-appearance'],
+    id: 'stream-pacer-peril-text',
+    classes: ['stream-pacer-peril-text'],
     tag: 'form',
-    window: {
-      title: 'STREAM_PACER.Settings.Appearance',
-      icon: 'fas fa-palette'
-    },
-    position: {
-      width: 460,
-      height: 'auto'
-    },
-    form: {
-      handler: saveAppearance,
-      closeOnSubmit: true
-    }
+    window: { title: 'STREAM_PACER.Settings.PerilText', icon: 'fas fa-skull' },
+    position: { width: 440, height: 'auto' },
+    form: { handler: savePerilText, closeOnSubmit: true }
   };
 
   static PARTS = {
-    form: {
-      template: featurePath(FEATURE_ID, 'templates/appearance-config.hbs')
-    }
+    form: { template: featurePath(FEATURE_ID, 'templates/peril-text.hbs') }
   };
 
   async _prepareContext() {
+    const L = (k) => game.i18n.localize(k);
     return {
-      perilWebGLEnabled: game.settings.get(MODULE_ID, 'sp.perilWebGLEnabled'),
-      isGM: game.user.isGM,
-      perilTextDire: game.settings.get(MODULE_ID, 'sp.perilTextDire'),
-      perilTextPeril: game.settings.get(MODULE_ID, 'sp.perilTextPeril'),
-      perilTextTag: game.settings.get(MODULE_ID, 'sp.perilTextTag'),
-      perilTextSubtitle: game.settings.get(MODULE_ID, 'sp.perilTextSubtitle'),
-      perilTextDirePlaceholder: game.i18n.localize('STREAM_PACER.DirePerilTitleDire'),
-      perilTextPerilPlaceholder: game.i18n.localize('STREAM_PACER.DirePerilTitlePeril'),
-      perilTextTagPlaceholder: game.i18n.localize('STREAM_PACER.DirePerilTag'),
-      perilTextSubtitlePlaceholder: game.i18n.localize('STREAM_PACER.DirePerilSubtitle')
+      fields: [
+        { name: 'perilTextDire', label: L('STREAM_PACER.Settings.PerilTextDire'), value: game.settings.get(MODULE_ID, 'sp.perilTextDire'), placeholder: L('STREAM_PACER.Peril.Dire') },
+        { name: 'perilTextPeril', label: L('STREAM_PACER.Settings.PerilTextPeril'), value: game.settings.get(MODULE_ID, 'sp.perilTextPeril'), placeholder: L('STREAM_PACER.Peril.Peril') },
+        { name: 'perilTextTag', label: L('STREAM_PACER.Settings.PerilTextTag'), value: game.settings.get(MODULE_ID, 'sp.perilTextTag'), placeholder: L('STREAM_PACER.Peril.Tag') },
+        { name: 'perilTextSubtitle', label: L('STREAM_PACER.Settings.PerilTextSubtitle'), value: game.settings.get(MODULE_ID, 'sp.perilTextSubtitle'), placeholder: L('STREAM_PACER.Peril.Subtitle') }
+      ]
     };
   }
 }
 
 export function registerSettings() {
-  // --- Appearance ---
-  game.settings.register(MODULE_ID, 'sp.perilWebGLEnabled', {
-    scope: 'client',
-    config: false,
-    type: Boolean,
-    default: true
+  /* ── the table's shared state: world settings only a GM can write ── */
+
+  // The GM's current call: { id, kind, at, ends?, targets? } or {}.
+  game.settings.register(MODULE_ID, 'sp.call', {
+    scope: 'world', config: false, type: Object, default: {}, onChange: refresh
+  });
+  // The room's mood: { id, kind, at } or {}.
+  game.settings.register(MODULE_ID, 'sp.mood', {
+    scope: 'world', config: false, type: Object, default: {}, onChange: refresh
+  });
+  // Spotlight marks: { marks: { userId: n } }. Never cleared by a reset or a
+  // scene change; only the GM's "Reset marks" clears it.
+  game.settings.register(MODULE_ID, 'sp.spotlight', {
+    scope: 'world', config: false, type: Object, default: { marks: {} }, onChange: refresh
   });
 
-  // Dire Peril display text — world-scoped so the whole table sees the same
-  // reveal. Empty string falls back to the localized default at render time.
-  for (const key of ['sp.perilTextDire', 'sp.perilTextPeril', 'sp.perilTextTag', 'sp.perilTextSubtitle']) {
-    game.settings.register(MODULE_ID, key, {
-      scope: 'world',
-      config: false,
-      type: String,
-      default: ''
-    });
-  }
-
-  game.settings.registerMenu(MODULE_ID, 'sp.appearanceMenu', {
-    name: 'STREAM_PACER.Settings.Appearance',
-    label: 'STREAM_PACER.Settings.AppearanceLabel',
-    hint: 'STREAM_PACER.Settings.AppearanceHint',
-    icon: 'fas fa-palette',
-    type: AppearanceConfig,
-    restricted: false
-  });
-
-
-  // Hidden state storage for persistence
-  game.settings.register(MODULE_ID, 'sp.pacerState', {
-    name: 'Pacer State',
-    scope: 'world',
-    config: false,
-    type: Object,
-    default: {
-      playerStates: {},
-      gmSignal: GM_SIGNAL.NONE,
-      countdownEnd: null,
-      direPerilActive: false
-    }
-  });
-
-  // Spotlight tracker state — world-scoped so totals survive a reload and are
-  // shared between co-GMs. Kept separate from pacerState so the pacer's
-  // "Reset all" and scene changes never wipe a session's spotlight tracking.
-  game.settings.register(MODULE_ID, 'sp.spotlightState', {
-    name: 'Spotlight State',
-    scope: 'world',
-    config: false,
-    type: Object,
-    default: { players: {} }
-  });
-
-  // Spotlight tracker on/off. World-scoped so the GM team shares one decision.
-  // When OFF the fairness panel is hidden entirely from the HUD.
-  game.settings.register(MODULE_ID, 'sp.spotlightEnabled', {
-    name: 'STREAM_PACER.Settings.SpotlightEnabled',
-    hint: 'STREAM_PACER.Settings.SpotlightEnabledHint',
-    scope: 'world',
-    config: true,
-    type: Boolean,
-    default: true,
-    onChange: () => {
-      // Re-render the HUD and start/stop the live timer for the new state.
-      game.streamPacer?.manager?._updateSpotlightInterval();
-      game.streamPacer?.hud?.render(false);
-    }
-  });
-
-  // Spotlight tracking mode. "time" accrues seconds in the light; "count" is a
-  // more abstract tally the GM clicks up/down (left-click add, right-click
-  // reduce) when a PC takes a spotlight moment.
-  game.settings.register(MODULE_ID, 'sp.spotlightMode', {
-    name: 'STREAM_PACER.Settings.SpotlightMode',
-    hint: 'STREAM_PACER.Settings.SpotlightModeHint',
-    scope: 'world',
-    config: true,
-    type: String,
-    choices: {
-      time: 'STREAM_PACER.Settings.SpotlightModeTime',
-      count: 'STREAM_PACER.Settings.SpotlightModeCount'
-    },
-    default: 'time',
-    onChange: () => {
-      game.streamPacer?.manager?._updateSpotlightInterval();
-      game.streamPacer?.hud?.render(false);
-    }
-  });
-
-  // Default countdown duration (1-10 minutes)
-  // Pass raw i18n keys — Foundry localizes them lazily when the settings
-  // sheet is rendered. Calling game.i18n.localize() here (during 'init')
-  // runs before language files are fully loaded and returns the raw key.
+  // Pass raw i18n keys: Foundry localizes them when the sheet renders.
   game.settings.register(MODULE_ID, 'sp.defaultCountdown', {
     name: 'STREAM_PACER.Settings.DefaultCountdown',
     hint: 'STREAM_PACER.Settings.DefaultCountdownHint',
-    scope: 'world',
-    config: true,
-    type: Number,
-    default: 60,
-    range: {
-      min: 60,
-      max: 600,
-      step: 30
-    }
+    scope: 'world', config: true, type: Number, default: 60,
+    range: { min: 30, max: 600, step: 30 }
   });
 
-  // Auto-reset on scene change
   game.settings.register(MODULE_ID, 'sp.resetOnSceneChange', {
     name: 'STREAM_PACER.Settings.ResetOnSceneChange',
     hint: 'STREAM_PACER.Settings.ResetOnSceneChangeHint',
-    scope: 'world',
-    config: true,
-    type: Boolean,
-    default: true
+    scope: 'world', config: true, type: Boolean, default: true
   });
 
-  // Exempt users (won't see the general pacer UI / bars - useful for streaming)
+  // Dire Peril wording, world-scoped so the whole table sees the same reveal.
+  // Empty falls back to the localized default at render time.
+  for (const key of PERIL_TEXT) {
+    game.settings.register(MODULE_ID, key, { scope: 'world', config: false, type: String, default: '', onChange: refresh });
+  }
+  game.settings.registerMenu(MODULE_ID, 'sp.perilTextMenu', {
+    name: 'STREAM_PACER.Settings.PerilText',
+    label: 'STREAM_PACER.Settings.PerilTextLabel',
+    hint: 'STREAM_PACER.Settings.PerilTextHint',
+    icon: 'fas fa-skull',
+    type: PerilTextConfig,
+    restricted: true
+  });
+
+  /* ── exemptions ── */
+
+  // Hidden from the band and the HUD (a stream capture or overlay login).
   game.settings.register(MODULE_ID, 'sp.exemptUsers', {
     name: 'STREAM_PACER.Settings.ExemptUsers',
     hint: 'STREAM_PACER.Settings.ExemptUsersHint',
     scope: 'world',
     config: false,
     type: Array,
-    default: []
+    default: [],
+    onChange: refresh
   });
 
-  // Dire Peril exempt users (won't see the Dire Peril splash / indicator).
-  // Tracked separately from exemptUsers so a user can be hidden from the
-  // general bars while still seeing the Dire Peril reveal (or vice versa).
+  // Hidden from the Dire Peril splash and lane. Separate from the list above so
+  // a capture login can show the peril reveal and nothing else (or the reverse).
   game.settings.register(MODULE_ID, 'sp.perilExemptUsers', {
     name: 'STREAM_PACER.Settings.PerilExemptUsers',
     hint: 'STREAM_PACER.Settings.PerilExemptUsersHint',
     scope: 'world',
     config: false,
     type: Array,
-    default: []
+    default: [],
+    onChange: refresh
   });
 
-  // Safety-light exempt users (see none of the traffic-light safety tool).
-  // Tracked separately from the other two lists because it is answering a
-  // different question: the bars and the Dire Peril splash are presentation, so
-  // hiding them costs nothing, whereas this one removes a channel. A capture or
-  // overlay login is a puppet and must never broadcast the table's private
-  // safety signals; a real person exempted here loses their only way to signal
-  // distress, which is why it is opt-in, empty by default, and spelled out in
-  // the hint rather than folded into either sibling.
+  // Hidden from the whole traffic-light tool. A different question from the two
+  // above: those are presentation, this one removes a channel. A capture login
+  // must never broadcast the table's private safety signals; a real person
+  // exempted here loses their only way to signal distress, which is why it is
+  // empty by default and spelled out in the hint.
   game.settings.register(MODULE_ID, 'sp.safetyExemptUsers', {
     name: 'STREAM_PACER.Settings.SafetyExemptUsers',
     hint: 'STREAM_PACER.Settings.SafetyExemptUsersHint',
     scope: 'world',
     config: false,
     type: Array,
-    default: []
+    default: [],
+    onChange: refresh
   });
 
-  // Register menu for exempt users
   game.settings.registerMenu(MODULE_ID, 'sp.exemptUsersMenu', {
     name: 'STREAM_PACER.Settings.ExemptUsers',
     label: 'STREAM_PACER.Settings.ExemptUsersLabel',
@@ -382,74 +250,33 @@ export function registerSettings() {
     restricted: true
   });
 
-  // Client-side HUD position memory
+  /* ── this client's own preferences ── */
+
   game.settings.register(MODULE_ID, 'sp.hudPosition', {
-    name: 'HUD Position',
-    scope: 'client',
-    config: false,
-    type: Object,
-    default: { left: null, top: null }
+    scope: 'client', config: false, type: Object, default: { left: null, top: null }
   });
-
-  // Hand raise audio notification enabled (GM only setting)
-  game.settings.register(MODULE_ID, 'sp.handRaiseAudioEnabled', {
-    name: 'STREAM_PACER.Settings.HandRaiseAudioEnabled',
-    hint: 'STREAM_PACER.Settings.HandRaiseAudioEnabledHint',
-    scope: 'client',
-    config: true,
-    type: Boolean,
-    default: true
+  game.settings.register(MODULE_ID, 'sp.hudCollapsed', {
+    scope: 'client', config: false, type: Boolean, default: false
   });
-
-  // Safety-light escalation cue (GM-facing, shares the volume slider below).
-  game.settings.register(MODULE_ID, 'sp.safetyAudioEnabled', {
-    name: 'STREAM_PACER.Settings.SafetyAudioEnabled',
-    hint: 'STREAM_PACER.Settings.SafetyAudioEnabledHint',
-    scope: 'client',
-    config: true,
-    type: Boolean,
-    default: true
+  game.settings.register(MODULE_ID, 'sp.sound', {
+    name: 'STREAM_PACER.Settings.Sound',
+    hint: 'STREAM_PACER.Settings.SoundHint',
+    scope: 'client', config: true, type: Boolean, default: true, onChange: refresh
   });
-
-  // Signal cues — the sound a player hears when a pacing signal arrives (wrap
-  // up, countdown and its last ticks, ready check, campfire). Client-scoped:
-  // each player owns their own ears. The GM never hears these; their side has
-  // the hand-raise chime and the "everyone is ready" chime below.
-  game.settings.register(MODULE_ID, 'sp.cueAudioEnabled', {
-    name: 'STREAM_PACER.Settings.CueAudioEnabled',
-    hint: 'STREAM_PACER.Settings.CueAudioEnabledHint',
-    scope: 'client',
-    config: true,
-    type: Boolean,
-    default: true
+  game.settings.register(MODULE_ID, 'sp.volume', {
+    name: 'STREAM_PACER.Settings.Volume',
+    hint: 'STREAM_PACER.Settings.VolumeHint',
+    scope: 'client', config: true, type: Number, default: 0.7,
+    range: { min: 0, max: 1, step: 0.05 }
   });
-
-  game.settings.register(MODULE_ID, 'sp.cueAudioVolume', {
-    name: 'STREAM_PACER.Settings.CueAudioVolume',
-    hint: 'STREAM_PACER.Settings.CueAudioVolumeHint',
-    scope: 'client',
-    config: true,
-    type: Number,
-    default: 0.5,
-    range: {
-      min: 0,
-      max: 1,
-      step: 0.1
-    }
+  game.settings.register(MODULE_ID, 'sp.titleFlash', {
+    name: 'STREAM_PACER.Settings.TitleFlash',
+    hint: 'STREAM_PACER.Settings.TitleFlashHint',
+    scope: 'client', config: true, type: Boolean, default: true
   });
-
-  // Hand raise audio volume (0-1)
-  game.settings.register(MODULE_ID, 'sp.handRaiseAudioVolume', {
-    name: 'STREAM_PACER.Settings.HandRaiseAudioVolume',
-    hint: 'STREAM_PACER.Settings.HandRaiseAudioVolumeHint',
-    scope: 'client',
-    config: true,
-    type: Number,
-    default: 0.5,
-    range: {
-      min: 0,
-      max: 1,
-      step: 0.1
-    }
+  // Toggled from the HUD, because turning it on needs the browser's permission
+  // prompt, which only a click can open.
+  game.settings.register(MODULE_ID, 'sp.desktopAlerts', {
+    scope: 'client', config: false, type: Boolean, default: false, onChange: refresh
   });
 }

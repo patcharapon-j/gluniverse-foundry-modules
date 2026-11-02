@@ -50,7 +50,7 @@
   "GLS.feature.stage.title": "Stage",
   "GLS.feature.stage.hint": "A cinematic stage for your cast: characters lit by the room they stand in, a push-in close-up with a name card, and comms call-ins.",
   "GLS.feature.stream-pacer.title": "Stream Pacer",
-  "GLS.feature.stream-pacer.hint": "GM/player pacing HUD: countdowns, spotlight, hand-raise and peril cues.",
+  "GLS.feature.stream-pacer.hint": "Table pacing: a signal band across the top of every screen for hands, wrap-ups, countdowns and ready checks, which also reaches players who are away from the tab. Spotlight marks, safety lights, campfire and Dire Peril.",
   "GLS.feature.statsblock-import.title": "PF2e Stat Block Importer",
   "GLS.feature.statsblock-import.hint": "Import PF2e NPCs and hazards from pasted stat-block text.",
   "GLS.feature.loot-gen.title": "Loot Generator",
