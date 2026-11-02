@@ -35,7 +35,7 @@ a {color:var(--gl-accent)}
 <pre id="results">Ready.</pre>
 </main>
 <script type="module">
-const values = new Map([['sp.perilWebGLEnabled',false],['timer.sound',false]]);
+const values = new Map([['timer.sound',false]]);
 const labels = {};
 const manifest = await fetch('/module.json').then(r=>r.json());
 for (const lang of manifest.languages) Object.assign(labels, await fetch('/'+lang.path).then(r=>r.json()));
@@ -54,7 +54,8 @@ function render(source,ctx) {
 globalThis.foundry = {applications:{api:{ApplicationV2:class{},HandlebarsApplicationMixin:base=>base},instances:new Map(),handlebars:{renderTemplate:async(path,ctx)=>render(await fetch('/'+path.replace('modules/gluniverse-foundry-modules/','')).then(r=>r.text()),ctx)}}};
 const { TimerHUD } = await import('/scripts/features/timer/hud.mjs');
 const { DiceSlot } = await import('/scripts/features/clocks-tracker/delving/dice-slot.js');
-const { PerilOverlay } = await import('/scripts/features/stream-pacer/PerilOverlay.js');
+const { playPerilSplash } = await import('/scripts/features/stream-pacer/band.js');
+const { perilHTML } = await import('/scripts/features/stream-pacer/render.js');
 const { createCinematicMotion } = await import('/scripts/features/critical/motion.mjs');
 TimerHUD.mount();
 let state={active:false,running:false,remainingMs:65000,totalMs:65000,expired:false,worldPaused:false,anchor:Date.now()};
@@ -66,9 +67,9 @@ document.querySelector('#timer-stop').onclick=()=>timer({active:false});
 document.querySelector('#tier').onchange=e=>document.body.style.setProperty('--gl-motion-scale',e.target.value);
 let dice;
 document.querySelector('#roll').onclick=()=>{dice?.destroy();const host=document.querySelector('#dice');delete host.dataset.tumbled;dice=DiceSlot.mount(host,{faces:[6,2,4,1,5],discard:2},()=>{host.textContent='6 · 2 discarded · 4 · 1 discarded · 5';delete host.dataset.tumbled})};
-const peril=new PerilOverlay();
-document.querySelector('#peril').onclick=()=>peril._playStageAndShowIndicator();
-document.querySelector('#dismiss-peril').onclick=()=>peril._hideIndicator();
+let peril;
+document.querySelector('#peril').onclick=()=>{peril?.finish();peril=playPerilSplash({html:perilHTML({dire:localize('STREAM_PACER.Peril.Dire'),peril:localize('STREAM_PACER.Peril.Peril'),subtitle:localize('STREAM_PACER.Peril.Subtitle')})})};
+document.querySelector('#dismiss-peril').onclick=()=>peril?.finish();
 let cinematic,raf;
 document.querySelector('#critical-play').onclick=()=>{if(raf)cancelAnimationFrame(raf);cinematic?.destroy();cinematic=createCinematicMotion(2200,{scale:Number(document.querySelector('#tier').value)});const start=performance.now();const art=document.querySelector('#critical-art'),back=document.querySelector('#critical-back');const tick=()=>{const elapsed=performance.now()-start,f=cinematic.sample(elapsed);art.style.opacity=f.imgAlpha;art.style.transform=`translateY(${f.lift}px) scale(${f.scaleMul})`;art.style.clipPath=`inset(${(1-f.wipe)*50}% 0)`;back.style.opacity=f.bgAlpha;if(elapsed<2200)raf=requestAnimationFrame(tick);else cinematic.destroy()};tick()};
 document.querySelector('#checks').onclick=async()=>{const output=document.querySelector('#results');output.textContent='Checking…';try {const suites=[['stage-initiative-motion-check','runStageInitiativeMotionChecks'],['insight-destiny-browser-check','runInsightDestinyMotionChecks'],['clocks-pacer-browser-check','runClocksPacerBrowserChecks'],['timer-browser-check','runTimerBrowserChecks']];const results=[];for(const [file,fn] of suites){const mod=await import('/tools/'+file+'.mjs');const result=await mod[fn]();results.push(...(result.assertions??result));output.textContent=results.join("\n")+"\nChecking next suite…"}output.textContent=results.join('\n')+'\n\nPASS: '+results.length+' assertions';window.motionCheckResults=results;}catch(error){output.textContent=error.stack;throw error}};

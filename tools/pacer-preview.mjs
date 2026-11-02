@@ -1,22 +1,25 @@
 /**
- * tools/pacer-preview.mjs — write a live preview page for the Stream Pacer
- * signal panels (wrap-up, countdown, ready check, campfire arrival).
+ * tools/pacer-preview.mjs — write a live preview page for Stream Pacer.
  *
- * The page imports the SHIPPED modules — PacerManager, PacerOverlay,
- * DossierCard, CampfireOverlay — and the shipped stylesheets, over a stubbed
- * `game`, so what it shows is the real arrival, dock and ready-check flow
- * rather than a lookalike. The signal cues are the real Web Audio synth too
- * (click anything once so the browser lets the page make sound).
+ * The page imports the SHIPPED modules (model.js, render.js, band.js, hud.js)
+ * and the shipped stylesheets over a preview server, and feeds them snapshots
+ * shaped exactly like the controller's. Nothing on the page is a lookalike: the
+ * lanes, the HUD and the Dire Peril splash are the files Foundry loads.
  *
- *   node tools/pacer-preview.mjs --out=.preview/pacer.html
+ *   node tools/pacer-preview.mjs [--out=.preview/pacer.html]
  *   node tools/preview-server.mjs        # then open /.preview/pacer.html
  *
- * SERVE it: a file:// page does not execute its module script. Append
- * `?role=player` for a player's screen (answer buttons, cues, the "You're
- * ready" pill) and `?role=gm` (the default) for the GM's tally card.
+ * SERVE it: a file:// page does not execute its module script.
  *
- * `window.__pacer` exposes the drivers (soft, countdown, ready, cancel,
- * campfire, answer, safety) for headless use.
+ *   ?scene=gm        the GM mid-countdown: a red light, two hands, a hold
+ *   ?scene=ready     the GM's ready check, half answered
+ *   ?scene=player    a player asked by name to wrap up, during a campfire
+ *   ?scene=checkin   a player's private check-in, over Dire Peril
+ *   ?scene=peril     the Dire Peril splash (capture ~1.4s in)
+ *   ?scene=calm      the GM after everyone saw it: lanes at rest; Rue left with a hand up
+ *   &live=1          lanes arrive one by one, so the motion can be watched
+ *
+ * `window.__pacer` exposes { set(scene), snapshot, band, hud } for headless use.
  */
 import { writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -27,146 +30,164 @@ const outArg = process.argv.find((a) => a.startsWith("--out="));
 const OUT = resolve(ROOT, outArg ? outArg.slice(6) : ".preview/pacer.html");
 
 const html = `<!doctype html>
-<html><head><meta charset="utf-8"><title>Pacer preview</title>
+<html><head><meta charset="utf-8"><title>Stream Pacer preview</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="/styles/gl-fonts.css">
 <link rel="stylesheet" href="/styles/gl-tokens.css">
 <link rel="stylesheet" href="/styles/gl-motion.css">
 <link rel="stylesheet" href="/styles/stream-pacer.css">
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e140f; }
-  /* A stand-in scene: grid over a dim map, a sidebar, a hotbar. */
-  #fake-map { position: fixed; inset: 0; background:
-    linear-gradient(#ffffff0a 1px, transparent 1px) 0 0 / 60px 60px,
-    linear-gradient(90deg, #ffffff0a 1px, transparent 1px) 0 0 / 60px 60px,
-    radial-gradient(ellipse at 35% 40%, #33472f, #172016 60%, #0e140f); }
-  #fake-sidebar { position: fixed; top: 0; right: 0; bottom: 0; width: 300px; background: #0d1016; border-left: 1px solid #222; }
-  #fake-hotbar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: 520px; height: 50px; background: #0d1016; border: 1px solid #222; }
-  #drive { position: fixed; bottom: 70px; left: 8px; z-index: 200; display: flex; flex-wrap: wrap; gap: 4px; max-width: 520px;
-    font: 12px system-ui; }
-  #drive button { font: inherit; padding: 4px 8px; cursor: pointer; }
-  #drive b { color: #ddd; padding: 4px; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0d0c; font-family: "Signika", system-ui, sans-serif; }
+  /* a stand-in table: a dim map under a grid, Foundry's controls, sidebar and hotbar */
+  #map { position: fixed; inset: 0; background:
+    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px) 0 0 / 70px 70px,
+    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px) 0 0 / 70px 70px,
+    radial-gradient(40% 50% at 30% 60%, #2a3324, transparent 70%),
+    radial-gradient(35% 40% at 70% 35%, #3a3022, transparent 70%),
+    radial-gradient(60% 60% at 50% 50%, #1c211b, #0b0d0c); }
+  #map::after { content: ""; position: absolute; left: 34%; top: 46%; width: 70px; height: 70px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #c9a86a, #5a4120); box-shadow: 0 0 0 3px #e9d9a8, 0 6px 18px #000a; }
+  #controls { position: fixed; left: 10px; top: 80px; display: flex; flex-direction: column; gap: 6px; }
+  #controls i { width: 36px; height: 36px; display: grid; place-items: center; background: #1b1b1fd9; border: 1px solid #ffffff1a; border-radius: 5px; color: #c9c9d0; font-size: 15px; }
+  #sidebar { position: fixed; right: 0; top: 0; bottom: 0; width: 300px; background: #121214e6; border-left: 1px solid #ffffff14; }
+  #sidebar .tabs { height: 36px; border-bottom: 1px solid #ffffff14; }
+  #sidebar .msg { margin: 10px; height: 64px; background: #ffffff0a; border-radius: 4px; }
+  #hotbar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; }
+  #hotbar i { width: 46px; height: 46px; background: #1b1b1fd9; border: 1px solid #ffffff1a; border-radius: 4px; }
+  #players { position: fixed; left: 10px; bottom: 10px; width: 180px; height: 92px; background: #1b1b1fd9; border: 1px solid #ffffff14; border-radius: 5px; }
+  #err { position: fixed; left: 8px; bottom: 120px; color: #ff6b6b; font: 12px monospace; white-space: pre; }
 </style></head>
 <body>
-<div id="fake-map"></div><div id="fake-sidebar"></div><div id="fake-hotbar"></div>
-<div id="drive"></div>
+<div id="map"></div>
+<div id="controls"><i class="fa-solid fa-user"></i><i class="fa-solid fa-ruler"></i><i class="fa-solid fa-lightbulb"></i><i class="fa-solid fa-music"></i></div>
+<div id="sidebar"><div class="tabs"></div><div class="msg"></div><div class="msg"></div><div class="msg"></div></div>
+<div id="players"></div>
+<div id="hotbar">${'<i></i>'.repeat(10)}</div>
+<pre id="err"></pre>
 <script type="module">
-const role = new URLSearchParams(location.search).get('role') === 'player' ? 'player' : 'gm';
-const lang = await (await fetch('/lang/stream-pacer.en.json')).json();
-const lookup = (k) => k.split('.').reduce((o, p) => o?.[p], lang);
-
-const settings = {
-  'sp.exemptUsers': [], 'sp.perilExemptUsers': [], 'sp.safetyExemptUsers': [],
-  'sp.cueAudioEnabled': true, 'sp.cueAudioVolume': 0.6,
-  'sp.handRaiseAudioEnabled': true, 'sp.handRaiseAudioVolume': 0.6,
-  'sp.defaultCountdown': 15, 'sp.pacerState': null
-};
-const users = [
-  { id: 'gm', name: 'Gamemaster', isGM: true, active: true },
-  { id: 'p1', name: 'Kaia Morrow', isGM: false, active: true },
-  { id: 'p2', name: 'Mirel Ashdown', isGM: false, active: true },
-  { id: 'p3', name: 'Rook', isGM: false, active: true },
-  { id: 'p4', name: 'Juno Vale', isGM: false, active: true }
-];
-users.get = (id) => users.find(u => u.id === id);
-const me = role === 'gm' ? users[0] : users[1];
-
-globalThis.game = {
-  user: me,
-  users,
-  settings: { get: (_ns, key) => settings[key], set: async (_ns, key, v) => { settings[key] = v; } },
-  i18n: {
-    localize: (k) => lookup(k) ?? k,
-    format: (k, d) => String(lookup(k) ?? k).replace(/\\{(\\w+)\\}/g, (_, n) => d?.[n] ?? '')
-  },
-  socket: { emit() {}, on() {} }
-};
-globalThis.foundry = {
-  utils: { randomID: () => Math.random().toString(36).slice(2, 12) },
-  // settings.js reads these at module scope for its config windows.
-  applications: { api: { ApplicationV2: class {}, HandlebarsApplicationMixin: (Base) => class extends Base {} }, handlebars: { renderTemplate: async (path, ctx) => {
-    // The campfire bar template, with the little Handlebars it uses.
-    let t = await (await fetch('/' + path.replace(/^modules\\/[^/]+\\//, ''))).text();
-    t = t.replace(/\\{\\{!--[\\s\\S]*?--\\}\\}/g, '');
-    for (let i = 0; i < 4; i++) t = t.replace(/\\{\\{#if (\\w+)\\}\\}((?:(?!\\{\\{#if)[\\s\\S])*?)\\{\\{\\/if\\}\\}/g, (_, k, body) => ctx[k] ? body : '');
-    return t.replace(/\\{\\{(\\w+)\\}\\}/g, (_, k) => ctx[k] ?? '');
-  } } }
-};
-
-const { PacerManager } = await import('/scripts/features/stream-pacer/PacerManager.js');
-const { PacerOverlay } = await import('/scripts/features/stream-pacer/PacerOverlay.js');
-const { CampfireOverlay } = await import('/scripts/features/stream-pacer/CampfireOverlay.js');
-const { CueAudio } = await import('/scripts/features/stream-pacer/CueAudio.js');
-const { SafetyRequestOverlay } = await import('/scripts/features/stream-pacer/SafetyRequestOverlay.js');
-const { SafetyAlertOverlay } = await import('/scripts/features/stream-pacer/SafetyAlertOverlay.js');
-const { PLAYER_STATUS } = await import('/scripts/features/stream-pacer/settings.js');
-
-PacerManager.onAllReady(() => CueAudio.playAllReady());
-new PacerOverlay().initialize();
-new CampfireOverlay().initialize();
-// Each gates itself on role: the ask is player-only, the alert GM-only.
-new SafetyRequestOverlay().initialize();
-new SafetyAlertOverlay().initialize();
-
-// A GM drives the manager directly; a player's screen receives what a GM sent.
-const drive = {
-  soft: () => role === 'gm' ? PacerManager.activateSoftSignal() : PacerManager.receiveGmSoftSignal(),
-  countdown: (s = 15) => role === 'gm' ? PacerManager.startCountdown(s) : PacerManager.receiveGmHardCountdown(Date.now() + s * 1000),
-  ready: () => role === 'gm' ? PacerManager.startReadyCheck() : PacerManager.receiveGmReadyCheck(foundry.utils.randomID()),
-  cancel: () => role === 'gm' ? PacerManager.cancelSignal() : PacerManager.receiveGmCancelSignal(),
-  campfire: (s = 0) => role === 'gm' ? PacerManager.declareCampfire(s || null) : PacerManager.receiveCampfireDeclare(s ? Date.now() + s * 1000 : null),
-  campfireOff: () => role === 'gm' ? PacerManager.dismissCampfire() : PacerManager.receiveCampfireDismiss(),
-  answer: (id, status) => PacerManager.receivePlayerStatusChange(id, PLAYER_STATUS[status] ?? status),
-  late: (sig) => PacerManager.receiveSyncState({ gmSignal: sig, readyCheckId: 'late', countdownEnd: Date.now() + 40000, playerStates: {} }),
-  safety: () => PacerManager.getState().safetyRequest.active ? PacerManager.receiveSafetyRequestStop() : PacerManager.receiveSafetyRequestStart(foundry.utils.randomID()),
-  light: (status) => PacerManager.setSafetyLight(me.id, status),
-  raise: (id, status) => PacerManager.receiveSafetyLight(id, status)
-};
-window.__pacer = drive;
-
-const bar = document.getElementById('drive');
-const add = (label, fn) => { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; bar.appendChild(b); };
-const tag = document.createElement('b'); tag.textContent = role.toUpperCase(); bar.appendChild(tag);
-add('Wrap-up', drive.soft);
-add('Countdown 15s', () => drive.countdown(15));
-add('Ready check', drive.ready);
-add('Cancel', drive.cancel);
-add('Campfire', () => drive.campfire(0));
-add('Campfire 90s', () => drive.campfire(90));
-add('End campfire', drive.campfireOff);
-for (const u of users.filter(u => !u.isGM && u.id !== me.id)) {
-  add(u.name.split(' ')[0] + ' ready', () => drive.answer(u.id, 'READY'));
-  add(u.name.split(' ')[0] + ' hand', () => drive.answer(u.id, 'HAND_RAISED'));
-}
-add('Late join (countdown)', () => drive.late('countdown'));
-add('Toggle safety check', drive.safety);
-if (role === 'player') for (const st of ['green', 'yellow', 'red']) add('My light ' + st, () => drive.light(st));
-else { add('Mirel yellow', () => drive.raise('p2', 'yellow')); add('Rook red', () => drive.raise('p3', 'red')); add('All green', () => { drive.raise('p2', 'green'); drive.raise('p3', 'green'); }); }
-add(role === 'gm' ? 'View as player' : 'View as GM', () => { location.search = role === 'gm' ? '?role=player' : '?role=gm'; });
-
-// ?demo=<scenario> sets a scene up on load, for headless contact sheets
-// (chrome --headless --screenshot --virtual-time-budget=… lets the timers run).
-const demo = new URLSearchParams(location.search).get('demo');
-if (demo) {
-  bar.style.display = 'none';
-  const scenarios = {
-    ready: () => drive.ready(),
-    answered: () => { drive.ready(); PacerManager.setPlayerStatus(me.id, PLAYER_STATUS.READY); },
-    hand: () => { drive.ready(); PacerManager.setPlayerStatus(me.id, PLAYER_STATUS.HAND_RAISED); },
-    tally: () => { drive.ready(); drive.answer('p1', 'READY'); drive.answer('p3', 'HAND_RAISED'); },
-    allready: () => { drive.ready(); for (const id of ['p1', 'p2', 'p3', 'p4']) drive.answer(id, 'READY'); },
-    soft: () => drive.soft(),
-    countdown: () => drive.countdown(75),
-    critical: () => drive.countdown(9),
-    campfire: () => drive.campfire(90),
-    safety: () => { drive.safety(); drive.ready(); },
-    ask: () => drive.safety(),
-    asked: () => { drive.safety(); drive.light('yellow'); },
-    alert: () => { drive.raise('p2', 'yellow'); drive.raise('p3', 'red'); },
-    alertYellow: () => drive.raise('p2', 'yellow')
+const report = (e) => { document.getElementById('err').textContent += (e?.stack ?? e) + '\\n'; };
+window.addEventListener('error', (e) => report(e.error ?? e.message));
+window.addEventListener('unhandledrejection', (e) => report(e.reason));
+try {
+  const M = await import('/scripts/features/stream-pacer/model.js');
+  const R = await import('/scripts/features/stream-pacer/render.js');
+  const { SignalBand, playPerilSplash } = await import('/scripts/features/stream-pacer/band.js');
+  const { PacerHud } = await import('/scripts/features/stream-pacer/hud.js');
+  const lang = await (await fetch('/lang/stream-pacer.en.json')).json();
+  const L = (key, data) => {
+    const v = key.split('.').reduce((o, k) => (o == null ? o : o[k]), lang);
+    if (typeof v !== 'string') return key;
+    return data ? v.replace(/\\{(\\w+)\\}/g, (_, k) => (k in data ? data[k] : '{' + k + '}')) : v;
   };
-  scenarios[demo]?.();
-}
+
+  const T0 = 1_000_000;
+  let clock = T0;
+  const P = (status, at = 0, extra = {}) => ({ status, at, ...extra });
+  const people = [
+    { id: 'gm', name: 'Patch', isGM: true, active: true, color: '#e0e0e8' },
+    { id: 'seri', name: 'Seri', active: true, color: '#ff5d73' },
+    { id: 'ash', name: 'Ash', active: true, color: '#3fb8a9' },
+    { id: 'kai', name: 'Kai', active: true, color: '#4f8df0' },
+    { id: 'mo', name: 'Morwen', active: true, color: '#f2b53a' },
+    { id: 'rue', name: 'Rue', active: false, color: '#b06cff' }
+  ];
+  const marks = { seri: 3, ash: 1, kai: 2, mo: 0, rue: 1 };
+  const users = (over = {}) => people.map((u) => ({ ...u, pacer: over[u.id] ?? null }));
+
+  const SCENES = {
+    gm: () => ({
+      me: { id: 'gm', isGM: true },
+      users: users({
+        seri: P('hand', T0 - 40000, { seen: { call: 'cd', ack: true } }),
+        ash: P('hold', T0 - 20000, { seen: { call: 'cd', ack: false } }),
+        mo: P('hand', T0 - 9000)
+      }),
+      call: { id: 'cd', kind: 'countdown', at: T0 - 78000, ends: T0 + 42000 },
+      presence: { kai: 'away', mo: 'idle' },
+      safety: { show: true, lights: { kai: { light: 'red' }, ash: { light: 'yellow' } } }
+    }),
+    ready: () => ({
+      me: { id: 'gm', isGM: true },
+      users: users({
+        seri: P('engaged', 0, { answer: { call: 'rc', value: 'ready' } }),
+        ash: P('engaged', 0, { answer: { call: 'rc', value: 'ready' } }),
+        kai: P('engaged', 0, { answer: { call: 'rc', value: 'wait' } })
+      }),
+      call: { id: 'rc', kind: 'ready', at: T0 - 8000 },
+      presence: { mo: 'away' },
+      safety: { show: true, lights: {} }
+    }),
+    player: () => ({
+      me: { id: 'seri', isGM: false },
+      users: users({ seri: P('hand', T0 - 30000) }),
+      call: { id: 'wr', kind: 'wrap', at: T0 - 2000, targets: ['seri'] },
+      mood: { id: 'cf', kind: 'campfire', at: T0 - 600000 },
+      safety: { show: true, mine: 'green' }
+    }),
+    checkin: () => ({
+      me: { id: 'ash', isGM: false },
+      users: users({ ash: P('hold', T0 - 5000) }),
+      mood: { id: 'pr', kind: 'peril', at: T0 - 30000 },
+      call: { id: 'rc2', kind: 'ready', at: T0 - 3000 },
+      safety: { show: true, mine: 'yellow', ask: { id: 'ask1', at: T0 - 1000 }, answered: false }
+    }),
+    peril: () => ({
+      me: { id: 'kai', isGM: false },
+      users: users(),
+      mood: { id: 'pr', kind: 'peril', at: T0 },
+      safety: { show: true }
+    }),
+    calm: () => ({
+      me: { id: 'gm', isGM: true },
+      users: users({
+        seri: P('engaged', 0, { seen: { call: 'w2', ack: true } }),
+        ash: P('engaged', 0, { seen: { call: 'w2', ack: true } }),
+        kai: P('engaged', 0, { seen: { call: 'w2', ack: false } }),
+        mo: P('hold', T0 - 1000, { seen: { call: 'w2', ack: true } }),
+        rue: P('hand', T0 - 90000)
+      }),
+      call: { id: 'w2', kind: 'wrap', at: T0 - 30000 },
+      mood: { id: 'cf', kind: 'campfire', at: T0 - 600000 },
+      safety: { show: true, lights: {} }
+    })
+  };
+
+  const params = new URLSearchParams(location.search);
+  let scene = params.get('scene') ?? 'gm';
+  const snapshot = () => M.normalizeSnapshot({
+    now: clock,
+    spotlight: { marks },
+    presence: {},
+    text: { perilTag: '', perilSubtitle: '' },
+    call: null, mood: null,
+    ...SCENES[scene]()
+  });
+
+  const band = new SignalBand({ L, onAction: (a, d) => console.log('action', a, { ...d }) });
+  const hud = new PacerHud({ L, onAction: (a, d) => console.log('hud', a, { ...d }), position: { left: 70, top: 190 } });
+
+  const draw = (limit = Infinity) => {
+    const s = snapshot();
+    band.update(M.lanes(s).slice(0, limit), s.now);
+    hud.update(M.hudModel(s, { desktop: 'off', sound: true }));
+  };
+
+  const set = (name) => {
+    scene = name;
+    if (name === 'peril') {
+      playPerilSplash({ html: R.perilHTML({ dire: L('STREAM_PACER.Peril.Dire'), peril: L('STREAM_PACER.Peril.Peril'), subtitle: L('STREAM_PACER.Peril.Subtitle') }) });
+    }
+    if (params.get('live')) {
+      let n = 0;
+      const step = () => { draw(++n); if (n < 6) setTimeout(step, 900); };
+      step();
+    } else draw();
+  };
+  set(scene);
+  setInterval(() => { clock += 1000; band.tick(clock); }, 1000);
+  window.__pacer = { set, snapshot, band, hud, M, R };
+} catch (e) { report(e); }
 </script>
 </body></html>
 `;

@@ -108,8 +108,8 @@ the page is hidden under policy. A surface is released only after its first
 (`core/warmup.mjs`) keeps its context until it really draws, or the warm-up
 would be thrown away before anyone saw the effect. `perf-check` requires a registration in every
 feature folder that creates a context. Registered today: initiative (break
-splash, card FX), stage, stream-pacer campfire and peril, arcane-surge
-beats, critical.
+splash, card FX), stage, arcane-surge beats, critical. Stream Pacer holds no
+context: its band, campfire and Dire Peril are DOM and CSS.
 
 ## What was measured (scratch v14 world, stub system)
 

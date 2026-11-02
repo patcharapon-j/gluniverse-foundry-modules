@@ -1,233 +1,586 @@
-// Stream Pacer — feature entry point (ported into GLUniverse Suite).
+// Stream Pacer — lifecycle and the controller.
 //
-// All former top-level Foundry hook registrations have been removed. The suite
-// registry drives three exported lifecycle functions instead:
-//   - registerSettings()  (re-exported from ./settings.js)
-//   - onInit()            (the old `init` hook body)
-//   - onReady()           (the old `ready` hook body, + socket wiring)
+// Where state lives, and why (docs/STREAM_PACER.md has the long version):
+//
+//   a player's status, hand order, "I saw it" and ready answer
+//       → a flag on that player's own User document. Every client already has
+//         every User, so a late joiner, a reload and a reset all converge on the
+//         same truth with no socket message that could be missed.
+//   the GM's call, the room's mood, spotlight marks
+//       → world settings only a GM can write.
+//   presence (is the window visible?), nudges, safety lights, check-ins
+//       → the suite socket, attested by the server, with `recipients` so a light
+//         only ever travels to a GM who may see it.
+//
 // Nothing runs at import time except definitions.
 
-import { MODULE_ID, registerSettings, captureLocalSafetyExemption } from './settings.js';
-import { PacerManager } from './PacerManager.js';
-import { SocketHandler } from './socket-handler.js';
-import { PacerHUD } from './PacerHUD.js';
-import { PacerOverlay } from './PacerOverlay.js';
-import { AudioManager } from './AudioManager.js';
-import { CueAudio } from './CueAudio.js';
-import { HandRaiseSidebar } from './HandRaiseSidebar.js';
-import { PerilOverlay } from './PerilOverlay.js';
-import { CampfireOverlay } from './CampfireOverlay.js';
-import { SafetyLightPanel } from './SafetyLightPanel.js';
-import { SafetyRequestOverlay } from './SafetyRequestOverlay.js';
-import { SafetyAlertOverlay } from './SafetyAlertOverlay.js';
-import { ThemeManager } from './ThemeManager.js';
-import { warmAtIdle } from '../../core/warmup.mjs';
+import { emitSocket, onSocket } from '../../core/socket.mjs';
+import { registerQuickProvider } from '../../core/quick-palette.mjs';
+import { matchesQuery } from '../../core/util.mjs';
+import { MODULE_ID, FEATURE_ID, FLAG, STATUS, CALL, MOOD, LIGHT, TIMING, COUNTDOWN_PRESETS } from './const.js';
+import {
+  registerSettings, setRefresher, isBarsExempt, isPerilExempt, isSafetyExempt,
+  captureLocalSafetyExemption
+} from './settings.js';
+import * as M from './model.js';
+import { perilHTML } from './render.js';
+import { SignalBand, playPerilSplash } from './band.js';
+import { PacerHud } from './hud.js';
+import { Reach, playCue, desktopState, toggleDesktop } from './alerts.js';
+import { SafetyDesk } from './safety.js';
 
 export { registerSettings };
 
-/**
- * Guarantee the feature stylesheet is linked. The suite manifest only declares
- * the shared token sheet (`styles/gl-tokens.css`); this feature's own sheet
- * lives at `modules/gluniverse-foundry-modules/styles/stream-pacer.css` and is injected
- * here so a plain reload is enough. No-op once the link already exists.
- */
-function ensureFeatureStyle() {
-  const href = `modules/${MODULE_ID}/styles/stream-pacer.css`;
-  if (document.querySelector('link[href*="styles/stream-pacer.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = href;
-  document.head.appendChild(link);
-}
+const L = (k, d) => (d ? game.i18n.format(k, d) : game.i18n.localize(k));
+const get = (key, fallback = null) => {
+  try { return game.settings.get(MODULE_ID, key); } catch { return fallback; }
+};
+const now = () => game.time.serverTime;
+const randomID = () => foundry.utils.randomID();
+const HEARD_KEY = `${MODULE_ID}.sp.heard`;
 
-let pacerHUD = null;
-let pacerOverlay = null;
-let audioManager = null;
-let handRaiseSidebar = null;
-let perilOverlay = null;
-let campfireOverlay = null;
-let safetyLightPanel = null;
-let safetyRequestOverlay = null;
-let safetyAlertOverlay = null;
-let isReady = false;
-let isFirstCanvas = true;
+let ctl = null;
 
-/** Everything from the old `init` hook. */
+/* ── lifecycle ──────────────────────────────────────────────────────────── */
+
 export function onInit() {
-  console.log(`${MODULE_ID} | Initializing Stream Pacer`);
+  registerKeybindings();
+  registerQuickProvider(QUICK_PROVIDER);
 
-  // Handle scene changes — reset states if the setting is enabled.
-  Hooks.on('canvasReady', () => {
-    // Skip if game not ready yet or if this is the first canvas load
-    if (!isReady) return;
-    if (isFirstCanvas) {
-      isFirstCanvas = false;
-      return;
-    }
-
-    if (game.settings.get(MODULE_ID, 'sp.resetOnSceneChange')) {
-      if (game.user.isGM) {
-        PacerManager.resetAll();
-      }
-    }
+  // A reset belongs to a scene CHANGE: the GM activating a different scene.
+  // The old feature reset on canvasReady, which also fires when a GM merely
+  // views a scene, so a GM peeking at the next map wiped the table's hands.
+  Hooks.on('updateScene', (scene, changes) => {
+    if (changes?.active !== true || !ctl) return;
+    if (game.users.activeGM?.id !== game.user.id) return;
+    if (!get('sp.resetOnSceneChange', true)) return;
+    ctl.resetTable({ keepMood: false });
   });
 
-  // Never leave players staring at a safety ask nobody can answer. When the
-  // last GM drops, close the request locally — the players' own lights are
-  // untouched, since those are their standing signal, not a reply to the ask.
   Hooks.on('updateUser', (user, changes) => {
-    if (!user.isGM || changes.active !== false) return;
-    const hasActiveGM = game.users.some(candidate => candidate.isGM && candidate.active);
-    if (!hasActiveGM) PacerManager.receiveSafetyRequestStop();
+    if (!ctl) return;
+    if (changes.flags?.[MODULE_ID] !== undefined || 'name' in changes || 'color' in changes) ctl.refresh();
+  });
+
+  // Joining and leaving is not a document update: `active` is set from the
+  // server's activity event, which raises userConnected and never updateUser.
+  Hooks.on('userConnected', (user, connected) => {
+    if (!ctl) return;
+    ctl.refresh();
+    // a GM arriving rebuilds their board from the table's own reports
+    if (user.isGM && connected && user.id !== game.user.id) ctl.announce();
+    // the last GM leaving: close the check-in, nobody can read an answer
+    if (user.isGM && !connected && !game.users.some((u) => u.isGM && u.active)) ctl.desk?.closeAsk();
   });
 }
 
-/** Everything from the old `ready` hook (+ socket wiring). */
 export function onReady() {
-  console.log(`${MODULE_ID} | Stream Pacer Ready`);
-  isReady = true;
-
-  // Ensure the feature stylesheet is linked (manifest only ships gl-tokens.css).
-  ensureFeatureStyle();
-
-  // Apply the fixed Arcane Glass palette before any UI renders.
-  ThemeManager.initialize();
-
-  // Three independent exemptions: the general pacer UI (bars/signals), the
-  // Dire Peril splash, and the whole traffic-light safety tool. A user can be
-  // hidden from one while still seeing the others — e.g. a streaming overlay
-  // that shows only the Dire Peril reveal. All three are read ONCE, here: they
-  // decide whether a surface is ever constructed, so they share one boundary —
-  // a change applies on that client's next reload.
-  const exemptUsers = game.settings.get(MODULE_ID, 'sp.exemptUsers');
-  const isExempt = exemptUsers.includes(game.user.id);
-  const perilExemptUsers = game.settings.get(MODULE_ID, 'sp.perilExemptUsers');
-  const isPerilExempt = perilExemptUsers.includes(game.user.id);
-  // Snapshot kept inside settings.js so PacerHUD and PacerManager read the same
-  // value without importing this module (which would be circular).
+  // Three independent exemptions, read once here because they decide what is
+  // ever constructed: the band and the HUD, the Dire Peril splash, and the whole
+  // traffic-light tool. A change applies on that client's next reload; the
+  // questions other clients ask about this user are read live.
+  const isExempt = isBarsExempt(game.user.id);
+  const isPerilSurfaceExempt = isPerilExempt(game.user.id);
   const isSafetySurfaceExempt = captureLocalSafetyExemption();
 
-  // Initialize the socket handler (always needed for state sync)
-  SocketHandler.initialize();
+  ctl = new Controller({ isExempt, isPerilSurfaceExempt });
 
-  // Initialize the pacer manager
-  PacerManager.initialize();
-
-  // Safety lights are live state, never persisted. When the sole GM reloads,
-  // close any request orphaned by the old client and ask the table to
-  // re-announce their lights so the board rebuilds itself.
-  const hasOtherActiveGM = game.users.some(user => user.isGM && user.active && user.id !== game.user.id);
-  if (game.user.isGM && !hasOtherActiveGM) {
-    SocketHandler.emitSafetyRequestStop();
-    SocketHandler.emitSafetyLightRequest();
-  }
-
-  // Independent of the normal HUD exemption: a safety ask reaches every active
-  // player who is not explicitly safety-exempt, even when their pacing bars are
-  // intentionally hidden — the banner grows its own lamps when there is no HUD
-  // light to point at. The safety exemption is the one thing that stops it,
-  // because a capture login must never put the table's private safety signals on
-  // the recording. Gated by not constructing it: nothing then toggles the
-  // `body.sp-safety-request` class (itself a tell that a check-in is running),
-  // and no fallback lamp cluster is ever grown.
+  // Every safety surface lives behind this gate. A capture login must never put
+  // the table's private safety signals on the recording, and the GM rights it is
+  // sometimes given change nothing: without a desk there is no lamp, no lane, no
+  // red frame, no cue, and the senders' recipient lists leave it out.
   if (!isSafetySurfaceExempt) {
-    safetyRequestOverlay = new SafetyRequestOverlay();
-    safetyRequestOverlay.initialize();
-  }
-
-  // Only initialize the general pacer UI if not exempt from the bars
-  if (!isExempt) {
-    // Create and render the HUD
-    pacerHUD = new PacerHUD();
-    pacerHUD.render(true);
-
-    // The player's traffic light: its own small fixture docked to the HUD's
-    // flank, so it never has to share the panel's layout. Needs both
-    // exemptions to be clear — the panel is docked to the bars, and it is
-    // itself a safety surface.
-    if (!isSafetySurfaceExempt) {
-      safetyLightPanel = new SafetyLightPanel();
-      safetyLightPanel.initialize();
-    }
-
-    // Initialize overlay for signals
-    pacerOverlay = new PacerOverlay();
-    pacerOverlay.initialize();
-
-    // Campfire Scene reveal + indicator. Shares the general-bars exemption: a
-    // streaming overlay hidden from the pacer UI also stays clear of this splash.
-    campfireOverlay = new CampfireOverlay();
-    campfireOverlay.initialize();
-    warmAtIdle('stream-pacer.campfire', () => campfireOverlay?.warm());
-  }
-
-  // The Dire Peril splash is gated by its own exemption list
-  if (!isPerilExempt) {
-    perilOverlay = new PerilOverlay();
-    perilOverlay.initialize();
-    warmAtIdle('stream-pacer.peril', () => perilOverlay?.warm());
-  }
-
-  // Initialize GM-only components
-  if (game.user.isGM) {
-    // Audio manager for hand-raise notifications
-    audioManager = new AudioManager();
-
-    // Subscribe to hand raise events for audio cue
-    PacerManager.onHandRaise((userId) => {
-      audioManager.playHandRaiseChime(userId);
+    ctl.desk = new SafetyDesk({
+      isGM: game.user.isGM,
+      emit: (payload, recipients) => emitSocket(FEATURE_ID, payload, { recipients }),
+      gmRecipients: () => safeGMs(),
+      playerRecipients: () => game.users.filter((u) => u.active && !u.isGM && !isSafetyExempt(u.id)).map((u) => u.id),
+      isExempt: (id) => isSafetyExempt(id),
+      isGMUser: (id) => !!game.users.get(id)?.isGM,
+      now,
+      refresh: () => ctl?.refresh()
     });
+  }
 
-    // Ready check: one chime when the last counted player turns Ready. The
-    // check stays open — closing it (or moving on) is the GM's call.
-    PacerManager.onAllReady(() => CueAudio.playAllReady());
+  onSocket(FEATURE_ID, (payload, _claimed, meta) => ctl?.receive(payload, meta?.attested ?? null));
+  setRefresher(() => ctl?.refresh());
+  ctl.start();
 
-    // Hand raise sidebar (GM-only prominent notification)
-    handRaiseSidebar = new HandRaiseSidebar();
-    handRaiseSidebar.initialize();
+  game.streamPacer = ctl.api;
+}
 
-    // A raised safety light must never be lost in the canvas: the alert layer
-    // keeps it on screen, and an escalation also rings. Both are suppressed for
-    // a safety-exempt client — the capture login is sometimes given GM rights,
-    // and the escalated viewport treatment and the tone would otherwise land in
-    // the video and audio capture. Gating the subscription rather than the
-    // AudioManager leaves the hand-raise chime untouched, and means the cue is
-    // owned by this world-scoped list instead of the client-scoped
-    // `sp.safetyAudioEnabled` — which would need someone to sign in as the
-    // puppet to tick it.
-    if (!isSafetySurfaceExempt) {
-      safetyAlertOverlay = new SafetyAlertOverlay();
-      safetyAlertOverlay.initialize();
+/** Active GMs who may hear a safety light. Read live, per message. */
+function safeGMs() {
+  return game.users.filter((u) => u.isGM && u.active && u.id !== game.user.id && !isSafetyExempt(u.id)).map((u) => u.id);
+}
 
-      PacerManager.onSafetyLight(({ status, escalated }) => {
-        if (escalated) audioManager.playSafetyChime(status);
+/* ── the controller ─────────────────────────────────────────────────────── */
+
+class Controller {
+  constructor({ isExempt, isPerilSurfaceExempt }) {
+    this.isExempt = isExempt;
+    this.isPerilSurfaceExempt = isPerilSurfaceExempt;
+    this.desk = null;
+    this.band = null;
+    this.hud = null;
+    this.reach = null;
+    this.presence = {};
+    this.prev = null;
+    this.heard = readHeard();
+    this._frame = 0;
+    this._clock = 0;
+    this._lastSecond = null;
+    this._timeup = null;
+    this._seenTimer = 0;
+    this._handAt = {};
+    this._nudgeAt = {};
+    this._splash = null;
+    this.api = this._api();
+  }
+
+  start() {
+    this.reach = new Reach({
+      onPresence: (state) => {
+        this.sendPresence(state);
+        this.refresh();
+      }
+    });
+    if (!this.isExempt) {
+      this.band = new SignalBand({ L, onAction: (a, d) => this.act(a, d) });
+      this.hud = new PacerHud({
+        L,
+        onAction: (a, d) => this.act(a, d),
+        position: get('sp.hudPosition'),
+        onMove: (pos) => game.settings.set(MODULE_ID, 'sp.hudPosition', pos)
       });
     }
+    // a GM reloading alone: no board survives a reload, so close any orphaned
+    // ask and ask the table to report again
+    if (game.user.isGM && !game.users.some((u) => u.isGM && u.active && u.id !== game.user.id)) {
+      emitSocket(FEATURE_ID, { t: 'askEnd', id: null });
+      emitSocket(FEATURE_ID, { t: 'roll' });
+    }
+    if (!game.user.isGM) {
+      // say hello: presence, light, and "is a check-in running?"
+      this.announce();
+      const gms = game.users.filter((u) => u.isGM && u.active).map((u) => u.id);
+      if (gms.length) emitSocket(FEATURE_ID, { t: 'hello' }, { recipients: gms });
+    }
+    this.refresh();
   }
 
-  // Expose global API
-  game.streamPacer = {
-    manager: PacerManager,
-    socket: SocketHandler,
-    hud: pacerHUD,
-    overlay: pacerOverlay,
-    audio: audioManager,
-    handSidebar: handRaiseSidebar,
-    peril: perilOverlay,
-    campfire: campfireOverlay,
-    safetyLight: safetyLightPanel,
-    safetyRequest: safetyRequestOverlay,
-    safetyAlert: safetyAlertOverlay,
-    theme: ThemeManager
-  };
-
-  // Late-join: if peril is already active, show the indicator only (no replay).
-  if (!isPerilExempt && PacerManager.getState().direPerilActive) {
-    perilOverlay.showIndicatorOnly();
+  /** Coalesce every reason to redraw into one pass per frame. */
+  refresh() {
+    if (this._frame) return;
+    // A hidden tab gets no animation frames, and a player with the tab in the
+    // background is exactly who a call's sound and notification are for. The
+    // timer runs there (throttled); whichever fires first does the pass.
+    const run = () => {
+      if (!this._frame) return;
+      cancelAnimationFrame(this._frame);
+      clearTimeout(this._frameTimer);
+      this._frame = 0;
+      this._render();
+    };
+    this._frame = requestAnimationFrame(run);
+    this._frameTimer = setTimeout(run, 100);
   }
 
-  // Late-join: same for an in-progress Campfire Scene.
-  if (!isExempt && PacerManager.getState().campfireActive) {
-    campfireOverlay.showIndicatorOnly();
+  snapshot() {
+    const users = game.users.map((u) => ({
+      id: u.id,
+      name: u.name,
+      color: u.color?.css ?? String(u.color ?? ''),
+      isGM: u.isGM,
+      active: u.active,
+      exempt: { bars: isBarsExempt(u.id), peril: isPerilExempt(u.id), safety: isSafetyExempt(u.id) },
+      pacer: u.getFlag(MODULE_ID, FLAG)
+    }));
+    return M.normalizeSnapshot({
+      now: now(),
+      me: { id: game.user.id, isGM: game.user.isGM },
+      users,
+      call: get('sp.call'),
+      mood: get('sp.mood'),
+      spotlight: get('sp.spotlight'),
+      presence: { ...this.presence, [game.user.id]: this.reach?.state },
+      safety: this.desk ? this.desk.snapshot() : { show: false },
+      text: { perilTag: get('sp.perilTextTag', ''), perilSubtitle: get('sp.perilTextSubtitle', '') }
+    });
+  }
+
+  _render() {
+    const next = this.snapshot();
+    this._arrive(next);
+    if (this.band) this.band.update(M.lanes(next), next.now);
+    if (this.hud) this.hud.update(M.hudModel(next, { collapsed: get('sp.hudCollapsed', false), sound: get('sp.sound', true), desktop: desktopState() }));
+    this._watchSeen(next);
+    this._syncClock(next);
+    this.prev = next;
+  }
+
+  _arrive(next) {
+    const a = M.arrivals(this.prev, next, this.heard);
+    for (const id of a.ids) this.heard.add(id);
+    if (a.ids.length) writeHeard(this.heard);
+    const t = Date.now();
+    const sounds = a.sounds.filter((cue) => {
+      if (cue !== 'hand') return true;
+      if (t - (this._handAt.last ?? 0) < TIMING.handCooldown) return false;
+      this._handAt.last = t;
+      return true;
+    });
+    // one cue per pass is plenty; the loudest news wins
+    const cue = PRIORITY.find((c) => sounds.includes(c));
+    const note = a.notify[0];
+    if (cue || note) {
+      const title = note ? L(note.k, note.d) : L('STREAM_PACER.Hud.Title');
+      this.reach?.alert({ cue, title, body: L('STREAM_PACER.Notify.Body') });
+    }
+    if (a.perilSplash && !this.isPerilSurfaceExempt) this._playPeril();
+  }
+
+  _playPeril() {
+    this._splash?.finish();
+    const text = (key, fallback) => (get(key, '') || L(fallback));
+    this._splash = playPerilSplash({
+      html: perilHTML({
+        dire: text('sp.perilTextDire', 'STREAM_PACER.Peril.Dire'),
+        peril: text('sp.perilTextPeril', 'STREAM_PACER.Peril.Peril'),
+        subtitle: text('sp.perilTextSubtitle', 'STREAM_PACER.Peril.Subtitle')
+      }),
+      onDone: () => { this._splash = null; }
+    });
+  }
+
+  /** A call on a screen someone is looking at, for long enough, counts as seen. */
+  _watchSeen(s) {
+    const me = M.meUser(s);
+    const due = !!(this.band && s.call && !s.me.isGM && me && M.isTargeted(s, me.id)
+      && me.pacer.seen?.call !== s.call.id && this.reach?.looking);
+    if (!due) {
+      clearTimeout(this._seenTimer);
+      this._seenTimer = 0;
+      return;
+    }
+    if (this._seenTimer) return;
+    const id = s.call.id;
+    this._seenTimer = setTimeout(() => {
+      this._seenTimer = 0;
+      const cur = this.snapshot();
+      const mine = M.meUser(cur);
+      if (cur.call?.id === id && this.reach?.looking && mine?.pacer.seen?.call !== id) this.writeMine({ seen: { call: id, ack: false } });
+    }, TIMING.seenDwell);
+  }
+
+  /** The countdown: the band's clock every second, ticks at the end, one cue at zero. */
+  _syncClock(s) {
+    const running = s.call?.kind === CALL.COUNTDOWN;
+    if (!running) {
+      clearInterval(this._clock);
+      this._clock = 0;
+      this._lastSecond = null;
+      return;
+    }
+    if (this._clock) return;
+    this._clock = setInterval(() => this._tick(), 250);
+    this._tick();
+  }
+
+  _tick() {
+    const call = M.normalizeCall(get('sp.call'));
+    if (!call || call.kind !== CALL.COUNTDOWN) return this._syncClock({ call: null });
+    const t = now();
+    this.band?.tick(t);
+    const left = M.secondsLeft(call, t);
+    if (left === this._lastSecond) return;
+    const prev = this._lastSecond;
+    this._lastSecond = left;
+    if (prev === null) return;
+    const s = this.prev;
+    const aimed = s && !s.me.isGM && M.isTargeted(s, s.me.id);
+    if (left > 0 && left <= TIMING.tickFrom && aimed && !this.isExempt) playCue('tick');
+    if (left === 0 && this._timeup !== call.id) {
+      this._timeup = call.id;
+      if (!this.isExempt && (aimed || game.user.isGM)) this.reach?.alert({ cue: 'timeup', title: L('STREAM_PACER.Notify.timeup'), body: L('STREAM_PACER.Notify.Body') });
+    }
+    // the lane changes tone at these two moments
+    if (left === TIMING.urgentFrom || left === 0) this.refresh();
+  }
+
+  /* ── writes ── */
+
+  async writeMine(patch) {
+    return this.writeUser(game.user, patch);
+  }
+
+  async writeUser(user, patch) {
+    const cur = M.normalizePlayer(user.getFlag(MODULE_ID, FLAG));
+    const next = { ...cur, ...patch };
+    if ('status' in patch) next.at = patch.status === STATUS.ENGAGED ? null : now();
+    // every field written, every time: a nested update merges, so a field left
+    // out would keep its old value forever
+    const full = { status: next.status, at: next.at ?? null, seen: next.seen ?? null, answer: next.answer ?? null };
+    return user.update({ [`flags.${MODULE_ID}.${FLAG}`]: full });
+  }
+
+  async writeMany(users, patch) {
+    const updates = users.map((u) => {
+      const cur = M.normalizePlayer(u.getFlag(MODULE_ID, FLAG));
+      const next = { ...cur, ...patch };
+      if ('status' in patch) next.at = patch.status === STATUS.ENGAGED ? null : now();
+      return { _id: u.id, [`flags.${MODULE_ID}.${FLAG}`]: { status: next.status, at: next.at ?? null, seen: next.seen ?? null, answer: next.answer ?? null } };
+    });
+    if (updates.length) await User.implementation.updateDocuments(updates);
+  }
+
+  async setCall(call) {
+    if (!game.user.isGM) return;
+    await game.settings.set(MODULE_ID, 'sp.call', call ?? {});
+  }
+
+  async startCall(kind, { seconds = null, targets = null } = {}) {
+    const t = now();
+    await this.setCall({
+      id: randomID(), kind, at: t,
+      ends: kind === CALL.COUNTDOWN ? t + Math.max(10, seconds ?? get('sp.defaultCountdown', 60)) * 1000 : null,
+      targets
+    });
+  }
+
+  async setMood(kind) {
+    if (!game.user.isGM) return;
+    const cur = M.normalizeMood(get('sp.mood'));
+    const next = kind && cur?.kind !== kind ? { id: randomID(), kind, at: now() } : {};
+    await game.settings.set(MODULE_ID, 'sp.mood', next);
+  }
+
+  /** Marks are read-modify-write, so a double click ("a big spotlight") is queued, not raced. */
+  mark(userId, delta) {
+    if (!game.user.isGM) return;
+    this._marks = (this._marks ?? Promise.resolve()).then(async () => {
+      const sp = M.normalizeSpotlight(get('sp.spotlight'));
+      const n = Math.max(0, (sp.marks[userId] ?? 0) + delta);
+      if (n) sp.marks[userId] = n; else delete sp.marks[userId];
+      await game.settings.set(MODULE_ID, 'sp.spotlight', { marks: sp.marks });
+    }).catch((e) => console.error(e));
+    return this._marks;
+  }
+
+  /** Lower every hand and hold, end the call and (unless kept) the mood. */
+  async resetTable({ keepMood = true } = {}) {
+    if (!game.user.isGM) return;
+    const raised = game.users.filter((u) => !u.isGM && M.normalizePlayer(u.getFlag(MODULE_ID, FLAG)).status !== STATUS.ENGAGED);
+    await this.writeMany(raised, { status: STATUS.ENGAGED });
+    await this.setCall(null);
+    if (!keepMood) await game.settings.set(MODULE_ID, 'sp.mood', {});
+  }
+
+  nudge(userIds) {
+    if (!game.user.isGM) return;
+    const t = Date.now();
+    const to = userIds.filter((id) => {
+      if (t - (this._nudgeAt[id] ?? 0) < TIMING.nudgeCooldown) return false;
+      this._nudgeAt[id] = t;
+      return game.users.get(id)?.active;
+    });
+    if (!to.length) return;
+    emitSocket(FEATURE_ID, { t: 'nudge', call: M.normalizeCall(get('sp.call'))?.id ?? null }, { recipients: to });
+    const names = to.map((id) => game.users.get(id)?.name).filter(Boolean).join(', ');
+    ui.notifications?.info(L('STREAM_PACER.Notify.Nudged', { names }));
+  }
+
+  sendPresence(state = this.reach?.state) {
+    if (game.user.isGM || !state) return;
+    const gms = game.users.filter((u) => u.isGM && u.active).map((u) => u.id);
+    if (gms.length) emitSocket(FEATURE_ID, { t: 'presence', state }, { recipients: gms });
+  }
+
+  /** Report everything a GM's board is built from. */
+  announce() {
+    this.sendPresence();
+    this.desk?.announce();
+  }
+
+  /* ── the wire ── */
+
+  receive(p, sender) {
+    if (!p || typeof p.t !== 'string' || !sender) return;
+    if (this.desk?.receive(p, sender)) return;
+    const fromGM = !!game.users.get(sender)?.isGM;
+    switch (p.t) {
+      case 'presence':
+        if (!game.user.isGM || !['here', 'idle', 'away'].includes(p.state)) return;
+        this.presence[sender] = p.state;
+        this.refresh();
+        return;
+      case 'hello':
+        if (!game.user.isGM) return;
+        this.desk?.replyHello(sender);
+        return;
+      case 'roll':
+        if (fromGM) this.announce();
+        return;
+      case 'nudge': {
+        if (!fromGM || this.isExempt) return;
+        const s = this.prev;
+        this.reach?.alert({ cue: 'nudge', title: L('STREAM_PACER.Notify.nudge'), body: L('STREAM_PACER.Notify.Body') });
+        if (s?.call) this.band?.flare(`call:${s.call.id}`);
+        return;
+      }
+      default:
+    }
+  }
+
+  /* ── what the buttons do ── */
+
+  async act(action, data = {}) {
+    const s = this.prev ?? this.snapshot();
+    const call = s.call;
+    try {
+      switch (action) {
+        // a player's own state
+        case 'status': return this.writeMine({ status: Object.values(STATUS).includes(data.status) ? data.status : STATUS.ENGAGED });
+        case 'ack': return call && this.writeMine({ seen: { call: call.id, ack: true } });
+        case 'answer': return call && this.writeMine({ answer: { call: call.id, value: data.value }, seen: { call: call.id, ack: true } });
+        case 'light': return this.desk?.setLight(data.light);
+        case 'sound': return game.settings.set(MODULE_ID, 'sp.sound', !get('sp.sound', true));
+        case 'desktop': { await toggleDesktop(); return this.refresh(); }
+        case 'collapse': { await game.settings.set(MODULE_ID, 'sp.hudCollapsed', !get('sp.hudCollapsed', false)); return this.refresh(); }
+
+        // the GM's calls
+        case 'wrap': return call?.kind === CALL.WRAP && !call.targets ? this.setCall(null) : this.startCall(CALL.WRAP);
+        case 'wrap-one': return this.startCall(CALL.WRAP, { targets: [data.user] });
+        case 'countdown': return this.startCall(CALL.COUNTDOWN, { seconds: Number(data.seconds) || null });
+        case 'ready': return call?.kind === CALL.READY ? this.setCall(null) : this.startCall(CALL.READY);
+        case 'end-call': return this.setCall(null);
+        case 'extend': return call?.kind === CALL.COUNTDOWN && this.setCall({ ...get('sp.call'), ends: Math.max(call.ends, now()) + TIMING.extend });
+        case 'nudge-unseen': return this.nudge(M.unseenTargets(s).map((u) => u.id));
+        case 'nudge': return this.nudge([data.user]);
+        case 'campfire': return this.setMood(MOOD.CAMPFIRE);
+        case 'peril': return this.setMood(MOOD.PERIL);
+        case 'end-mood': return game.user.isGM && game.settings.set(MODULE_ID, 'sp.mood', {});
+
+        // hands and marks
+        case 'call-on': { const u = game.users.get(data.user); return u && game.user.isGM && this.writeUser(u, { status: STATUS.ENGAGED }); }
+        case 'lower-all': return this.writeMany(game.users.filter((u) => !u.isGM && M.normalizePlayer(u.getFlag(MODULE_ID, FLAG)).status !== STATUS.ENGAGED), { status: STATUS.ENGAGED });
+        case 'clear-holds': return this.writeMany(game.users.filter((u) => !u.isGM && M.normalizePlayer(u.getFlag(MODULE_ID, FLAG)).status === STATUS.HOLD), { status: STATUS.ENGAGED });
+        case 'mark': return this.mark(data.user, 1);
+        case 'unmark': return this.mark(data.user, -1);
+        case 'reset-marks': {
+          const ok = await foundry.applications.api.DialogV2.confirm({
+            window: { title: L('STREAM_PACER.Hud.ResetMarks') },
+            content: `<p>${L('STREAM_PACER.Hud.ResetMarksConfirm')}</p>`
+          });
+          return ok && game.settings.set(MODULE_ID, 'sp.spotlight', { marks: {} });
+        }
+
+        // safety
+        case 'ask': return this.desk?.startAsk(randomID());
+        case 'end-ask': return this.desk?.endAsk();
+        case 'safety-seen': {
+          const sig = M.raisedLights(s).map((r) => `${r.user.id}:${r.light}`).join('|');
+          return this.desk?.acknowledge(sig);
+        }
+        default:
+      }
+    } catch (e) {
+      console.error(`${MODULE_ID} | stream-pacer | ${action} failed`, e);
+      ui.notifications?.error(L('STREAM_PACER.Notify.Failed'));
+    }
+  }
+
+  _api() {
+    return {
+      raiseHand: () => this.act('status', { status: STATUS.HAND }),
+      needTime: () => this.act('status', { status: STATUS.HOLD }),
+      lower: () => this.act('status', { status: STATUS.ENGAGED }),
+      wrapUp: (userId = null) => (userId ? this.act('wrap-one', { user: userId }) : this.startCall(CALL.WRAP)),
+      countdown: (seconds) => this.startCall(CALL.COUNTDOWN, { seconds }),
+      readyCheck: () => this.startCall(CALL.READY),
+      endCall: () => this.setCall(null),
+      campfire: () => this.setMood(MOOD.CAMPFIRE),
+      peril: () => this.setMood(MOOD.PERIL),
+      endMood: () => this.act('end-mood'),
+      mark: (userId, delta = 1) => this.mark(userId, delta),
+      reset: () => this.resetTable(),
+      snapshot: () => this.snapshot()
+    };
   }
 }
+
+/** Which cue wins when several arrive in one pass. */
+const PRIORITY = ['red', 'peril', 'yellow', 'checkin', 'wrap', 'countdown', 'ready', 'nudge', 'hand', 'allready', 'campfire'];
+
+/* ── a client's memory of what it already announced ── */
+
+function readHeard() {
+  try { return new Set(JSON.parse(sessionStorage.getItem(HEARD_KEY) ?? '[]')); } catch { return new Set(); }
+}
+function writeHeard(set) {
+  try { sessionStorage.setItem(HEARD_KEY, JSON.stringify([...set].slice(-64))); } catch { /* storage may be blocked */ }
+}
+
+/* ── keybindings and the quick palette ──────────────────────────────────── */
+
+function registerKeybindings() {
+  const bind = (key, def) => {
+    try { game.keybindings.register(MODULE_ID, key, def); } catch (e) { console.warn(`${MODULE_ID} | stream-pacer | keybinding ${key}`, e); }
+  };
+  bind('sp.raiseHand', {
+    name: 'STREAM_PACER.Keys.RaiseHand', hint: 'STREAM_PACER.Keys.RaiseHandHint',
+    editable: [{ key: 'KeyH', modifiers: ['Alt'] }],
+    onDown: () => {
+      if (!ctl || game.user.isGM) return false;
+      const mine = M.normalizePlayer(game.user.getFlag(MODULE_ID, FLAG));
+      ctl.act('status', { status: mine.status === STATUS.HAND ? STATUS.ENGAGED : STATUS.HAND });
+      return true;
+    }
+  });
+  bind('sp.wrapUp', {
+    name: 'STREAM_PACER.Keys.WrapUp', hint: 'STREAM_PACER.Keys.WrapUpHint', restricted: true,
+    editable: [{ key: 'KeyW', modifiers: ['Alt'] }],
+    onDown: () => { if (!ctl || !game.user.isGM) return false; ctl.act('wrap'); return true; }
+  });
+  bind('sp.readyCheck', {
+    name: 'STREAM_PACER.Keys.ReadyCheck', hint: 'STREAM_PACER.Keys.ReadyCheckHint', restricted: true,
+    editable: [{ key: 'KeyR', modifiers: ['Alt'] }],
+    onDown: () => { if (!ctl || !game.user.isGM) return false; ctl.act('ready'); return true; }
+  });
+  bind('sp.endCall', {
+    name: 'STREAM_PACER.Keys.EndCall', hint: 'STREAM_PACER.Keys.EndCallHint', restricted: true,
+    editable: [],
+    onDown: () => { if (!ctl || !game.user.isGM) return false; ctl.act('end-call'); return true; }
+  });
+}
+
+const QUICK_PROVIDER = {
+  id: FEATURE_ID,
+  order: 40,
+  label: 'STREAM_PACER.Quick.Group',
+  icon: 'fa-solid fa-gauge-high',
+  available: () => !!ctl && !!game.user?.isGM,
+  search(query) {
+    const go = (act, data) => async () => ctl?.act(act, data);
+    const items = [
+      { key: 'wrap', title: L('STREAM_PACER.Hud.Wrap'), icon: 'fa-solid fa-flag-checkered', run: go('wrap') },
+      ...COUNTDOWN_PRESETS.map((sec) => ({ key: `cd${sec}`, title: L('STREAM_PACER.Hud.CountdownFor', { m: sec / 60 }), icon: 'fa-solid fa-stopwatch', run: go('countdown', { seconds: sec }) })),
+      { key: 'ready', title: L('STREAM_PACER.Hud.Ready'), icon: 'fa-solid fa-circle-question', run: go('ready') },
+      { key: 'end', title: L('STREAM_PACER.Action.EndCall'), icon: 'fa-solid fa-xmark', run: go('end-call') },
+      { key: 'campfire', title: L('STREAM_PACER.Hud.Campfire'), icon: 'fa-solid fa-fire', run: go('campfire') },
+      { key: 'peril', title: L('STREAM_PACER.Hud.Peril'), icon: 'fa-solid fa-skull', run: go('peril') },
+      { key: 'hands', title: L('STREAM_PACER.Hud.ClearHands'), icon: 'fa-solid fa-hand-point-down', run: go('lower-all') },
+      ...(ctl?.desk ? [{ key: 'ask', title: L('STREAM_PACER.Hud.CheckIn'), icon: 'fa-solid fa-hand-holding-heart', run: go(ctl.desk.ask ? 'end-ask' : 'ask') }] : []),
+      ...game.users.filter((u) => u.active && !u.isGM && !isBarsExempt(u.id)).flatMap((u) => [
+        { key: `wrap-${u.id}`, title: L('STREAM_PACER.Action.WrapOne', { name: u.name }), icon: 'fa-solid fa-flag-checkered', run: go('wrap-one', { user: u.id }) },
+        { key: `nudge-${u.id}`, title: L('STREAM_PACER.Action.Nudge', { name: u.name }), icon: 'fa-solid fa-hand-back-fist', run: go('nudge', { user: u.id }) },
+        { key: `mark-${u.id}`, title: L('STREAM_PACER.Quick.Mark', { name: u.name }), icon: 'fa-solid fa-star', run: go('mark', { user: u.id }) }
+      ])
+    ];
+    const run = L('STREAM_PACER.Quick.Run');
+    return items
+      .filter((i) => !query || matchesQuery(i.title, query))
+      .slice(0, 12)
+      .map((i) => ({ key: i.key, title: i.title, sub: L('GLS.feature.stream-pacer.title'), icon: i.icon, actions: [{ id: 'run', label: run, icon: 'fa-solid fa-play', mod: '' }], run: i.run }));
+  }
+};

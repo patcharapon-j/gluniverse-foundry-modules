@@ -28,7 +28,7 @@
  * with no upside here, and as an element it gets the suite's display face and
  * its motion tokens for free.
  *
- * Modelled on `stream-pacer/PerilWebGL`: raw WebGL, own canvas on `<body>`, own
+ * Raw WebGL (the shape Stream Pacer's old peril renderer had): own canvas on `<body>`, own
  * RAF loop, own resize listener, clean no-op without WebGL. No PIXI — a
  * two-second cosmetic beat has no business being able to disturb the renderer
  * the scene draw depends on.
