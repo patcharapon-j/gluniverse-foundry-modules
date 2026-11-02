@@ -137,6 +137,8 @@ section = "migration";
     ok(`old theme ${theme} → ${style}`, M.migrateLegacyCommsLayout({ theme }).style === style);
   }
   ok("old 'centered' alignment → center", M.migrateLegacyCommsLayout({ valign: "centered" }).align === "center");
+  ok("a comms layout that never picked a style is the quiet one", M.normalizeCommsLayout({}).style === "clean" && M.DEFAULT_COMMS_STYLE === "clean");
+  ok("a stored holo comms layout stays holo", M.normalizeCommsLayout({ style: "holo" }).style === "holo");
   const store = stripComments(read(`${FEAT}/store.mjs`));
   ok("migration never overwrites a cast the new Stage already has", /if \(!cast\.length && Array\.isArray\(legacy\)/.test(store));
   ok("migration is versioned and GM-only", /MIGRATION_VERSION/.test(store) && /if \(!isGM\(\)\) return;/.test(store));

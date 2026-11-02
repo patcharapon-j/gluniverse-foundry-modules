@@ -25,6 +25,7 @@
 
 import { coverPlacement, cropFor, viewBoxStyle } from "../../../core/face-frame-math.mjs";
 import { scaledMs } from "../../../core/theme.mjs";
+import { COMMS_STYLES, DEFAULT_COMMS_STYLE } from "../model.mjs";
 
 /**
  * The face-frame preset a comms portrait is cropped to: a square window with
@@ -113,7 +114,7 @@ export class CommsOverlay {
     this.root.setAttribute("aria-hidden", "true");
     this.root.dataset.edge = "right";
     this.root.dataset.align = "center";
-    this.root.dataset.style = "holo";
+    this.root.dataset.style = DEFAULT_COMMS_STYLE;
     this.stack = el("div", "glstage-comms-stack", this.root);
     parent.append(this.root);
     this.root.ownerDocument.defaultView?.addEventListener("resize", this.#onResize);
@@ -200,7 +201,7 @@ export class CommsOverlay {
     const r = this.root;
     r.dataset.edge = pick(L.edge, ["right", "left"], "right");
     r.dataset.align = pick(L.align, ["top", "center", "bottom"], "center");
-    r.dataset.style = pick(L.style, ["holo", "radio", "clean"], "holo");
+    r.dataset.style = pick(L.style, COMMS_STYLES, DEFAULT_COMMS_STYLE);
     this.#width = num(L.width, 120, 320, 188);
     r.style.setProperty("--glstage-comms-width", String(this.#width));
     r.style.setProperty("--glstage-comms-inset", `${num(L.inset, 0, 240, 20)}px`);
