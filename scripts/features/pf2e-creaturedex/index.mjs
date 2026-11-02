@@ -33,8 +33,10 @@
 import { Suite } from "../../core/registry.mjs";
 import { SUITE_ID, warn } from "../../core/const.mjs";
 import { DELIVERY, FEATURE_ID, PREFIX, SETTINGS } from "./constants.mjs";
+import { ensureSuiteGroup, bindSuiteToolClicks } from "../../core/scene-controls.mjs";
 import { CreaturedexApp, mayOpen } from "./app.mjs";
 import { dexKey } from "./identity.mjs";
+import { KNOWLEDGE_SETTING, scrub } from "./store.mjs";
 
 const L = (key) => {
   const s = game.i18n.localize(key);
@@ -72,13 +74,14 @@ function registerSettings() {
   game.settings.register(SUITE_ID, SETTINGS.doctorIwr, bool(SETTINGS.doctorIwr, false));
 
   // How a Recall Knowledge check gets answered when `pf2e-recall` is also on.
-  // Explicit rather than accidental: the prose saying "you sense it is
-  // dangerous" beside a card printing AC 24 is two answers to one roll.
+  // Nothing reads it: the reveal is the GM's click and Recall Knowledge never
+  // consulted it, so a control for it was a switch that did nothing. Kept
+  // registered (and off the Control Center) so a stored value still reads.
   game.settings.register(SUITE_ID, SETTINGS.delivery, {
     name: `GLDEX.settings.${SETTINGS.delivery.slice(PREFIX.length)}.name`,
     hint: `GLDEX.settings.${SETTINGS.delivery.slice(PREFIX.length)}.hint`,
     scope: "world",
-    config: true,
+    config: false,
     type: String,
     choices: {
       [DELIVERY.both]: "GLDEX.delivery.both",
@@ -219,41 +222,55 @@ function registerTokenHud() {
  * The two moments this feature serves want different surfaces. "What do I know
  * about *this* thing" is one click from a token, mid-combat. "What have we
  * learned" is a shelf you browse between sessions, and a shelf needs somewhere
- * to live that is not attached to any one creature — which is what this is.
+ * to live that is not attached to any one creature, which is what this is.
  *
- * It sits under Token controls rather than getting a layer of its own: a whole
- * scene-control group for one button is a lot of chrome, and Foundry's own
- * grouping puts "things about creatures on the board" there.
- *
- * v13 changed `getSceneControlButtons` from an array of groups to a record
- * keyed by name, with `tools` a record rather than an array. Both shapes are
- * handled because the suite supports v13 and v14, and reading the wrong one is
- * a button that simply never appears.
+ * It lives in the suite's own control group, as every suite tool does. It used
+ * to go under Token controls by the v12 name `token`; v13 renamed that group
+ * `tokens`, so the button silently never appeared. A `button` tool resolves
+ * through `onChange`, which fires only when the active tool changes, so the
+ * rendered node is also bound directly or a second click does nothing.
  */
+const TOOL = "gldex";
+
 function registerSceneControl() {
   Hooks.on("getSceneControlButtons", (controls) => {
     try {
       if (!mayOpen()) return;
-      const group = Array.isArray(controls) ? controls.find((c) => c.name === "token") : controls?.token;
+      const group = ensureSuiteGroup(controls);
       if (!group) return;
-      const tool = {
-        name: "gldex",
+      group.tools[TOOL] = {
+        name: TOOL,
         title: "GLDEX.app.open",
         icon: "fa-solid fa-book-skull",
+        order: Object.keys(group.tools).length,
         button: true,
         visible: true,
-        order: 99,
         onChange: () => CreaturedexApp.open({}),
-        onClick: () => CreaturedexApp.open({}),
       };
-      if (Array.isArray(group.tools)) {
-        if (!group.tools.some((t) => t.name === "gldex")) group.tools.push(tool);
-      } else if (group.tools && typeof group.tools === "object") {
-        group.tools.gldex ??= tool;
-      }
     } catch (error) {
       warn("pf2e-creaturedex | could not add the scene control", error);
     }
+  });
+  Hooks.on("renderSceneControls", (_app, html) => {
+    if (!mayOpen()) return;
+    bindSuiteToolClicks(html, { [TOOL]: () => CreaturedexApp.open({}) });
+  });
+}
+
+/**
+ * Redraw an open dex wherever the knowledge or a read rule changes.
+ *
+ * Without this a player's open window kept showing the sealed plate after the
+ * GM revealed the section, until they clicked something. Every client hears
+ * `updateSetting` for a world setting, the GM's own included, so this is also
+ * the GM's only redraw after a write: one render, which is what lets the
+ * section unseal on screen rather than replay twice.
+ */
+function registerLiveRefresh() {
+  const watched = new Set([KNOWLEDGE_SETTING, SETTINGS.party, SETTINGS.playerAccess].map((k) => `${SUITE_ID}.${k}`));
+  Hooks.on("updateSetting", (setting) => {
+    if (!watched.has(String(setting?.key ?? ""))) return;
+    CreaturedexApp.refreshOpen();
   });
 }
 
@@ -307,6 +324,7 @@ function onInit() {
   registerContextMenu();
   registerKeybinding();
   registerTokenHud();
+  registerLiveRefresh();
   // An open window follows the target, so a player aiming at something they
   // have studied sees its entry without touching the window at all.
   Hooks.on("targetToken", (user, token, targeted) => {
@@ -315,7 +333,14 @@ function onInit() {
   });
 }
 
-function onReady() {}
+/**
+ * One pass, by the active GM: drop held-back abilities nobody has earned.
+ * Worlds from before that rule stored them on the first reveal, where every
+ * client could read them.
+ */
+function onReady() {
+  if (game.user?.isGM && game.users?.activeGM === game.user) scrub();
+}
 
 Suite.register({
   id: FEATURE_ID,
