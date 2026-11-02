@@ -13,6 +13,7 @@
 import * as THREE from "./three.mjs";
 import { PROGRAMS } from "./glsl.mjs";
 import { PALETTE, hexToRgbFloat, mix } from "../../../core/theme.mjs";
+import { NEUTRAL_LIGHT } from "../environment.mjs";
 
 const MAX_EFFECT_LIGHTS = 8;
 export { MAX_EFFECT_LIGHTS };
@@ -42,8 +43,9 @@ export function createShared() {
     uWorldSize: { value: new THREE.Vector2(1, 1) },
     uAmbient: { value: 1 },
     // A low sun (≈38° up) from the back-left of the default view: long cast
-    // shadows, and lit and shaded faces of every block read apart.
-    uKeyDir: { value: new THREE.Vector3(-0.74, 0.62, -0.26).normalize() },
+    // shadows, and lit and shaded faces of every block read apart. The
+    // environment moves it with the time of day (atmosphere.mjs).
+    uKeyDir: { value: new THREE.Vector3(...NEUTRAL_LIGHT.dir) },
     uShadowMap: { value: null },
     uShadowMatrix: { value: new THREE.Matrix4() },
     uShadowMode: { value: 0 },
@@ -60,6 +62,37 @@ export function createShared() {
     uTime: { value: 0 },
     // The square grid on tops: rgb colour, a strength (0 = off). setOptions({grid}).
     uGrid: { value: new THREE.Vector4(0, 0, 0, 0) },
+    // The environment (render/atmosphere.mjs writes them; glsl.mjs LIT documents
+    // each). These starting values are the neutral light: today's look exactly.
+    uEnvFill: { value: new THREE.Vector3(...NEUTRAL_LIGHT.fill) },
+    uEnvKey: { value: new THREE.Vector3(...NEUTRAL_LIGHT.key) },
+    uEnvBounce: { value: new THREE.Vector3(...NEUTRAL_LIGHT.bounce) },
+    uEnvSky: { value: new THREE.Vector3(...NEUTRAL_LIGHT.sky) },
+    uEnvOvercast: { value: 0 },
+    uEnvFlash: { value: 0 },
+    uEnvFog: { value: new THREE.Vector4(0.8, 0.82, 0.86, 0) },
+    uEnvAtmo: { value: new THREE.Vector4(1, 0, 0, 0) },
+    uEnvClouds: { value: new THREE.Vector4(0, 0.2, 1, 0) },
+    uEnvFocus: { value: new THREE.Vector3() },
+    uEnvSurface: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uEnvFlow: { value: new THREE.Vector4(1, 0, 0, 0) },
+    uEnvFx: { value: new THREE.Vector4(1, 1, 1, 0) },
+    uEnvTime: { value: 0 },
+    // the room around the table, tinted by the hour's sky (1 = untinted)
+    uEnvBack: { value: new THREE.Vector3(1, 1, 1) },
+  };
+}
+
+/** The shared uniforms a weather program reads, by reference. */
+function envRefs(shared) {
+  const pick = (k, v) => shared?.[k] ?? { value: v };
+  return {
+    uAmbient: pick("uAmbient", 1),
+    uEnvFill: pick("uEnvFill", new THREE.Vector3(...NEUTRAL_LIGHT.fill)),
+    uEnvKey: pick("uEnvKey", new THREE.Vector3(...NEUTRAL_LIGHT.key)),
+    uEnvSky: pick("uEnvSky", new THREE.Vector3(...NEUTRAL_LIGHT.sky)),
+    uEnvFlash: pick("uEnvFlash", 0),
+    uEnvTime: pick("uEnvTime", 0),
   };
 }
 
@@ -331,14 +364,82 @@ export const MATERIALS = {
     });
   },
 
-  backdrop(_shared, { top = mix(PALETTE.ink3, PALETTE.accent, 0.12), bottom = PALETTE.ink1 } = {}) {
+  backdrop(shared, { top = mix(PALETTE.ink3, PALETTE.accent, 0.12), bottom = PALETTE.ink1 } = {}) {
     return new THREE.ShaderMaterial({
       name: "dio.backdrop",
       vertexShader: PROGRAMS.backdrop.vertex,
       fragmentShader: PROGRAMS.backdrop.fragment,
-      uniforms: { uTop: { value: vec3(top) }, uBottom: { value: vec3(bottom) } },
+      uniforms: {
+        uTop: { value: vec3(top) }, uBottom: { value: vec3(bottom) },
+        uEnvBack: shared?.uEnvBack ?? { value: new THREE.Vector3(1, 1, 1) },
+      },
       depthWrite: false,
       depthTest: false,
+    });
+  },
+
+  /**
+   * Weather particles (PARTICLE_VERT): one instanced draw. `height` and
+   * `heightInfo` are the atmosphere layer's ground lookup, shared by reference
+   * with the splashes. Premultiplied output: lit kinds cover, glowing kinds add.
+   */
+  particles(shared, { height, heightInfo, box } = {}) {
+    return new THREE.ShaderMaterial({
+      name: "dio.particles",
+      vertexShader: PROGRAMS.particles.vertex,
+      fragmentShader: PROGRAMS.particles.fragment,
+      uniforms: {
+        ...envRefs(shared),
+        uKind: { value: 0 },
+        uBoxMin: box?.min ?? { value: new THREE.Vector3() },
+        uBoxSize: box?.size ?? { value: new THREE.Vector3(1, 1, 1) },
+        uPScale: box?.scale ?? { value: 1 },
+        uPPx: box?.px ?? { value: 0.01 },
+        uPWind: { value: new THREE.Vector4(1, 0, 0, 0) },
+        uPTint: { value: new THREE.Vector4(1, 1, 1, 0) },
+        uPOpacity: { value: 1 },
+        uHeightTex: height ?? { value: null },
+        uHeightInfo: heightInfo ?? { value: new THREE.Vector3(1, 1, 1) },
+      },
+      transparent: true,
+      depthWrite: false,
+      // a streak's quad faces whichever way it falls across the screen
+      side: THREE.DoubleSide,
+      blending: THREE.CustomBlending,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneMinusSrcAlphaFactor,
+      blendSrcAlpha: THREE.OneFactor,
+      blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+    });
+  },
+
+  /** Rain landing on the ground and on water (SPLASH_VERT). */
+  splash(shared, { height, heightInfo, box } = {}) {
+    return new THREE.ShaderMaterial({
+      name: "dio.splash",
+      vertexShader: PROGRAMS.splash.vertex,
+      fragmentShader: PROGRAMS.splash.fragment,
+      uniforms: {
+        ...envRefs(shared),
+        uBoxMin: box?.min ?? { value: new THREE.Vector3() },
+        uBoxSize: box?.size ?? { value: new THREE.Vector3(1, 1, 1) },
+        uPScale: box?.scale ?? { value: 1 },
+        uPPx: box?.px ?? { value: 0.01 },
+        uPOpacity: { value: 1 },
+        uHeightTex: height ?? { value: null },
+        uHeightInfo: heightInfo ?? { value: new THREE.Vector3(1, 1, 1) },
+      },
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.CustomBlending,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneMinusSrcAlphaFactor,
+      blendSrcAlpha: THREE.OneFactor,
+      blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
     });
   },
 
@@ -374,6 +475,7 @@ export const MATERIALS = {
 export const MATERIAL_PROGRAM = Object.freeze({
   top: "top", side: "side", water: "water", wall: "wall", card: "card", solid: "solid",
   unlit: "unlit", ring: "ring", glass: "glass", footprint: "footprint", reticle: "reticle", link: "link", ribbon: "ribbon", backdrop: "backdrop", table: "table", depth: "depth", blur: "blur",
+  particles: "particles", splash: "splash",
 });
 
 /** "#rrggbb" / any CSS colour → THREE.Color, total. */

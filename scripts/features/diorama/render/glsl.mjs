@@ -84,15 +84,37 @@ uniform sampler2D uField;
 uniform float uFieldOn;
 uniform vec2 uHeightRange;
 
+/*
+ * The environment (render/atmosphere.mjs writes all of these from the resolved
+ * environment, environment.mjs). Neutral values reproduce the fixed light the
+ * view had before it: the fill, key and bounce below at no overcast, no flash,
+ * no fog, no clouds, dry, no snow.
+ */
+uniform vec3 uEnvFill;      // sky fill
+uniform vec3 uEnvKey;       // the direct key (sun, or the moon at night)
+uniform vec3 uEnvBounce;    // warm light thrown back up by the ground
+uniform vec3 uEnvSky;       // the sky's own colour: haze, reflections
+uniform float uEnvOvercast; // 0..1: softens the key, greys the fill
+uniform float uEnvFlash;    // lightning, 0..1, brief
+uniform vec4 uEnvFog;       // rgb fog colour (unlit), a density
+uniform vec4 uEnvAtmo;      // x fog height (cells), y haze, z light shafts, w atmosphere on (fx)
+uniform vec4 uEnvClouds;    // x cover, y speed (cells/s), zw wind direction (unit, on the map)
+uniform vec3 uEnvFocus;     // the camera's target: haze grows with depth behind it
+uniform vec4 uEnvSurface;   // x wetness, y snow cover, z mist over water
+uniform vec4 uEnvFlow;      // xy river flow direction, z flow speed, w rain on water
+uniform vec4 uEnvFx;        // x cliff relief (fx.detail), y full water (fx.water), z colour grade, w unused
+uniform float uEnvTime;     // the shared animation clock (a copy of uTime)
+
 bool dioInWorld(vec2 uv) { return uv.x >= 0.0 && uv.y >= 0.0 && uv.x <= 1.0 && uv.y <= 1.0; }
 
 /**
  * The terrain field (terrain-field.mjs): r occlusion, g signed distance to the
- * nearest cliff lip, b distance to the bank in water. Neutral without one.
+ * nearest cliff lip, b distance to the bank in water, a how near dry ground is
+ * to the water (1 at the waterline). Neutral without one.
  */
 vec4 fieldAt(vec2 xz) {
   vec2 uv = xz / uWorldSize;
-  if (uFieldOn < 0.5 || !dioInWorld(uv)) return vec4(1.0, 1.0, 0.0, 1.0);
+  if (uFieldOn < 0.5 || !dioInWorld(uv)) return vec4(1.0, 1.0, 0.0, 0.0);
   return texture2D(uField, uv);
 }
 
@@ -129,7 +151,7 @@ float shadowTap(vec3 p, vec2 o) {
   return p.z - 0.0018 <= d ? 1.0 : 0.0;
 }
 
-float shadowAt(vec3 wp, vec3 n) {
+float shadowMapAt(vec3 wp, vec3 n) {
   if (uShadowMode < 0.5) return 1.0;
   vec4 lp = uShadowMatrix * vec4(wp + n * 0.03, 1.0);
   vec3 p = lp.xyz / lp.w * 0.5 + 0.5;
@@ -145,6 +167,24 @@ float shadowAt(vec3 wp, vec3 n) {
     s += shadowTap(p, vec2(cos(a), sin(a)) * r);
   }
   return s / 12.0;
+}
+
+/**
+ * Cloud shadows: big soft patches drifting with the wind, over everything the
+ * sun lights (they ride the shadow term, so cards and water get them too).
+ * One fbm at about a dozen cells a feature. 1 = open sky.
+ */
+float cloudAt(vec2 xz) {
+  if (uEnvAtmo.w < 0.5 || uEnvClouds.x < 0.01) return 1.0;
+  vec2 p = (xz - uEnvClouds.zw * (uEnvClouds.y * uEnvTime)) * 0.085;
+  float n = dioFbm(p) * 0.8 + dioNoise(p * 3.3 + 1.7) * 0.2;
+  float thr = 0.82 - uEnvClouds.x * 0.55;
+  return 1.0 - 0.62 * smoothstep(thr - 0.07, thr + 0.09, n);
+}
+
+/** The key light's shadow at a point: the shadow map, under the clouds. */
+float shadowAt(vec3 wp, vec3 n) {
+  return shadowMapAt(wp, n) * cloudAt(wp.xz);
 }
 
 vec3 effectLight(vec3 wp, vec3 n) {
@@ -164,52 +204,147 @@ vec3 effectLight(vec3 wp, vec3 n) {
  * The sun is a cool sky fill plus a warm direct key. Weighted so open flat ground
  * comes out at 1.0 (the map's own colours), ground in shadow at the fill alone
  * (about half, tinted cool), a face turned to the sun brighter than the floor and
- * a face turned away as dark as a shadow.
+ * a face turned away as dark as a shadow. The three colours follow the time of
+ * day (environment.mjs); the old constant names stay as aliases.
  */
-const vec3 SKY_FILL = vec3(0.46, 0.50, 0.58);
-const vec3 SUN_KEY = vec3(0.86, 0.80, 0.70);
+#define SKY_FILL uEnvFill
+#define SUN_KEY uEnvKey
 /** Warm light thrown back up by the sunlit ground: faces that look down or out. */
-const vec3 BOUNCE = vec3(0.10, 0.08, 0.055);
+#define BOUNCE uEnvBounce
+const vec3 DIO_LUMA = vec3(0.299, 0.587, 0.114);
 
 /** The sun alone, for a surface with normal n and shadow term sh. */
 vec3 sunlight(vec3 n, float sh) {
   float ndl = max(dot(n, uKeyDir), 0.0);
   float down = clamp(1.0 - n.y, 0.0, 1.0);
-  return uAmbient * (SKY_FILL * (0.9 + 0.1 * n.y) + SUN_KEY * ndl * sh + BOUNCE * down);
+  // overcast: the key fades, the fill greys and lifts (a soft, shadowless day)
+  vec3 fill = mix(SKY_FILL, vec3(dot(SKY_FILL, DIO_LUMA)) * 1.22, uEnvOvercast * 0.6);
+  vec3 key = SUN_KEY * (1.0 - 0.72 * uEnvOvercast);
+  vec3 c = uAmbient * (fill * (0.9 + 0.1 * n.y) + key * ndl * sh + BOUNCE * down * (1.0 - 0.6 * uEnvOvercast));
+  // lightning: a cold flash from the whole sky, brightest on what faces up
+  return c + uEnvFlash * vec3(0.72, 0.78, 0.95) * (0.55 + 0.45 * max(n.y, 0.0));
 }
 
-/** Albedo under the sun + the light bake + effect lights. */
-vec3 shade(vec3 albedo, vec3 wp, vec3 n, float ao, vec2 lightXZ) {
-  vec3 sun = sunlight(n, shadowAt(wp, n));
-  vec3 lit = sun + lightAt(lightXZ) + effectLight(wp, n);
+/** shade() with the shadow term already taken. */
+vec3 shadeLit(vec3 albedo, vec3 wp, vec3 n, float ao, vec2 lightXZ, float sh) {
+  vec3 lit = sunlight(n, sh) + lightAt(lightXZ) + effectLight(wp, n);
   lit *= mix(1.0, ao, uAOOn);
   return albedo * lit;
+}
+
+/** Albedo under the sun + the light bake + effect lights, with no weather on it (water). */
+vec3 shadeBase(vec3 albedo, vec3 wp, vec3 n, float ao, vec2 lightXZ) {
+  return shadeLit(albedo, wp, n, ao, lightXZ, shadowAt(wp, n));
+}
+
+const vec3 DIO_SNOW = vec3(0.93, 0.95, 0.98);
+
+/**
+ * Albedo under the sun + the light bake + effect lights, as the weather leaves
+ * it: snow settles on what faces up (the paint's own light and dark kept
+ * under it), rain darkens and richens every surface, and wet tops gather
+ * puddles that catch the sky and the sun. A bank by the water is wet whatever
+ * the weather, its edge lapping with the waves (full water only).
+ */
+vec3 shade(vec3 albedo, vec3 wp, vec3 n, float ao, vec2 lightXZ) {
+  float wet = uEnvSurface.x;
+  float up = clamp(n.y, 0.0, 1.0);
+  if (uEnvFx.y > 0.5 && up > 0.6) {
+    float near = fieldAt(wp.xz).a;
+    float lap = 0.42 + 0.2 * sin(uEnvTime * 1.15 + dioNoise(wp.xz * 2.3) * 4.0);
+    wet = max(wet, smoothstep(lap - 0.2, lap + 0.04, near) * 0.85);
+  }
+  if (wet > 0.001) {
+    float por = 0.55 + 0.45 * dioNoise(wp.xz * 3.1 + wp.y);
+    albedo *= mix(1.0, 0.66, wet * por);
+    albedo = max(mix(vec3(dot(albedo, DIO_LUMA)), albedo, 1.0 + 0.18 * wet), 0.0);
+  }
+  float snow = uEnvSurface.y;
+  float cover = 0.0;
+  if (snow > 0.001) {
+    float drift = dioFbm(wp.xz * 0.9 + 3.7) * 0.6 + dioNoise(wp.xz * 5.3) * 0.4;
+    float t = 1.0 - snow;
+    cover = smoothstep(t - 0.1, t + 0.12, drift * 0.75 + up * 0.35 - 0.05) * smoothstep(0.4, 0.8, up);
+    cover = max(cover, smoothstep(0.85, 1.0, snow) * smoothstep(0.55, 0.85, up));
+    float l = dot(albedo, DIO_LUMA);
+    albedo = mix(albedo, DIO_SNOW * (0.8 + 0.32 * l), cover * 0.95);
+    wet *= 1.0 - cover;
+  }
+  float sh = shadowAt(wp, n);
+  vec3 lit = shadeLit(albedo, wp, n, ao, lightXZ, sh);
+  if (wet > 0.001 && up > 0.6) {
+    vec3 V = normalize(cameraPosition - wp);
+    float puddle = smoothstep(0.55, 0.7, dioFbm(wp.xz * 0.55 + 11.0)) * smoothstep(0.35, 0.85, uEnvSurface.x);
+    vec2 jit = vec2(dioNoise(wp.xz * 9.0), dioNoise(wp.xz * 9.0 + 5.0)) - 0.5;
+    vec3 nn = normalize(n + vec3(jit.x, 0.0, jit.y) * 0.35 * (1.0 - puddle));
+    float fres = pow(1.0 - max(dot(nn, V), 0.0), 4.0);
+    float spec = pow(max(dot(nn, normalize(uKeyDir + V)), 0.0), mix(36.0, 200.0, puddle)) * sh;
+    lit = mix(lit, uEnvSky * uAmbient * 0.9, (fres * 0.45 + 0.28) * puddle * wet);
+    lit += SUN_KEY * spec * wet * (0.18 + 0.7 * puddle) * uAmbient * (1.0 - uEnvOvercast * 0.6);
+  }
+  return lit;
 }
 
 /** Soft shoulder, then the explored-not-visible look (desaturated, dim). */
 vec3 finish(vec3 c, float vis) {
   vec3 over = max(c - 0.82, 0.0);
   c = min(c, 0.82) + 0.18 * (1.0 - exp(-over / 0.18));
-  // a light grade: a touch of saturation and contrast about mid-grey
-  float lg = dot(c, vec3(0.299, 0.587, 0.114));
-  c = max(mix(vec3(lg), c, 1.07), 0.0);
-  c = max((c - 0.45) * 1.04 + 0.45, 0.0);
+  if (uEnvFx.z > 0.5) {
+    // a light grade: a touch of saturation and contrast about mid-grey
+    float lg = dot(c, DIO_LUMA);
+    c = max(mix(vec3(lg), c, 1.07), 0.0);
+    c = max((c - 0.45) * 1.04 + 0.45, 0.0);
+  }
   // half a level of dither hides banding in the long dark gradients
   c += (dioHash(gl_FragCoord.xy + 17.0) - 0.5) / 255.0;
   if (vis < 0.75) {
-    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    float l = dot(c, DIO_LUMA);
     c = mix(vec3(l), c, 0.22) * 0.5;
   }
   return c;
 }
 
 /**
+ * The air between the camera and a lit surface (fx.atmosphere): fog pooling in
+ * low ground and broken into slow wisps along the wind, shafts of a low sun
+ * through it, and haze toward the sky's colour with depth behind the camera's
+ * target. Lit like the sky it hangs under, so night fog is dark and a flash
+ * lights it.
+ */
+vec3 dioAtmosphere(vec3 c, vec3 wp) {
+  if (uEnvAtmo.w < 0.5) return c;
+  float lum = uAmbient + uEnvFlash * 0.8;
+  if (uEnvFog.a > 0.001) {
+    float above = max(wp.y - uHeightRange.x, 0.0);
+    float pool = exp(-above / max(uEnvAtmo.x, 0.05));
+    vec2 drift = uEnvClouds.zw * (uEnvTime * (0.05 + 0.1 * uEnvClouds.y));
+    float wisp = dioFbm(wp.xz * 0.3 - drift + vec2(wp.y * 0.5, 0.0));
+    float f = clamp(uEnvFog.a * pool * (0.45 + 1.0 * wisp), 0.0, 0.86);
+    vec3 fc = uEnvFog.rgb * lum;
+    if (uEnvAtmo.z > 0.001) {
+      vec2 sd = normalize(uKeyDir.xz + vec2(1e-4));
+      vec2 across = vec2(-sd.y, sd.x);
+      float s = dioNoise(vec2(dot(wp.xz, across) * 0.55, dot(wp.xz, sd) * 0.05 + uEnvTime * 0.015));
+      fc += SUN_KEY * smoothstep(0.42, 0.85, s) * uEnvAtmo.z * 0.45 * uAmbient;
+    }
+    c = mix(c, fc, f);
+  }
+  if (uEnvAtmo.y > 0.001) {
+    vec3 fwd = -vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]);
+    float depth = dot(wp - uEnvFocus, fwd);
+    float haze = uEnvAtmo.y * (0.12 + 0.5 * smoothstep(-8.0, 22.0, depth));
+    c = mix(c, uEnvSky * lum * 0.92, clamp(haze, 0.0, 0.55));
+  }
+  return c;
+}
+
+/**
  * The last step of every lit surface, with its world position: the
- * atmosphere (fog, haze, weather tint) over the grade. Surfaces call this,
- * never finish() directly, so the environment reaches all of them.
+ * atmosphere (fog, haze) under the grade. Surfaces call this, never finish()
+ * directly, so the environment reaches all of them.
  */
 vec3 dioFinish(vec3 c, float vis, vec3 wp) {
-  return finish(c, vis);
+  return finish(dioAtmosphere(c, wp), vis);
 }
 `;
 
@@ -284,7 +419,7 @@ void main() {
     c = mix(c, ink, gridLine(vWorld.xz) * uGrid.a);
   }
   c = heightGrade(c, vWorld.y);
-  gl_FragColor = vec4(finish(c, vis), 1.0);
+  gl_FragColor = vec4(dioFinish(c, vis, vWorld), 1.0);
 }
 `;
 
@@ -408,6 +543,8 @@ vec3 sideBase(int m, vec3 lipC) {
  */
 const float RELIEF = 0.42;
 vec3 paintedSide(int m, vec3 lipC, float a, float d, float y) {
+  // fx.detail low: no relief at all, the material's flat colour under the paint
+  if (uEnvFx.x < 0.5) return mix(sideBase(m, lipC), lipC, uSidePaint);
   vec3 pat = sideAlbedo(m, lipC, a, d, y);
   float l = dot(pat, vec3(0.299, 0.587, 0.114));
   float l0 = max(dot(sideBase(m, lipC), vec3(0.299, 0.587, 0.114)), 0.04);
@@ -418,6 +555,34 @@ vec3 paintedSide(int m, vec3 lipC, float a, float d, float y) {
 
 /** Cells from the foot of a bank face to the waterline (terrain-mesh bed and surface). */
 const float WATERLINE = 0.325;
+const vec3 FALL_FOAM = vec3(0.90, 0.95, 0.98);
+
+/*
+ * A waterfall: the face a water top spills over (terrain-mesh flag +8). The
+ * sheet takes the pool's own painted colour, a little lighter, runs down in
+ * streaks at a fall's speed, curls white over the lip and churns white where
+ * it lands (on the ground, or at the lower pool's waterline). Simple water:
+ * the same sheet, still.
+ */
+vec3 fallSheet(vec3 lipC, float a, float d, float up, bool intoWater) {
+  float full = uEnvFx.y;
+  float t = uTime * full;
+  vec3 wc = lipC * vec3(0.66, 0.82, 0.92) + vec3(0.06, 0.09, 0.11);
+  float yy = d * 1.0 - t * 2.1;
+  float s1 = dioNoise(vec2(a * 7.0, yy * 1.3));
+  float s2 = dioNoise(vec2(a * 19.0 + 3.0, yy * 2.6));
+  float streak = s1 * 0.6 + s2 * 0.4;
+  vec3 c = wc * (0.78 + 0.4 * streak);
+  c = mix(c, FALL_FOAM, smoothstep(0.62, 0.86, streak) * mix(0.25, 0.6, full));
+  float curl = 1.0 - smoothstep(0.0, 0.1 + 0.04 * s1, d);
+  float footLevel = intoWater ? WATERLINE : 0.0;
+  float churn = 1.0 - smoothstep(0.0, 0.16 + 0.12 * dioNoise(vec2(a * 5.0, t * 1.4)), abs(up - footLevel));
+  if (!intoWater) churn = 1.0 - smoothstep(0.0, 0.2 + 0.12 * dioNoise(vec2(a * 5.0, t * 1.4)), up);
+  c = mix(c, FALL_FOAM, max(curl * 0.55, churn * 0.85));
+  // below the lower pool's surface the sheet is seen through its water
+  if (intoWater && up < WATERLINE) c = mix(c, wc * 0.55, 0.6);
+  return c;
+}
 
 void main() {
   float vis = visionAt(vLip);
@@ -429,6 +594,8 @@ void main() {
   vec3 lipC = mix(mapSoft(vLip - n.xz * 0.3), lipSharp, 0.18);
   int m = int(vMat + 0.5);
   float flag = vFlag;
+  bool fall = flag >= 7.5;
+  if (fall) flag -= 8.0;
   bool wet = flag >= 3.5;
   if (wet) flag -= 4.0;
   bool pit = flag >= 1.5;
@@ -450,18 +617,31 @@ void main() {
   c *= mix(1.0, 0.6, smoothstep(0.0, 3.6, vDepth));
   if (cut) c *= 0.84;
   if (pit) c = mix(c, vec3(0.015, 0.012, 0.02), smoothstep(0.05, 1.4, vDepth));
+  // snow lies along the lip, where the top's own cover hangs over the edge
+  if (uEnvSurface.y > 0.001 && !fall) {
+    float capDepth = (0.03 + 0.07 * uEnvSurface.y) * (0.6 + 0.8 * dioNoise(vec2(vAlong * 6.0, 1.7)));
+    c = mix(c, DIO_SNOW * 0.92, smoothstep(0.25, 0.7, uEnvSurface.y) * (1.0 - smoothstep(capDepth, capDepth + fwD * 1.5, vDepth)));
+  }
+  // the waterline laps: the wet band breathes with the waves (full water)
+  float lapLine = WATERLINE + uEnvFx.y * 0.035 * sin(uTime * 1.15 + vAlong * 2.3);
   if (wet) {
-    float damp = 1.0 - smoothstep(WATERLINE, WATERLINE + 0.16, up);
+    float damp = 1.0 - smoothstep(lapLine, lapLine + 0.16, up);
     float under = 1.0 - smoothstep(WATERLINE - 0.015, WATERLINE + 0.015, up);
     c = mix(c, c * vec3(0.64, 0.72, 0.76), damp);
     c = mix(c, c * vec3(0.52, 0.68, 0.74), under);
   }
+  if (fall) c = fallSheet(lipC, vAlong, vDepth, up, wet);
   float ao = 1.0;
-  if (flag > 0.5) ao = mix(0.4, 1.0, smoothstep(0.0, 0.4, up));
-  vec3 lit = shade(c, vWorld, n, ao, vWorld.xz + n.xz * 0.12);
-  if (wet) {
+  if (flag > 0.5 && !fall) ao = mix(0.4, 1.0, smoothstep(0.0, 0.4, up));
+  vec3 lit = fall ? shadeBase(c, vWorld, n, ao, vWorld.xz + n.xz * 0.12) : shade(c, vWorld, n, ao, vWorld.xz + n.xz * 0.12);
+  if (fall) {
+    // the sheet's own sheen: a glint running down it where it faces the light
+    float g = dioNoise(vec2(vAlong * 11.0, vDepth * 3.0 - uTime * uEnvFx.y * 2.6));
+    lit += SUN_KEY * smoothstep(0.7, 0.95, g) * 0.25 * uAmbient * (0.4 + 0.6 * max(dot(n, uKeyDir), 0.0));
+  }
+  if (wet && !fall) {
     // sun thrown off the water, moving on the bank just above the line
-    float near = 1.0 - smoothstep(0.0, 0.24, abs(up - WATERLINE - 0.06));
+    float near = 1.0 - smoothstep(0.0, 0.24, abs(up - lapLine - 0.06));
     lit += dioCaustic(vec2(vAlong * 2.7, vWorld.y * 5.0), uTime) * near * 0.2 * uAmbient;
   }
   // the lip itself: one device-px line of light where the top turns down
@@ -478,7 +658,7 @@ void main() {
     lit = mix(lit, uTrim * (0.55 + 0.45 * uAmbient), trim * 0.85);
   }
   lit = heightGrade(lit, vWorld.y);
-  gl_FragColor = vec4(finish(lit, vis), 1.0);
+  gl_FragColor = vec4(dioFinish(lit, vis, vWorld), 1.0);
 }
 `;
 
@@ -508,7 +688,6 @@ varying vec3 vWorld;
 varying float vShore;
 /** terrain-field.mjs SHORE_RANGE: the bank distance is stored over this. */
 const float SHORE_RANGE = 1.5;
-const vec3 SKY = vec3(0.72, 0.82, 0.92);
 const vec3 FOAM = vec3(0.93, 0.97, 0.99);
 const vec3 GLINT = vec3(1.0, 0.95, 0.84);
 
@@ -519,6 +698,31 @@ float waveH(vec2 p, float t) {
        + dioNoise(p * 7.3 + vec2(-t * 0.31, t * 0.27)) * 0.2;
 }
 
+/** Rain on the water: rings from a jittered grid of drops, two layers. */
+float ripples(vec2 p, float t, float amount) {
+  float h = 0.0;
+  for (int k = 0; k < 2; k++) {
+    float fk = float(k);
+    vec2 q = p * (3.1 + fk * 1.9) + fk * 7.31;
+    vec2 cell = floor(q);
+    vec2 f = fract(q);
+    float rnd = dioHash(cell + fk * 13.0);
+    vec2 c = vec2(dioHash(cell + 3.1), dioHash(cell + 5.7)) * 0.6 + 0.2;
+    float life = fract(t * (0.8 + rnd * 0.7) + rnd * 3.0);
+    float d = length(f - c) - life * 0.42;
+    h += exp(-d * d * 900.0) * (1.0 - life) * step(rnd, amount);
+  }
+  return h;
+}
+
+/*
+ * Full water (fx.water): the bed seen through it, bent by the waves, caustics
+ * in the shallows, a little sky at grazing angles and sun glints. Waves roll IN
+ * toward the bank (the field's shore distance) and break into a foam line that
+ * breathes with them; a river's whole surface slides with the flow, streaked
+ * along it; rain rings it; mist drifts over it at dawn and in fog.
+ * Simple water: the map's own colour, flat and tinted, a still foam line.
+ */
 void main() {
   float vis = visionAt(vWorld.xz);
   if (vis <= 0.0) discard;
@@ -528,32 +732,70 @@ void main() {
   // a field-less board falls back to the mesh's own bank flag
   if (uFieldOn < 0.5) shore = mix(1.0, 0.0, smoothstep(0.5, 1.0, vShore));
   float deep = smoothstep(0.04, 1.2, shore);
+  vec3 up = vec3(0.0, 1.0, 0.0);
+  if (uEnvFx.y < 0.5) {
+    vec3 col = mapSoft(p) * mix(vec3(0.92, 0.99, 1.0), vec3(0.6, 0.76, 0.84), deep);
+    vec3 lit = shadeBase(col, vWorld, up, 1.0, p);
+    lit = mix(lit, uEnvSky * uAmbient, 0.1);
+    float edge = 1.0 - smoothstep(0.02, 0.09, shore);
+    lit = mix(lit, FOAM * uAmbient, edge * 0.55);
+    lit = heightGrade(lit, vWorld.y);
+    gl_FragColor = vec4(dioFinish(lit, vis, vWorld), mix(0.72, 0.9, deep) + edge * 0.08);
+    return;
+  }
+  // a river: everything rides the flow
+  vec2 fdir = uEnvFlow.xy;
+  float fspeed = uEnvFlow.z;
+  vec2 pf = p - fdir * (fspeed * 1.1 * t);
   float e = 0.035;
-  float h0 = waveH(p, t);
-  vec2 g = vec2(waveH(p + vec2(e, 0.0), t) - h0, waveH(p + vec2(0.0, e), t) - h0) / e;
+  float h0 = waveH(pf, t);
+  vec2 g = vec2(waveH(pf + vec2(e, 0.0), t) - h0, waveH(pf + vec2(0.0, e), t) - h0) / e;
   vec3 n = normalize(vec3(-g.x * 0.1, 1.0, -g.y * 0.1));
 
   vec3 under = mapAt(p + n.xz * (0.06 + 0.1 * deep));
   vec3 body = mapSoft(p);
   vec3 col = under * mix(vec3(0.95, 1.0, 1.0), vec3(0.6, 0.76, 0.84), deep);
   col = mix(col, body * vec3(0.5, 0.7, 0.8), deep * 0.32);
-  col += dioCaustic(p * 2.3, t) * (1.0 - deep * 0.7) * 0.11;
+  col += dioCaustic(pf * 2.3, t) * (1.0 - deep * 0.7) * 0.11 * (1.0 - uEnvOvercast * 0.7);
 
-  vec3 lit = shade(col, vWorld, vec3(0.0, 1.0, 0.0), 1.0, p);
-  float sh = shadowAt(vWorld, vec3(0.0, 1.0, 0.0));
+  vec3 lit = shadeBase(col, vWorld, up, 1.0, p);
+  float sh = shadowAt(vWorld, up);
   vec3 V = normalize(cameraPosition - vWorld);
   float fres = pow(1.0 - max(dot(n, V), 0.0), 3.0);
-  lit = mix(lit, SKY * uAmbient, fres * 0.4);
+  lit = mix(lit, uEnvSky * uAmbient, fres * 0.4);
   float spec = pow(max(dot(n, normalize(uKeyDir + V)), 0.0), 160.0) * sh;
-  lit += GLINT * spec * 1.1 * uAmbient;
+  lit += GLINT * mix(vec3(1.0), SUN_KEY, 0.5) * spec * 1.1 * uAmbient * (1.0 - uEnvOvercast * 0.75);
 
-  float lace = 1.0 - smoothstep(0.02, 0.1 + 0.07 * dioNoise(p * 6.0 + t * 0.3), shore);
-  float roll = smoothstep(0.8, 1.0, sin(shore * 17.0 - t * 1.5) * 0.5 + 0.5);
-  roll *= (1.0 - smoothstep(0.06, 0.55, shore)) * smoothstep(0.3, 0.7, dioNoise(p * 3.7 + vec2(t * 0.12, 0.0)));
-  float foam = max(lace, roll * 0.65);
+  // waves rolling in: bands whose phase falls toward the bank, broken by noise
+  float swell = sin(shore * 15.0 + t * 1.6) * 0.5 + 0.5;
+  float roll = smoothstep(0.78, 1.0, swell);
+  roll *= (1.0 - smoothstep(0.06, 0.6, shore)) * smoothstep(0.28, 0.7, dioNoise(p * 3.7 + vec2(t * 0.12, 0.0)));
+  // the foam line at the edge, pushed up the bank as each wave arrives
+  float reach = 0.06 + 0.05 * (sin(t * 1.6) * 0.5 + 0.5) + 0.06 * dioNoise(p * 6.0 + t * 0.3);
+  float lace = 1.0 - smoothstep(0.015, reach, shore);
+  float foam = max(lace, roll * 0.6);
+  // a river streaks along its flow
+  if (fspeed > 0.01) {
+    vec2 across = vec2(-fdir.y, fdir.x);
+    float st = dioNoise(vec2((dot(p, fdir) - fspeed * 1.6 * t) * 1.4, dot(p, across) * 7.5));
+    foam = max(foam, smoothstep(0.66, 0.86, st) * 0.45 * fspeed);
+  }
+  // rain rings: the sky caught in each ring
+  if (uEnvFlow.w > 0.001) {
+    float r = ripples(p, t, uEnvFlow.w);
+    lit = mix(lit, mix(uEnvSky, FOAM, 0.5) * uAmbient, clamp(r, 0.0, 1.0) * 0.55);
+  }
   lit = mix(lit, FOAM * uAmbient, foam * 0.7);
+  float alpha = mix(0.7, 0.9, deep) + foam * 0.1;
+  // mist over the water, drifting with the wind
+  if (uEnvAtmo.w > 0.5 && uEnvSurface.z > 0.001) {
+    vec2 drift = uEnvClouds.zw * (t * 0.12);
+    float m = smoothstep(0.42, 0.85, dioFbm(p * 0.45 - drift)) * uEnvSurface.z;
+    lit = mix(lit, uEnvFog.rgb * uAmbient * 1.05, m * 0.6);
+    alpha = min(1.0, alpha + m * 0.2);
+  }
   lit = heightGrade(lit, vWorld.y);
-  gl_FragColor = vec4(finish(lit, vis), mix(0.7, 0.9, deep) + foam * 0.1);
+  gl_FragColor = vec4(dioFinish(lit, vis, vWorld), alpha);
 }
 `;
 
@@ -685,7 +927,7 @@ void main() {
   vec2 lxz = cap ? vWorld.xz : vWorld.xz + n.xz * 0.14;
   vec3 lit = shade(c, vWorld, n, ao, lxz);
   if (cap) lit = max(lit, shade(c, vWorld, n, ao, vWorld.xz + vPerp * 0.14));
-  gl_FragColor = vec4(finish(lit, vis), uOpacity);
+  gl_FragColor = vec4(dioFinish(lit, vis, vWorld), uOpacity);
 }
 `;
 
@@ -803,7 +1045,7 @@ void main() {
   sun = mix(vec3(uAmbient), sun, 0.75);
   vec3 lit = c.rgb / max(c.a, 0.05) * (sun + lightAt(vFoot.xz) + effectLight(p, uFacing));
   lit *= 1.0 + uLift;
-  vec3 col = mix(uOutline.rgb, finish(lit, 1.0), artCov);
+  vec3 col = mix(uOutline.rgb, dioFinish(lit, 1.0, vFoot + vec3(0.0, 0.6, 0.0)), artCov);
   float a = lineCov;
   if (uGhost > 0.5) {
     float hatch = step(0.5, fract((gl_FragCoord.x + gl_FragCoord.y) / 9.0));
@@ -834,7 +1076,7 @@ varying vec3 vNormal;
 void main() {
   vec3 n = normalize(vNormal);
   vec3 lit = shade(uColor, vWorld, n, 1.0, vWorld.xz);
-  gl_FragColor = vec4(finish(lit, 1.0), uOpacity);
+  gl_FragColor = vec4(dioFinish(lit, 1.0, vWorld), uOpacity);
 }
 `;
 
@@ -1109,9 +1351,10 @@ void main() {
 export const BACKDROP_FRAG = NOISE + /* glsl */ `
 uniform vec3 uTop;
 uniform vec3 uBottom;
+uniform vec3 uEnvBack;   // the hour's sky, faintly, over the room around the table (1 = none)
 varying vec2 vUv;
 void main() {
-  vec3 c = mix(uBottom, uTop, smoothstep(0.0, 1.0, vUv.y));
+  vec3 c = mix(uBottom, uTop * uEnvBack, smoothstep(0.0, 1.0, vUv.y));
   float v = length(vUv - vec2(0.5, 0.55));
   c *= 1.0 - 0.35 * smoothstep(0.3, 0.85, v);
   // a dark, wide gradient bands in 8 bits: dither it by half a level
@@ -1200,6 +1443,246 @@ void main() {
 }
 `;
 
+/* ---------------------------------------------------------------- weather */
+
+/*
+ * Weather particles: ONE instanced draw for whichever kind is falling. Every
+ * instance carries only a random seed (aSeed); where it is, how it moves and
+ * what it looks like are computed here from that seed and the shared clock, so
+ * the CPU does nothing per particle per frame. Positions wrap inside a box
+ * around the camera's target (uBoxMin/uBoxSize), which the layer sizes from the
+ * zoom, so the density on screen is the same at every zoom; sizes scale with
+ * the view (uPScale) for the same reason. What falls below the ground (the
+ * height texture, one texel per sub-cell) or leaves the board is dropped.
+ * uKind: 1 rain, 2 snow, 3 leaves, 4 petals, 5 embers, 6 ash, 7 sand, 8 fireflies.
+ * Output is premultiplied: lit kinds cover, glowing kinds (vGlow) add.
+ */
+const GROUND_AT = /* glsl */ `
+uniform sampler2D uHeightTex;
+uniform vec3 uHeightInfo;   // sub-columns, sub-rows, sub-cells per cell
+/** The top under a point (cells); far below for off the board or void. */
+float groundAt(vec2 xz) {
+  vec2 uv = xz * uHeightInfo.z / max(uHeightInfo.xy, vec2(1.0));
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return -1000.0;
+  return texture2D(uHeightTex, uv).r;
+}
+`;
+
+export const PARTICLE_VERT = NOISE + GROUND_AT + /* glsl */ `
+uniform float uKind;
+uniform float uEnvTime;
+uniform vec3 uBoxMin;
+uniform vec3 uBoxSize;
+uniform vec4 uPWind;        // xy wind direction (unit), z strength 0..1
+uniform float uPScale;      // the view's size: visible height in cells / 12
+uniform float uPPx;         // one device pixel, in cells: nothing draws thinner
+uniform float uAmbient;
+uniform vec3 uEnvFill;
+uniform vec3 uEnvKey;
+uniform float uEnvFlash;
+uniform vec4 uPTint;        // rgb, a = how much of it
+attribute vec4 aSeed;
+varying vec2 vQ;
+varying vec3 vCol;
+varying float vAlpha;
+varying float vGlow;
+
+vec3 wrapBox(vec3 q) { return uBoxMin + mod(q - uBoxMin, uBoxSize); }
+
+void main() {
+  vec4 s = aSeed;
+  float t = uEnvTime;
+  int kind = int(uKind + 0.5);
+  vec2 wind = uPWind.xy * uPWind.z;
+  vec3 base = s.xyz * uBoxSize;
+  vec3 p = vec3(0.0);
+  vec3 vel = vec3(0.0, -1.0, 0.0);
+  vec3 col = vec3(1.0);
+  bool streak = false;
+  bool local = false;      // y follows the ground under it (sand, fireflies)
+  float size = 0.04;
+  float len = 0.0;
+  float alpha = 1.0;
+  float glow = 0.0;
+  float spin = 0.0;
+  float squash = 1.0;
+  if (kind == 1) {
+    vel = vec3(wind.x * 6.0, -13.0 - s.w * 4.0, wind.y * 6.0);
+    p = wrapBox(base + vel * t);
+    streak = true; len = 0.3 + 0.22 * s.w; size = 0.011;
+    col = vec3(0.80, 0.86, 0.94); alpha = 0.7;
+  } else if (kind == 2 || kind == 6) {
+    float fallV = kind == 2 ? 0.85 + s.w * 0.55 : 0.38 + s.w * 0.3;
+    vel = vec3(wind.x * 2.4, -fallV, wind.y * 2.4);
+    p = wrapBox(base + vel * t);
+    p.x += sin(t * (1.1 + s.w) + s.x * 40.0) * 0.16;
+    p.z += cos(t * (0.9 + s.w * 0.7) + s.z * 33.0) * 0.16;
+    size = kind == 2 ? 0.032 + s.w * 0.03 : 0.026 + s.w * 0.02;
+    col = kind == 2 ? vec3(0.97, 0.98, 1.0) : mix(vec3(0.30, 0.29, 0.28), vec3(0.62, 0.60, 0.58), s.w);
+    alpha = kind == 2 ? 0.92 : 0.8;
+  } else if (kind == 3 || kind == 4) {
+    float fallV = kind == 3 ? 0.65 + s.w * 0.4 : 0.42 + s.w * 0.3;
+    vel = vec3(wind.x * 2.6 + 0.12, -fallV, wind.y * 2.6 + 0.08);
+    p = wrapBox(base + vel * t);
+    p.x += sin(t * 1.3 + s.w * 50.0) * 0.32;
+    p.z += cos(t * 1.1 + s.y * 40.0) * 0.24;
+    spin = t * (1.3 + s.w * 2.0) + s.x * 6.2831853;
+    squash = 0.22 + 0.78 * abs(cos(t * (1.9 + s.y * 1.4) + s.z * 6.2831853));
+    size = kind == 3 ? 0.07 + s.w * 0.04 : 0.045 + s.w * 0.025;
+    if (kind == 3) {
+      vec3 a = mix(vec3(0.86, 0.40, 0.11), vec3(0.95, 0.70, 0.18), smoothstep(0.0, 0.5, s.w));
+      col = mix(a, vec3(0.62, 0.19, 0.10), smoothstep(0.6, 1.0, s.w));
+    } else {
+      col = mix(vec3(1.0, 0.76, 0.86), vec3(0.99, 0.94, 0.96), s.w);
+    }
+  } else if (kind == 5) {
+    vel = vec3(wind.x * 1.4, 1.1 + s.w * 1.2, wind.y * 1.4);
+    p = wrapBox(base + vel * t);
+    p.x += sin(t * 2.3 + s.x * 30.0) * 0.12;
+    p.z += cos(t * 1.9 + s.z * 30.0) * 0.12;
+    size = 0.02 + s.w * 0.022;
+    float flick = 0.6 + 0.4 * sin(t * (7.0 + s.w * 6.0) + s.y * 50.0);
+    col = mix(vec3(1.0, 0.36, 0.07), vec3(1.0, 0.76, 0.32), s.w) * flick * 1.3;
+    glow = 1.0;
+    alpha = 1.0 - smoothstep(0.5, 1.0, (p.y - uBoxMin.y) / uBoxSize.y);
+  } else if (kind == 7) {
+    vec2 d = length(uPWind.xy) > 0.01 ? normalize(uPWind.xy) : vec2(1.0, 0.0);
+    float sp = (5.0 + 9.0 * uPWind.z) * (0.8 + 0.4 * s.w);
+    vec2 xz = uBoxMin.xz + mod(base.xz + d * sp * t - uBoxMin.xz, uBoxSize.xz);
+    p = vec3(xz.x, groundAt(xz) + 0.04 + s.y * s.y * 1.6 + sin(t * 2.0 + s.x * 20.0) * 0.06, xz.y);
+    vel = vec3(d.x * sp, 0.0, d.y * sp);
+    streak = true; local = true; len = 0.16 + 0.3 * s.w; size = 0.012;
+    col = mix(vec3(0.80, 0.66, 0.44), vec3(0.94, 0.83, 0.62), s.w); alpha = 0.5;
+  } else {
+    vec3 home = wrapBox(base);
+    vec2 xz = home.xz + vec2(sin(t * 0.37 + s.w * 20.0), cos(t * 0.29 + s.x * 17.0)) * 0.45;
+    p = vec3(xz.x, groundAt(xz) + 0.2 + s.y * 1.1 + sin(t * 0.8 + s.z * 9.0) * 0.12, xz.y);
+    float blink = pow(max(sin(t * (0.6 + s.w * 0.5) + s.x * 37.0), 0.0), 5.0);
+    local = true; size = 0.026 + s.w * 0.016;
+    col = vec3(0.86, 1.0, 0.45) * (0.2 + 1.7 * blink);
+    glow = 1.0;
+  }
+  if (glow < 0.5) {
+    col = mix(col, uPTint.rgb * (0.4 + dot(col, vec3(0.333))), uPTint.a);
+    col *= uAmbient * (uEnvFill * 1.05 + uEnvKey * 0.55) + vec3(uEnvFlash * 0.8);
+  }
+  // fade at the box's sides (it moves with the camera) and drop what is under ground
+  vec3 lo = p - uBoxMin, hi = uBoxMin + uBoxSize - p;
+  float edge = min(min(lo.x, hi.x), min(lo.z, hi.z)) / max(0.1 * min(uBoxSize.x, uBoxSize.z), 1e-3);
+  alpha *= clamp(edge, 0.0, 1.0);
+  float g = groundAt(p.xz);
+  bool dead = g < -999.0 || (!local && p.y < g - 0.02) || alpha < 0.003;
+  vAlpha = alpha;
+  vCol = col;
+  vGlow = glow;
+  // a drop or a flake is never under a device pixel across, or it flickers away
+  float w = max(size * uPScale, uPPx * (streak ? 0.9 : 1.5));
+  vec4 vh = viewMatrix * vec4(p, 1.0);
+  vec3 pos;
+  if (streak) {
+    vec3 tail = p - normalize(vel) * len * mix(1.0, uPScale, 0.5);
+    vec4 vt = viewMatrix * vec4(tail, 1.0);
+    vec2 d = vt.xy - vh.xy;
+    float L = length(d);
+    vec2 dir = L > 1e-5 ? d / L : vec2(0.0, 1.0);
+    // a streak seen end-on still reads as a drop
+    if (L < w * 3.0) vt.xy = vh.xy + dir * w * 3.0;
+    pos = mix(vh.xyz, vt.xyz, position.y);
+    pos.xy += vec2(-dir.y, dir.x) * position.x * w;
+    vQ = position.xy;
+  } else {
+    vec2 c = vec2(position.x, position.y * 2.0 - 1.0);
+    vQ = c;
+    vec2 q = vec2(c.x * squash, c.y);
+    float cs = cos(spin), sn = sin(spin);
+    pos = vh.xyz + vec3(vec2(q.x * cs - q.y * sn, q.x * sn + q.y * cs) * w, 0.0);
+  }
+  gl_Position = dead ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix * vec4(pos, 1.0);
+}
+`;
+
+export const PARTICLE_FRAG = /* glsl */ `
+uniform float uKind;
+uniform float uPOpacity;
+varying vec2 vQ;
+varying vec3 vCol;
+varying float vAlpha;
+varying float vGlow;
+void main() {
+  int kind = int(uKind + 0.5);
+  float a;
+  vec3 col = vCol;
+  if (kind == 1 || kind == 7) {
+    // a streak: bright at the leading drop, thinning to the tail
+    a = (1.0 - vQ.x * vQ.x) * smoothstep(0.0, 0.12, vQ.y) * (1.0 - vQ.y);
+  } else if (kind == 3 || kind == 4) {
+    // an almond with a midrib
+    float hw = (1.0 - vQ.y * vQ.y) * (kind == 3 ? 0.55 : 0.8);
+    a = 1.0 - smoothstep(hw - 0.14, hw, abs(vQ.x));
+    if (kind == 3) col *= 0.78 + 0.22 * smoothstep(0.02, 0.12, abs(vQ.x));
+  } else {
+    float r = length(vQ);
+    if (vGlow > 0.5) {
+      a = exp(-r * r * 5.0) * (1.0 - smoothstep(0.75, 1.0, r));
+      col += vec3(0.45) * exp(-r * r * 30.0);
+    } else {
+      a = 1.0 - smoothstep(0.4, 1.0, r);
+    }
+  }
+  a *= vAlpha * uPOpacity;
+  if (a < 0.004) discard;
+  gl_FragColor = vec4(col * a, a * (1.0 - vGlow));
+}
+`;
+
+/*
+ * Rain landing: rings on the ground and on water, one instanced draw. Each
+ * instance moves to a new random spot every cycle (hashed from the cycle
+ * count), so again nothing is computed per particle on the CPU.
+ */
+export const SPLASH_VERT = NOISE + GROUND_AT + /* glsl */ `
+uniform float uEnvTime;
+uniform vec3 uBoxMin;
+uniform vec3 uBoxSize;
+uniform float uPScale;
+uniform float uPPx;
+attribute vec4 aSeed;
+varying vec2 vQ;
+varying float vLife;
+void main() {
+  float rate = 1.3 + aSeed.w * 1.2;
+  float ph = uEnvTime * rate + aSeed.z * 17.0;
+  float cyc = floor(ph);
+  vLife = fract(ph);
+  vec2 rnd = vec2(dioHash(aSeed.xy * 31.7 + cyc * 0.731), dioHash(aSeed.yx * 17.3 + cyc * 1.37));
+  vec2 xz = uBoxMin.xz + rnd * uBoxSize.xz;
+  float g = groundAt(xz);
+  float r = max((0.025 + 0.1 * vLife) * mix(1.0, uPScale, 0.5), uPPx * (2.0 + 6.0 * vLife));
+  vQ = vec2(position.x, position.y * 2.0 - 1.0);
+  vec3 p = vec3(xz.x + vQ.x * r, g + 0.012, xz.y + vQ.y * r);
+  gl_Position = g < -999.0 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix * viewMatrix * vec4(p, 1.0);
+}
+`;
+
+export const SPLASH_FRAG = /* glsl */ `
+uniform float uPOpacity;
+uniform float uAmbient;
+uniform vec3 uEnvSky;
+uniform float uEnvFlash;
+varying vec2 vQ;
+varying float vLife;
+void main() {
+  float r = length(vQ);
+  if (r > 1.0) discard;
+  float ring = exp(-pow((r - 0.8) * 8.0, 2.0)) * pow(1.0 - vLife, 1.4);
+  float hit = (1.0 - smoothstep(0.0, 0.3, r)) * max(1.0 - vLife * 5.0, 0.0);
+  float a = max(ring, hit * 0.7) * uPOpacity;
+  if (a < 0.004) discard;
+  vec3 col = mix(uEnvSky, vec3(1.0), 0.55) * (uAmbient + uEnvFlash);
+  gl_FragColor = vec4(col * a, a);
+}
+`;
+
 /** Every program, for the check tool: name → { vertex, fragment }. */
 export const PROGRAMS = Object.freeze({
   top: { vertex: TOP_VERT, fragment: TOP_FRAG },
@@ -1219,6 +1702,8 @@ export const PROGRAMS = Object.freeze({
   table: { vertex: TABLE_VERT, fragment: TABLE_FRAG },
   depth:{ vertex: DEPTH_VERT, fragment: DEPTH_FRAG },
   blur: { vertex: POST_VERT, fragment: BLUR_FRAG },
+  particles: { vertex: PARTICLE_VERT, fragment: PARTICLE_FRAG },
+  splash: { vertex: SPLASH_VERT, fragment: SPLASH_FRAG },
 });
 
 /** Names of the uniforms a GLSL source declares. */

@@ -13,7 +13,9 @@
  *      exact at any zoom, even at 8 texels per cell.
  *   B  distance from a water texel to the bank, cells, over [0, SHORE_RANGE];
  *      0 on dry ground. The map's outer edge is not a bank: a sea runs on.
- *   A  1
+ *   A  on dry ground, nearness to the water: 1 at the waterline, 0 from
+ *      WET_RANGE cells up the bank (the wet band). 1 on water, 0 on void and
+ *      on a map with no water.
  */
 
 import { SUB, Q_PER_CELL, KIND } from "../constants.mjs";
@@ -23,6 +25,8 @@ export const FIELD_PX_PER_CELL = 8;
 export const LIP_RANGE = 0.5;
 /** Shore distances are stored over this many cells. */
 export const SHORE_RANGE = 1.5;
+/** The wet band climbs this many cells up a dry bank. */
+export const WET_RANGE = 0.35;
 /** A drop of at least this many q makes a lip. */
 const LIP_MIN_Q = 1;
 /** Horizon samples, cells from the texel. */
@@ -165,6 +169,26 @@ export function buildTerrainField(t) {
       if (src[i] === 0) continue;
       const cells = Math.max(0, Math.sqrt(d2[i]) - 0.5) / P;
       data[i * 4 + 2] = Math.round(255 * clamp01(cells / SHORE_RANGE));
+    }
+  }
+
+  // A: how near dry ground is to the water (the wet band up a bank), the same
+  // transform the other way round: water texels are the sources.
+  for (let i = 0; i < W * H; i++) data[i * 4 + 3] = 0;
+  if (anyWater) {
+    const wsrc = new Float64Array(W * H);
+    for (let i = 0; i < W * H; i++) wsrc[i] = src[i] === 0 ? Infinity : 0;
+    const d2 = edt2d(wsrc, W, H);
+    for (let py = 0; py < H; py++) {
+      const si = Math.floor(((py + 0.5) / P) * SUB);
+      for (let px = 0; px < W; px++) {
+        const i = py * W + px;
+        if (src[i] !== 0) { data[i * 4 + 3] = 255; continue; }
+        const sj = Math.floor(((px + 0.5) / P) * SUB);
+        if (Number.isNaN(top[si * sw + sj])) continue;
+        const cells = Math.max(0, Math.sqrt(d2[i]) - 0.5) / P;
+        data[i * 4 + 3] = Math.round(255 * (1 - clamp01(cells / WET_RANGE)));
+      }
     }
   }
 
