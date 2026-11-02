@@ -1,7 +1,7 @@
 /*
  * GLUniverse Suite — stream: the capture client's overlay and the Control Room.
  *
- * A scoped black skin (docs/adr/0004-stream-view-skin.md), the same one Stream Pacer carries (ADR 0003):
+ * A scoped black skin (docs/adr/0006-stream-view-skin.md), the same one Stream Pacer carries (ADR 0003):
  * the design system's neutral ramp and status hues mirrored as `--glus-*` tokens under the stream's own
  * roots, never on :root. Motion and timing come from the suite (`--gl-d-*`, `--gl-ease*`); motion the JS
  * plays reads OVERLAY_MOTION (constants.js) and CARD_MOTION (stream-cards/cards/card-motion.js).

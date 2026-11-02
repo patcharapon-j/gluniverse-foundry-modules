@@ -597,7 +597,7 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
 
 /* ------------------------------------------- the cards stay setting-neutral -- */
 // The stream sits over whatever world the table plays in, so the cards are a
-// quiet black plate, not a sci-fi HUD (docs/adr/0004-stream-view-skin.md). Every
+// quiet black plate, not a sci-fi HUD (docs/adr/0006-stream-view-skin.md). Every
 // piece of the old look comes back without an error and renders perfectly: a
 // decode is one helper call, a monospace label is one token. The cut is the
 // suite's motif and the plate keeps it, which makes the entrance clip the quiet
@@ -938,7 +938,7 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
 }
 
 /* ------------------------------------------------- the stream view's skin --- */
-// The skin is scoped (docs/adr/0004-stream-view-skin.md). Everything here renders perfectly when it
+// The skin is scoped (docs/adr/0006-stream-view-skin.md). Everything here renders perfectly when it
 // is wrong: a token on :root repaints other features, a bare keyframe name overrides somebody else's,
 // a literal duration ignores the motion tier, a fixed blur ignores the player's glass level.
 for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-cards-daggerheart.css"]) {

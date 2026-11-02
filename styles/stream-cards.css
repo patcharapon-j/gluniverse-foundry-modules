@@ -1,7 +1,7 @@
 /*
  * GLUniverse Suite — stream-cards.
  *
- * The roll card and the status card, in the stream view's black skin (docs/adr/0004-stream-view-skin.md).
+ * The roll card and the status card, in the stream view's black skin (docs/adr/0006-stream-view-skin.md).
  * The skin's ink, paper and tones (`--glus-*`) are declared in styles/stream.css on every stream root,
  * this one included; motion lengths live in CARD_MOTION (cards/card-motion.js). Class prefix: .glus-rc-*
  * (roll card), .glus-sc-* (status card).

@@ -93,8 +93,9 @@ etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
   Combat Intro, docs/adr/0001-scoped-skins.md, Stream Pacer's black skin,
   docs/adr/0003-stream-pacer-skin.md, Resource Trackers' skin,
   docs/adr/0004-resource-trackers-skin.md, the Creaturedex's skin,
-  docs/adr/0005-creaturedex-skin.md, and PF2e Odds' ink skin,
-  docs/adr/0006-odds-and-line-skin.md — each lives only under its features' own
+  docs/adr/0005-creaturedex-skin.md, PF2e Odds' ink skin,
+  docs/adr/0006-odds-and-line-skin.md, and the stream view's skin,
+  docs/adr/0007-stream-view-skin.md — each lives only under its features' own
   roots and never on `:root`); `styles/gl-tokens.css` is the single source of truth and
   `styles/gl-motion.css` the single keyframe pool. Use the `--gl-*` tokens and
   the `.gl-*` utilities. The non-negotiables:
@@ -1618,7 +1619,7 @@ own focus — that focus is struck for an 8.2:4.4 art box, and in a square it sh
 a face pushed left and a lot of shoulder, which reads as the framing being broken
 rather than as the wrong box.
 
-The view has a scoped black skin (docs/adr/0004-stream-view-skin.md): `--glus-*`
+The view has a scoped black skin (docs/adr/0006-stream-view-skin.md): `--glus-*`
 tokens on the stream's own roots, `glus-` keyframes, and every duration a row of
 `CARD_MOTION` or `OVERLAY_MOTION` read through the tier-scaled lookup, never a
 literal. `audience.mjs`, `chat-settings.mjs` and `room-model.mjs` are pure so the

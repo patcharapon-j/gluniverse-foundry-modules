@@ -1,4 +1,4 @@
-# 0004 · A scoped black skin for the stream view
+# 0006 · A scoped black skin for the stream view
 
 Status: accepted (2026-11-03)
 

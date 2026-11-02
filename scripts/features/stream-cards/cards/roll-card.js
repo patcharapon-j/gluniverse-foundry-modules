@@ -30,7 +30,7 @@ import {
  * duality die, an outcome named by key, chips, a feature's price) are all optional, so a PF2e model draws
  * exactly as it always did.
  *
- * The look is the stream view's black skin (docs/adr/0004-stream-view-skin.md): a chamfered slab, paper
+ * The look is the stream view's black skin (docs/adr/0006-stream-view-skin.md): a chamfered slab, paper
  * type, and one tone carried by a solid verdict tag and a rule along the top edge. Its motion is fade,
  * rise and unfold, with no text decode, scan line or light sweep. Only the crit crack is effect, and it is
  * shared with core.
