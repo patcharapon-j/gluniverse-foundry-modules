@@ -71,6 +71,8 @@
     "styles/theatre.css",
     "styles/theatre-apps.css",
     "styles/roleplay-chat.css",
+    "styles/diorama.css",
+    "styles/diorama-editor.css",
     "styles/perf.css"
   ],
   "languages": [
@@ -238,6 +240,21 @@
       "lang": "en",
       "name": "English",
       "path": "lang/roleplay-chat.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/diorama.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/diorama-editor.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/diorama-rules.en.json"
     },
     {
       "lang": "en",

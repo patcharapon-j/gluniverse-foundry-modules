@@ -205,7 +205,9 @@ export class TargetLineController {
     }
     this.#riseFromLaunchingToken(desired);
     this.#updateListening();
-    Hooks.callAll(TARGETS_HOOKS.linesChanged, [...desired.values()].map(({ sourceId, targetId }) => ({ sourceId, targetId })));
+    // `color` is the line's own colour (a 0xRRGGBB number), so a second view of the same lines (the Diorama)
+    // draws them in the colour this one chose, relationship and all.
+    Hooks.callAll(TARGETS_HOOKS.linesChanged, [...desired.values()].map(({ sourceId, targetId, style }) => ({ sourceId, targetId, color: style?.color ?? null })));
   }
 
   /**

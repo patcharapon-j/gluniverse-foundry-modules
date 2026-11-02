@@ -232,12 +232,13 @@ rather than at the end.
 | hexcrawl           | hex.                         | null              | —               | off     |
 | theatre            | th.                          | null              | —               | off     |
 | roleplay-chat      | rp.                          | null              | —               | off     |
+| diorama            | dio.                         | null              | —               | off     |
 | perf               | perf.                        | null              | —               | ON      |
 
 `⤷ <id>` in the requires column is a `requiresFeature` edge (a sibling suite
 feature that must be enabled), not a `requires` module id.
 
-`pf2e-aoe` additionally declares `minimumGeneration: 14`; generation gates
+`pf2e-aoe` and `diorama` additionally declare `minimumGeneration: 14`; generation gates
 apply to one feature and must not raise the suite-wide `module.json` minimum.
 
 This table is hand-maintained and has drifted before. The authority is always the

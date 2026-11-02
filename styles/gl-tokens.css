@@ -464,6 +464,9 @@ body.gl-motion-cinematic { --gl-motion-scale: 1.4; }
 .stream-pacer-peril-indicator-wrap,
 .stream-pacer-campfire-bar-wrap,
 #glrp-lane > .glrp-line,
+.gldio-app,
+.gldio-toolbar,
+.gldio-toast,
 .insight-notification {
   zoom: var(--gl-ui-scale, 1);
 }

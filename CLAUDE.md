@@ -1737,6 +1737,51 @@ are pure (`model.mjs`, `render.mjs`), which is what the preview drives:
 `/.preview/roleplay-chat.html`. Foundry's own log and box need a live session.
 See `docs/ROLEPLAY_CHAT.md`.
 
+**When touching Diorama** (`features/diorama/`, `styles/diorama*.css`,
+`templates/diorama/`, `vendor/three/`), re-run its check. Everything it covers
+fails silently:
+
+```bash
+node tools/diorama-check.mjs
+```
+
+Zero problems required. Four things are worth knowing before you change it.
+
+**The 2D canvas is the truth.** The view never decides who sees what. Token
+visibility is `token.isVisible`, and light and vision are baked in world space
+from Foundry's own polygons (its render textures are screen-space and cannot be
+projected). Height occludes sight because `HeightSweepPolygon` replaces the
+sight and light backends and wraps `DetectionMode#_testLOS`
+(docs/adr/0002-height-sight-backend.md); it stands down if another module
+already owns a backend.
+
+**Elevation is written, cover is not.** A token's elevation is the ground under
+its footprint plus its `dio.altitude`, written per waypoint in the same move. A
+cliff above the step height costs Infinity for `walk` and is allowed for
+`climb`. Falls and cover are shown, never applied.
+
+**Terrain is one forced replacement.** `dio.terrain` is keyed by Level id and
+written only through `TerrainStore.write`; a plain nested update merges and a
+cleared cell survives. Read it through `liveTerrain()`. Difficult terrain is a
+native `modifyMovementCost` Region, written on Save.
+
+**The renderer is pure.** `render/` reaches no `game`, `canvas` or `foundry`,
+renders on demand, binds `Budget.ladder("diorama", SHED_ORDER)` and registers
+its context with `Surfaces`. That is what the preview drives:
+`node tools/diorama-preview.mjs && node tools/preview-server.mjs`, then
+`/.preview/diorama.html`. The sight backend, movement and the editor need a live
+v14 session. See `docs/DIORAMA.md`.
+
+**The view redraws two other features, and draws only what they decided.**
+Target lines are the ones `stream-targets` announces on
+`TARGETS_HOOKS.linesChanged`, in the colour it announces. The listener is wired
+at init, because lines are announced when targets change, not when the view
+opens. Conditions ring the base (`dio.effects` "halo") the way PF2e Effects
+Halo rings a 2D token, so PF2e effects that show on the token join them there.
+Before touching `render/`, load the `diorama-craft` skill: one sun, contact
+shadow first, hairlines in device px, damped motion, no runtime program
+variants.
+
 **When touching the Performance feature, the shared frame budget or any
 feature's shedding** (`features/perf/`, `core/budget.mjs`, `core/gl-surfaces.mjs`,
 `core/pan.mjs`, any `SHED_ORDER`, any suite WebGL context, any backdrop blur),
