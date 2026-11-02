@@ -184,7 +184,7 @@
 .glod-badge {
   position: relative;
   box-sizing: border-box;
-  width: 214px;
+  width: 228px;
   padding: 9px 12px 11px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -268,7 +268,7 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
-  column-gap: 10px;
+  column-gap: 8px;
 }
 
 .glod-pct {
@@ -295,6 +295,10 @@
 
 .glod-pct--unknown { color: var(--glod-faint); }
 
+/* A range is two numbers: it steps down a size so the defence keeps its column. */
+.glod-badge[data-state="range"] .glod-pct { font-size: 23px; letter-spacing: -0.03em; }
+.glod-badge[data-state="range"] .glod-dc { font-size: 15px; }
+
 .glod-deg {
   display: flex;
   flex-direction: column;
@@ -303,12 +307,13 @@
   padding-bottom: 1px;
   font-size: 11px;
   font-weight: 650;
-  line-height: 1;
-  white-space: nowrap;
+  line-height: 1.05;
 }
 
 .glod-deg b { font-weight: inherit; color: var(--glod-dim); }
 .glod-deg em { font-style: normal; color: var(--glod-c); }
+/* A crit range wraps under its word, never at its own dash. */
+.glod-deg em span { white-space: nowrap; }
 .glod-deg--unknown { color: var(--glod-faint); white-space: normal; line-height: 1.2; }
 
 .glod-dc {

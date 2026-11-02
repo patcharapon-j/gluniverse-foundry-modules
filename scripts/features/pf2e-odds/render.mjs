@@ -116,7 +116,7 @@ function degreeLine(model, t) {
   // Inverted (a save against the viewer's own spell): the headline is the
   // target doing WORSE than a success, and the second figure its critical failure.
   const crit = model.invert ? "GLOD.word.critFail" : "GLOD.word.crit";
-  return `<span class="glod-deg"><b>${escapeHTML(t(chanceWord(model)))}</b><em>${escapeHTML(t(crit))} ${escapeHTML(model.crit ?? "")}</em></span>`;
+  return `<span class="glod-deg"><b>${escapeHTML(t(chanceWord(model)))}</b><em>${escapeHTML(t(crit))} <span>${escapeHTML(model.crit ?? "")}</span></em></span>`;
 }
 
 /** The defence being rolled against: its label over its value, at the plate's right. */
