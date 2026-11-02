@@ -269,7 +269,10 @@ function registerSceneControl() {
 function registerLiveRefresh() {
   const watched = new Set([KNOWLEDGE_SETTING, SETTINGS.party, SETTINGS.playerAccess].map((k) => `${SUITE_ID}.${k}`));
   Hooks.on("updateSetting", (setting) => {
-    if (!watched.has(String(setting?.key ?? ""))) return;
+    const key = String(setting?.key ?? "");
+    if (!watched.has(key)) return;
+    // Switching Party Knowledge off can un-earn held-back abilities.
+    if (key === `${SUITE_ID}.${SETTINGS.party}` && game.user?.isGM && game.users?.activeGM === game.user) scrub();
     CreaturedexApp.refreshOpen();
   });
 }

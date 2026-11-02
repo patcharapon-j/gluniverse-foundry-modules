@@ -229,16 +229,17 @@ export function applyForget(data, subject) {
  * Drop held-back abilities nobody has earned, across the whole dex.
  *
  * Worlds from before this rule kept every subject's uncategorised abilities in
- * the store from the first reveal on. Run once by the active GM; null when
- * there was nothing to drop. It reads under the loosest rule (the union), so it
- * only ever drops what no reading of the table could have earned.
+ * the store from the first reveal on, and switching Party Knowledge off can
+ * un-earn them. Run by the active GM on ready and whenever that setting moves;
+ * null when there was nothing to drop. It reads under the table's current rule,
+ * the same one every write settles under.
  */
-export function scrubDeferred(data) {
+export function scrubDeferred(data, party = false) {
   let changed = false;
   const out = clone(data);
   for (const entry of Object.values(out)) {
     if (!plain(entry?.meta) || !Array.isArray(entry.meta.deferred) || !entry.meta.deferred.length) continue;
-    if (completeForSomeone(entry, true)) continue;
+    if (completeForSomeone(entry, party)) continue;
     entry.meta.deferred = [];
     changed = true;
   }

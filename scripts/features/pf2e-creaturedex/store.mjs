@@ -139,4 +139,4 @@ export const refresh = (subject, snapshots = {}, meta = null) =>
 export const forget = (subject) => writeAll(applyForget(readAll(), subject));
 
 /** Drop held-back abilities nobody earned (older worlds stored them early). */
-export const scrub = () => writeAll(scrubDeferred(readAll()));
+export const scrub = () => writeAll(scrubDeferred(readAll(), partyMode()));
