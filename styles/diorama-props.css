@@ -1,0 +1,77 @@
+/* Diorama — the props mode of the terrain editor. Tokens only (docs/DESIGN_SYSTEM.md).
+   Builds on the editor's own controls (.gldio-ed-tool, .gldio-ed-mat, .gldio-ed-seg). */
+
+/* ── mode switch ──────────────────────────────────────────────────────── */
+
+.gldio-pr-modes { flex: 0 0 auto; }
+.gldio-pr-count {
+  min-width: 2ch;
+  padding: 0 var(--gl-sp-1);
+  border-radius: var(--gl-r-xs);
+  background: rgb(var(--gl-tint-light) / 0.06);
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: 0;
+}
+.gldio-ed-segbtn.is-active .gldio-pr-count { color: var(--gl-text-bright); background: color-mix(in srgb, var(--gl-accent) 22%, transparent); }
+
+/* ── shape palette: the tool grid's look, six to a row ────────────────── */
+
+.gldio-pr-shapes {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--gl-sp-1);
+  padding: var(--gl-sp-2);
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-sm);
+  background: var(--gl-surface-inset);
+  box-shadow: inset 0 2px 8px var(--gl-shadow);
+}
+
+/* ── materials: each chip's edge is the hue the material reads as ─────── */
+
+.gldio-pr-mats { grid-template-columns: repeat(3, 1fr); }
+.gldio-pr-mat[data-prop-mat="stone"] { --gldio-mat: var(--gl-text-dim); }
+.gldio-pr-mat[data-prop-mat="marble"] { --gldio-mat: var(--gl-text-bright); }
+.gldio-pr-mat[data-prop-mat="wood"] { --gldio-mat: var(--gl-warn); }
+.gldio-pr-mat[data-prop-mat="metal"] { --gldio-mat: var(--gl-cyan); }
+.gldio-pr-mat[data-prop-mat="foliage"] { --gldio-mat: var(--gl-good); }
+.gldio-pr-mat[data-prop-mat="crystal"] { --gldio-mat: var(--gl-violet); }
+.gldio-pr-mat[data-prop-mat="plaster"] { --gldio-mat: var(--gl-signal-pale); }
+.gldio-pr-mat[data-prop-mat="cloth"] { --gldio-mat: var(--gl-hazard); }
+.gldio-pr-mat[data-prop-mat="earth"] { --gldio-mat: var(--gl-signal); }
+.gldio-pr-mat[data-prop-mat="ice"] { --gldio-mat: var(--gl-teal); }
+.gldio-pr-mat[data-prop-mat="map"] { --gldio-mat: var(--gl-accent); }
+
+/* ── the selected prop ────────────────────────────────────────────────── */
+
+.gldio-pr-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  height: var(--gldio-ibtn);
+  padding: 0 var(--gl-sp-3);
+  border: 1px solid color-mix(in srgb, var(--gl-accent) 45%, transparent);
+  border-radius: var(--gl-r-xs);
+  background: color-mix(in srgb, var(--gl-accent) 12%, transparent);
+  color: var(--gl-text-bright);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.gldio-pr-edit .gldio-ed-row .gldio-ed-text { flex: 1 1 auto; min-width: 0; }
+.gldio-pr-edit .gldio-ed-row .gldio-ed-num { flex: 0 1 6ch; min-width: 0; }
+
+.gldio-pr-flags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  margin-left: auto;
+}
+
+/* Every button here takes its type from the editor's own sizing, never the host's. */
+.gldio-ed .gldio-pr-edit .gl-btn { min-height: var(--gldio-ibtn); padding: 0 var(--gl-sp-4); font-size: var(--gl-fs-3xs); }

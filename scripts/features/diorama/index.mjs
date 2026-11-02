@@ -13,6 +13,7 @@
 import { Suite } from "../../core/registry.mjs";
 import { SUITE_ID } from "../../core/const.mjs";
 import { FEATURE_ID, PREFIX, SETTINGS, WALL_MATERIALS } from "./constants.mjs";
+import { OPTIONS } from "./options.mjs";
 import { onInit, onReady, api } from "./main.mjs";
 
 Suite.register({
@@ -131,6 +132,20 @@ Suite.register({
       type: Object,
       default: {},
     });
+    // Graphics (per user) and the table's environment and prop rules (GM): options.mjs.
+    for (const o of OPTIONS) {
+      const label = (v) => `GLDIO.settings.${o.name}.${v}`;
+      game.settings.register(SUITE_ID, o.key, {
+        name: `GLDIO.settings.${o.name}.name`,
+        hint: `GLDIO.settings.${o.name}.hint`,
+        scope: o.scope,
+        config: true,
+        type: o.type === "boolean" ? Boolean : o.type === "number" ? Number : String,
+        ...(o.choices ? { choices: Object.fromEntries(o.choices.map((v) => [v, label(v)])) } : {}),
+        ...(o.range ? { range: { ...o.range } } : {}),
+        default: o.default,
+      });
+    }
   },
 
   onInit,

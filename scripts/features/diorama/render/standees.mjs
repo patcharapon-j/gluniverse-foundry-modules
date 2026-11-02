@@ -16,17 +16,25 @@
  *
  * Position changes tween with a hop per grid step (TIMING.standeeStep); state
  * changes (outline, lift) follow with frame-rate independent damping.
+ *
+ * Token life (render/life.mjs, the `life` frame option): the whole miniature
+ * hops step by step on a gravity arc, falls off ledges under gravity, squashes
+ * its card a little at every contact and springs back, and raises a dust puff
+ * where it lands (render/dust.mjs, shed as "standeeDust"). A flyer breathes on
+ * its stand (shed with "standeeSway") and its shadow softens with altitude.
+ * Off, a move is the old linear slide with a card-only bounce.
  */
 
 import * as THREE from "./three.mjs";
 import { TIMING } from "../constants.mjs";
 import { PALETTE, lighten, mix } from "../../../core/theme.mjs";
 import { MATERIALS, cssRgb } from "./materials.mjs";
-import { composeCard, drawChips, drawPlate, loadDrawable, maskHit, shadowCanvas, HALO_MAX, PLATE_PX } from "./art.mjs";
-import { clamp01, lerp } from "./tween.mjs";
+import { composeCard, drawChips, drawPlate, loadDrawable, maskHit, shadowCanvas, shadowSoftCanvas, HALO_MAX, PLATE_PX } from "./art.mjs";
+import { clamp01, ease } from "./tween.mjs";
+import { DUST, SQUASH, hoverPose, planMove, poseAt, squashAt } from "./life.mjs";
+import { DustLayer } from "./dust.mjs";
 
 const BASE_H = 0.07;
-const HOP = 0.14;
 const SWAY = 0.014;
 const PLATE_W = 1.15;
 const MAX_STEPS = 12;
@@ -45,6 +53,23 @@ const MAX_LEAN = (60 * Math.PI) / 180;
 export const FIGURE_SCALE = 1.35;
 /** In the air from 1 q (a quarter cell) above the ground: world units are cells. */
 const FLY_MIN = 0.25;
+/** A picked-up miniature: how high it rides above its square (cells). */
+export const HOLD_LIFT = 1.5;
+/** The flight stand's glass foot. */
+const STAND_FOOT = "#dcecff";
+/** It rises past that and settles back (fraction of HOLD_LIFT), and bobs this much in the hand (cells). */
+const HOLD_OVERSHOOT = 0.12;
+const HOLD_BOB = 0.035;
+/** How far the card stretches as it leaves the table (fraction of its height). */
+const HOLD_STRETCH = 0.07;
+/** A hold's tone (view/input.mjs: what setting it down here costs) → the colour of the squares it lands on. */
+const HOLD_TONES = Object.freeze({ info: PALETTE.info, warn: PALETTE.warn, hazard: PALETTE.hazard, peril: PALETTE.peril });
+/** 1/s: how fast a held miniature follows the hand, and its swing the hand's speed. */
+const HOLD_FOLLOW = 20;
+const HOLD_SWING = 9;
+/** Radians of lean per cell/s of hand speed, and the most it leans. */
+const HOLD_LEAN = 0.05;
+const HOLD_LEAN_MAX = 0.32;
 /** Outline width by state, device px; the targeted line also glows. */
 export const OUTLINE_PX = Object.freeze({ rest: 2, hovered: 2.25, controlled: 2.5, targeted: 3.5 });
 /** The card quad is grown by this many device px each side for line and glow. */
@@ -169,6 +194,18 @@ export class StandeesLayer {
     this.geo.column.translate(0, 0.5, 0);
     const sc = shadowCanvas();
     this.shadowTex = sc ? new THREE.CanvasTexture(sc) : null;
+    const ss = shadowSoftCanvas();
+    this.shadowSoftTex = ss ? new THREE.CanvasTexture(ss) : null;
+    /** Landing dust, one pool for every standee. */
+    this.dust = new DustLayer(shared);
+    this.group.add(this.dust.group);
+    /** (x, z) cells → the ground there (cells) or NaN; the renderer's rules ground. */
+    this.ground = null;
+    /** Token life, landing dust and flyer hover, as the last frame was told. */
+    this._life = true;
+    this._dust = true;
+    this._hover = true;
+    this._hv = { dy: 0, roll: 0 };
     /**
      * Shadow casters: one upright copy of each card turned to face the sun,
      * alpha-tested so the cast shadow is the figure's silhouette. They live in
@@ -187,6 +224,28 @@ export class StandeesLayer {
   }
 
   setGridSize(size) { this.size = size || 100; }
+
+  /**
+   * Where the ground is, so a walk follows stairs and finds the ledge it steps
+   * off: (x, z) in cells → ground height in cells, or NaN where unknown.
+   * Without it a drop past a step falls at the last step of the move.
+   */
+  setGround(fn) { this.ground = typeof fn === "function" ? fn : null; }
+
+  /** The ground under a figure `w` cells wide at (x, z): the highest it covers. */
+  groundUnder(x, z, w) {
+    const f = this.ground;
+    if (!f) return NaN;
+    let g = f(x, z);
+    if (w > 1.25) {
+      const o = w / 2 - 0.25;
+      for (let a = -1; a <= 1; a += 2) for (let b = -1; b <= 1; b += 2) {
+        const v = f(x + a * o, z + b * o);
+        if (Number.isFinite(v) && !(v <= g)) g = v;
+      }
+    }
+    return g;
+  }
 
   setGhosts(on) {
     this.ghosts = on !== false;
@@ -227,6 +286,11 @@ export class StandeesLayer {
     const shadow = new THREE.Mesh(this.geo.flat, MATERIALS.unlit(shared, { map: this.shadowTex, color: "#ffffff", opacity: 0.9 }));
     shadow.position.y = 0.008;
     shadow.renderOrder = 2;
+    // the soft, wide half of the shadow, faded in with altitude (placeShadowSoft)
+    const shadowSoft = new THREE.Mesh(this.geo.flat, MATERIALS.unlit(shared, { map: this.shadowSoftTex, color: "#ffffff", opacity: 0 }));
+    shadowSoft.position.y = 0.007;
+    shadowSoft.renderOrder = 2;
+    shadowSoft.visible = false;
     // The card, its x-ray (drawn only where hidden) and its glow: one program,
     // three modes, one margin uniform shared by reference.
     const margin = { value: new THREE.Vector2(0, 0) };
@@ -259,7 +323,7 @@ export class StandeesLayer {
       return m;
     });
     body.add(card);
-    root.add(shadow, glow, turn, base, ring, reticle, plate, ...chips);
+    root.add(shadowSoft, shadow, glow, turn, base, ring, reticle, plate, ...chips);
     // Flight: a glass stand down to the ground, its foot, and the squares below.
     // Never in SHADOW_LAYER or the casters scene: clear glass casts nothing.
     const stand = new THREE.Group();
@@ -267,7 +331,7 @@ export class StandeesLayer {
     const column = new THREE.Mesh(this.geo.column, MATERIALS.glass(shared));
     column.userData.tokenId = id;
     column.renderOrder = 4;
-    const foot = new THREE.Mesh(this.geo.flat, MATERIALS.ring(shared, { color: "#dcecff", inner: 0, outer: 0.92, soft: 0.06, fill: 1, opacity: 0.22 }));
+    const foot = new THREE.Mesh(this.geo.flat, MATERIALS.ring(shared, { color: STAND_FOOT, inner: 0, outer: 0.92, soft: 0.06, fill: 1, opacity: 0.22 }));
     const footRim = new THREE.Mesh(this.geo.flat, MATERIALS.ring(shared, { color: "#ffffff", inner: 0.84, outer: 0.95, soft: 0.04, opacity: 0.7 }));
     const footprint = new THREE.Mesh(this.geo.flat, MATERIALS.footprint(shared));
     footprint.renderOrder = 1;
@@ -282,7 +346,9 @@ export class StandeesLayer {
     caster.matrixAutoUpdate = true;
     this.casters.add(caster);
     const e = {
-      id, root, body, base, ring, turn, glow, shadow, card, plate, caster,
+      id, root, body, base, ring, turn, glow, shadow, shadowSoft, card, plate, caster,
+      // token life: the pose a move writes each frame, the last contact's squash, the hover's weight
+      pose: { x: 0, z: 0, y: 0, g: 0, lift: 0, hop: 0, seg: -1 }, squash: { t0: 0, amp: 0 }, hoverW: -1,
       stand, column, foot, footRim, footprint, flying: false,
       xray, aura, margin, reticle, chips, chipMat, chipCanvas: null, chipTex: null, chipCount: 0, haloSig: "",
       look: null, lookTo: null,
@@ -302,7 +368,14 @@ export class StandeesLayer {
     // g: the ground under it. A missing groundQ means "standing on it".
     const gq = Number(t.groundQ);
     target.g = t.groundQ != null && Number.isFinite(gq) ? gq / 4 : target.y;
-    if (!e.pos) e.pos = { ...target };
+    // Just set down: the token's old position may still be arriving; it is not a move.
+    const aw = e.awaitMove;
+    const stale = !!aw && now < aw.until && Math.hypot(target.x - aw.from.x, target.z - aw.from.z) < 0.02
+      && Math.abs(target.y - aw.from.y) < 0.02;
+    if (aw && !stale) e.awaitMove = null;
+    if (e.hold) e.heldTarget = { ...target };
+    else if (stale) aw.last = { ...target }; // kept: if the move never comes, it goes back there (frame)
+    else if (!e.pos) e.pos = { ...target };
     else if (target.x !== e.move?.to.x || target.z !== e.move?.to.z || target.y !== e.move?.to.y) {
       const from = this.current(e, now);
       const d = Math.hypot(target.x - from.x, target.z - from.z);
@@ -313,7 +386,7 @@ export class StandeesLayer {
         e.move = { from, to: target, t0: now, ms: TIMING.standeeStep * steps, hops: d >= 0.5 ? steps : 0 };
       }
     }
-    if (!e.move) e.pos = { ...target };
+    if (!e.move && !e.hold && !stale) e.pos = { ...target };
     const width = Math.max(0.25, Number(t.widthCells) || 1);
     e.width = width;
     const r = width * 0.4;
@@ -351,10 +424,57 @@ export class StandeesLayer {
 
   current(e, now) {
     if (!e.move) return { ...e.pos };
-    const p = clamp01((now - e.move.t0) / e.move.ms);
-    const { from, to } = e.move;
-    const fg = Number.isFinite(from.g) ? from.g : from.y, tg = Number.isFinite(to.g) ? to.g : to.y;
-    return { x: lerp(from.x, to.x, p), z: lerp(from.z, to.z, p), y: lerp(from.y, to.y, p), g: lerp(fg, tg, p) };
+    const q = poseAt(this.planOf(e), now - e.move.t0, e.pose, this._life);
+    return { x: q.x, z: q.z, y: q.y, g: q.g };
+  }
+
+  /**
+   * The move's plan (render/life.mjs), built on first use: a move started
+   * anywhere (update, endHold) is planned from where it starts, with the ground
+   * along its path. Its duration is the plan's (a fall takes longer than a step).
+   */
+  planOf(e) {
+    const m = e.move;
+    if (m.plan) return m.plan;
+    const w = e.width ?? 1;
+    const ground = this.ground ? (x, z) => this.groundUnder(x, z, w) : null;
+    m.plan = planMove(m.from, m.to, { stepMs: TIMING.standeeStep, fallMs: TIMING.standeeFall, flyer: !!e.flying, maxSteps: MAX_STEPS, ground });
+    m.ms = Math.max(1, m.plan.ms);
+    m.contact = 0;
+    return m.plan;
+  }
+
+  /**
+   * Advance a move to `now`: fire every contact it passed (at the moment it
+   * happened), then write the pose into e.pose. @returns {object|null} the
+   * pose, or null when the move just ended (e.pos is then where it stands)
+   */
+  stepMove(e, now) {
+    const m = e.move;
+    const plan = this.planOf(e);
+    const tms = now - m.t0;
+    const segs = plan.segs;
+    while (m.contact < segs.length && segs[m.contact].t1 <= tms) {
+      const s = segs[m.contact++];
+      this.touchDown(e, m.t0 + s.t1, s.x1, s.g1, s.z1, s.land, s.dust);
+    }
+    if (tms >= m.ms) {
+      e.pos = { ...m.to };
+      e.move = null;
+      return null;
+    }
+    return poseAt(plan, tms, e.pose, this._life);
+  }
+
+  /**
+   * A contact: the card squashes by `amp` and springs back, and dust rises at
+   * (x, y, z) with `dust` strength. `at` is when it happened (ms), so a frame
+   * that arrives late still shows it at the right point of its life.
+   */
+  touchDown(e, at, x, y, z, amp, dust) {
+    if (!this._life) return;
+    if (amp > 0) { e.squash.t0 = at; e.squash.amp = amp; }
+    if (dust > 0 && this._dust && e.root.visible && !e.state?.ghost) this.dust.emit(x, y, z, (e.width ?? 1) * 0.4, dust, at);
   }
 
   layoutCard(e) {
@@ -440,28 +560,47 @@ export class StandeesLayer {
     return { n, x0: Math.round(x - n / 2), z0: Math.round(z - n / 2) };
   }
 
-  /** Place the flight stand (or hide it) for the standee's current position. */
-  placeStand(e, p) {
+  /**
+   * Place the flight stand (or hide it) for the standee's current position.
+   * A miniature in the hand hangs over where it will land: the stand's tether
+   * down to a filled spot and the squares it covers, all in the colour of its
+   * hold's tone (red where setting it down is out of reach), on every screen
+   * that draws the hold.
+   */
+  placeStand(e, p, held = false) {
     const g = Number.isFinite(p.g) ? p.g : p.y;
     const alt = p.y - g;
-    const flying = StandeesLayer.isFlying(p.y, g);
-    e.flying = flying;
-    e.stand.visible = flying;
+    const airborne = StandeesLayer.isFlying(p.y, g);
+    // A held miniature keeps what it was (a flyer stays grabbable by its foot).
+    const flying = held ? e.flying && airborne : airborne;
+    e.flying = held ? e.flying : flying;
+    const landing = held && !!e.hold && airborne;
+    e.stand.visible = flying || landing;
+    if (landing) {
+      const col = rgb(HOLD_TONES[e.hold.tone] ?? HOLD_TONES.info);
+      e.column.material.uniforms.uColor.value.set(...col);
+      e.foot.material.uniforms.uColor.value.set(...col);
+      e.foot.material.uniforms.uOpacity.value = 0.4;
+      e.footRim.material.uniforms.uColor.value.set(...col);
+      e.footRim.material.uniforms.uOpacity.value = 1;
+      e.footprint.material.uniforms.uColor.value.set(...col);
+      e.footprint.material.uniforms.uOpacity.value = 1;
+    }
     const r = (e.width ?? 1) * 0.4;
-    const k = flying ? 1 / (1 + alt * 0.45) : 1;
+    const k = airborne ? 1 / (1 + alt * 0.45) : 1;
     // The contact shadow stays on the ground, smaller and fainter the higher up.
-    e.shadow.position.y = (flying ? g - p.y : 0) + 0.008;
+    e.shadow.position.y = (airborne ? g - p.y : 0) + 0.008;
     e.shadow.scale.set(r * 3.1 * (0.5 + 0.5 * k), 1, r * 3.1 * (0.5 + 0.5 * k));
     e.shadow.material.uniforms.uOpacity.value = (e.shadowOpacity ?? 0.9) * (0.35 + 0.65 * k);
     // the reticle marks the ground under the target, flying or not
-    e.reticle.position.y = (flying ? g - p.y : 0) + 0.022;
-    if (!flying) return;
+    e.reticle.position.y = (airborne ? g - p.y : 0) + 0.022;
+    if (!flying && !landing) return;
     const dy = g - p.y;
-    const rc = 0.045 * Math.sqrt(e.width ?? 1);
+    const rc = (landing ? 0.03 : 0.045) * Math.sqrt(e.width ?? 1);
     e.column.position.y = dy;
     e.column.scale.set(rc, Math.max(0.01, alt), rc);
     e.column.material.uniforms.uGround.value = g;
-    const fr = 0.3 * Math.sqrt(e.width ?? 1);
+    const fr = (landing ? 0.44 : 0.3) * Math.sqrt(e.width ?? 1);
     e.foot.position.y = dy + 0.014; e.foot.scale.set(fr, 1, fr);
     e.footRim.position.y = dy + 0.016; e.footRim.scale.set(fr, 1, fr);
     const f = StandeesLayer.footprintOf(p.x, p.z, e.width);
@@ -594,7 +733,7 @@ export class StandeesLayer {
     this.group.remove(e.root);
     this.casters.remove(e.caster);
     this.castersDirty = true;
-    for (const m of [e.base, e.ring, e.turn, e.glow, e.shadow, e.card, e.xray, e.aura, e.plate, e.caster,
+    for (const m of [e.base, e.ring, e.turn, e.glow, e.shadow, e.shadowSoft, e.card, e.xray, e.aura, e.plate, e.caster,
       e.column, e.foot, e.footRim, e.footprint, e.reticle]) m.material.dispose();
     e.chipMat.dispose();
     e.chipTex?.dispose();
@@ -607,7 +746,11 @@ export class StandeesLayer {
    * Per frame: billboards, moves, sway.
    * @returns {boolean} true while something moves
    */
-  frame(now, camera, yaw, sway, { pxWorld = this.pxWorld, markers = true } = {}) {
+  frame(now, camera, yaw, sway, { pxWorld = this.pxWorld, markers = true, life = true, dust = true, hover = true } = {}) {
+    this._life = life !== false;
+    this._dust = this._life && dust !== false;
+    this._hover = this._life && hover !== false;
+    if (!this._dust) this.dust.clear();
     this.facing.value.set(Math.sin(yaw), 0, Math.cos(yaw));
     camera.getWorldDirection(_dir);
     const lean = Math.min(MAX_LEAN, Math.max(0, Math.asin(Math.max(-1, Math.min(1, -_dir.y)))));
@@ -633,37 +776,134 @@ export class StandeesLayer {
         e.reticle.material.uniforms.uBreathe.value = breathe;
       }
       this.placeHalo(e, yaw, camera);
-      let p = e.pos, hop = 0;
-      if (e.move) {
-        const k = clamp01((now - e.move.t0) / e.move.ms);
-        p = this.current(e, now);
-        if (e.move.hops) hop = HOP * Math.abs(Math.sin(Math.PI * e.move.hops * k));
-        if (k >= 1) { e.pos = { ...e.move.to }; e.move = null; p = e.pos; } else active = true;
+      // Set down and the move never came (Foundry refused it): back to where the token is.
+      const aw = e.awaitMove;
+      if (aw) {
+        if (now < aw.until) active = true;
+        else {
+          e.awaitMove = null;
+          const to = aw.last ?? aw.from;
+          const d = Math.hypot(to.x - e.pos.x, to.z - e.pos.z);
+          if (d > 1e-4 || Math.abs(to.y - e.pos.y) > 1e-4) {
+            const steps = Math.max(1, Math.min(MAX_STEPS, Math.round(d)));
+            e.move = { from: { ...e.pos }, to: { ...to }, t0: now, ms: TIMING.standeeStep * steps, hops: d >= 0.5 ? steps : 0 };
+            active = true;
+          }
+        }
+      }
+      let p = e.pos, hop = 0, lift = 0;
+      if (e.hold && this.stepHold(e, now, dt)) active = true;
+      const h = e.hold;
+      if (h) {
+        p = { x: h.x, z: h.z, y: h.y + h.lift + (h.bob ?? 0), g: h.g };
+      } else if (e.move) {
+        // life: the whole miniature hops (lift); off: the old card-only bounce (hop)
+        const q = this.stepMove(e, now);
+        if (q) { p = q; lift = q.lift; hop = q.hop; active = true; } else p = e.pos;
       }
       e.root.position.set(p.x, p.y, p.z);
       e.body.position.y = hop;
-      this.placeStand(e, p);
+      this.placeStand(e, p, !!h);
+      // A flyer breathes on its stand; never while in the hand.
+      if (this.stepHover(e, now, dt, !h)) active = true;
+      const rise = lift + (e.hoverW > 0 ? this._hv.dy * e.hoverW : 0);
+      this.placeShadowSoft(e, p);
+      if (rise !== 0) this.raise(e, rise, lift);
+      // the card's squash since its last contact, springing back
+      // in the hand: a stretch as it leaves the table (negative squash)
+      const s = h ? -(h.stretch ?? 0) : squashAt(e.squash.amp, now - e.squash.t0);
+      if (h || s > 0) active = true; else e.squash.amp = 0;
+      e.body.scale.set(1 + s * 0.5, 1 - s, 1 + s * 0.5);
       // YXZ: turn to the camera's yaw, then lean back about the card's own x axis.
       e.card.rotation.order = "YXZ";
       e.card.rotation.set(-lean, yaw, 0);
       e.body.rotation.z = 0;
-      if (sway && e.root.visible) {
+      if (h) {
+        // Carried: the figure leans into the hand's motion, as a mini held by its top does.
+        const cl = (v) => Math.max(-HOLD_LEAN_MAX, Math.min(HOLD_LEAN_MAX, v * HOLD_LEAN));
+        e.body.rotation.set(cl(h.vz), 0, cl(-h.vx));
+      } else if (sway && e.root.visible) {
         e.body.rotation.set(0, 0, Math.sin(t * 1.25 + e.phase) * SWAY);
         e.card.rotation.y = yaw + Math.sin(t * 0.8 + e.phase * 1.7) * SWAY * 0.6;
       } else {
         e.body.rotation.set(0, 0, 0);
       }
+      if (!h && e.hoverW > 0) e.body.rotation.z += this._hv.roll * e.hoverW;
       e.plate.quaternion.copy(camera.quaternion);
       // Above the card's leaned top, along the card's own up axis.
       const along = (e.cardH ?? 1) + 0.1 + (PLATE_W * (e.plateH ?? 0)) / 2;
       const back = Math.sin(lean) * along;
       e.plate.position.set(-back * Math.sin(yaw), BASE_H + Math.cos(lean) * along, -back * Math.cos(yaw));
-      this.placeCaster(e, p, hop, sunYaw);
+      // the hover is left out of the cast shadow: it would redraw the shadow map every frame
+      this.placeCaster(e, p, hop + lift, sunYaw);
     }
+    if (this.dust.frame(now, camera)) active = true;
     this.lean = lean;
     this.yaw = yaw;
     this.targeted = targeted;
     return active;
+  }
+
+  /**
+   * A flyer's hover weight follows 1 while it may hover (a flyer on its stand,
+   * not in the hand, hover allowed) and 0 otherwise, damped so it never snaps
+   * in or out; this._hv is this entry's breathe and roll at full weight.
+   * @returns {boolean} true while the hover moves or fades
+   */
+  stepHover(e, now, dt, free) {
+    const want = this._hover && free && e.flying && e.root.visible ? 1 : 0;
+    if (e.hoverW < 0) e.hoverW = want;   // first frame: start where it should be
+    else if (e.hoverW !== want) {
+      e.hoverW += (want - e.hoverW) * (1 - Math.exp(-FOLLOW * dt));
+      if (Math.abs(want - e.hoverW) < 1e-3) e.hoverW = want;
+    }
+    if (e.hoverW > 0) hoverPose(now, e.phase, this._hv);
+    else { this._hv.dy = 0; this._hv.roll = 0; }
+    return e.hoverW > 0;
+  }
+
+  /**
+   * Raise the figure by `dy` (a hop's lift plus the hover) while everything that
+   * marks the ground stays on it: the shadows, the reticle, and a flyer's stand,
+   * whose column reaches up to the raised feet. A hopping walker's contact
+   * shadow tightens and fades a little while it is off the table.
+   */
+  raise(e, dy, lift) {
+    e.root.position.y += dy;
+    e.shadow.position.y -= dy;
+    e.shadowSoft.position.y -= dy;
+    e.reticle.position.y -= dy;
+    if (lift > 0) {
+      const k = Math.max(0.6, 1 - lift * 2.2);
+      e.shadow.scale.x *= k; e.shadow.scale.z *= k;
+      e.shadow.material.uniforms.uOpacity.value *= k;
+    }
+    if (!e.stand.visible) return;
+    e.column.position.y -= dy;
+    e.column.scale.y = Math.max(0.01, e.column.scale.y + dy);
+    e.foot.position.y -= dy;
+    e.footRim.position.y -= dy;
+    e.footprint.position.y -= dy;
+  }
+
+  /**
+   * The soft half of the ground shadow: under a figure in the air (a flyer, or
+   * one in the hand), wider and stronger the higher it is, while the contact
+   * shadow above it shrinks and fades (placeStand). Together they read as a
+   * shadow that softens with altitude.
+   */
+  placeShadowSoft(e, p) {
+    const s = e.shadowSoft;
+    const g = Number.isFinite(p.g) ? p.g : p.y;
+    const alt = p.y - g;
+    if (!e.root.visible || !StandeesLayer.isFlying(p.y, g)) { s.visible = false; return; }
+    const k = 1 / (1 + alt * 0.45);
+    const r = (e.width ?? 1) * 0.4;
+    const w = r * 3.1 * (1.15 + 0.9 * (1 - k));
+    s.visible = true;
+    s.position.y = g - p.y + 0.007;
+    s.scale.set(w, 1, w);
+    s.material.uniforms.uOpacity.value = (e.shadowOpacity ?? 0.9) * (1 - k) * 0.7;
   }
 
   /**
@@ -713,22 +953,145 @@ export class StandeesLayer {
    * Raycast cards then bases. @returns {string|null} token id
    */
   pick(raycaster) {
-    const cards = [], bases = [];
+    return this.pickPart(raycaster)?.id ?? null;
+  }
+
+  /**
+   * Raycast every part a hand could grab a miniature by: the card, the base,
+   * and for a flyer its glass stand and the foot and squares on the ground
+   * under it. `part` is "air" for a flyer's card, base or stand (it moves at
+   * its altitude) and "ground" for anything on the table. `exclude`: a token
+   * id to see through (the one in the hand).
+   * @returns {{id:string, part:"air"|"ground"}|null}
+   */
+  pickPart(raycaster, exclude = null) {
+    const objs = [], owner = new Map();
+    const add = (o, e, part) => { objs.push(o); owner.set(o, { e, part }); };
     for (const e of this.entries.values()) {
-      if (!e.root.visible) continue;
-      if (e.card.visible) cards.push(e.card);
-      bases.push(e.base);
-      if (e.stand.visible) bases.push(e.column);   // the glass stand picks its flyer
+      if (!e.root.visible || e.id === exclude) continue;
+      const air = e.flying ? "air" : "ground";
+      if (e.card.visible) add(e.card, e, air);
+      add(e.base, e, air);
+      if (e.stand.visible) {
+        add(e.column, e, "air");
+        add(e.foot, e, "ground");
+        add(e.footprint, e, "ground");
+      }
     }
-    const hits = raycaster.intersectObjects([...cards, ...bases], false);
+    const hits = raycaster.intersectObjects(objs, false);
     for (const h of hits) {
-      const id = h.object.userData.tokenId;
-      const e = this.entries.get(id);
-      if (!e) continue;
+      const o = owner.get(h.object);
+      if (!o) continue;
+      const { e, part } = o;
       if (h.object === e.card && h.uv && !maskHit(e.cardData?.mask, h.uv.x, h.uv.y)) continue;
-      return id;
+      return { id: e.id, part };
     }
     return null;
+  }
+
+  /**
+   * A miniature in a hand. `hold` = { x, y (px, foot centre), footQ, phase }:
+   * phase "carry" lifts it off the table and follows (x, y) with damping;
+   * "drop" lowers it onto (x, y, footQ) and lets go. null lets go at once.
+   * While held, a token update only records where Foundry put it; the hand
+   * hands the figure back to the ordinary move when it lands.
+   */
+  setHold(id, hold, now = performance.now()) {
+    const e = this.entries.get(String(id));
+    if (!e) return;
+    if (!hold) { this.endHold(e, now); return; }
+    const S = this.size;
+    const to = { x: Number(hold.x) / S, z: Number(hold.y) / S, y: Number(hold.footQ ?? 0) / 4 };
+    if (!Number.isFinite(to.x) || !Number.isFinite(to.z)) return;
+    if (!Number.isFinite(to.y)) to.y = 0;
+    const gq = Number(hold.groundQ);
+    to.g = hold.groundQ != null && Number.isFinite(gq) ? gq / 4 : to.y;
+    if (!e.hold) {
+      const from = this.current(e, now);
+      e.move = null;
+      e.heldTarget = null;
+      e.awaitMove = null;
+      // where the token stood when it was picked up: until Foundry says otherwise, that is old news
+      e.heldFrom = e.pos ? { ...e.pos } : { ...from };
+      e.hold = { x: from.x, z: from.z, y: from.y, g: Number.isFinite(from.g) ? from.g : from.y,
+        lift: 0, vx: 0, vz: 0, to, phase: "carry", t0: now };
+    }
+    const h = e.hold;
+    h.to = to;
+    h.tone = HOLD_TONES[hold.tone] ? hold.tone : "info";
+    if (hold.phase === "drop" && h.phase !== "drop") { h.phase = "drop"; h.t0 = now; h.liftAt = h.lift; }
+    else if (hold.phase !== "drop" && h.phase === "drop") { h.phase = "carry"; h.t0 = now; }
+    this.onChange?.();
+  }
+
+  endHold(e, now) {
+    const h = e.hold;
+    if (!h) return;
+    e.hold = null;
+    // the landing spot goes back to being the flight stand's (applyLook's colours)
+    e.footRim.material.uniforms.uColor.value.set(1, 1, 1);
+    e.foot.material.uniforms.uColor.value.set(...rgb(STAND_FOOT));
+    this.applyLook(e);
+    const at = { x: h.x, z: h.z, y: h.y + h.lift, g: h.g };
+    const target = e.heldTarget;
+    const from = e.heldFrom;
+    e.heldTarget = null;
+    e.heldFrom = null;
+    const near = (a, b) => !!a && !!b && Math.hypot(a.x - b.x, a.z - b.z) < 0.02 && Math.abs(a.y - b.y) < 0.02;
+    // Set down somewhere new before the move has come back from Foundry: stay on the
+    // square it was set down on, and let the token's old position (still arriving
+    // in refreshes) not walk it back, for a moment.
+    if (!near(at, from) && (!target || near(target, from))) {
+      e.pos = { ...at, y: h.y };
+      e.awaitMove = { from: { ...from }, until: now + TIMING.holdAwait };
+      return;
+    }
+    if (!target) { e.pos = { ...at, y: h.y }; return; }
+    const d = Math.hypot(target.x - at.x, target.z - at.z);
+    if (d < 0.02 && Math.abs(target.y - h.y) < 0.02 && h.lift < 0.02) { e.pos = { ...target }; return; }
+    // Foundry put it somewhere other than where the hand let go (a wall stopped it): walk there.
+    const steps = Math.max(1, Math.min(MAX_STEPS, Math.round(d)));
+    e.move = { from: at, to: target, t0: now, ms: TIMING.standeeStep * steps, hops: d >= 0.5 ? steps : 0 };
+  }
+
+  /** Step a held miniature one frame. @returns {boolean} still moving */
+  stepHold(e, now, dt) {
+    const h = e.hold;
+    const k = 1 - Math.exp(-HOLD_FOLLOW * dt);
+    const px = h.x, pz = h.z;
+    h.x += (h.to.x - h.x) * k;
+    h.z += (h.to.z - h.z) * k;
+    h.y += (h.to.y - h.y) * k;
+    h.g += (h.to.g - h.g) * k;
+    const vx = dt > 0 ? (h.x - px) / dt : 0, vz = dt > 0 ? (h.z - pz) / dt : 0;
+    const kv = 1 - Math.exp(-HOLD_SWING * dt);
+    h.vx += (vx - h.vx) * kv; h.vz += (vz - h.vz) * kv;
+    if (h.phase === "carry") {
+      // up past its height and back: picked up by a hand, not raised on a lift
+      const u = clamp01((now - h.t0) / TIMING.liftUp);
+      const rise = HOLD_LIFT * (ease.outCubic(u) + HOLD_OVERSHOOT * Math.sin(Math.PI * u));
+      h.lift = u < 1 ? Math.max(h.lift * (1 - u), rise) : HOLD_LIFT;
+      h.stretch = HOLD_STRETCH * Math.sin(Math.PI * clamp01(u * 1.4));
+      // a hand is never quite still: one slow breath per TIMING.holdBob
+      h.bob = u < 1 ? 0 : HOLD_BOB * Math.sin(((now - h.t0 - TIMING.liftUp) / TIMING.holdBob) * Math.PI * 2);
+    } else {
+      h.stretch = 0;
+      h.bob = 0;
+      const u = clamp01((now - h.t0) / TIMING.liftDrop);
+      // falls under gravity (ease in), with one small settle at the end
+      const fall = (h.liftAt ?? HOLD_LIFT) * (1 - u * u);
+      const settle = u > 0.82 ? Math.sin(((u - 0.82) / 0.18) * Math.PI) * 0.025 : 0;
+      h.lift = Math.max(0, fall) + settle;
+      if (u >= 1) {
+        h.x = h.to.x; h.z = h.to.z; h.y = h.to.y; h.g = h.to.g; h.lift = 0;
+        // set down on the table: a landing (a flyer set down at its altitude is not one)
+        if (!StandeesLayer.isFlying(h.y, h.g)) this.touchDown(e, h.t0 + TIMING.liftDrop, h.x, h.y, h.z, SQUASH.drop, DUST.drop);
+        this.endHold(e, now);
+        return true;
+      }
+    }
+    // in the hand it bobs, so it asks for frames until it is set down
+    return true;
   }
 
   /**
@@ -766,6 +1129,8 @@ export class StandeesLayer {
     this.casters.clear();
     for (const g of Object.values(this.geo)) (Array.isArray(g) ? g : [g]).forEach((x) => x.dispose());
     this.shadowTex?.dispose();
+    this.shadowSoftTex?.dispose();
+    this.dust.dispose();
     for (const a of this.art.values()) a.promise.then(() => a.texture?.dispose());
     this.art.clear();
   }

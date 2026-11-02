@@ -237,7 +237,8 @@ export default async function check(ctx) {
     }
   }
   const block = Terrain.blank(6, 6);
-  for (let si = 4; si < 8; si++) for (let sj = 4; sj < 8; sj++) block.set(si, sj, { h: 8 });
+  // 20 ft: taller than a medium eye plus the sight reveal, so it outlines sight too.
+  for (let si = 4; si < 8; si++) for (let sj = 4; sj < 8; sj++) block.set(si, sj, { h: 16 });
   const live = { terrain: block, grid };
   const Cls = sb.createHeightSweepClass(StubBase, { Edge: StubEdge, Vertex: () => StubVertex, context: () => live });
   const tok = (elevation) => ({ documentName: "Token", elevation, width: 1, height: 1, actor: null });
@@ -256,7 +257,7 @@ export default async function check(ctx) {
   ctx.ok("backend: cliff edges block sight and light, not movement or sound",
     cliffsIn(low).every((x) => x.sight > 0 && x.light > 0 && x.move === 0 && x.sound === 0));
   ctx.ok("backend: cliff edges are clones of the cache", cliffsIn(low).every((x) => !sb.cliffEdgeObjects(block, 4, 100, StubEdge).includes(x)));
-  const high = make("sight", { doc: tok(10) });
+  const high = make("sight", { doc: tok(20) });
   high._identifyEdges();
   ctx.ok("backend: an eye above the block gets none", cliffsIn(high).length === 0);
   const sound = make("sound");
@@ -266,7 +267,25 @@ export default async function check(ctx) {
   light._identifyEdges();
   ctx.ok("backend: a light on the ground is blocked by the block", cliffsIn(light).length === 4);
   ctx.ok("backend: a light's eye is never under the ground",
-    sb.polygonEyeQ({ config: { type: "light" }, origin: { x: 250, y: 250, elevation: 0 } }, live) === 9);
+    sb.polygonEyeQ({ config: { type: "light" }, origin: { x: 250, y: 250, elevation: 0 } }, live) === 17);
+
+  // The sight reveal: a 10 ft block hides its own top from a medium eye's floor
+  // view, but a creature standing on it would be seen, so sight is not cut there.
+  // Light keeps the exact outline, and a creature behind it is still hidden in 3D.
+  const terrace = Terrain.blank(6, 6);
+  for (let si = 4; si < 8; si++) for (let sj = 4; sj < 8; sj++) terrace.set(si, sj, { h: 8 });
+  const tLive = { terrain: terrace, grid };
+  const TCls = sb.createHeightSweepClass(StubBase, { Edge: StubEdge, Vertex: () => StubVertex, context: () => tLive });
+  const tMake = (type, doc) => { const p = new TCls(); p.config = { type, source: doc ? { object: { document: doc } } : null }; p.origin = { x: 50, y: 250, elevation: 0 }; return p; };
+  const tSight = tMake("sight", tok(0)); tSight._identifyEdges();
+  const tLight = tMake("light", null); tLight._identifyEdges();
+  ctx.ok("reveal: sight reveals ground a medium creature there would be seen on",
+    cliffsIn(tSight).length === 0 && sb.outlineFloorQ(tSight, tLive) === Math.floor(eyeQ(tok(0), grid) + (sb.SIGHT_REVEAL_DIST / grid.distance) * 4),
+    String(cliffsIn(tSight).length));
+  ctx.ok("reveal: lights keep the exact outline", cliffsIn(tLight).length === 4 && sb.outlineFloorQ(tLight, tLive) === Math.floor(sb.polygonEyeQ(tLight, tLive)));
+  ctx.ok("reveal: a creature behind the 10 ft block is still hidden in 3D",
+    !sb.targetInClearLine(tLive, eyeQ(tok(0), grid), { x: 50, y: 250 }, { x: 550, y: 250 }, 0, 6));
+  ctx.ok("reveal: the lift is a medium creature, from SIZE_HEIGHT", /SIGHT_REVEAL_DIST = SIZE_HEIGHT\.med/.test(readFileSync(join(ctx.root, "scripts/features/diorama/foundry/sight-backend.mjs"), "utf8")));
   const boxed = make("sight", { box: { x: 0, y: 0, width: 300, height: 600 } });
   boxed._identifyEdges();
   ctx.ok("backend: the bounding box filters cliff edges", cliffsIn(boxed).length === 3, String(cliffsIn(boxed).length));
@@ -280,8 +299,8 @@ export default async function check(ctx) {
   const ray = { A: { x: 50, y: 250 }, B: { x: 550, y: 250 } };
   const any = make("sight");
   ctx.ok("backend: a 3D ray into the block collides", any._testCollision(ray, "any", { x: 550, y: 250, elevation: 0 }, 0, 1) === true);
-  const over = make("sight", { doc: tok(10) });
-  const res = over._testCollision(ray, "any", { x: 550, y: 250, elevation: 10 }, 0, 1);
+  const over = make("sight", { doc: tok(20) });
+  const res = over._testCollision(ray, "any", { x: 550, y: 250, elevation: 20 }, 0, 1);
   ctx.ok("backend: a ray over the block falls through to the walls", res === false && over.superSawCliffs === false);
   const lowWalls = make("sight");
   lowWalls._testCollision({ A: { x: 50, y: 50 }, B: { x: 550, y: 50 } }, "any", { x: 550, y: 50, elevation: 0 }, 0, 1);

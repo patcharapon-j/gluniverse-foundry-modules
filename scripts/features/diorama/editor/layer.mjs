@@ -29,6 +29,8 @@ import { SUB, KIND } from "../constants.mjs";
 import { PALETTE, hexToInt, hexToRgb } from "../../../core/theme.mjs";
 import { parseKey } from "./difficult.mjs";
 import { BRUSHED } from "./session.mjs";
+import { footprintCorners, worldOf, SHAPE_DEFAULTS } from "../terrain/props.mjs";
+import { snapCentre } from "./props-tool.mjs";
 
 const CAPTURE_Z = 10000;
 const CLICK_SLOP = 5;
@@ -107,9 +109,10 @@ export class EditorLayer {
     this.walls = new PIXI.Graphics();
     this.preview = new PIXI.Graphics();
     this.cursor = new PIXI.Graphics();
-    for (const g of [this.outlines, this.marks, this.difficult, this.walls, this.preview, this.cursor]) g.eventMode = "none";
+    this.props = new PIXI.Graphics();
+    for (const g of [this.outlines, this.marks, this.difficult, this.walls, this.preview, this.cursor, this.props]) g.eventMode = "none";
 
-    root.addChild(this.dim, this.fill, this.outlines, this.marks, this.difficult, this.mask, this.walls, this.preview, this.cursor);
+    root.addChild(this.dim, this.fill, this.outlines, this.marks, this.difficult, this.mask, this.walls, this.props, this.preview, this.cursor);
     root.on("pointerdown", (ev) => this.#down(ev));
     root.on("pointermove", (ev) => this.#move(ev));
     root.on("pointerup", (ev) => this.#up(ev));
@@ -128,7 +131,7 @@ export class EditorLayer {
     });
 
     this.#paintAll();
-    this.#queue("outlines", "difficult", "mask", "walls", "dim", "view");
+    this.#queue("outlines", "difficult", "mask", "walls", "dim", "view", "props");
     return true;
   }
 
@@ -171,6 +174,7 @@ export class EditorLayer {
       case "preview": this.#queue("preview"); break;
       case "tool": this.#queue("cursor", "walls"); break;
       case "view": this.#queue("view", "dim", "outlines"); break;
+      case "props": case "mode": this.#queue("props", "cursor"); break;
     }
   }
 
@@ -189,6 +193,7 @@ export class EditorLayer {
         if (need.has("mask")) this.#drawMask();
         if (need.has("walls")) this.#drawWalls();
         if (need.has("preview")) this.#drawPreview();
+        if (need.has("props")) this.#drawProps();
         if (need.has("dim")) this.#drawDim();
         if (need.has("view")) this.#applyView();
         if (need.has("cursor")) this.#drawCursor();
@@ -358,6 +363,39 @@ export class EditorLayer {
     }
   }
 
+  /* ── props ──────────────────────────────────────────────────────────── */
+
+  /**
+   * Every prop's footprint, in hairlines: brighter in Props mode, the selected
+   * one in the signal colour with its front marked, a GM-only one in violet.
+   * In Terrain mode they stay faintly visible so a brush stroke is not made
+   * blind under a crate.
+   */
+  #drawProps() {
+    const s = this.session, g = this.props, size = s.grid.size;
+    g.clear();
+    const on = s.mode === "props";
+    const sel = s.propTool.selected;
+    for (const p of s.props) {
+      const pts = footprintCorners(p).map(([x, y]) => [x * size, y * size]);
+      const picked = on && p.id === sel;
+      const c = picked ? col("signal") : p.hidden ? col("violet") : col("textBright");
+      g.beginFill(c, picked ? 0.24 : on ? 0.12 : 0.05);
+      g.lineStyle({ width: 1, color: c, alpha: on ? 0.95 : 0.4, native: true });
+      g.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < 4; i++) g.lineTo(pts[i][0], pts[i][1]);
+      g.lineTo(pts[0][0], pts[0][1]);
+      g.endFill();
+      if (picked) {
+        // the front edge (local +y): where a wedge runs down, where a card faces
+        const [a, b] = [worldOf(p, -0.35, 0.5), worldOf(p, 0.35, 0.5)];
+        g.lineStyle({ width: 1, color: col("signal"), alpha: 1, native: true });
+        g.moveTo(a[0] * size, a[1] * size).lineTo(b[0] * size, b[1] * size);
+      }
+    }
+    g.lineStyle(0);
+  }
+
   /* ── drag preview ───────────────────────────────────────────────────── */
 
   #drawPreview() {
@@ -406,6 +444,14 @@ export class EditorLayer {
     const erase = this._mods.shift && ["brush", "rect", "fill", "raise", "lower"].includes(s.tool);
     const c = this._mods.alt ? col("cyan") : erase ? col("hazard") : col("textBright");
     g.lineStyle({ width: 1, color: c, alpha: 0.95, native: true });
+    if (s.mode === "props") {
+      // where a click would put the next prop (its default footprint, snapped)
+      const d = SHAPE_DEFAULTS[s.propTool.shape] ?? SHAPE_DEFAULTS.box;
+      const cx = h.x / size, cy = h.y / size;
+      const x = s.propTool.snap ? snapCentre(cx, d.w) : cx, y = s.propTool.snap ? snapCentre(cy, d.d) : cy;
+      g.drawRect((x - d.w / 2) * size, (y - d.d / 2) * size, d.w * size, d.d * size);
+      return;
+    }
     if (s.tool === "wall") {
       g.drawCircle(h.x, h.y, WALL_TOL_PX / (canvas.stage.scale.x || 1));
       return;

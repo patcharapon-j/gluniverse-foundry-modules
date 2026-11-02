@@ -7,14 +7,21 @@
  *
  *   left click token          control (shift adds / removes)
  *   left click ground         release all
- *   left drag own token       path preview, drop = TokenDocument#move
+ *   left drag own token       pick the miniature up, carry it (everyone watching
+ *                             sees it in the hand) and set it down where it is let
+ *                             go: one TokenDocument#move. Out of reach, up a cliff
+ *                             or through a wall is warned in red, never refused.
+ *                             A flyer is grabbed by its figure (moves at its
+ *                             altitude) or by its foot.
  *   double click token        sheet
  *   right click token         token menu
  *   left / right click door   Foundry's DoorControl rules
  *   long press / Alt+click    ping
  *   Ctrl+drag ground          ruler
  *   right / middle drag       pan; wheel = zoom
- *   hover a token             distance + terrain cover from the controlled one
+ *   hover a token             distance + terrain cover from the controlled one; with
+ *                             dio.tactics, the line of sight to it and to every target,
+ *                             and a drop line with its falling damage on a dragged path
  */
 
 import { SUITE_ID } from "../../../core/const.mjs";
@@ -23,6 +30,7 @@ import { CAMERA, FLAG_ALTITUDE, TIMING } from "../constants.mjs";
 import { distToQ, qToDist } from "../terrain/model.mjs";
 import { pathCellsTo } from "./snapshot.mjs";
 import * as Seam from "./seams.mjs";
+import { sightReadouts, fallReadouts, isFlying, linesKey } from "./tactics.mjs";
 import { t, isGM, userColor } from "./util.mjs";
 
 /** Pointer travel (client px) before a press becomes a drag. */
@@ -111,7 +119,12 @@ export class Input {
     }
     if (hit?.type === "token") {
       const tok = this.token(hit.id);
-      if (tok?.document?.isOwner) this.down.dragToken = tok;
+      if (tok?.document?.isOwner) {
+        this.down.dragToken = tok;
+        // "air": grabbed by a flyer's figure or stand, so it travels at its altitude;
+        // "ground": by the foot on the table, so the pointer's square is the square.
+        this.down.part = hit.part ?? "ground";
+      }
       return;
     }
     if (!hit || hit.type === "ground") {
@@ -134,7 +147,7 @@ export class Input {
     if (d.button === 1 || d.button === 2) { if (d.moved) this.panBy(dx, dy); return; }
     if (d.button !== 0 || !d.moved) return;
     if (this.ruler) { this.updateRuler(ev); return; }
-    if (d.dragToken) this.updateDrag(ev, d.dragToken);
+    if (d.dragToken) this.updateDrag(ev, d.dragToken, d);
   }
 
   async onUp(ev) {
@@ -176,6 +189,7 @@ export class Input {
 
   cancel() {
     const had = !!(this.drag || this.ruler || this.down);
+    this.losKey = null;
     this.down = null;
     this.clearLong();
     this.clearDrag();
@@ -359,27 +373,100 @@ export class Input {
 
   /* ──────────────────────────── drag / path ──────────────────────────── */
 
-  updateDrag(ev, tok) {
+  /**
+   * Moving a miniature: it is picked up and follows the hand, lifted clear of
+   * the table on every screen watching the scene, and letting go sets it down
+   * on the square under it in one move. Nothing refuses a square: out of
+   * reach, up a cliff or past a wall is shown in red with what it would cost,
+   * and the GM or the player decides (the table has its reasons). The move
+   * records the cheapest route the reach found, when there is one, so what it
+   * cost is kept; the figure never walks it.
+   * A flyer grabbed by its figure or stand moves at its altitude: the pointer
+   * is read on the level plane at its feet, not on the ground far behind it.
+   */
+  updateDrag(ev, tok, d = this.down) {
     const doc = tok.document;
     const g = this.ctx.grid();
     const size = g.size;
     if (!this.drag) {
       const start = { i: Math.round(doc._source.y / size), j: Math.round(doc._source.x / size) };
       const w = Math.max(1, Math.round(doc.width)), h = Math.max(1, Math.round(doc.height));
-      this.drag = { tok, cells: [start], anchor: { i: Math.floor((h - 1) / 2), j: Math.floor((w - 1) / 2) }, key: "" };
+      const elevQ = distToQ(Number(doc._source.elevation ?? doc.elevation) || 0, g.distance);
+      const air = d?.part === "air" && Seam.altitude(doc) > 0;
+      this.drag = {
+        tok, cells: [start], start, w, h, anchor: { i: Math.floor((h - 1) / 2), j: Math.floor((w - 1) / 2) }, key: "",
+        air, elevQ, sent: 0, dest: start, routed: true, tone: "info", sentTone: "info", pose: null, keep: 0,
+      };
+      this.ctx.dragging?.(tok);
+      this.hold("carry", (start.j + w / 2) * size, (start.i + h / 2) * size);
+      // A hand held still sends nothing; tell the table it is still holding before they let go of it.
+      this.drag.keep = setInterval(() => {
+        const dr = this.drag;
+        if (dr?.pose) this.ctx.sendHold?.(dr.tok.document, dr.pose);
+      }, TIMING.holdKeep);
     }
-    const hit = this.pick(ev);
-    let x, y;
-    if (hit?.type === "ground") { x = hit.x; y = hit.y; }
-    else if (hit?.type === "token") { const o = this.token(hit.id); x = o?.center?.x; y = o?.center?.y; }
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    const cell = { i: Math.floor(y / size) - this.drag.anchor.i, j: Math.floor(x / size) - this.drag.anchor.j };
-    const cells = pathCellsTo(this.drag.cells, cell);
+    const drag = this.drag;
+    const at = this.pointerAt(ev, drag);
+    if (!at) return;
+    const cell = { i: Math.floor(at.y / size) - drag.anchor.i, j: Math.floor(at.x / size) - drag.anchor.j };
+    const reach = this.ctx.reach?.();
+    const route = reach && reach.tokenId === doc.id ? reach.pathTo(cell.i, cell.j) : null;
+    const cells = route ?? pathCellsTo([drag.start], cell);
+    drag.dest = cell;
     const key = cells.map((c) => `${c.i},${c.j}`).join(";");
-    if (key === this.drag.key) return;
-    this.drag.cells = cells;
-    this.drag.key = key;
-    this.showPath();
+    if (key !== drag.key) {
+      drag.cells = cells;
+      drag.key = key;
+      // no reach to ask (a system with no Speed): the straight line is the route
+      drag.routed = !!route || !(reach && reach.tokenId === doc.id);
+      this.showPath();
+    }
+    this.hold("carry", at.x, at.y, cell);
+  }
+
+  /** The px point the pointer is over for this drag (not the token in the hand). */
+  pointerAt(ev, drag) {
+    const r = this.r;
+    if (!r) return null;
+    if (drag.air) {
+      const p = r.pickPlane?.(ev.clientX, ev.clientY, drag.elevQ);
+      if (p && Number.isFinite(p.x)) return p;
+    }
+    let hit = null;
+    try { hit = r.pick(ev.clientX, ev.clientY, { exclude: drag.tok.id, doors: false }); } catch { hit = null; }
+    if (hit?.type === "ground") return { x: hit.x, y: hit.y };
+    if (hit?.type === "token") {
+      const o = this.token(hit.id);
+      if (Number.isFinite(o?.center?.x)) return { x: o.center.x, y: o.center.y };
+    }
+    return null;
+  }
+
+  /**
+   * Pose the miniature in the hand, here and (throttled) on every other screen
+   * watching this scene. x, y: px of the figure's centre; `cell` the top-left
+   * square it would land on, for the height it floats over.
+   */
+  hold(phase, x, y, cell = null) {
+    const drag = this.drag;
+    if (!drag) return;
+    const doc = drag.tok.document;
+    const g = this.ctx.grid();
+    const scene = this.ctx.scene();
+    const size = g.size;
+    const c = cell ?? { i: Math.floor(y / size) - drag.anchor.i, j: Math.floor(x / size) - drag.anchor.j };
+    const ground = Seam.groundDist(scene, c.j * size, c.i * size, doc.width, doc.height);
+    const groundQ = distToQ(ground, g.distance);
+    const footQ = distToQ(ground + Seam.altitude(doc), g.distance);
+    // tone: what setting it down here costs, so every screen colours the squares it lands on
+    const pose = { x, y, footQ, groundQ, phase, tone: phase === "carry" ? drag.tone : "info" };
+    drag.pose = pose;
+    this.r?.setHold?.(doc.id, pose);
+    const now = performance.now();
+    if (phase === "carry" && pose.tone === drag.sentTone && now - drag.sent < TIMING.holdSend) return;
+    drag.sent = now;
+    drag.sentTone = pose.tone;
+    this.ctx.sendHold?.(doc, pose);
   }
 
   /** Waypoints for the drag's cells (index 0 = the start). */
@@ -424,17 +511,59 @@ export class Input {
       zQ: distToQ(p.elevation, g.distance),
       color: toneColor(k ? tones[k - 1] : tones[0]),
     }));
+    const routed = this.drag.routed || cells.length < 2;
+    if (this.offBoard(this.drag.dest, this.drag)) {
+      // Foundry keeps tokens on the scene: the one square nothing can set it down on.
+      const b = points[points.length - 1];
+      this.showFalls([]);
+      this.drag.tone = "peril";
+      this.ctx.setOverlays({ path: { points: [{ ...points[0], color: PALETTE.peril }, { ...b, color: PALETTE.peril }], color: PALETTE.peril }, marks: [], falls: [] });
+      this.place("path", { x: b.x, y: b.y, zQ: b.zQ + 1 }, [t("GLDIO.move.offBoard")], "peril");
+      return;
+    }
+    if (!routed) {
+      // No walking route reaches it this turn (too far, up a cliff, past a wall). It
+      // is placed, not walked, so there are no ledges to fall off on the way: one red
+      // line to where it lands, how far and how much higher or lower, and the warning.
+      const a = points[0], b = points[points.length - 1];
+      const line = [{ ...a, color: PALETTE.peril }, { ...b, color: PALETTE.peril }];
+      this.showFalls([]);
+      this.drag.tone = "peril";
+      this.ctx.setOverlays({ path: { points: line, color: PALETTE.peril }, marks: [], falls: [] });
+      const d = Number(result?.distance) || 0;
+      const lines = [Seam.distanceText({ systemId, distance: d, gridDistance: g.distance, units: g.units, t }).text];
+      const dz = Math.round(((Number(wps[wps.length - 1].elevation) || 0) - (Number(wps[0].elevation) || 0)) * 10) / 10;
+      if (Math.abs(dz) >= (Number(g.distance) || 5) / 2) {
+        lines.push(t(dz > 0 ? "GLDIO.move.up" : "GLDIO.move.down", { distance: Math.abs(dz), units: g.units }));
+      }
+      lines.push(t("GLDIO.move.noRoute"), t("GLDIO.move.anyway"));
+      this.place("path", { x: b.x, y: b.y, zQ: b.zQ + 1 }, lines, "peril");
+      return;
+    }
     const an = Seam.analyze(this.ctx.terrain(), cells, g);
+    // A flyer (in the air, or moving by flying) does not fall off a ledge.
+    const falls = isFlying(Seam.altitude(doc), wps[0].action) ? [] : an.falls;
     const marks = [
       ...an.climbs.map((c) => ({ i: c.i, j: c.j, color: PALETTE.warn, alpha: 0.45 })),
-      ...an.falls.map((f) => ({ i: f.i, j: f.j, color: PALETTE.hazard, alpha: 0.45 })),
+      ...falls.map((f) => ({ i: f.i, j: f.j, color: PALETTE.hazard, alpha: 0.45 })),
     ];
-    this.ctx.setOverlays({ path: { points, color: toneColor(tones[0]) }, marks });
-
+    // The drop off each ledge, drawn down the cliff with what the landing costs (shown, never applied).
+    const tactics = this.ctx.tactics?.() !== false;
+    const fr = tactics
+      ? fallReadouts({ terrain: this.ctx.terrain(), cells, falls, grid: g, w: this.drag.w, h: this.drag.h, systemId, t })
+      : { lines: [], labels: [] };
+    this.showFalls(fr.labels);
     const total = result ? read(result.distance, result.cost) : null;
+    this.drag.tone = total && cells.length > 1 ? total.tone : "info";
+    // The squares it lands on are drawn by the figure in the hand (render/standees.mjs), on every screen.
+    this.ctx.setOverlays({ path: { points, color: toneColor(tones[0]) }, marks, falls: fr.lines });
+
     const lines = total ? [total.text] : [];
+    // More than a turn's movement: warned, and it can still be set down.
+    if (total?.tone === "peril") lines.push(t("GLDIO.move.beyond"), t("GLDIO.move.anyway"));
     for (const c of an.climbs) lines.push(t("GLDIO.path.climb", { distance: Math.round(c.riseDist * 10) / 10, units: g.units }));
-    for (const f of an.falls) {
+    // with the readouts on, each fall is labelled at its own ledge instead
+    for (const f of tactics ? [] : falls) {
       const s = Seam.fallText({ systemId, dropDist: f.dropDist, intoWater: f.intoWater, units: g.units, t });
       if (s) lines.push(s);
     }
@@ -443,25 +572,79 @@ export class Input {
     else this.unplace("path");
   }
 
+  /**
+   * Let go: the miniature drops onto the square under the hand and the token is
+   * placed there in one move, with no walk (animate: false) and nothing
+   * refused (walls and cost ignored). Warn, never block: the red the drag
+   * showed is the whole of the rule. Foundry's pause is Foundry's, and stays.
+   */
   async commitDrag() {
     const drag = this.drag;
-    this.clearDrag();
-    if (!drag || drag.cells.length < 2) return;
+    const paused = game.paused && !isGM();
+    const dest = drag?.dest ?? drag?.start;
+    const moving = !!drag && (dest.i !== drag.start.i || dest.j !== drag.start.j) && !paused && !this.offBoard(dest, drag);
+    if (drag) {
+      const size = this.ctx.grid().size;
+      const c = moving ? dest : drag.start;
+      this.hold("drop", (c.j + drag.w / 2) * size, (c.i + drag.h / 2) * size, c);
+    }
+    this.clearDrag({ keepHold: true });
+    if (!drag || !moving) {
+      if (drag && paused && (dest.i !== drag.start.i || dest.j !== drag.start.j)) ui.notifications.warn("GAME.PausedWarning", { localize: true });
+      return;
+    }
     const doc = drag.tok.document;
-    if (game.paused && !isGM()) { ui.notifications.warn("GAME.PausedWarning", { localize: true }); return; }
-    const wps = this.waypoints(drag).slice(1);
+    // the route the reach found (so the move keeps what it cost), else straight onto the square
+    const end = drag.cells[drag.cells.length - 1];
+    const onRoute = drag.routed && end && end.i === dest.i && end.j === dest.j;
+    const wps = this.waypoints({ ...drag, cells: onRoute ? drag.cells : [drag.start, dest] }).slice(1);
     wps.forEach((w, k) => { w.snapped = true; w.explicit = k === wps.length - 1; w.checkpoint = k === wps.length - 1; });
     const last = wps[wps.length - 1];
     let ok = false;
-    try { ok = await doc.move(wps, { showRuler: false }); } catch (e) { console.error(e); ok = false; }
+    try {
+      ok = await doc.move(wps, {
+        showRuler: false, animate: false, autoRotate: false,
+        constrainOptions: { ignoreWalls: true, ignoreCost: true },
+      });
+    } catch (e) { console.error(e); ok = false; }
     if (!ok && (doc._source.x !== last.x || doc._source.y !== last.y)) ui.notifications.warn(t("GLDIO.move.stopped"));
+    // Whatever Foundry decided, the figure goes to where the token really is.
+    if (!ok) this.ctx.tokensChanged?.();
   }
 
-  clearDrag() {
-    if (!this.drag) return;
+  /** Would a footprint with its top-left on `cell` leave the scene? (Foundry keeps tokens on it.) */
+  offBoard(cell, drag) {
+    const r = globalThis.canvas?.dimensions?.sceneRect;
+    if (!r || !cell) return false;
+    const size = this.ctx.grid().size;
+    const x = cell.j * size, y = cell.i * size;
+    return x < r.x - 1 || y < r.y - 1 || x + drag.w * size > r.x + r.width + 1 || y + drag.h * size > r.y + r.height + 1;
+  }
+
+  clearDrag({ keepHold = false } = {}) {
+    const drag = this.drag;
+    if (!drag) return;
     this.drag = null;
-    this.ctx.setOverlays({ path: null, marks: [] });
+    clearInterval(drag.keep);
+    // Cancelled mid-air (Escape, a lost pointer): back onto its own square.
+    if (!keepHold) {
+      this.drag = drag;
+      const size = this.ctx.grid().size;
+      this.hold("drop", (drag.start.j + drag.w / 2) * size, (drag.start.i + drag.h / 2) * size, drag.start);
+      this.drag = null;
+    }
+    this.ctx.dragging?.(null);
+    this.ctx.setOverlays({ path: null, marks: [], falls: [] });
     this.unplace("path");
+    this.showFalls([]);
+  }
+
+  /** The fall labels of the path being dragged (view/tactics.mjs fallReadouts). */
+  showFalls(labels) {
+    const ids = new Set();
+    for (const l of labels) { this.place(l.id, l.world, l.lines, l.tone); ids.add(l.id); }
+    for (const id of this.fallIds ?? []) if (!ids.has(id)) this.unplace(id);
+    this.fallIds = ids;
   }
 
   /* ──────────────────────────── hover ──────────────────────────── */
@@ -494,8 +677,47 @@ export class Input {
     this.ctx.setOverlays({ hover: cell });
   }
 
+  /**
+   * From the controlled token to the hovered one and to this user's targets:
+   * the line of sight (broken where it is stopped), the cover and the 3D
+   * distance (view/tactics.mjs). Only to tokens Foundry shows this viewer.
+   */
+  sightLabels() {
+    const from = globalThis.canvas?.tokens?.controlled?.[0] ?? null;
+    const hovered = this.token(this.hoverId);
+    const scene = this.ctx.scene();
+    const targets = [...(globalThis.game?.user?.targets ?? [])].filter((tk) => tk?.document?.parent === scene);
+    const g = this.ctx.grid();
+    let out = { lines: [], labels: [] };
+    try {
+      out = sightReadouts({ from, hovered, targets, grid: g, asPlayers: this.ctx.asPlayers(), systemId: sysId(), t });
+    } catch (e) { console.error(e); }
+    const ids = new Set();
+    for (const l of out.labels) {
+      const tok = this.token(l.tokenId);
+      if (!tok) continue;
+      const zTop = distToQ(Number(tok.document.elevation) || 0, g.distance) + Seam.heightQ(tok, g.distance);
+      this.place(l.id, { x: tok.center.x, y: tok.center.y, zQ: zTop + 1 }, l.lines, l.tone);
+      ids.add(l.id);
+    }
+    for (const id of this.sightIds ?? []) if (!ids.has(id)) this.unplace(id);
+    this.sightIds = ids;
+    const key = linesKey(out.lines);
+    // an unchanged readout rebuilds nothing (null after cancel: write it once again)
+    if (key !== this.losKey) { this.losKey = key; this.ctx.setOverlays({ los: out.lines }); }
+  }
+
+  /** The readouts switched off (dio.tactics): drop their lines and target labels. */
+  clearSight() {
+    for (const id of this.sightIds ?? []) if (id !== "hover") this.unplace(id);
+    this.sightIds = new Set();
+    if (this.losKey) { this.losKey = ""; this.ctx.setOverlays({ los: [] }); }
+  }
+
   /** Distance and terrain cover from the controlled token to the hovered one. */
   hoverLabel() {
+    if (this.ctx.tactics?.() !== false) { this.sightLabels(); return; }
+    this.clearSight();
     const target = this.token(this.hoverId);
     const from = globalThis.canvas?.tokens?.controlled?.[0] ?? null;
     if (!target || !from || from === target || this.ctx.asPlayers()) { this.unplace("hover"); return; }
@@ -531,7 +753,7 @@ export class Input {
 
   /** Re-project every live label (the camera or a token moved). */
   relabel() {
-    if (this.hoverId) this.hoverLabel();
+    if (this.hoverId || this.sightIds?.size || this.losKey || globalThis.game?.user?.targets?.size) this.hoverLabel();
     for (const [id, a] of this.anchors) this.ctx.hud.label(id, this.r?.project(a.world.x, a.world.y, a.world.zQ) ?? null, a.lines, a.tone);
   }
 

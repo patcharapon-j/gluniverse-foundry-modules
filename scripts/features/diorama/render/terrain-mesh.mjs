@@ -19,7 +19,10 @@
  *           (cells below the lip), drop (cells from lip to bottom at this
  *           point), along (world coordinate along the edge), mat (index into
  *           CLIFF_MATERIALS), flag (1 = the bottom meets ground, so it gets
- *           contact AO; +2 = it falls into a pit, so it fades to dark).
+ *           contact AO; +2 = it falls into a pit, so it fades to dark; +4 = it
+ *           stands in water, so it draws a waterline; +8 = it is a waterfall:
+ *           water spilling from its surface onto lower ground or into lower
+ *           water; 0 = the board's own edge, which ends in the plinth).
  *   water   the animated surfaces, slightly below each water sub-cell's top.
  *           Attributes: position, shore (1 at corners that touch a bank).
  *
@@ -371,9 +374,14 @@ export function buildTerrainMesh(t, { merge = true, meta = false } = {}) {
       const otherLive = G.live(nk);
       const otherWater = otherLive && G.kind[nk] === KIND.WATER;
       const selfWater = G.kind[k] === KIND.WATER;
-      const A = profile(G, k, e, "high", otherWater);
+      // A waterfall: this water spills over the edge onto lower ground or into
+      // lower water. Its face then starts at the water's surface (not its bed,
+      // which left the surface ending in mid-air over a lower pool).
+      const otherTop = otherLive ? (otherWater ? G.h[nk] - WATER_SURFACE_Q : G.h[nk]) : Infinity;
+      const fall = selfWater && otherLive && otherTop < G.h[k] - WATER_SURFACE_Q - EPS;
+      const A = profile(G, k, e, "high", otherWater && !fall);
       const B = otherLive ? profile(G, nk, (e + 2) % 4, "low", selfWater) : [[0, 1, G.baseQ, G.baseQ]];
-      const flag = (otherLive ? 1 : 0) + (otherLive && G.kind[nk] === KIND.PIT ? 2 : 0);
+      const flag = (otherLive ? 1 : 0) + (otherLive && G.kind[nk] === KIND.PIT ? 2 : 0) + (otherWater ? 4 : 0) + (fall ? 8 : 0);
       const ts = new Set([0, 1]);
       for (const s of A) { ts.add(s[0]); ts.add(s[1]); }
       for (const s of B) { ts.add(s[0]); ts.add(s[1]); }

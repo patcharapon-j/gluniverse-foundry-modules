@@ -15,28 +15,38 @@
 
 import { err, SUITE_ID } from "../../../core/const.mjs";
 import { Surfaces } from "../../../core/gl-surfaces.mjs";
-import { FEATURE_ID, SETTINGS, CAMERA, TIMING, snapYawStep, yawStride } from "../constants.mjs";
+import { FEATURE_ID, SETTINGS, CAMERA, TIMING, FLAG_KNOWN, snapYawStep, yawStride } from "../constants.mjs";
 import { TerrainStore, supportsScene } from "../terrain/store.mjs";
 import { liveTerrain, onTerrainChange } from "../terrain/live.mjs";
 import { readWalls, readTokens, backgroundSrc, loadArt } from "./snapshot.mjs";
 import { Baker } from "./bake.mjs";
 import { Input } from "./input.mjs";
 import { Hud } from "./hud.mjs";
-import { sendInvite, sendSummon } from "./sync.mjs";
+import { sendHold, sendInvite, sendSummon } from "./sync.mjs";
+import { reachOf } from "./reach.mjs";
 import { loadSeams, heightDist, groundDist } from "./seams.mjs";
 import { el, isGM, setting, setSetting, streamOwnsView, t, typingTarget } from "./util.mjs";
 import { HOOKS as STREAM_HOOKS } from "../../stream/constants.js";
 import { turnState, currentCombatantToken } from "../integrations/turns.mjs";
-import { templateCells } from "../integrations/templates.mjs";
+import { templateAreas } from "../integrations/templates.mjs";
 import { SequencerMirror } from "../integrations/sequencer.mjs";
 import { currentLines, linksOn, onLinesChanged } from "../integrations/target-lines.mjs";
+import { OPTIONS, resolveGraphics } from "../options.mjs";
+import { sceneEnvironment, environmentTouched, ENV_HOOKS } from "./environment-source.mjs";
+import { PropStore } from "../terrain/props-store.mjs";
 
 const ROOT_ID = "gldio-view";
-const PARTS = ["terrain", "background", "walls", "tokens", "links", "cells", "overlays", "effects", "options", "lighting"];
-const emptyOverlays = () => ({ path: null, cells: [], marks: [], ruler: null, pings: [], hover: null });
+const PARTS = ["terrain", "background", "walls", "tokens", "links", "cells", "overlays", "effects", "options", "lighting", "environment", "props"];
+/** Setting keys whose change redraws with new graphics / a new environment. */
+const GRAPHICS_KEYS = new Set(OPTIONS.filter((o) => o.scope === "client").map((o) => `${SUITE_ID}.${o.key}`));
+const ENV_KEYS = new Set(["dio.envSource", "dio.weatherSource"].map((k) => `${SUITE_ID}.${k}`));
+const emptyOverlays = () => ({ path: null, cells: [], marks: [], ruler: null, pings: [], hover: null, reach: null });
+/** Setting keys whose change means a token's reach must be found again. */
+const REACH_KEYS = new Set([`${SUITE_ID}.dio.reach`, `${SUITE_ID}.dio.propsBlock`]);
 
 const fresh = () => ({
-  open: false, scene: null, grid: null, terrain: null, saved: false,
+  reach: null, reachTimer: 0, dragTok: null, holds: new Map(),
+  open: false, scene: null, grid: null, terrain: null, ground: null, saved: false,
   root: null, canvas: null, r: null, Renderer: null, surface: null,
   hooks: [], unTerrain: null, unLines: null, keyFn: null, resizeObs: null, tokenIds: new Set(),
   dirty: new Set(), raf: 0, labelUntil: 0, labelRaf: 0,
@@ -141,6 +151,7 @@ export function onCanvasReady() {
     S.scene = scene;
     S.bg = null;
     S.overlays = emptyOverlays();
+    S.reach = null;
     S.input?.cancel();
     S.seq?.dispose();
     S.seq = new SequencerMirror({ onChange: () => mark("effects"), groundQ });
@@ -195,6 +206,7 @@ async function mount(scene) {
   S.baker = new Baker({
     grid: S.grid,
     mode: visionMode,
+    known: () => !!S.scene?.getFlag?.(SUITE_ID, FLAG_KNOWN),
     onBaked: (res) => { S.lighting = res; mark("lighting"); if (S.asPlayers) mark("tokens"); },
   });
   S.seq = new SequencerMirror({ onChange: () => mark("effects"), groundQ });
@@ -212,6 +224,7 @@ async function mount(scene) {
   // Bake vision now, so the first frame that draws the ground also hides what this viewer has not seen.
   try { S.baker.bake(); } catch (e) { err("diorama: first bake failed", e); }
   markAll();
+  queueReach();
   if (isGM()) sendInvite(scene.id);
 }
 
@@ -240,7 +253,68 @@ function bindInput() {
     onHover: () => mark("tokens"),
     asPlayers: () => S.asPlayers,
     cameraMoved: () => trackLabels(0),
+    reach: () => S.reach,
+    dragging: (tok) => { S.dragTok = tok ?? null; computeReach(); },
+    sendHold: (doc, pose) => { if (S.scene) sendHold(S.scene.id, doc, pose); },
+    tokensChanged: () => mark("tokens"),
+    tactics: () => setting("dio.tactics", true) !== false,
   });
+}
+
+/* ═══════════════════════════ reach ═══════════════════════════ */
+
+/** Find the reach again soon (several hooks fire for one change). */
+function queueReach() {
+  if (!S.open || S.reachTimer) return;
+  S.reachTimer = setTimeout(computeReach, TIMING.reachDebounce);
+}
+
+/**
+ * The squares the selected (or carried) token can reach in one, two and three
+ * Strides. Shown per this player's `dio.reach`; a drag always finds it, since
+ * the lift style routes the move along it.
+ */
+function computeReach() {
+  if (S.reachTimer) clearTimeout(S.reachTimer);
+  S.reachTimer = 0;
+  if (!S.open) return;
+  const mode = setting("dio.reach", "selected");
+  let tok = S.dragTok;
+  if (!tok && mode === "selected") {
+    const c = globalThis.canvas?.tokens?.controlled ?? [];
+    if (c.length === 1 && c[0].document?.parent === S.scene && c[0].document.isOwner) tok = c[0];
+  }
+  let reach = null;
+  if (tok && S.grid) {
+    try { reach = reachOf({ tok, scene: S.scene, grid: S.grid, terrain: S.terrain }); } catch (e) { err("diorama: reach failed", e); }
+  }
+  S.reach = reach;
+  const show = reach && mode !== "off" && (mode === "selected" || S.dragTok);
+  const next = show ? { cells: reach.cells, start: { ...reach.start, w: reach.w, h: reach.h } } : null;
+  if (!next && !S.overlays.reach) return;
+  S.overlays.reach = next;
+  mark("overlays");
+}
+
+/** A miniature in another player's hand (sync.mjs), shown here if this viewer sees that token. */
+export function applyHold(p, sender) {
+  if (!S.open || !S.r || S.scene?.id !== p?.sceneId || !sender) return false;
+  const tok = globalThis.canvas?.tokens?.get(p.tokenId);
+  const doc = tok?.document;
+  if (!doc) return false;
+  if (!sender.isGM && !doc.testUserPermission(sender, "OWNER")) return false;
+  if (!S.tokenIds.has(doc.id)) return false; // not on this viewer's board (hidden, unseen)
+  const pose = { x: Number(p.x), y: Number(p.y), footQ: Number(p.footQ), groundQ: Number(p.groundQ),
+    phase: p.phase === "drop" ? "drop" : "carry", tone: typeof p.tone === "string" ? p.tone : "info" };
+  if (![pose.x, pose.y, pose.footQ].every(Number.isFinite)) return false;
+  clearTimeout(S.holds.get(doc.id));
+  S.holds.delete(doc.id);
+  S.r.setHold(doc.id, pose);
+  if (pose.phase === "carry") {
+    // A hand that goes quiet (a closed tab) lets go; the figure walks back to its token.
+    S.holds.set(doc.id, setTimeout(() => { S.holds.delete(doc.id); S.r?.setHold(doc.id, null); mark("tokens"); }, TIMING.holdStale));
+  }
+  return true;
 }
 
 function teardown() {
@@ -248,6 +322,8 @@ function teardown() {
   if (S.raf) cancelAnimationFrame(S.raf);
   if (S.labelRaf) cancelAnimationFrame(S.labelRaf);
   for (const [name, id] of S.hooks) Hooks.off(name, id);
+  if (S.reachTimer) clearTimeout(S.reachTimer);
+  for (const timer of S.holds.values()) clearTimeout(timer);
   S.unTerrain?.();
   S.unLines?.();
   if (S.keyFn) window.removeEventListener("keydown", S.keyFn, true);
@@ -274,10 +350,14 @@ function wireHooks() {
   const onActor = (doc) => { if (doc?.parent?.documentName === "Actor" || doc?.parent?.documentName === "Token") mark("tokens"); };
 
   for (const h of ["createToken", "updateToken", "deleteToken"]) on(h, tokensHere);
+  // The reach follows the selected token, the walls and doors, and difficult terrain.
+  on("updateToken", (doc) => { if (here(doc) && (doc.id === S.reach?.tokenId || doc.object?.controlled)) queueReach(); });
   on("refreshToken", tokens);
   on("targetToken", tokens);
-  on("controlToken", () => { mark("tokens"); S.baker?.request(); S.input?.hoverLabel(); });
-  for (const h of ["createWall", "updateWall", "deleteWall"]) on(h, wallsHere);
+  on("controlToken", () => { mark("tokens"); S.baker?.request(); S.input?.hoverLabel(); queueReach(); });
+  for (const h of ["createWall", "updateWall", "deleteWall"]) on(h, (doc) => { wallsHere(doc); if (here(doc)) queueReach(); });
+  for (const h of ["createRegionBehavior", "updateRegionBehavior", "deleteRegionBehavior"]) on(h, () => queueReach());
+  on("updateActor", (actor) => { if (S.reach && actor === globalThis.canvas?.tokens?.get(S.reach.tokenId)?.actor) queueReach(); });
   for (const h of ["updateCombat", "deleteCombat", "createCombatant", "updateCombatant", "deleteCombatant"]) on(h, tokens);
   on("combatTurnChange", (combat) => { mark("tokens"); follow(combat); });
   on("combatStart", (combat) => { mark("tokens"); follow(combat); });
@@ -285,19 +365,35 @@ function wireHooks() {
   for (const h of ["createItem", "updateItem", "deleteItem", "createActiveEffect", "updateActiveEffect", "deleteActiveEffect"]) on(h, onActor);
   on("sightRefresh", () => { S.baker?.request(); mark("tokens"); });
   on("lightingRefresh", () => S.baker?.request());
-  for (const h of ["createRegion", "updateRegion", "deleteRegion"]) on(h, (doc) => { if (here(doc)) mark("cells"); });
+  for (const h of ["createRegion", "updateRegion", "deleteRegion"]) on(h, (doc) => { if (here(doc)) { mark("cells"); queueReach(); } });
   on("updateScene", (scene, changes) => {
     if (scene !== S.scene) return;
     if ("levels" in changes || "background" in changes || "initialLevel" in changes) mark("background");
-    if ("environment" in changes) S.baker?.request();
+    if ("environment" in changes) { S.baker?.request(); mark("environment"); }
+    // a known layout (FLAG_KNOWN) is read off the document by the bake; any flag write re-bakes
+    if (changes?.flags?.[SUITE_ID]) S.baker?.request();
+    if (environmentTouched(changes)) mark("environment");
+    if (PropStore.touched(changes)) mark("props");
   });
+  // Time and weather from elsewhere (the calendar, the Weather feature).
+  for (const h of ENV_HOOKS) on(h, () => mark("environment"));
   on("updateUser", (_u, changes) => { if ("color" in changes) mark("tokens"); });
   // The stream capture: its camera moves the 2D canvas; the 3D camera follows.
   on("canvasPan", (_c, pos) => followCanvas(pos));
   on(STREAM_HOOKS.streamModeChanged, () => followCanvas());
+  // A client-scope setting never becomes a Setting document, so it never fires
+  // updateSetting: Foundry announces it on clientSettingChanged instead.
+  on("clientSettingChanged", (key) => {
+    if (REACH_KEYS.has(key)) { queueReach(); return; }
+    if (GRAPHICS_KEYS.has(key)) { mark("options"); if (key.endsWith(".dayNight")) mark("environment"); }
+  });
   // The GM changed the camera snap: put an open view back on it.
   on("updateSetting", (s) => {
     if (s?.key === `${SUITE_ID}.${SETTINGS.effects}`) { mark("tokens"); return; }
+    if (REACH_KEYS.has(s?.key)) queueReach();
+    if (GRAPHICS_KEYS.has(s?.key)) { mark("options"); if (s.key.endsWith(".dayNight")) mark("environment"); return; }
+    if (ENV_KEYS.has(s?.key)) { mark("environment"); return; }
+    if (s?.key === `${SUITE_ID}.dio.propsBlock`) { mark("props"); return; }
     if (s?.key !== `${SUITE_ID}.${SETTINGS.yawSnap}` || !S.r) return;
     const cam = S.r.getCamera();
     const step = snapYawStep(cam.yawStep ?? 0, yawSnap());
@@ -305,7 +401,7 @@ function wireHooks() {
   });
   // The controls change width with the active tool set; place again after a render.
   on("renderSceneControls", () => placeBesideControls());
-  S.unTerrain = onTerrainChange((scene) => { if (!scene || scene.id === S.scene?.id) mark("terrain"); });
+  S.unTerrain = onTerrainChange((scene) => { if (!scene || scene.id === S.scene?.id) { mark("terrain"); queueReach(); } });
   // The targeting lines: exactly the ones stream-targets draws on this client.
   S.unLines = onLinesChanged(() => mark("links"));
 }
@@ -358,15 +454,18 @@ function flush() {
     if (d.has("terrain")) {
       readTerrain();
       r.setGrid(gridArg());
-      r.setTerrain(S.terrain);
+      // The ground is drawn; props draw themselves on it (the rules terrain,
+      // S.terrain, has the solid ones stamped in, for movement and picks).
+      r.setTerrain(S.ground);
       S.baker?.setGrid(S.grid);
       S.baker?.request();
       S.hud?.setSetup(gm && !S.saved);
-      d.add("walls"); d.add("tokens"); d.add("cells"); d.add("background");
+      d.add("walls"); d.add("tokens"); d.add("cells"); d.add("background"); d.add("props");
+      queueReach();
     }
     if (d.has("background")) loadBackground();
     if (d.has("walls")) {
-      r.setWalls(readWalls({ isGM: gm && !S.asPlayers, terrain: S.terrain, grid: S.grid, defaultMaterial: setting(SETTINGS.wallMaterial, "stone") }));
+      r.setWalls(readWalls({ isGM: gm && !S.asPlayers, terrain: S.ground, grid: S.grid, defaultMaterial: setting(SETTINGS.wallMaterial, "stone") }));
     }
     if (d.has("tokens")) {
       const tokens = readTokens({
@@ -382,8 +481,11 @@ function flush() {
         halo: haloLayout(),
       });
       r.setTokens(tokens);
+      const was = S.tokenIds;
       S.tokenIds = new Set(tokens.map((tk) => tk.id));
       d.add("links");
+      // who is on the board decides which attached areas (auras) show
+      if (was.size !== S.tokenIds.size || [...was].some((id) => !S.tokenIds.has(id))) d.add("cells");
     }
     // A line whose end is not standing on the board is dropped here, not drawn to nowhere.
     if (d.has("links")) r.setLinks?.(linksOn(currentLines(), S.tokenIds));
@@ -398,8 +500,10 @@ function flush() {
       if (fx.length) mark("effects"); // follow attached effects every frame while any play
     }
     if (d.has("options")) {
-      r.setOptions({ tiltShift: !!setting(SETTINGS.tiltShift, false), cutaway: S.cutaway, ghosts: gm && !S.asPlayers, grid: gridLook() });
+      r.setOptions({ tiltShift: !!setting(SETTINGS.tiltShift, false), cutaway: S.cutaway, ghosts: gm && !S.asPlayers, grid: gridLook(), graphics: readGraphics() });
     }
+    if (d.has("environment")) r.setEnvironment?.(sceneEnvironment(S.scene, { dayNight: !!setting("dio.dayNight", true) }));
+    if (d.has("props")) r.setProps?.(PropStore.states(S.scene, { isGM: gm && !S.asPlayers }));
     if (d.has("lighting") && S.lighting) r.setLighting(S.lighting);
     r.requestRender();
     if (d.has("tokens") || d.has("terrain")) S.input?.relabel();
@@ -412,6 +516,7 @@ function readTerrain() {
   const live = liveTerrain(S.scene);
   S.grid = live?.grid ?? null;
   S.terrain = live?.terrain ?? null;
+  S.ground = live?.ground ?? S.terrain;
   S.saved = !!live?.saved;
 }
 
@@ -434,10 +539,14 @@ async function loadBackground() {
 
 async function loadCells() {
   const seq = ++S.cellSeq;
-  let cells = [];
-  try { cells = await templateCells({ grid: S.grid, isGM: isGM() && !S.asPlayers }); } catch (e) { err("diorama: templates", e); }
+  let cells = [], areas = [];
+  try {
+    // an area attached to a creature shows only while that creature is on this viewer's board
+    ({ cells, areas } = await templateAreas({ grid: S.grid, isGM: isGM(), asPlayers: S.asPlayers, tokenSeen: (id) => S.tokenIds.has(id) }));
+  } catch (e) { err("diorama: templates", e); }
   if (!S.open || seq !== S.cellSeq) return;
   S.overlays.cells = cells;
+  S.r?.setAreas?.(areas);
   mark("overlays");
 }
 
@@ -462,8 +571,15 @@ function gridLook() {
   const g = S.scene?.grid;
   const on = !!setting(SETTINGS.grid, true);
   const color = typeof g?.color === "string" ? g.color : (g?.color?.css ?? "#000000");
-  const alpha = Math.max(0.18, Math.min(0.45, Number(g?.alpha) || 0.3));
+  const alpha = Math.max(0.1, Math.min(0.8, Number(setting("dio.gridStrength", 0.3)) || 0.3));
   return { on, color: /^#[0-9a-f]{6}$/i.test(color) ? color : "#000000", alpha };
+}
+
+/** This client's graphics choices, resolved (options.mjs). */
+function readGraphics() {
+  const raw = {};
+  for (const o of OPTIONS) if (o.scope === "client") raw[o.name] = setting(o.key, o.default);
+  return resolveGraphics(raw);
 }
 
 /** Keep the toolbar beside Foundry's scene controls, whatever their width. */
@@ -632,6 +748,8 @@ function hudActions() {
       markAll();
       S.baker?.request();
     },
+    graphics: () => import("./graphics-app.mjs").then((m) => m.openGraphics()).catch((e) => err("diorama: graphics", e)),
+    environment: () => import("./environment-app.mjs").then((m) => m.openEnvironment(S.scene)).catch((e) => err("diorama: environment", e)),
     autoSetup: () => editTerrain(S.scene),
     close: () => closeView(),
   };

@@ -19,12 +19,17 @@ export const TOOLBAR = Object.freeze([
   { act: "tiltShift", icon: "fa-solid fa-camera-retro", key: "GLDIO.view.tiltShift", toggle: true },
   { act: "cutaway", icon: "fa-solid fa-scissors", key: "GLDIO.view.cutaway", toggle: true },
   { act: "follow", icon: "fa-solid fa-crosshairs", key: "GLDIO.view.follow", toggle: true },
+  { act: "graphics", icon: "fa-solid fa-sliders", key: "GLDIO.view.graphics" },
   { sep: true, gm: true },
+  { act: "environment", icon: "fa-solid fa-cloud-sun-rain", key: "GLDIO.view.environment", gm: true },
   { act: "summon", icon: "fa-solid fa-users-viewfinder", key: "GLDIO.view.summon", gm: true },
   { act: "asPlayers", icon: "fa-solid fa-eye", key: "GLDIO.view.asPlayers", gm: true, toggle: true },
   { sep: true },
   { act: "close", icon: "fa-solid fa-xmark", key: "GLDIO.view.close" },
 ]);
+
+/** Tones a label badge may take: each is a suite token (`--gl-<tone>`). */
+export const CHIP_TONES = Object.freeze(["info", "good", "warn", "hazard", "peril"]);
 
 export class Hud {
   /**
@@ -77,10 +82,12 @@ export class Hud {
   }
 
   /**
-   * Show or move a floating label at client px. `lines` are plain text.
+   * Show or move a floating label at client px. `lines` are plain text, or a
+   * badge `{ text, chip: tone }`: a solid chip in that tone's colour (a cover
+   * value, a fall's damage), so the one fact that decides a turn reads first.
    * @param {string} id
    * @param {{x:number, y:number}|null} at
-   * @param {string[]} lines
+   * @param {Array<string|{text:string, chip:string}>} lines
    * @param {string} [tone]  info | warn | hazard | peril
    */
   label(id, at, lines = [], tone = "info") {
@@ -91,10 +98,16 @@ export class Hud {
       this.labelEls.set(id, n);
       this.labels.append(n);
     }
-    const key = lines.join("\n");
+    const key = lines.map((s) => (typeof s === "string" ? s : `${s?.chip}:${s?.text}`)).join("\n");
     if (n.dataset.text !== key) {
       n.dataset.text = key;
-      n.replaceChildren(...lines.map((s, k) => el("div", { class: k ? "gldio-label-sub" : "gldio-label-main", text: s })));
+      n.replaceChildren(...lines.map((s, k) => {
+        if (s && typeof s === "object") {
+          const chip = el("span", { class: "gl-chip gl-chip-solid", text: String(s.text ?? ""), style: `--gl-accent: var(--gl-${CHIP_TONES.includes(s.chip) ? s.chip : "info"})` });
+          return el("div", { class: "gldio-label-sub" }, [chip]);
+        }
+        return el("div", { class: k ? "gldio-label-sub" : "gldio-label-main", text: s });
+      }));
     }
     n.dataset.tone = tone;
     const r = this.root.getBoundingClientRect();

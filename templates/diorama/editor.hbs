@@ -34,6 +34,89 @@
     <p class="gldio-ed-notice is-warn"><i class="fa-solid fa-power-off"></i> {{localize "GLDIO.editor.offNotice"}}</p>
   {{/if}}
 
+  {{!-- Terrain or props: the two things this panel edits. --}}
+  <div class="gldio-ed-seg gldio-pr-modes" role="group" aria-label="{{localize "GLDIO.props.modeLabel"}}">
+    <button type="button" class="gldio-ed-segbtn {{#if mode.terrain}}is-active{{/if}}" data-action="mode" data-mode="terrain" aria-pressed="{{#if mode.terrain}}true{{else}}false{{/if}}"><i class="fa-solid fa-mountain"></i> {{localize "GLDIO.props.mode.terrain"}}</button>
+    <button type="button" class="gldio-ed-segbtn {{#if mode.props}}is-active{{/if}}" data-action="mode" data-mode="props" aria-pressed="{{#if mode.props}}true{{else}}false{{/if}}"><i class="fa-solid fa-cubes"></i> {{localize "GLDIO.props.mode.props"}} <span class="gldio-pr-count gl-numeric">{{props.count}}</span></button>
+  </div>
+
+  {{#if mode.props}}
+  <section class="gldio-ed-sec gldio-pr">
+    <div class="gldio-ed-head"><span class="gldio-ed-label gldio-ed-label--bright">{{localize "GLDIO.props.shapesLabel"}}</span><span class="gl-rule"></span></div>
+    <p class="gldio-ed-hint">{{localize "GLDIO.props.hint"}}</p>
+    <nav class="gldio-pr-shapes" aria-label="{{localize "GLDIO.props.shapesLabel"}}">
+      {{#each props.shapes}}
+        <button type="button" class="gldio-ed-tool {{#if active}}is-active{{/if}}" data-action="propShape" data-shape="{{key}}"
+          data-tooltip="{{label}}" aria-label="{{label}}" aria-pressed="{{#if active}}true{{else}}false{{/if}}"><i class="fa-solid {{icon}}"></i></button>
+      {{/each}}
+    </nav>
+    <div class="gldio-ed-head"><span class="gldio-ed-label">{{localize "GLDIO.props.matsLabel"}}</span><span class="gl-rule"></span></div>
+    <div class="gldio-ed-mats gldio-pr-mats">
+      {{#each props.mats}}
+        <button type="button" class="gldio-ed-mat gldio-pr-mat {{#if active}}is-active{{/if}}" data-action="propMat" data-mat="{{key}}" data-prop-mat="{{key}}">{{label}}</button>
+      {{/each}}
+    </div>
+    <label class="gldio-ed-check"><input type="checkbox" data-field="prop.snap" {{#if props.snap}}checked{{/if}}> {{localize "GLDIO.props.snap"}}</label>
+  </section>
+
+  <section class="gldio-ed-sec gldio-pr-edit">
+    <div class="gldio-ed-head"><span class="gldio-ed-label">{{localize "GLDIO.props.selected"}}</span><span class="gl-rule"></span></div>
+    {{#if props.sel}}
+      <div class="gldio-ed-row">
+        <span class="gldio-pr-badge"><i class="fa-solid {{props.sel.icon}}"></i> {{props.sel.shapeLabel}}</span>
+        <input class="gldio-ed-text" type="text" value="{{props.sel.label}}" maxlength="60" data-field="prop.label"
+          aria-label="{{localize "GLDIO.props.field.label"}}" placeholder="{{localize "GLDIO.props.field.label"}}">
+      </div>
+      <div class="gldio-ed-grid2">
+        <label class="gldio-ed-field"><span class="gldio-ed-label">{{localize "GLDIO.props.field.x"}}</span>
+          <input class="gldio-ed-num gl-numeric" type="number" step="0.25" value="{{props.sel.x}}" data-field="prop.x"></label>
+        <label class="gldio-ed-field"><span class="gldio-ed-label">{{localize "GLDIO.props.field.y"}}</span>
+          <input class="gldio-ed-num gl-numeric" type="number" step="0.25" value="{{props.sel.y}}" data-field="prop.y"></label>
+        <label class="gldio-ed-field"><span class="gldio-ed-label">{{props.sel.wLabel}}</span>
+          <input class="gldio-ed-num gl-numeric" type="number" min="{{props.sel.sizeMin}}" step="{{props.sel.sizeStep}}" value="{{props.sel.w}}" data-field="prop.w"></label>
+        <label class="gldio-ed-field"><span class="gldio-ed-label">{{props.sel.dLabel}}</span>
+          <input class="gldio-ed-num gl-numeric" type="number" min="{{props.sel.sizeMin}}" step="{{props.sel.sizeStep}}" value="{{props.sel.d}}" data-field="prop.d"></label>
+        <label class="gldio-ed-field"><span class="gldio-ed-label">{{props.sel.hLabel}}</span>
+          <input class="gldio-ed-num gl-numeric" type="number" min="{{props.sel.sizeMin}}" step="{{props.sel.sizeStep}}" value="{{props.sel.h}}" data-field="prop.h"></label>
+        <label class="gldio-ed-field"><span class="gldio-ed-label">{{props.sel.elevLabel}}</span>
+          <input class="gldio-ed-num gl-numeric" type="number" step="{{props.sel.sizeStep}}" value="{{props.sel.elev}}" data-field="prop.elev"
+            placeholder="{{localize "GLDIO.props.field.elevAuto"}}"></label>
+      </div>
+      <div class="gldio-ed-row">
+        <span class="gldio-ed-label">{{localize "GLDIO.props.field.rot"}}</span>
+        <button type="button" class="gldio-ed-ibtn" data-action="propOp" data-op="rotL" data-tooltip="{{localize "GLDIO.props.action.rotL"}}" aria-label="{{localize "GLDIO.props.action.rotL"}}"><i class="fa-solid fa-rotate-left"></i></button>
+        <input class="gldio-ed-num gl-numeric" type="number" min="0" max="359" step="15" value="{{props.sel.rot}}" data-field="prop.rot" aria-label="{{localize "GLDIO.props.field.rot"}}">
+        <button type="button" class="gldio-ed-ibtn" data-action="propOp" data-op="rotR" data-tooltip="{{localize "GLDIO.props.action.rotR"}}" aria-label="{{localize "GLDIO.props.action.rotR"}}"><i class="fa-solid fa-rotate-right"></i></button>
+      </div>
+      <div class="gldio-ed-row">
+        <span class="gldio-ed-label">{{localize "GLDIO.props.field.tint"}}</span>
+        <input class="gldio-ed-colour" type="color" value="{{props.sel.tintValue}}" data-field="prop.tint" aria-label="{{localize "GLDIO.props.field.tint"}}">
+        <button type="button" class="gldio-ed-ibtn" data-action="propOp" data-op="clearTint" {{#unless props.sel.tint}}disabled{{/unless}}
+          data-tooltip="{{localize "GLDIO.props.action.clearTint"}}" aria-label="{{localize "GLDIO.props.action.clearTint"}}"><i class="fa-solid fa-droplet-slash"></i></button>
+        <span class="gldio-pr-flags">
+          <label class="gldio-ed-check" data-tooltip="{{localize "GLDIO.props.solidHint"}}"><input type="checkbox" data-field="prop.solid" {{#if props.sel.solid}}checked{{/if}}> {{localize "GLDIO.props.field.solid"}}</label>
+          <label class="gldio-ed-check" data-tooltip="{{localize "GLDIO.props.hiddenHint"}}"><input type="checkbox" data-field="prop.hidden" {{#if props.sel.hidden}}checked{{/if}}> {{localize "GLDIO.props.field.hidden"}}</label>
+        </span>
+      </div>
+      {{#if props.sel.card}}
+        <div class="gldio-ed-row">
+          <input class="gldio-ed-text" type="text" value="{{props.sel.img}}" data-field="prop.img" aria-label="{{localize "GLDIO.props.field.img"}}" placeholder="{{localize "GLDIO.props.field.img"}}">
+          <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--sm" data-action="propOp" data-op="pickImg"><i class="fa-solid fa-folder-open"></i> {{localize "GLDIO.props.action.pickImg"}}</button>
+        </div>
+        <p class="gldio-ed-hint">{{localize "GLDIO.props.cardHint"}}</p>
+      {{/if}}
+      <div class="gldio-ed-actions">
+        <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--sm" data-action="propOp" data-op="duplicate"><i class="fa-solid fa-clone"></i> {{localize "GLDIO.props.action.duplicate"}}</button>
+        <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--sm" data-action="propOp" data-op="deselect"><i class="fa-solid fa-xmark"></i> {{localize "GLDIO.props.action.deselect"}}</button>
+        <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--sm gldio-ed-btn--danger" data-action="propOp" data-op="remove"><i class="fa-solid fa-trash"></i> {{localize "GLDIO.props.action.remove"}}</button>
+      </div>
+    {{else}}
+      <p class="gldio-ed-hint gldio-ed-hint--faint">{{localize "GLDIO.props.none"}}</p>
+    {{/if}}
+    <p class="gldio-ed-hint gldio-ed-hint--faint">{{localize "GLDIO.props.count" n=props.count}}</p>
+  </section>
+  {{else}}
+
   {{!-- Tools. --}}
   <nav class="gldio-ed-tools" aria-label="{{localize "GLDIO.editor.tools"}}">
     {{#each tools}}
@@ -184,6 +267,7 @@
       </div>
     {{/if}}
   </section>
+  {{/if}}
 
   {{!-- Map-wide. --}}
   <section class="gldio-ed-sec gldio-ed-map">
@@ -196,6 +280,8 @@
     <div class="gldio-ed-actions">
       <button type="button" class="gl-btn gldio-ed-btn" data-action="autoSetup" {{#if busy}}disabled{{/if}} data-tooltip="{{localize "GLDIO.editor.auto.hint"}}">
         <i class="fa-solid {{#if (eq busy "auto")}}fa-spinner fa-spin{{else}}fa-wand-sparkles{{/if}}"></i> {{localize "GLDIO.editor.auto.label"}}</button>
+      <button type="button" class="gl-btn gldio-ed-btn" data-action="importLayout" {{#if busy}}disabled{{/if}} data-tooltip="{{localize "GLDIO.editor.layout.hint"}}">
+        <i class="fa-solid fa-file-import"></i> {{localize "GLDIO.editor.layout.label"}}</button>
       <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--danger" data-action="clearAll" {{#if busy}}disabled{{/if}}>
         <i class="fa-solid fa-eraser"></i> {{localize "GLDIO.editor.clear.label"}}</button>
     </div>

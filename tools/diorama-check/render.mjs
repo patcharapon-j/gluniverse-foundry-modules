@@ -331,7 +331,7 @@ async function checkStandees(ctx, sources, rig) {
   ctx.ok("target lines draw over the board (no depth test)", lm.material.depthTest === false && lm.material.depthWrite === false);
   ctx.ok("the renderer has setLinks and claims motion for lines and reticles",
     typeof (await import(ctx.url(`${RENDER_DIR}/renderer.mjs`))).DioramaRenderer.prototype.setLinks === "function"
-    && /this\.links\.frame\(/.test(rsrc) && /this\.standees\.targeted && shed\.markerMotion/.test(rsrc));
+    && /this\.links\.frame\(/.test(rsrc) && /this\.standees\.targeted && fx\.markers/.test(rsrc));
   ctx.ok("glint and breathe loop on whole periods of TIMING", /now % P\) \/ P/.test(stripComments(sources["links.mjs"]))
     && /now % P\) \/ P\) \* Math\.PI \* 2/.test(stripComments(sources["standees.mjs"])));
   links.dispose();

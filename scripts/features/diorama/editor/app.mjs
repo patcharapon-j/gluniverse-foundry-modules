@@ -26,7 +26,19 @@ import { EditorSession, TOOLS, BRUSHED } from "./session.mjs";
 import { blankLike, BRUSH_MAX, H_MIN, H_MAX, PALETTE_MAX } from "./tools.mjs";
 import { planDifficult, readDifficult, writeDifficult } from "./difficult.mjs";
 import { autoSetupDetailed } from "./auto-setup.mjs";
+import { loadAutoOptions, promptAutoOptions, describeAuto } from "./auto-dialog.mjs";
 import { backgroundSrc, sampleColours, wallSegments, sceneInsideFn } from "./sample.mjs";
+import { PropStore } from "../terrain/props-store.mjs";
+import { PROP_SHAPES, PROP_MATERIALS, SIZE_MIN, normalizeProps, propToJSON, resolveProps } from "../terrain/props.mjs";
+import { propsBlock } from "../terrain/live.mjs";
+
+/** Shape → icon in the props palette (Font Awesome solid). */
+export const PROP_ICONS = Object.freeze({
+  box: "fa-cube", cylinder: "fa-database", cone: "fa-ice-cream", sphere: "fa-circle", dome: "fa-igloo",
+  pyramid: "fa-mountain", wedge: "fa-arrow-trend-up", torus: "fa-ring", capsule: "fa-capsules", arch: "fa-archway",
+  pillar: "fa-landmark", crate: "fa-box", barrel: "fa-drum", rock: "fa-hill-rockslide", tree: "fa-tree",
+  pine: "fa-caret-up", bush: "fa-seedling", card: "fa-image",
+});
 
 export const EDITOR_ID = "gldio-editor";
 
@@ -82,6 +94,7 @@ function EditorApp() {
         addLayer: DioramaEditor.#onAddLayer,
         removeLayer: DioramaEditor.#onRemoveLayer,
         autoSetup: DioramaEditor.#onAutoSetup,
+        importLayout: DioramaEditor.#onImportLayout,
         copyFrom: DioramaEditor.#onCopyFrom,
         clearAll: DioramaEditor.#onClearAll,
         toggleOff: DioramaEditor.#onToggleOff,
@@ -89,6 +102,10 @@ function EditorApp() {
         save: DioramaEditor.#onSave,
         discard: DioramaEditor.#onDiscard,
         sampleMap: DioramaEditor.#onSampleMap,
+        mode: DioramaEditor.#onMode,
+        propShape: DioramaEditor.#onPropShape,
+        propMat: DioramaEditor.#onPropMat,
+        propOp: DioramaEditor.#onPropOp,
       },
     };
 
@@ -106,6 +123,7 @@ function EditorApp() {
         grid: g,
         walls: wallSegments(scene),
         difficult: readDifficult(scene),
+        props: PropStore.read(scene),
       });
       /** The world's default wall material (walls with no entry in terrain.walls). */
       this.defaultWallMaterial = this.#defaultWallMaterial();
@@ -204,7 +222,7 @@ function EditorApp() {
 
     #onSession(kind, d = {}) {
       if (d.live) return;     // a slider is being dragged; re-rendering would drop it
-      if (["tool", "palette", "history", "colours", "difficult"].includes(kind)) this.#render();
+      if (["tool", "palette", "history", "colours", "difficult", "props", "mode"].includes(kind)) this.#render();
     }
 
     #render() {
@@ -300,6 +318,30 @@ function EditorApp() {
         copyScenes,
         canCopy: copyScenes.length > 0,
         hasArt: !!src,
+        mode: { terrain: s.mode !== "props", props: s.mode === "props" },
+        props: this.#propsContext(),
+      };
+    }
+
+    /** The props panel: the palette, and the selected prop in the scene's units. */
+    #propsContext() {
+      const s = this.session, pt = s.propTool, p = s.selectedProp;
+      const D = this.grid.distance || 5, units = this.grid.units ?? "";
+      const d = (cells) => round(cells * D);
+      return {
+        count: s.props.length,
+        snap: pt.snap,
+        shapes: PROP_SHAPES.map((key) => ({ key, icon: PROP_ICONS[key], label: L(`GLDIO.props.shape.${key}`), active: key === (p?.shape ?? pt.shape) })),
+        mats: PROP_MATERIALS.map((key) => ({ key, label: L(`GLDIO.props.mat.${key}`), active: key === (p?.mat ?? pt.mat) })),
+        sel: p && {
+          id: p.id, label: p.label, icon: PROP_ICONS[p.shape], shapeLabel: L(`GLDIO.props.shape.${p.shape}`),
+          x: round(p.x), y: round(p.y), w: d(p.w), d: d(p.d), h: d(p.h), elev: p.elev === null ? "" : d(p.elev),
+          rot: round(p.rot), tint: p.tint, tintValue: p.tint ?? "#ffffff", solid: p.solid, hidden: p.hidden,
+          card: p.shape === "card", img: p.img,
+          sizeMin: round(SIZE_MIN * D), sizeStep: round(D / 4),
+          wLabel: L("GLDIO.props.field.w", { units }), dLabel: L("GLDIO.props.field.d", { units }),
+          hLabel: L("GLDIO.props.field.h", { units }), elevLabel: L("GLDIO.props.field.elev", { units }),
+        },
       };
     }
 
@@ -354,6 +396,30 @@ function EditorApp() {
         }
         case "entry.kind": s.updateEntry(s.layer, { kind: num() }); break;
         case "entry.material": s.updateEntry(s.layer, { material: input.value }); break;
+        default:
+          if (f.startsWith("prop.")) this.#propField(f.slice(5), input, live);
+      }
+    }
+
+    /** A field of the props panel. Sizes are typed in the scene's units, stored in cells. */
+    #propField(key, input, live) {
+      const s = this.session;
+      if (key === "snap") { s.setPropTool({ snap: input.checked }); return; }
+      const id = s.propTool.selected;
+      if (!id) return;
+      const D = this.grid.distance || 5;
+      const n = Number(input.value);
+      const cells = (v) => v / D;
+      switch (key) {
+        case "label": if (!live) s.updateProp(id, { label: input.value.trim() }); break;
+        case "x": case "y": if (Number.isFinite(n)) s.updateProp(id, { [key]: n }); break;
+        case "w": case "d": case "h": if (Number.isFinite(n) && n > 0) s.updateProp(id, { [key]: cells(n) }); break;
+        case "elev": s.updateProp(id, { elev: input.value.trim() === "" || !Number.isFinite(n) ? null : cells(n) }); break;
+        case "rot": if (Number.isFinite(n)) s.updateProp(id, { rot: n }); break;
+        case "tint": s.updateProp(id, { tint: input.value }, { commit: !live }); break;
+        case "solid": s.updateProp(id, { solid: input.checked }); break;
+        case "hidden": s.updateProp(id, { hidden: input.checked }); break;
+        case "img": if (!live) s.updateProp(id, { img: input.value.trim() }); break;
       }
     }
 
@@ -369,6 +435,10 @@ function EditorApp() {
       else if (mod && (k === "y" || (k === "z" && ev.shiftKey))) this.session.redo();
       else if (!mod && ev.key === "[") this.session.setOption("brush", { radius: this.session.brush.radius - 1 });
       else if (!mod && ev.key === "]") this.session.setOption("brush", { radius: this.session.brush.radius + 1 });
+      else if (this.session.mode === "props" && this.session.propTool.selected && !mod && (ev.key === "Delete" || ev.key === "Backspace")) this.session.removeProp();
+      else if (this.session.mode === "props" && this.session.propTool.selected && !mod && k === "r") this.#turnProp(ev.shiftKey ? -90 : 90);
+      else if (this.session.mode === "props" && this.session.propTool.selected && ev.key === "Escape") this.session.selectProp(null);
+      else if (this.session.mode === "props" && this.session.propTool.selected && mod && k === "d") this.session.duplicateProp();
       else handled = false;
       if (handled) { ev.preventDefault(); ev.stopPropagation(); }
     }
@@ -399,6 +469,10 @@ function EditorApp() {
       const s = this.session;
       try {
         await TerrainStore.write(this.scene, s.terrain);
+        // Props are written only when they changed, so an untouched level keeps no empty entry.
+        const stored = JSON.stringify(PropStore.read(this.scene).map(propToJSON));
+        const draft = JSON.stringify(normalizeProps(s.props).map(propToJSON));
+        if (draft !== stored) await PropStore.write(this.scene, s.props);
         if (s.pending.length) {
           const plan = planDifficult(s.existingDifficult, s.pending);
           await writeDifficult(this.scene, plan, {
@@ -409,6 +483,16 @@ function EditorApp() {
         }
         s.saved({ difficult: readDifficult(this.scene) });
         ui.notifications.info(L("GLDIO.editor.saved", { scene: this.scene.name }));
+        // An imported layout's tokens move once its terrain is saved, onto the saved ground.
+        if (this._layoutTokens?.length) {
+          const { placeTokens } = await import("./layout-import.mjs");
+          // Tokens stand on the rules ground: a solid prop under one lifts it.
+          const rules = resolveProps(s.terrain, normalizeProps(s.props), { stamp: propsBlock() }).terrain;
+          const { moved, missing } = await placeTokens(this.scene, rules, this._layoutTokens);
+          this._layoutTokens = null;
+          if (moved) ui.notifications.info(L("GLDIO.editor.layout.tokensMoved", { n: moved }));
+          if (missing.length) ui.notifications.warn(L("GLDIO.editor.layout.tokensMissing", { names: missing.join(", ") }));
+        }
         return true;
       } catch (e) {
         console.error("GLUniverse Suite | diorama editor save failed", e);
@@ -427,6 +511,37 @@ function EditorApp() {
     /* ── actions ────────────────────────────────────────────────────── */
 
     static #onTool(_ev, target) { this.session.setTool(target.dataset.tool); }
+
+    /* ── props ──────────────────────────────────────────────────────── */
+
+    static #onMode(_ev, target) { this.session.setMode(target.dataset.mode); this.#render(); }
+    static #onPropShape(_ev, target) { this.session.setPropTool({ shape: target.dataset.shape }); this.#render(); }
+    static #onPropMat(_ev, target) { this.session.setPropTool({ mat: target.dataset.mat }); this.#render(); }
+
+    #turnProp(deg) {
+      const p = this.session.selectedProp;
+      if (p) this.session.updateProp(p.id, { rot: (((p.rot + deg) % 360) + 360) % 360 });
+    }
+
+    static async #onPropOp(_ev, target) {
+      const s = this.session, p = s.selectedProp;
+      if (!p) return;
+      switch (target.dataset.op) {
+        case "rotL": this.#turnProp(-45); break;
+        case "rotR": this.#turnProp(45); break;
+        case "clearTint": s.updateProp(p.id, { tint: null }); break;
+        case "duplicate": s.duplicateProp(p.id); break;
+        case "deselect": s.selectProp(null); break;
+        case "remove": s.removeProp(p.id); break;
+        case "pickImg": {
+          const FP = foundry.applications?.apps?.FilePicker?.implementation ?? globalThis.FilePicker;
+          if (!FP) return;
+          new FP({ type: "image", current: p.img || "", callback: (path) => s.updateProp(p.id, { img: path }) }).render(true);
+          return;
+        }
+      }
+      this.#render();
+    }
     static #onUndo() { this.session.undo(); }
     static #onRedo() { this.session.redo(); }
 
@@ -490,26 +605,36 @@ function EditorApp() {
       if (ok) s.removeEntry(s.layer);
     }
 
-    static async #onAutoSetup() {
+    static async #onAutoSetup(ev) {
       if (this._busy) return;
+      // The button asks for the options first; opening on an unset scene runs with the last ones used.
+      let options = loadAutoOptions();
+      if (ev instanceof Event) {
+        options = await promptAutoOptions({ units: this.grid.units });
+        if (!options || this._busy) return;
+      }
       this._busy = "auto";
       this.#render();
       try {
         const have = await this.#ensureColours();
         const s = this.session, g = this.grid;
+        // The fine raster rides the same (cached) reading as the colours.
+        const fine = have ? (await sampleColours(this.scene).catch(() => null))?.fine ?? null : null;
         const res = autoSetupDetailed({
-          colours: have ? s.colours : null,
-          cols: g.cols, rows: g.rows, gridSize: g.size,
+          colours: have ? s.colours : null, fine,
+          cols: g.cols, rows: g.rows, gridSize: g.size, distance: g.distance,
           walls: s.walls,
           sceneInside: sceneInsideFn(this.scene),
           palette: s.terrain.palette,
           wallHeight: s.terrain.wallHeight, stepHeight: s.terrain.stepHeight,
+          options,
         });
         res.terrain.walls = { ...s.terrain.walls };
         s.replace(res.terrain, "auto");
         const st = res.stats;
         ui.notifications.info(L(have ? "GLDIO.editor.auto.done" : "GLDIO.editor.auto.doneNoArt", {
           rooms: st.roomCells, water: Math.round(st.water / (SUB * SUB)), void: Math.round(st.void / (SUB * SUB)),
+          raised: Math.round(st.raised / (SUB * SUB)), how: describeAuto(st, options),
         }));
       } catch (e) {
         console.error("GLUniverse Suite | diorama auto setup failed", e);
@@ -518,6 +643,51 @@ function EditorApp() {
         this._busy = null;
         this.#render();
       }
+    }
+
+    /** Paste or load a layout (docs/DIORAMA_LAYOUT.md) and replace the draft with it; one undoable step. */
+    static async #onImportLayout() {
+      const esc = (v) => foundry.utils.escapeHTML?.(v) ?? v;
+      const text = await DialogV2.prompt({
+        window: { title: L("GLDIO.editor.layout.title"), icon: "fa-solid fa-file-import" },
+        classes: ["gldio-app", "gldio-dialog"],
+        position: { width: 520 },
+        content: `<p class="gldio-dialog-text">${esc(L("GLDIO.editor.layout.body"))}</p>
+          <textarea name="layout" class="gldio-ed-layout" rows="14" spellcheck="false" placeholder='{ "format": "gluniverse-diorama-layout", … }'></textarea>
+          <input type="file" name="file" accept=".json,application/json">`,
+        ok: { label: L("GLDIO.editor.layout.apply"), icon: "fa-solid fa-file-import", callback: (_ev, button) => button.form.elements.layout.value },
+        render: (_ev, dialog) => {
+          const form = dialog.element.querySelector("form");
+          form?.elements.file?.addEventListener("change", async (ev) => {
+            const f = ev.target.files?.[0];
+            if (f) form.elements.layout.value = await f.text();
+          });
+        },
+        rejectClose: false,
+      }).catch(() => null);
+      if (!text?.trim()) return;
+      const { parseLayout, compileForScene } = await import("./layout-import.mjs");
+      let data;
+      try { data = parseLayout(text); } catch (e) {
+        ui.notifications.error(L("GLDIO.editor.layout.badJson", { error: e.message }));
+        return;
+      }
+      const s = this.session;
+      const res = compileForScene(this.scene, data, s.terrain);
+      if (!res.terrain) {
+        console.warn("GLUniverse Suite | diorama layout problems:", res.errors);
+        ui.notifications.error(L("GLDIO.editor.layout.errors", { n: res.errors.length, error: res.errors[0] }));
+        return;
+      }
+      if (res.warnings.length) console.warn("GLUniverse Suite | diorama layout warnings:", res.warnings);
+      // A layout that says nothing about props leaves the draft's own props alone.
+      s.replace(res.terrain, "layout", Array.isArray(res.props) ? { props: res.props } : {});
+      this._layoutTokens = res.tokens;
+      if (res.props?.length) ui.notifications.info(L("GLDIO.props.layoutPlaced", { n: res.props.length }));
+      ui.notifications.info(L(res.tokens.length ? "GLDIO.editor.layout.doneTokens" : "GLDIO.editor.layout.done", {
+        ops: Array.isArray(data.ops) ? data.ops.length : 0, tokens: res.tokens.length,
+      }));
+      if (res.warnings.length) ui.notifications.warn(L("GLDIO.editor.layout.warnings", { n: res.warnings.length, warning: res.warnings[0] }));
     }
 
     static #onCopyFrom() {

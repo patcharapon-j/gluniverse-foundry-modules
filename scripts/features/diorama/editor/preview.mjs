@@ -20,6 +20,7 @@ import { warn, SUITE_ID } from "../../../core/const.mjs";
 import { Surfaces } from "../../../core/gl-surfaces.mjs";
 import { CAMERA, SETTINGS, WALL_MATERIALS, yawStride } from "../constants.mjs";
 import { backgroundSrc, loadBackground } from "./sample.mjs";
+import { resolveProps, propStates } from "../terrain/props.mjs";
 
 export const PREVIEW_ID = "gldio-editor-preview";
 /** Terrain re-feed coalescing while a stroke is in progress (ms). Not an animation. */
@@ -182,7 +183,7 @@ function PreviewApp() {
       this._ro = new ResizeObserver(() => this.#resize());
       this._ro.observe(this._stage);
       this._off = this.session.on((kind) => {
-        if (kind === "terrain" || kind === "palette" || kind === "history") this.#schedule();
+        if (kind === "terrain" || kind === "palette" || kind === "history" || kind === "props") this.#schedule();
         else if (kind === "walls") this.#syncWalls();
       });
     }
@@ -238,7 +239,10 @@ function PreviewApp() {
     #syncTerrain() {
       if (!this.r || !this.session) return;
       // A copy: the renderer may hold on to what it is handed, the draft keeps changing.
-      this.r.setTerrain(this.session.terrain.clone());
+      const ground = this.session.terrain.clone();
+      this.r.setTerrain(ground);
+      // The draft's props, stood on the draft's ground; GM-only ones as ghosts.
+      this.r.setProps?.(propStates(resolveProps(ground, this.session.props).props, { isGM: true }));
       this.#syncWalls();
     }
 

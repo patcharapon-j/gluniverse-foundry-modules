@@ -17,6 +17,9 @@
  *           exploration texture, read back at bake resolution once a second.
  *           null for "everything visible" (the GM, or a scene without token
  *           vision).
+ *   SOURCES the same lights as plain data (lightData): where each is, its
+ *           radii, colour and Foundry animation, for the renderer's flicker,
+ *           flames and torch shading (render/torches.mjs).
  *
  * "View as players" (GM) builds line of sight for every player-owned token
  * with sight through the installed sight backend, since a GM has no vision
@@ -67,15 +70,46 @@ export function lightTint(data, rgb) {
   return c.map((v) => Math.round(v * k * 255));
 }
 
+/**
+ * One light source as plain data for the renderer (render/torches.mjs): what
+ * flickers, burns and shades. Position and radii in px, elevation in scene
+ * distance units, `tint` the colour and strength the bake drew it with (0..1),
+ * `color` its own colour (null for an uncoloured light), `anim` its Foundry
+ * animation, `token` whether a token carries it (no flame is drawn for one).
+ * @returns {object|null}
+ */
+export function lightData(src) {
+  const d = src?.data ?? {};
+  const x = Number(d.x), y = Number(d.y);
+  const dim = Math.max(Number(d.dim) || 0, Number(d.bright) || 0, Number(d.radius) || 0);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || dim <= 0) return null;
+  const rgb = rgbOf(src);
+  const hasColor = d.color !== null && d.color !== undefined && Number.isFinite(Number(d.color));
+  const anim = d.animation ?? src?.animation ?? {};
+  const doc = src?.object?.document;
+  const token = doc?.documentName === "Token" || String(src?.sourceId ?? "").startsWith("Token.");
+  return {
+    id: String(src?.sourceId ?? `${x},${y}`),
+    x, y, dim, bright: Math.max(0, Math.min(dim, Number(d.bright) || 0)),
+    elevation: Number(d.elevation ?? doc?.elevation) || 0,
+    tint: lightTint(d, rgb).map((v) => v / 255),
+    color: hasColor && rgb ? rgb.slice(0, 3) : null,
+    anim: { type: typeof anim.type === "string" && anim.type ? anim.type : null, speed: Number(anim.speed ?? 5), intensity: Number(anim.intensity ?? 5) },
+    token,
+  };
+}
+
 export class Baker {
   /**
    * @param {object} o
    * @param {{cols:number, rows:number, size:number}} o.grid
    * @param {() => ("own"|"players"|null)} o.mode   vision mode
-   * @param {(result:{darkness:number, light:HTMLCanvasElement, vision:HTMLCanvasElement|null}) => void} o.onBaked
+   * @param {() => boolean} [o.known]   the players know the layout: the whole board counts as explored
+   * @param {(result:{darkness:number, light:HTMLCanvasElement, vision:HTMLCanvasElement|null, sources:object[]}) => void} o.onBaked
    */
-  constructor({ grid, mode, onBaked }) {
+  constructor({ grid, mode, known = () => false, onBaked }) {
     this.mode = mode;
+    this.known = known;
     this.onBaked = onBaked;
     this.timer = 0;
     this.again = false;
@@ -125,7 +159,9 @@ export class Baker {
     this.seen = null;
     if (mode === "own") { this.drawOwnVision(lights, globalLit); vision = this.vision; }
     else if (mode === "players") { this.drawPlayersVision(lights, globalLit); vision = this.vision; }
-    this.onBaked({ darkness, light: this.light, vision });
+    const sources = [];
+    for (const src of lights) { const s = lightData(src); if (s) sources.push(s); }
+    this.onBaked({ darkness, light: this.light, vision, sources });
   }
 
   lightSources(env) {
@@ -174,7 +210,10 @@ export class Baker {
     const ctx = this.vision.getContext("2d");
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "rgb(0, 0, 0)";
+    // A known layout is explored everywhere (G), and seen only where sight reaches (R).
+    let known = false;
+    try { known = !!this.known(); } catch { known = false; }
+    ctx.fillStyle = known ? "rgb(0, 255, 0)" : "rgb(0, 0, 0)";
     ctx.fillRect(0, 0, this.vision.width, this.vision.height);
     return ctx;
   }

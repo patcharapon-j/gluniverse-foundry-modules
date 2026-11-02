@@ -14,7 +14,8 @@
 import { SUITE_ID, warn, err } from "../../core/const.mjs";
 import { ensureSuiteGroup, bindSuiteToolClicks } from "../../core/scene-controls.mjs";
 import { TerrainStore, supportsScene } from "./terrain/store.mjs";
-import { invalidate } from "./terrain/live.mjs";
+import { invalidate, PROPS_BLOCK } from "./terrain/live.mjs";
+import { PropStore } from "./terrain/props-store.mjs";
 import { installRules, readyRules } from "./foundry/install.mjs";
 import { wireSocket } from "./view/sync.mjs";
 import { watchTargetLines } from "./integrations/target-lines.mjs";
@@ -48,6 +49,12 @@ export const api = {
   project: (x, y, elevation = 0) => (_view?.isOpen() ? _view.projectPoint(x, y, elevation) : null),
   /** A token's on-screen anchor above its standee's head, or null when closed. */
   tokenAnchor: (tokenId) => (_view?.isOpen() ? _view.tokenAnchor(tokenId) : null),
+  /**
+   * Write a layout (docs/DIORAMA_LAYOUT.md) to a scene and place its tokens.
+   * GM only. Resolves `{ ok, errors, warnings, moved, missing }`.
+   * @param {object|string} layout  @param {{scene?: Scene, tokens?: boolean}} [o]
+   */
+  importLayout: (layout, o) => import("./editor/layout-import.mjs").then((m) => m.importLayout(layout, o)),
 };
 
 /* A `button` tool fires onChange only when the active tool changes, so clicks
@@ -137,7 +144,9 @@ function registerKeybindings() {
 }
 
 function onUpdateScene(scene, changes) {
-  if (!TerrainStore.touched(changes)) return;
+  // Props are part of the rules terrain (stamped while dio.propsBlock is on),
+  // so a props save drops the same cache a terrain save does.
+  if (!TerrainStore.touched(changes) && !PropStore.touched(changes)) return;
   invalidate(scene);
   if (scene !== globalThis.canvas?.scene) return;
   // "3D off" toggled: re-gate the button, and close a player's open view.
@@ -146,6 +155,11 @@ function onUpdateScene(scene, changes) {
     _view.closeView();
     ui.notifications?.info(game.i18n.localize("GLDIO.view.off"));
   }
+}
+
+/** Switching dio.propsBlock re-stamps (or un-stamps) every scene's rules terrain. */
+function onUpdateSetting(setting) {
+  if (setting?.key === `${SUITE_ID}.${PROPS_BLOCK}`) invalidate();
 }
 
 function onCanvasReady() {
@@ -165,6 +179,7 @@ export function onInit() {
   Hooks.on("getSceneControlButtons", onGetSceneControlButtons);
   Hooks.on("renderSceneControls", onRenderSceneControls);
   Hooks.on("updateScene", onUpdateScene);
+  Hooks.on("updateSetting", onUpdateSetting);
   Hooks.on("canvasReady", onCanvasReady);
 }
 

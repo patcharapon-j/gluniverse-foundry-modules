@@ -21,6 +21,8 @@
  *   history         a step was committed, undone or redone
  *   view            overlay opacity / dim / outlines changed
  *   colours         map colours became available (or failed)
+ *   props {live}    the props draft or the selection changed (live = a drag)
+ *   mode            terrain ↔ props mode
  */
 
 import { KIND, SUB, WALL_MATERIALS } from "../constants.mjs";
@@ -30,6 +32,11 @@ import {
   updatePaletteEntry, removePaletteEntry, replaceTerrain, BRUSH_MAX, unionBox,
 } from "./tools.mjs";
 import { planDifficult, cellKey } from "./difficult.mjs";
+import { normalizeProps, PROP_SHAPES, PROP_MATERIALS } from "../terrain/props.mjs";
+import { makeProp, addProp, hitProp, updateProp, moveProp, removeProp, duplicateProp } from "./props-tool.mjs";
+
+/** Editor modes: painting the ground, or placing props on it. */
+export const MODES = Object.freeze(["terrain", "props"]);
 
 export const TOOLS = Object.freeze(["brush", "rect", "fill", "wand", "raise", "lower", "stairs", "wall", "difficult"]);
 /** Tools whose shift-modifier erases to Floor. */
@@ -45,12 +52,17 @@ export class EditorSession {
    * @param {Array<{id:string, a:number[], b:number[]}>} [o.walls]
    * @param {Array<{id:string, cells:string[], difficulty:number}>} [o.difficult]  our saved regions
    */
-  constructor({ terrain, grid, walls = [], difficult = [] }) {
+  constructor({ terrain, grid, walls = [], difficult = [], props = [] }) {
     this.terrain = terrain;
     this.grid = grid;
     this.walls = walls;
     this.existingDifficult = difficult;
     this.pending = [];
+    /** The props draft (terrain/props.mjs), replaced wholesale on every edit. */
+    this.props = normalizeProps(props);
+    this.mode = "terrain";
+    /** Props mode: what a click places, what is selected, whether moves snap. */
+    this.propTool = { shape: "box", mat: "stone", selected: null, snap: true };
     this.tool = "brush";
     this.layer = Math.min(terrain.palette.length - 1, Math.max(0, terrain.palette.findIndex((p) => p.kind === KIND.FLOOR && p.h > 0)));
     this.brush = { radius: 1, shape: "circle" };
@@ -66,7 +78,7 @@ export class EditorSession {
     this.mask = null;
     this.preview = null;
     this.hoverWall = null;
-    this.history = new History(terrain, { aux: { pending: [] } });
+    this.history = new History(terrain, { aux: { pending: [], props: this.props } });
     this._stroke = null;
     this._listeners = new Set();
     /** Set by the app: called when the wand needs map colours it does not have. */
@@ -135,6 +147,117 @@ export class EditorSession {
     this.emit("walls");
   }
 
+  /* ── props ──────────────────────────────────────────────────────────── */
+
+  setMode(mode) {
+    if (!MODES.includes(mode) || mode === this.mode) return;
+    this.cancelStroke();
+    this.mode = mode;
+    this.emit("mode");
+    this.emit("props");
+    this.emit("tool");
+  }
+
+  /** shape / mat / snap for the next placement (a selected prop takes shape and mat too). */
+  setPropTool(patch = {}) {
+    const t = this.propTool;
+    if (PROP_SHAPES.includes(patch.shape)) t.shape = patch.shape;
+    if (PROP_MATERIALS.includes(patch.mat)) t.mat = patch.mat;
+    if (typeof patch.snap === "boolean") t.snap = patch.snap;
+    if (t.selected && (patch.mat !== undefined || patch.shape !== undefined)) {
+      const upd = {};
+      if (PROP_MATERIALS.includes(patch.mat)) upd.mat = patch.mat;
+      if (PROP_SHAPES.includes(patch.shape)) upd.shape = patch.shape;
+      if (Object.keys(upd).length) { this.updateProp(t.selected, upd); return; }
+    }
+    this.emit("tool");
+  }
+
+  get selectedProp() {
+    const id = this.propTool.selected;
+    return id ? this.props.find((p) => p.id === id) ?? null : null;
+  }
+
+  selectProp(id) {
+    const next = id && this.props.some((p) => p.id === id) ? id : null;
+    if (next === this.propTool.selected) return;
+    this.propTool.selected = next;
+    this.emit("props");
+    this.emit("tool");
+  }
+
+  /** Edit a prop. `commit: false` previews (a field being typed into). */
+  updateProp(id, patch, { commit = true } = {}) {
+    const next = updateProp(this.props, id, patch);
+    if (next === this.props) return false;
+    this.props = next;
+    this.emit("props", { live: !commit });
+    if (commit) this.commit("prop:edit");
+    return true;
+  }
+
+  removeProp(id = this.propTool.selected) {
+    if (!id || !this.props.some((p) => p.id === id)) return false;
+    this.cancelStroke();
+    this.props = removeProp(this.props, id);
+    if (this.propTool.selected === id) this.propTool.selected = null;
+    this.emit("props");
+    this.emit("tool");
+    return this.commit("prop:remove");
+  }
+
+  duplicateProp(id = this.propTool.selected) {
+    const r = duplicateProp(this.props, id);
+    if (!r.id) return false;
+    this.props = r.props;
+    this.propTool.selected = r.id;
+    this.emit("props");
+    this.emit("tool");
+    return this.commit("prop:duplicate");
+  }
+
+  /** Replace every prop (an imported layout). Undoable. */
+  replaceProps(props, label = "props") {
+    this.cancelStroke();
+    this.props = normalizeProps(props);
+    if (!this.props.some((p) => p.id === this.propTool.selected)) this.propTool.selected = null;
+    this.emit("props");
+    this.emit("tool");
+    return this.commit(label);
+  }
+
+  #propDown(p) {
+    const size = this.grid.size || 100;
+    const x = (p.x ?? (p.sj + 0.5) * size / SUB) / size, y = (p.y ?? (p.si + 0.5) * size / SUB) / size;
+    const hit = hitProp(this.props, x, y);
+    if (hit && p.shift) { this.removeProp(hit.id); return; }
+    if (hit) {
+      this.propTool.selected = hit.id;
+      this._stroke = { tool: "prop", id: hit.id, dx: x - hit.x, dy: y - hit.y, moved: false };
+      this.emit("props");
+      this.emit("tool");
+      return;
+    }
+    if (p.alt || p.ctrl) { this.selectProp(null); return; }
+    const prop = makeProp(this.props, { shape: this.propTool.shape, mat: this.propTool.mat, x, y, snap: this.propTool.snap });
+    if (!prop) return;
+    this.props = addProp(this.props, prop);
+    this.propTool.selected = prop.id;
+    this.emit("props");
+    this.emit("tool");
+    this.commit("prop:add");
+  }
+
+  #propMove(st, p) {
+    const size = this.grid.size || 100;
+    const x = p.x / size - st.dx, y = p.y / size - st.dy;
+    const next = moveProp(this.props, st.id, x, y, { snap: this.propTool.snap && !p.ctrl });
+    if (next === this.props) return;
+    this.props = next;
+    st.moved = true;
+    this.emit("props", { live: true });
+  }
+
   /* ── ops ────────────────────────────────────────────────────────────── */
 
   get floorLayer() { return floorIndex(this.terrain.palette); }
@@ -166,6 +289,7 @@ export class EditorSession {
   down(p) {
     this.cancelStroke();
     const t = this.terrain;
+    if (this.mode === "props") { this.#propDown(p); return; }
     if (p.alt) { this.pick(p); return; }
     const erase = !!p.shift && ERASABLE.has(this.tool);
     switch (this.tool) {
@@ -224,6 +348,9 @@ export class EditorSession {
     }
     const at = [p.si, p.sj];
     switch (st.tool) {
+      case "prop":
+        this.#propMove(st, p);
+        break;
       case "brush": case "raise": case "lower":
         if (at[0] === st.last[0] && at[1] === st.last[1]) return;
         for (const [a, b] of lineCells(st.last, at).slice(1)) this.#dab(st, a, b);
@@ -256,6 +383,9 @@ export class EditorSession {
     this._stroke = null;
     const t = this.terrain;
     switch (st.tool) {
+      case "prop":
+        if (st.moved) { this.emit("props"); this.commit("prop:move"); }
+        break;
       case "brush": case "raise": case "lower": {
         // A stroke painted with a stairs / ramp entry gets its direction from the ground around it.
         const entry = st.op.layer != null ? t.palette[st.op.layer] : null;
@@ -304,6 +434,8 @@ export class EditorSession {
     if (!st) return;
     this._stroke = null;
     if (this.preview) { this.preview = null; this.emit("preview"); }
+    // A prop dragged so far stays where it was dropped, as one step.
+    if (st.tool === "prop" && st.moved) { this.emit("props"); this.commit("prop:move"); }
     // Brush strokes already wrote into the draft; keep what was painted as one step.
     if (st.tool === "brush" || st.tool === "raise" || st.tool === "lower") this.commit(st.tool);
     if (st.tool === "difficult" && st.cells.size) {
@@ -453,7 +585,14 @@ export class EditorSession {
   /** Replace the draft wholesale (auto setup, copy, clear all). Undoable. */
   replace(src, label = "replace", opts = {}) {
     this.cancelStroke();
-    replaceTerrain(this.terrain, src, opts);
+    // `props` (a layout's) lands in the same undo step as the terrain it stands on.
+    const { props, ...rest } = opts;
+    replaceTerrain(this.terrain, src, rest);
+    if (Array.isArray(props)) {
+      this.props = normalizeProps(props);
+      if (!this.props.some((p) => p.id === this.propTool.selected)) this.propTool.selected = null;
+      this.emit("props");
+    }
     this.layer = Math.max(0, Math.min(this.terrain.palette.length - 1, this.layer));
     this.mask = null;
     this.emit("mask");
@@ -466,7 +605,7 @@ export class EditorSession {
   /* ── history ────────────────────────────────────────────────────────── */
 
   commit(label = "") {
-    const did = this.history.commit(this.terrain, label, { pending: this.pending });
+    const did = this.history.commit(this.terrain, label, { pending: this.pending, props: this.props });
     if (did) this.emit("history", { label });
     return did;
   }
@@ -478,7 +617,15 @@ export class EditorSession {
     this.cancelStroke();
     const r = this.history[which](this.terrain);
     if (!r) return false;
-    if (r.aux !== undefined) { this.pending = r.aux?.pending ?? []; this.emit("difficult"); }
+    if (r.aux !== undefined) {
+      this.pending = r.aux?.pending ?? [];
+      this.emit("difficult");
+      if (Array.isArray(r.aux?.props)) {
+        this.props = normalizeProps(r.aux.props);
+        if (!this.props.some((q) => q.id === this.propTool.selected)) this.propTool.selected = null;
+        this.emit("props");
+      }
+    }
     this.layer = Math.max(0, Math.min(this.terrain.palette.length - 1, this.layer));
     if (r.change.box) this.emit("terrain", { box: r.change.box });
     if (r.meta) { this.emit("palette"); this.emit("walls"); this.emit("terrain", { box: null }); }
@@ -491,7 +638,7 @@ export class EditorSession {
   saved({ difficult = this.existingDifficult } = {}) {
     this.pending = [];
     this.existingDifficult = difficult;
-    this.history.reset(this.terrain, { pending: [] });
+    this.history.reset(this.terrain, { pending: [], props: this.props });
     this.emit("difficult");
     this.emit("history", { label: "save" });
     this.emit("tool");

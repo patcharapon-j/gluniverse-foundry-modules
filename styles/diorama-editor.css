@@ -474,8 +474,8 @@
 .gldio-ed .gldio-ed-btn--danger { --gl-accent: var(--gl-hazard); }
 .gldio-ed .gldio-ed-btn--danger:hover:not(:disabled) { color: var(--gl-hazard-hot); }
 
-.gldio-ed-actions { display: flex; gap: var(--gl-sp-2); }
-.gldio-ed-actions > .gldio-ed-btn { flex: 1 1 0; }
+.gldio-ed-actions { display: flex; flex-wrap: wrap; gap: var(--gl-sp-2); }
+.gldio-ed-actions > .gldio-ed-btn { flex: 1 1 40%; }
 
 /* ── footer ───────────────────────────────────────────────────────────── */
 
@@ -506,6 +506,21 @@
   color: var(--gl-text);
   font-size: var(--gl-fs-sm);
   line-height: var(--gl-lh-normal);
+}
+
+/* The layout paste box: JSON, so the tech face, and tall enough to see a palette. */
+.gldio-dialog .gldio-ed-layout {
+  width: 100%;
+  min-height: 14em;
+  margin: var(--gl-sp-2) 0;
+  resize: vertical;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+  line-height: var(--gl-lh-normal);
+  color: var(--gl-text);
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-line-strong);
+  border-radius: var(--gl-radius);
 }
 
 /* ── 3D preview window ────────────────────────────────────────────────── */
@@ -560,3 +575,86 @@
   background: var(--gl-ink-1);
 }
 .gldio-pv-bar > .gl-rule { flex: 1 1 auto; }
+
+/* ── Auto setup options (editor/auto-dialog.mjs) ──────────────────────── */
+
+.gldio-auto-dialog .window-content { padding: var(--gl-sp-5) var(--gl-sp-6); overflow: auto; }
+
+.gldio-auto {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-2);
+  margin-top: var(--gl-sp-4);
+}
+
+.gldio-auto-check {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  color: var(--gl-text-bright);
+  font-size: var(--gl-fs-sm);
+  cursor: pointer;
+}
+.gldio-auto-check input { margin: 0; accent-color: var(--gl-accent); }
+
+.gldio-auto-set {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-4);
+  margin: var(--gl-sp-2) 0 0;
+  padding: var(--gl-sp-4) 0 0;
+  border: 0;
+  border-top: 1px solid var(--gl-hair);
+  transition: opacity var(--gl-d-quick) var(--gl-ease);
+}
+.gldio-auto-set:disabled { opacity: 0.45; }
+
+.gldio-auto-row {
+  display: grid;
+  grid-template-columns: minmax(7em, 34%) 1fr;
+  align-items: center;
+  column-gap: var(--gl-sp-4);
+  row-gap: var(--gl-sp-1);
+}
+.gldio-auto-row > .gldio-auto-hint { grid-column: 2; }
+
+.gldio-auto-label {
+  color: var(--gl-text);
+  font-size: var(--gl-fs-xs);
+}
+
+.gldio-auto-hint {
+  margin: 0;
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-2xs);
+  line-height: var(--gl-lh-normal);
+}
+
+.gldio-auto :is(select, input[type="number"]) {
+  min-width: 0;
+  height: var(--gldio-chip);
+  margin: 0;
+  padding: 0 var(--gl-sp-3);
+  border: 1px solid var(--gl-edge);
+  border-radius: var(--gl-r-xs);
+  background: var(--gl-surface-inset);
+  color: var(--gl-text-bright);
+  font-size: var(--gl-fs-xs);
+  transition: border-color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.gldio-auto input[type="number"] { font-family: var(--gl-tech); }
+.gldio-auto :is(select, input[type="number"]):focus { outline: 0; border-color: var(--gl-accent); box-shadow: var(--gl-ring); }
+.gldio-auto select option { background: var(--gl-ink-2); color: var(--gl-text); }
+
+/* DialogV2 footer buttons: sized here, .gl-btn has none. */
+.gldio-auto-dialog .gldio-auto-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gl-sp-2);
+  min-height: var(--gldio-chip);
+  padding: 0 var(--gl-sp-5);
+  font-size: var(--gl-fs-2xs);
+  line-height: 1;
+  white-space: nowrap;
+}

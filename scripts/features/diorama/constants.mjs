@@ -25,6 +25,16 @@ export const FLAG_STANDEE = "dio.standee";
 export const FLAG_CREATURE_HEIGHT = "dio.height";
 /** Token flag: altitude above the ground (flying), distance units. */
 export const FLAG_ALTITUDE = "dio.altitude";
+/** Scene flag: the scene's environment (time of day, weather, atmosphere). environment.mjs owns its shape. */
+export const FLAG_ENV = "dio.env";
+/** Scene flag: placed props, keyed by Level id like the terrain. terrain/props.mjs owns its shape. */
+export const FLAG_PROPS = "dio.props";
+/**
+ * Scene flag: players already know this map's layout. Ground nobody has seen
+ * yet draws as remembered (dim, grey, under a faint mist) instead of hidden in
+ * the fog. It reveals terrain only: creatures still need sight.
+ */
+export const FLAG_KNOWN = "dio.known";
 
 /** Settings (all keys start with PREFIX so the Control Center routes them). */
 export const SETTINGS = Object.freeze({
@@ -94,12 +104,21 @@ export const PF2E_WATER_FALL_REDUCTION = 20;
  */
 export const SHED_ORDER = Object.freeze([
   "tiltShift",
+  "atmosphere",       // fog, haze, light shafts, cloud shadows
+  "embers",           // the sparks rising off fires (render/torches.mjs)
+  "weatherParticles", // full → reduced particle counts first, then none
+  "fogDrift",         // the fog of war's mist holds still
   "ambientOcclusion",
   "softShadows",
+  "torchShadows",     // figures' shadows away from torches, torch-side shading
+  "propDetail",       // prop and cliff relief, foliage sway
   "shadows",
+  "torchFlicker",     // lights burn steady, flames hold their shape
   "water",
-  "standeeSway",
+  "standeeDust",      // the puff where a standee lands (walk, fall, drop)
+  "standeeSway",      // idle sway, and a flyer's hover on its stand
   "markerMotion",    // the target reticle's breathe and the target lines' glint
+  "areaMotion",      // the slow glow rising through a spell area's volume (render/areas.mjs)
   "effectLights",
   "renderScale",
   "fpsCap",
@@ -111,11 +130,31 @@ export const TIMING = Object.freeze({
   door: 360,         // door leaf swing
   wallCut: 260,      // camera-facing wall lowering
   standeeStep: 140,  // standee hop per grid step while moving
+  standeeSettle: 200, // a landed standee's card springing back from its squash
+  standeeFall: 300,  // a standee dropping one cell off a ledge (gravity: longer drops take √ as long)
+  dustLife: 560,     // a landing's dust puff, from the footfall to gone
+  hoverLoop: 6400,   // a flyer's hover: two breaths and one sway per loop
   ping: 1600,
   reticleBreathe: 1800, // one in-and-out of a target reticle's arrows
   linkGlint: 2400,      // a glint's run along a target line, source to target
   inviteTimeout: 30000,
   bakeThrottle: 50,  // light / vision bake coalescing
+  liftUp: 260,       // a picked-up miniature rising off the table (past its height and back)
+  liftDrop: 260,     // and falling onto the square it is set down on
+  holdBob: 1700,     // one slow rise and fall of a miniature held in the hand
+  holdSend: 50,      // a held miniature's pose, at most this often to the table
+  holdStale: 4000,   // a remote hold with no word for this long is dropped
+  holdKeep: 1000,    // a hand held still says it is still holding this often (well inside holdStale)
+  holdAwait: 1500,   // a miniature just set down waits this long for Foundry's move before going back
+  reachDebounce: 60, // reach recompute coalescing
+  flickerStep: 170,  // one noise step of a torch's flicker at Foundry speed 5
+  flickerGentle: 900, // one noise step of a warm light with no animation
+  lightPulse: 2600,  // one breath of a "pulse" light at Foundry speed 5
+  torchFade: 450,    // a light joining or leaving the few lights that shade figures
+  flameLick: 620,    // a flame's tongues rising through its own height
+  emberRise: 2400,   // one spark's life, from the fire to gone
+  fogDrift: 40000,   // the fog of war's mist drifting FOG_DRIFT_CELLS (3) cells downwind
+  areaDrift: 7200,   // one glow band rising through a spell area, floor to crown
 });
 
 /**
@@ -148,6 +187,7 @@ export function snapYawStep(step, snapDeg) {
 export const MSG = Object.freeze({
   invite: "invite",
   summon: "summon",
+  hold: "hold",
 });
 
 /** Texture resolution of the light / vision bakes, px per cell. */

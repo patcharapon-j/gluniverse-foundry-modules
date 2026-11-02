@@ -25,9 +25,30 @@
  *   target=knight  the knight targeted (red outline, glow, reticle)
  *   tilt=0|1  cutaway=0|1  door=closed|open|locked  ghosts=0|1
  *   still=1     shed water and sway, so the page goes idle (screenshots)
+ *   life=walk|fall|drop|fly|land  token life: a walk, a 5 / 10 ft fall, a hovering flyer,
+ *               a flyer landing; seek=<ms> freezes the standees that long into
+ *               the move (stills mid-hop, mid-fall, at the dust); tokenLife=0 off
  *   shed=<n>    shed the first n SHED_ORDER entries
  *   novision=1  no vision bake (everything visible)
  *   dark=<0..1> scene darkness (default 0.4)
+ *   torches=1   the two lights as bake sources: a torch that flickers and burns, a
+ *               brazier prop whose warm light becomes a fire; lightFx=off|on
+ *   fow=clouds|flat  the fog of war's style; unseen=wide  sight in the middle only
+ *   props=1     the props gallery (every shape, every material, a stack, cards,
+ *               a GM-only ghost) instead of the tokens; view=props|mats frames it
+ *   areas=1     spell areas as volumes (a burst on the plateau's corner, a cone, a
+ *               line, an emanation), on PF2e's squares; areaVolumes=0 flat only
+ *   los=knight-goblin[,rogue-drake]  lines of sight with their readouts
+ *   fall=1      a dragged path off the plateau: the drop line and its damage
+ *
+ * The environment (environment.mjs; a preset first, then fields over it):
+ *   preset=<key>  clearDay | goldenHour | dusk | night | rain | storm | snow | …
+ *   time=<0..24>|table   weather=<kind>  intensity=<0..1>
+ *   fog=<0..1>  fogh=<0..1>  wind=<0..1>  winddir=<deg>  clouds=<0..1>
+ *   wet=<0..1>  snow=<0..1>  flow=<0..1>  flowdir=<deg>
+ * Graphics (options.mjs): q=low|medium|high|ultra, water=simple|full,
+ *   detail=low|high, weatherFx=off|reduced|full, atmosphere=off|on,
+ *   shadows=off|hard|soft, dayNight=0, grade=0
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -88,6 +109,8 @@ import { DioramaRenderer } from "/scripts/features/diorama/render/renderer.mjs";
 import { Terrain } from "/scripts/features/diorama/terrain/model.mjs";
 import { KIND, DIR, SUB, SHED_ORDER, BAKE_PX_PER_CELL } from "/scripts/features/diorama/constants.mjs";
 import { PALETTE } from "/scripts/core/theme.mjs";
+import { resolveEnv, applyPreset, normalizeEnv } from "/scripts/features/diorama/environment.mjs";
+import { resolveGraphics } from "/scripts/features/diorama/options.mjs";
 
 const Q = new URLSearchParams(location.search);
 const COLS = 16, ROWS = 12, SIZE = 100;
@@ -168,6 +191,7 @@ function buildTerrain() {
   fillCells(0, 2, 0, 4, P("Ledge 5"));                   // earth ledge
   fillCells(8, 10, 1, 3, P("Pit"), -8, KIND.PIT);        // pit
   fillCells(8, 10, 6, 8, P("Water"), -4, KIND.WATER);    // sunken pond
+  fillCells(6, 7, 7, 7, P("Water"), -1, KIND.WATER);     // a stream spilling into it: a waterfall
   // stairs: cells (3..4, 7..8), descending west from the plateau (8 → 0)
   const st = P("Stairs");
   for (let si = 3 * SUB; si < 5 * SUB; si++) {
@@ -269,6 +293,12 @@ function visionCanvas() {
   g.fillStyle = "rgb(0,255,0)"; g.fillRect(0, 4 * k, 2 * k, 8 * k);          // explored, not visible
   g.fillStyle = "rgb(0,0,0)"; g.fillRect(13 * k, 9 * k, 3 * k, 3 * k);       // never seen
   g.beginPath(); g.arc(13 * k, 9 * k, 1.4 * k, 0, 7); g.fill();
+  // unseen=wide: a party's sight in the middle of the map, everything past it never seen
+  if (Q.get("unseen") === "wide") {
+    g.fillStyle = "rgb(0,0,0)"; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = "rgb(0,255,0)"; g.beginPath(); g.ellipse(7 * k, 6.5 * k, 7.2 * k, 5 * k, 0, 0, 7); g.fill();
+    g.fillStyle = "rgb(255,255,0)"; g.beginPath(); g.ellipse(7.5 * k, 6.5 * k, 5 * k, 3.6 * k, 0.3, 0, 7); g.fill();
+  }
   return c;
 }
 
@@ -367,7 +397,63 @@ const tokens = () => [
 r.setTokens(tokens());
 r.setOptions({ ghosts });
 
-r.setLighting({ darkness: Q.has("dark") ? Number(Q.get("dark")) : 0.4, light: lightCanvas(), vision: Q.get("novision") === "1" ? null : visionCanvas() });
+// torches=1: the bake's two lights as sources (view/bake.mjs lightData), a torch
+// in the house and a brazier on the grass, so they flicker, burn and throw shadows
+const TORCHES_ON = Q.get("torches") === "1";
+const lightSources = TORCHES_ON ? [
+  { id: "AmbientLight.torch", x: 12 * SIZE, y: 4 * SIZE, dim: 3.4 * SIZE, bright: 1.5 * SIZE, elevation: 0, tint: [1, 0.66, 0.33], color: [1, 0.6, 0.25],
+    anim: { type: "torch", speed: 5, intensity: 5 }, token: false },
+  { id: "AmbientLight.brazier", x: 5.5 * SIZE, y: 8.6 * SIZE, dim: 4.2 * SIZE, bright: 1.8 * SIZE, elevation: 0, tint: [1, 0.75, 0.43], color: [1, 0.62, 0.3],
+    anim: { type: null, speed: 5, intensity: 5 }, token: false },
+] : null;
+r.setLighting({ darkness: Q.has("dark") ? Number(Q.get("dark")) : 0.4, light: lightCanvas(), vision: Q.get("novision") === "1" ? null : visionCanvas(), sources: lightSources });
+
+// The environment (environment.mjs), from the URL: a preset, then any field over it.
+const envFlag = (() => {
+  const e = Q.has("preset") ? applyPreset(Q.get("preset")) : normalizeEnv(null);
+  const n = (k) => Number(Q.get(k));
+  if (Q.has("time")) e.hour = Q.get("time") === "table" ? null : n("time");
+  if (Q.has("weather")) e.weather = { kind: Q.get("weather"), intensity: Q.has("intensity") ? n("intensity") : 0.7 };
+  else if (Q.has("intensity")) e.weather.intensity = n("intensity");
+  if (Q.has("fog")) e.fog.density = n("fog");
+  if (Q.has("fogh")) e.fog.height = n("fogh");
+  if (Q.has("wind")) e.wind.strength = n("wind");
+  if (Q.has("winddir")) e.wind.dir = n("winddir");
+  if (Q.has("clouds")) e.clouds = n("clouds");
+  if (Q.has("wet")) e.wetness = n("wet");
+  if (Q.has("snow")) e.snow = n("snow");
+  if (Q.has("flow")) e.water.speed = n("flow");
+  if (Q.has("flowdir")) e.water.dir = n("flowdir");
+  return normalizeEnv(e);
+})();
+// graphics: q=low|medium|high|ultra, and any option by name (water=simple, weatherFx=reduced, grade=0, …)
+// adaptive=0 keeps the budget from shedding weather and air (a software GL sheds everything)
+const gRaw = { quality: Q.get("q") || "high", adaptive: Q.get("adaptive") !== "0" };
+for (const k of ["shadows", "ao", "water", "detail", "weatherFx", "atmosphere", "lightFx"]) if (Q.has(k)) gRaw[k] = Q.get(k);
+// fow=clouds|flat: the fog of war's style (dio.fogStyle; "fog" is the environment's)
+if (Q.has("fow")) gRaw.fogStyle = Q.get("fow");
+for (const k of ["dayNight", "grade", "tokenLife", "areaVolumes"]) if (Q.has(k)) gRaw[k] = Q.get(k) !== "0";
+r.setOptions({ graphics: resolveGraphics(gRaw) });
+r.setEnvironment(resolveEnv(envFlag, { dayNight: Q.get("dayNight") !== "0" }));
+window.__env = envFlag;
+// ppx=<cells>: pin the weather's device-pixel floor (debugging the particle pass)
+if (Q.has("ppx")) Object.defineProperty(r.atmosphere, "pxWorld", { get: () => Number(Q.get("ppx")), set() {} });
+// probe=1: the weather layer's state after a few seconds, in #probe (headless --dump-dom)
+if (Q.get("probe") === "1") setTimeout(() => {
+  const a = r.atmosphere, u = r.shared;
+  const v = (x) => (x?.toArray ? x.toArray().map((n) => +n.toFixed(3)) : x);
+  const pre = document.createElement("pre");
+  pre.id = "probe";
+  pre.textContent = JSON.stringify({
+    particles: a.pGeo.instanceCount, splashes: a.sGeo.instanceCount, kind: a.pMat.uniforms.uKind.value,
+    boxMin: v(a.box.min.value), boxSize: v(a.box.size.value), scale: a.box.scale.value, heightInfo: v(a.heightInfo.value),
+    time: u.uEnvTime.value, fx: r.fx, inScene: !!a.particles.parent?.parent, visible: a.particles.visible && a.group.visible,
+    seed0: v(a.pGeo.attributes.aSeed.array.slice(0, 4)), opacity: a.pMat.uniforms.uPOpacity.value,
+    ndc: (() => { const s = a.pGeo.attributes.aSeed.array; const p = a.box.min.value.clone().add(a.box.size.value.clone().multiply({ x: s[0], y: s[1], z: s[2] })); return v(p.clone().project(r.rig.camera)); })(),
+    programs: r.webgl.info.programs?.map((p) => p.name), flash: u.uEnvFlash.value, ambient: u.uAmbient.value, key: v(u.uEnvKey.value), keyDir: v(u.uKeyDir.value),
+  });
+  document.body.append(pre);
+}, 3000);
 
 const path = () => ({ points: [
   { x: rogueAt.x, y: rogueAt.y, zQ: 0 }, { x: 650, y: 450, zQ: 0, color: PALETTE.good }, { x: 750, y: 450, zQ: 2, color: PALETTE.good },
@@ -389,6 +475,88 @@ const effects = [
   { id: "rune", kind: "flat", source: runeCanvas(), x: 1150, y: 950, zQ: 0, widthPx: 260, heightPx: 260, rotation: 15, alpha: 0.9, light: { color: PALETTE.violet, radius: 260 } },
 ];
 r.setEffects(effects);
+
+/* ------------------------------------------------------------ props (props=1) */
+// Every shape (south-east grass, three rows of six), every material (west
+// grass, as capsules and boxes), a crate stacked on a crate, an image card and
+// a GM-only ghost, all built the way the feature builds them: normalised,
+// resolved against the terrain, then turned into the GM's states. The tokens,
+// effects and overlays step aside so the props read on their own.
+// props=1&view=props frames the shapes; props=1&view=mats frames the materials.
+const PROPS_ON = Q.get("props") === "1";
+if (PROPS_ON) {
+  const PM = await import("/scripts/features/diorama/terrain/props.mjs");
+  const shapeMat = { box: "stone", cylinder: "metal", cone: "plaster", sphere: "marble", dome: "stone", pyramid: "crystal",
+    wedge: "earth", torus: "metal", capsule: "cloth", arch: "stone", pillar: "marble", crate: "wood", barrel: "wood",
+    rock: "stone", tree: "foliage", pine: "foliage", bush: "foliage", card: "map" };
+  // Card art by a short URL, the way a prop stores a path: a data URL is longer
+  // than a stored path may be, and the normaliser drops it.
+  const blobUrl = async (dataUrl) => URL.createObjectURL(await (await fetch(dataUrl)).blob());
+  const knightUrl = await blobUrl(ART.knight), drakeUrl = await blobUrl(ART.drake);
+  const list = [];
+  PM.PROP_SHAPES.forEach((shape, n) => {
+    const d = PM.SHAPE_DEFAULTS[shape];
+    const k = Math.min(1, 0.9 / Math.max(d.w, d.d));              // fit a 0.9-square slot
+    const x = 9.5 + (n % 6), y = 7.4 + Math.floor(n / 6) * 1.25;
+    list.push({ id: "s-" + shape, shape, x, y, w: d.w * k, d: d.d * k, h: Math.min(d.h, 2.2) * (shape === "tree" || shape === "pine" ? 0.75 : 1),
+      rot: shape === "wedge" ? 90 : shape === "arch" ? 0 : 20, mat: shapeMat[shape], label: shape,
+      img: shape === "card" ? knightUrl : undefined });
+  });
+  list.push({ id: "stack", shape: "crate", x: 14.5, y: 8.65, w: 0.55, d: 0.55, h: 0.5, rot: 35, label: "stacked crate" });
+  PM.PROP_MATERIALS.forEach((mat, n) => {
+    const x = 0.5 + (n % 6), y = n < 6 ? 4.5 : 6.5;
+    list.push({ id: "m-" + mat, shape: n % 2 ? "box" : "capsule", x, y, w: 0.6, d: 0.6, h: n % 2 ? 0.7 : 1.1, rot: 15, mat, label: mat });
+  });
+  list.push({ id: "tinted", shape: "pillar", x: 8.5, y: 6.5, h: 2, mat: "marble", tint: "#e0a8ff", label: "tinted pillar" });
+  list.push({ id: "ghost", shape: "box", x: 15.5, y: 8.5, w: 0.8, d: 0.8, h: 1.2, hidden: true, label: "GM only" });
+  list.push({ id: "card2", shape: "card", x: 6.5, y: 4.5, h: 1.4, img: drakeUrl, label: "drake card" });
+  const norm = PM.normalizeProps(list);
+  const resolved = PM.resolveProps(terrain, norm).props;
+  const states = PM.propStates(resolved, { isGM: true });
+  r.setTokens([]);
+  r.setEffects([]);
+  r.setOverlays({});
+  r.setProps(states);
+  window.__props = { count: states.length, ghosts: states.filter((s) => s.ghost).length, blocks: states.filter((s) => s.blocks).length };
+  // probe=props: the layer's state after the art lands, in #probe (headless --dump-dom)
+  if (Q.get("probe") === "props") setTimeout(() => {
+    const L = r.props, v = (x) => x.toArray().map((n) => +n.toFixed(3));
+    const pre = document.createElement("pre");
+    pre.id = "probe";
+    pre.textContent = JSON.stringify({
+      ...window.__props,
+      buckets: [...L.buckets].map(([k, b]) => k + ":" + b.mesh.count + "/" + b.caster.count),
+      contact: L.contact?.count,
+      cards: [...L.cards.values()].map((c) => ({ at: v(c.mesh.position), size: v(c.material.uniforms.uCardSize.value), tex: !!c.texture,
+        inScene: !!c.mesh.parent?.parent, casts: !!c.caster.parent,
+        art: c.texture ? [...c.texture.image.getContext("2d").getImageData(c.texture.image.width >> 1, c.texture.image.height >> 2, 1, 1).data] : null,
+        screen: (({ x, y }) => [Math.round(x), Math.round(y)])(r.project(c.state.x * SIZE, c.state.y * SIZE, (c.state.base + c.state.h / 2) * 4)) })),
+      animated: L.animated(r.fx), rules: !!L.rules,
+    });
+    document.body.append(pre);
+  }, 3000);
+}
+
+// torches=1: the brazier the second light burns in (a warm light on a prop named for a fire)
+if (TORCHES_ON && !PROPS_ON) {
+  const PM = await import("/scripts/features/diorama/terrain/props.mjs");
+  const norm = PM.normalizeProps([{ id: "brazier", shape: "cylinder", x: 5.5, y: 8.6, w: 0.55, d: 0.55, h: 0.45, rot: 0, mat: "metal", label: "Brazier" }]);
+  r.setProps(PM.propStates(PM.resolveProps(terrain, norm).props, { isGM: true }));
+  // probe=torches: the living-light layer's state after a few seconds, in #probe (headless --dump-dom)
+  if (Q.get("probe") === "torches") setTimeout(() => {
+    const T = r.torches, u = r.shared;
+    const pre = document.createElement("pre");
+    pre.id = "probe";
+    pre.textContent = JSON.stringify({
+      lights: T.lights.map((l) => ({ id: l.id, kind: l.kind, y: +l.y?.toFixed(2) })), fires: T.fires.length,
+      flames: T.flameGeo.instanceCount, embers: T.emberGeo.instanceCount, shadows: T.shadowGeo.instanceCount,
+      shadow0: [...T.shadowAttr.aFoot.array.slice(0, 4), ...T.shadowAttr.aDir.array.slice(0, 4)].map((v) => +v.toFixed(3)),
+      count: u.uTorchCount.value, dir: u.uTorchDir.value, fx: r.fx,
+      entries: [...(r.standees.entries?.values() ?? [])].slice(0, 2).map((e) => ({ vis: e.root?.visible, pos: e.root?.position?.toArray?.(), st: e.state && { groundQ: e.state.groundQ, ghost: e.state.ghost }, cardH: e.cardH })),
+    });
+    document.body.append(pre);
+  }, 3000);
+}
 
 // links=1: target lines (the 3D form of stream-targets' 2D lines)
 const rgbOf = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
@@ -417,6 +585,8 @@ else if (view === "fly") cam = { ...cam, zoom: 1.7, target: { x: 900, y: 750, zQ
 else if (view === "knight") cam = { ...cam, zoom: 3.2, target: { x: knightAt.x, y: knightAt.y, zQ: 10 } };
 else if (view === "goblin") cam = { ...cam, zoom: 3.2, target: { x: 250, y: 150, zQ: 6 } };
 else if (view === "rogue") cam = { ...cam, zoom: 3.2, target: { x: rogueAt.x, y: rogueAt.y, zQ: 2 } };
+else if (view === "props") cam = { ...cam, zoom: 2.2, target: { x: 1200, y: 880, zQ: 2 } };
+else if (view === "mats") cam = { ...cam, zoom: 2.4, target: { x: 380, y: 560, zQ: 2 } };
 else cam.zoom = 0.82;
 if (Q.has("zoom")) cam.zoom = Number(Q.get("zoom"));
 r.setCamera(cam, { animate: false });
@@ -427,6 +597,188 @@ r.setOptions({ tiltShift: Q.get("tilt") === "1", cutaway: Q.get("cutaway") !== "
 function resize() { r.resize(window.innerWidth, window.innerHeight); }
 window.addEventListener("resize", resize);
 resize();
+
+/* ------------------------------------------------------------ token life (life=…) */
+// life=walk  a squire walks five squares east along the plaza
+// life=fall  a squire walks east off the 5 ft earth ledge and drops to the grass
+// life=drop  a squire walks south off the 10 ft plateau
+// life=fly   the harpy hovers on its stand
+// life=land  the harpy glides down to land on the grass
+// seek=<ms>  freeze the standees' clock that long after the move starts (stills
+//            mid-hop, mid-fall, at the dust). Without it the move repeats.
+// tokenLife=0 turns token animation off (the old slide).
+const LIFE = Q.get("life");
+if (LIFE) {
+  const SC = {
+    walk: { id: "squire", from: { x: 950, y: 650, footQ: 8 }, to: { x: 1450, y: 650, footQ: 8 }, cam: { x: 1200, y: 650, zQ: 12 }, zoom: 2.2 },
+    fall: { id: "squire", from: { x: 350, y: 250, footQ: 4 }, to: { x: 650, y: 250, footQ: 0 }, cam: { x: 520, y: 260, zQ: 2 } },
+    drop: { id: "squire", from: { x: 950, y: 650, footQ: 8 }, to: { x: 950, y: 950, footQ: 0 }, cam: { x: 950, y: 800, zQ: 4 } },
+    fly: { id: "harpy", cam: { x: 350, y: 550, zQ: 16 } },
+    land: { id: "harpy", from: { x: 350, y: 550, footQ: 12, groundQ: 0 }, to: { x: 550, y: 550, footQ: 0 }, cam: { x: 450, y: 550, zQ: 3 } },
+  }[LIFE];
+  if (SC) {
+    const squire = { id: "squire", name: "Squire", heightQ: 6, widthCells: 1, art: ART.knight, disposition: 1, visible: true, ghost: false,
+      controlled: false, hovered: false, targets: [], turn: null, conditions: [], bars: [{ frac: 0.9, color: PALETTE.good }] };
+    const all = tokens();
+    const tmpl = all.find((t) => t.id === SC.id) ?? squire;
+    // only the figure in the scene (others=1 keeps the rest of the cast)
+    const others = Q.get("others") === "1" ? all.filter((t) => t.id !== SC.id) : [];
+    document.getElementById("label").style.display = "none";
+    const at = (p) => ({ ...tmpl, x: p.x, y: p.y, footQ: p.footQ, groundQ: p.groundQ ?? p.footQ });
+    const S = r.standees, F = S.frame.bind(S);
+    const seek = Q.has("seek") ? Number(Q.get("seek")) : null;
+    let t0 = null;
+    if (seek !== null) S.frame = (now, ...a) => F(t0 === null ? now : t0 + seek, ...a);
+    if (SC.from) r.setTokens([...others, at(SC.from)]);
+    // the figure reads on its own: no effects, path or pings in the way
+    r.setEffects([]);
+    r.setOverlays({});
+    r.setCamera({ ...cam, zoom: Q.has("zoom") ? Number(Q.get("zoom")) : SC.zoom ?? 3, target: SC.cam }, { animate: false });
+    const go = () => {
+      t0 = performance.now();
+      if (SC.from) { S.set([...others, at(SC.from)], t0 - 1, false); S.set([...others, at(SC.to)], t0, true); }
+      r.requestRender();
+    };
+    // after the first frame, so the board is drawn before anything moves
+    setTimeout(() => {
+      go();
+      if (seek === null && SC.from) setInterval(go, 3200);
+    }, 400);
+    window.__life = () => ({ t0, seek, plan: S.entries.get(SC.id)?.move?.plan ?? null, dust: S.dust.live });
+    // probe=life: the walker, the pool and the frame flags after the scene ran, in #probe (headless --dump-dom)
+    if (Q.get("probe") === "life") setTimeout(() => {
+      const e = S.entries.get(SC.id), v = (p) => [p.x, p.y, p.z].map((n) => +n.toFixed(3));
+      const pre = document.createElement("pre");
+      pre.id = "probe";
+      pre.textContent = JSON.stringify({ fx: { life: r.fx?.life, dust: r.fx?.dust, hover: r.fx?.hover }, flags: [S._life, S._dust, S._hover],
+        root: e && v(e.root.position), squash: e?.body.scale.y, hoverW: e?.hoverW, live: S.dust.live,
+        motes: S.dust.motes.filter((m) => m.visible).map((m) => [...v(m.position), +m.scale.x.toFixed(3), +m.material.uniforms.uOpacity.value.toFixed(3)]),
+        inScene: (() => { let o = S.dust.motes[0]; while (o.parent) o = o.parent; return o === r.scene; })(),
+        groupVisible: S.dust.group.visible && S.group.visible, tex: S.dust.texture?.image?.width ?? null,
+        screen: (() => { const m = S.dust.motes.find((x) => x.visible); if (!m) return null; const p = r.project(m.position.x * 100, m.position.z * 100, m.position.y * 4); return [Math.round(p.x), Math.round(p.y)]; })() });
+      document.body.append(pre);
+    }, 1500);
+  }
+}
+
+/* ------------------------------------------------------------ tactics (areas=1, los=…, fall=1) */
+// areas=1  spell areas as volumes: a burst on the plateau's corner pouring over its
+//          edge, a cone, a line and an emanation round the goblin, each on PF2e's squares
+// los=a-b[,c-d]  the line of sight from a's eye to b, broken where ground or a wall stops
+//          it, with the real readout (distance, height, cover badge) from view/tactics.mjs
+// fall=1   a dragged path off the plateau's south edge: the drop line and its damage
+const TACTICS = Q.get("areas") === "1" || Q.has("los") || Q.get("fall") === "1";
+if (TACTICS && !LIFE && !PROPS_ON) {
+  const V = await import("/scripts/features/diorama/view/tactics.mjs");
+  const LOS = await import("/scripts/features/diorama/rules/los.mjs");
+  const D3 = await import("/scripts/features/diorama/rules/distance3d.mjs");
+  const { analyzePath } = await import("/scripts/features/diorama/rules/path.mjs");
+  for (const href of ["/styles/gl-tokens.css", "/styles/diorama.css"]) {
+    const l = document.createElement("link"); l.rel = "stylesheet"; l.href = href; document.head.append(l);
+  }
+  // the shipped strings, formatted as game.i18n.format does
+  const strings = Object.assign({}, ...(await Promise.all(["/lang/diorama.en.json", "/lang/diorama-rules.en.json"].map((u) => fetch(u).then((x) => x.json())))));
+  const t = (k, d = {}) => (strings[k] ?? k).replace(/\{(\w+)\}/g, (_, n) => (n in d ? d[n] : "{" + n + "}"));
+  document.getElementById("label").style.display = "none";
+  r.setEffects([]);
+  const grid = { size: SIZE, distance: 5, units: "ft" };
+  const toks = Object.fromEntries(tokens().map((tk) => [tk.id, tk]));
+  const box = document.createElement("div");
+  box.className = "gldio-labels gl-type";
+  box.style.position = "fixed";
+  box.style.zIndex = "2";
+  document.body.append(box);
+  const placed = [];
+  const putLabel = (world, lines, tone) => {
+    const n = document.createElement("div");
+    n.className = "gldio-label gl-glass";
+    n.dataset.tone = tone;
+    lines.forEach((s, k) => {
+      const row = document.createElement("div");
+      if (s && typeof s === "object") {
+        row.className = "gldio-label-sub";
+        const chip = document.createElement("span");
+        chip.className = "gl-chip gl-chip-solid";
+        chip.textContent = s.text;
+        chip.style.setProperty("--gl-accent", "var(--gl-" + s.chip + ")");
+        row.append(chip);
+      } else { row.className = k ? "gldio-label-sub" : "gldio-label-main"; row.textContent = s; }
+      n.append(row);
+    });
+    box.append(n);
+    placed.push({ n, world });
+  };
+  const over = { cells: [], los: [], falls: [], marks: [] };
+
+  if (Q.get("areas") === "1") {
+    const sq = D3.pf2eSquares;
+    const cellsWhere = (f) => { const out = []; for (let i = 0; i < ROWS; i++) for (let j = 0; j < COLS; j++) if (f((j + 0.5) * SIZE, (i + 0.5) * SIZE, i, j)) out.push({ i, j }); return out; };
+    const d5 = (x0, y0, x1, y1) => sq(Math.ceil(Math.abs(x1 - x0) / SIZE - 1e-9), Math.ceil(Math.abs(y1 - y0) / SIZE - 1e-9));
+    const deg = Math.PI / 180;
+    // PF2e's rules squares, restated from pf2e-aoe/data.mjs for a page with no canvas
+    const burst = { id: "burst", kind: "burst", origin: { x: 1500, y: 700 }, radius: 2, color: PALETTE.hazard };
+    burst.cells = cellsWhere((x, y) => d5(x, y, 1500, 700) <= 2);
+    const cone = { id: "cone", kind: "cone", origin: { x: 300, y: 600 }, radius: 3, direction: 0, angle: 90 * deg, color: PALETTE.info };
+    cone.cells = cellsWhere((x, y) => {
+      const a = Math.atan2(y - 600, x - 300);
+      return Math.abs(a) <= 45 * deg + 1e-9 && d5(x, y, 300, 600) <= 3;
+    });
+    const line = { id: "line", kind: "line", origin: { x: 600, y: 1100 }, color: PALETTE.violet };
+    line.cells = cellsWhere((x, y) => y > 1100 && y < 1200 && x > 600 && x < 1200);
+    const gob = toks.goblin;
+    const em = { id: "aura", kind: "emanation", origin: { x: gob.x, y: gob.y }, radius: 1, base: [0.5, 0.5], color: PALETTE.good };
+    em.cells = cellsWhere((x, y) => d5(x, y, gob.x, gob.y) <= 1);
+    const list = [burst, cone, line, em];
+    r.setAreas(list);
+    for (const a of list) for (const c of a.cells) over.cells.push({ ...c, color: a.color });
+    window.__areas = list.map((a) => ({ id: a.id, cells: a.cells.length, meshes: r.areas.count }));
+  }
+
+  if (Q.has("los")) {
+    const sightWalls = walls().filter((w) => w.type === "wall" && w.baseQ > 0).map((w) => ({ ax: w.a[0], ay: w.a[1], bx: w.b[0], by: w.b[1] }));
+    for (const pair of Q.get("los").split(",")) {
+      const [an, bn] = pair.split("-"), A = toks[an], B = toks[bn];
+      if (!A || !B) continue;
+      const eye = A.footQ + A.heightQ * 0.9;
+      const res = LOS.lineOfSight(terrain, { x: A.x, y: A.y, eyeQ: eye }, { x: B.x, y: B.y, footQ: B.footQ, heightQ: B.heightQ, radiusPx: (B.widthCells * SIZE) / 2 }, SIZE, { walls: sightWalls });
+      const boxOf = (tk) => ({ x: tk.x - (tk.widthCells * SIZE) / 2, y: tk.y - (tk.widthCells * SIZE) / 2, w: tk.widthCells * SIZE, h: tk.widthCells * SIZE,
+        elevation: (tk.footQ / 4) * 5, height: tk.widthCells * 5, actor: true });
+      const distance = D3.pf2eDistance(boxOf(A), boxOf(B), { size: SIZE, distance: 5 }).distance;
+      const read = { ...res, distance, rise: ((B.footQ - A.footQ) / 4) * 5 };
+      const tone = V.sightTone(read);
+      const tc = { info: PALETTE.info, warn: PALETTE.warn, hazard: PALETTE.hazard, peril: PALETTE.peril }[tone];
+      over.los.push({ id: pair, a: res.line.a, b: res.line.b, pieces: LOS.lineStyles(res.line.spans), color: tc, strength: 1 });
+      putLabel({ x: B.x, y: B.y, zQ: B.footQ + B.heightQ + 1 }, V.sightLines(read, { systemId: "pf2e", units: "ft", gridDistance: 5, t }), tone);
+    }
+  }
+
+  if (Q.get("fall") === "1") {
+    const cells = [{ i: 4, j: 11 }, { i: 5, j: 11 }, { i: 6, j: 11 }, { i: 7, j: 11 }, { i: 8, j: 11 }];
+    const an = analyzePath(terrain, cells, grid);
+    const fr = V.fallReadouts({ terrain, cells, falls: an.falls, grid, systemId: "pf2e", t });
+    over.falls = fr.lines;
+    over.path = { points: cells.map((c) => ({ x: (c.j + 0.5) * SIZE, y: (c.i + 0.5) * SIZE, zQ: terrain.cellTop(c.i, c.j), color: PALETTE.good })), color: PALETTE.good };
+    over.marks = an.falls.map((f) => ({ i: f.i, j: f.j, color: PALETTE.hazard, alpha: 0.45 }));
+    for (const l of fr.labels) putLabel(l.world, l.lines, l.tone);
+  }
+
+  const { marks, cells, ...rest } = over;
+  r.setOverlays({ ...rest, cells: [...cells, ...marks] });
+  const follow = () => {
+    for (const p of placed) {
+      const at = r.project(p.world.x, p.world.y, p.world.zQ);
+      p.n.style.setProperty("--gldio-x", Math.round(at.x) + "px");
+      p.n.style.setProperty("--gldio-y", Math.round(at.y) + "px");
+    }
+    requestAnimationFrame(follow);
+  };
+  follow();
+  // at=x,y,zQ points the camera (px, q) for close stills
+  const at = Q.has("at") ? Q.get("at").split(",").map(Number) : [800, 600, 2];
+  if (Q.get("view") === "tactics" || !Q.has("view")) r.setCamera({ ...cam, zoom: Q.has("zoom") ? Number(Q.get("zoom")) : 1.05, target: { x: at[0], y: at[1], zQ: at[2] ?? 2 } }, { animate: false });
+  // the page's hover handler would put the old overlays back over these
+  window.__tacticsOverlays = { ...rest, cells: [...cells, ...marks] };
+}
 
 /* ------------------------------------------------------------ UI */
 const status = document.getElementById("status"), label = document.getElementById("label");
@@ -467,7 +819,7 @@ canvas.addEventListener("click", (e) => {
 });
 canvas.addEventListener("mousemove", (e) => {
   const hit = r.pick(e.clientX, e.clientY);
-  const o = overlays();
+  const o = window.__tacticsOverlays ? { ...window.__tacticsOverlays } : overlays();
   if (hit?.type === "ground") o.hover = { i: hit.i, j: hit.j };
   r.setOverlays(o);
 });
