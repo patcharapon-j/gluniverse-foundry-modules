@@ -149,7 +149,7 @@ names its action (`Longsword 2nd  vs Ogre`).
   type with the value in its tone.
 - **GM-only:** a dashed line under the chips, `True 60%  Players see 55–70%`.
 - **Material:** a scoped skin, black-leaning ink with paper type and amber kept
-  for criticals (docs/adr/0005-odds-and-line-skin.md).
+  for criticals (docs/adr/0006-odds-and-line-skin.md).
 - **Visibility:**
   - Every client draws the badge from its own knowledge.
   - The stream client always renders the **player** view, even when it is logged

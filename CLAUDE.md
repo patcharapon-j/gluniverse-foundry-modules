@@ -92,8 +92,9 @@ etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
   theme (the exceptions are the scoped Aegis skin of the initiative rail and
   Combat Intro, docs/adr/0001-scoped-skins.md, Stream Pacer's black skin,
   docs/adr/0003-stream-pacer-skin.md, Resource Trackers' skin,
-  docs/adr/0004-resource-trackers-skin.md, and PF2e Odds' ink skin,
-  docs/adr/0005-odds-and-line-skin.md — each lives only under its features' own
+  docs/adr/0004-resource-trackers-skin.md, the Creaturedex's skin,
+  docs/adr/0005-creaturedex-skin.md, and PF2e Odds' ink skin,
+  docs/adr/0006-odds-and-line-skin.md — each lives only under its features' own
   roots and never on `:root`); `styles/gl-tokens.css` is the single source of truth and
   `styles/gl-motion.css` the single keyframe pool. Use the `--gl-*` tokens and
   the `.gl-*` utilities. The non-negotiables:
@@ -1294,7 +1295,7 @@ active GM's alone. **The tag sits on the line the canvas draws**: it is placed
 on `stream-targets`' own path for the same two tokens through the pure
 `line-place.mjs`, which the preview places through too, so a lookalike path in
 `line-badges.mjs` would put every tag beside its line with nothing reported. The
-skin is scoped (ADR 0005): a `--glod-*` read with no declaration falls back to
+skin is scoped (ADR 0006): a `--glod-*` read with no declaration falls back to
 nothing, and the check refuses one. To see it: `node tools/target-line-preview.mjs
 && node tools/pf2e-odds-preview.mjs && node tools/preview-server.mjs`, then
 `/.preview/odds.html` (`?freeze=1` stops the narrowing loop) or

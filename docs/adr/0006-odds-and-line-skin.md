@@ -1,4 +1,4 @@
-# 0005 · A scoped ink skin for PF2e Odds
+# 0006 · A scoped ink skin for PF2e Odds
 
 Status: accepted (2026-11-03)
 
