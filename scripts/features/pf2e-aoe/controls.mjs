@@ -5,7 +5,9 @@ import { escapeAttr, escapeHTML } from "../../core/util.mjs";
 import { ensureSuiteGroup, bindSuiteToolClicks } from "../../core/scene-controls.mjs";
 import { FLAGS } from "./constants.mjs";
 import { normalizeColor, normalizeLabel } from "./data.mjs";
+import { lookFor } from "./presentation.mjs";
 import { BUILTIN_PROFILES } from "./profiles.mjs";
+import { paintSwatchElement } from "./render/swatch.mjs";
 import { compactPresentation } from "./schema.mjs";
 
 const TOOL = "pf2e-aoe-create";
@@ -53,7 +55,8 @@ function shapeData({ shape, size, width }) {
   }
 }
 
-function creatorContent() {
+/* Exported for the preview page, which renders this exact form. */
+export function creatorContent() {
   const profileId = PROFILE_SET.has(draft.profileId) ? draft.profileId : "builtin:etched-neutral";
   const color = normalizeColor(draft.color, "#759dff");
   const unit = sceneUnit();
@@ -91,9 +94,12 @@ function creatorContent() {
         <div class="form-fields"><input type="number" name="width" min="1" max="100" step="1" value="${Number(draft.width) || 5}"></div>
       </div>
       <div class="gl-aoe-create-grid">
-        <div class="form-group">
+        <div class="form-group gl-aoe-create-profile">
           <label>${escapeHTML(t("GLAOE.RegionStyle.Profile"))}</label>
-          <div class="form-fields"><select name="profileId">${profileOptions}</select></div>
+          <div class="form-fields">
+            <canvas class="gl-aoe-swatch" data-swatch data-size="40" aria-hidden="true"></canvas>
+            <select name="profileId">${profileOptions}</select>
+          </div>
         </div>
         <div class="form-group gl-aoe-create-color">
           <label>${escapeHTML(t("GLAOE.RegionStyle.Color"))}</label>
@@ -108,7 +114,7 @@ function creatorContent() {
     </form>`;
 }
 
-function bindCreatorDialog(_event, dialog) {
+export function bindCreatorDialog(_event, dialog) {
   const form = dialog.element?.querySelector("form.gl-aoe-create-form");
   if (!form) return;
   const shape = form.elements.shape;
@@ -116,9 +122,18 @@ function bindCreatorDialog(_event, dialog) {
   const colorOverride = form.elements.colorOverride;
   const output = form.querySelector(".gl-aoe-create-color output");
   const width = form.querySelector(".gl-aoe-create-width");
+  const profile = form.elements.profileId;
+  const swatch = form.querySelector("[data-swatch]");
+  const paint = () => {
+    const entry = BUILTIN_PROFILES.find((item) => item.id === profile?.value) ?? BUILTIN_PROFILES[0];
+    const palette = colorOverride?.checked && color?.value ? { body: color.value } : entry.appearance?.palette ?? null;
+    paintSwatchElement(swatch, lookFor(entry.semantics, { ...entry.appearance, palette }));
+  };
   shape?.addEventListener("change", () => width?.toggleAttribute("hidden", shape.value !== "line"));
-  color?.addEventListener("input", () => { if (output) output.value = color.value; });
-  colorOverride?.addEventListener("change", () => { if (color) color.disabled = !colorOverride.checked; });
+  color?.addEventListener("input", () => { if (output) output.value = color.value; paint(); });
+  colorOverride?.addEventListener("change", () => { if (color) color.disabled = !colorOverride.checked; paint(); });
+  profile?.addEventListener("change", paint);
+  paint();
 }
 
 function readCreator(button) {

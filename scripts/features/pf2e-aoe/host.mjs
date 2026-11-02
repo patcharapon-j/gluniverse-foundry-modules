@@ -9,6 +9,7 @@ import { presentationStyle } from "./presentation.mjs";
 import { createMeasurementPresenter, layoutPresenters, measurementSummary } from "./measurement.mjs";
 import { sceneUsesNativePresentation } from "./scene-config.mjs";
 import { AreaView } from "./render/area.mjs";
+import { PLATE_FONTS } from "./render/plate.mjs";
 
 const ROOT_Z = 650; // over tokens, under walls/controls
 const SETTLE_MS = 160; // quiet time after the last move before the mask is rebuilt
@@ -164,6 +165,7 @@ class AoeHost {
   attach() {
     this.detach();
     if (!canvas?.ready || !PIXI?.Container) return;
+    this.loadPlateFonts();
     this.ladder = Budget.ladder("pf2e-aoe", SHED_ORDER, { minShed: () => this.minShed });
     /* The level can move while the tick is stopped (a still look, motion
        "none", a tier change from the Performance feature), and nothing else
@@ -206,6 +208,25 @@ class AoeHost {
     this._unbudget = null;
     this.ladder?.dispose();
     this.ladder = null;
+  }
+
+  /**
+   * A PIXI.Text rasterises once, with whatever face the browser has at that
+   * moment, and never looks again: a plate built before the bundled face has
+   * loaded keeps the fallback for the rest of the session. Ask for both faces,
+   * and rebuild any plate drawn in the meantime once they are in.
+   */
+  loadPlateFonts() {
+    const fonts = globalThis.document?.fonts;
+    if (this._fontsReady || typeof fonts?.load !== "function") return;
+    this._fontsReady = true;
+    const faces = [`650 16px ${PLATE_FONTS.title}`, `500 12px ${PLATE_FONTS.detail}`];
+    Promise.all(faces.map((face) => fonts.load(face).catch(() => null))).then(() => {
+      for (const entry of this.entries.values()) entry.labelKey = null;
+      for (const entry of [...this.entries.values()]) {
+        if (entry.label && !entry.anim.leaving) this.tryRefresh(entry.region);
+      }
+    });
   }
 
   /** Behaviours shed off the front of SHED_ORDER right now. */
@@ -276,7 +297,9 @@ class AoeHost {
       .sort((a, b) => b.priority - a.priority || a.order - b.order)
       .slice(0, this.options.maxConcurrent).map((entry) => entry.region);
     const keep = new Set(regions.map((region) => region.id));
-    for (const id of [...this.entries.keys()]) if (!keep.has(id)) this.remove(id);
+    /* An area that leaves the set (hidden, deleted, past the cap) dissipates
+       rather than vanishing; one that comes back revives in refresh(). */
+    for (const id of [...this.entries.keys()]) if (!keep.has(id)) this.remove(id, { release: true });
     for (const region of regions) this.tryRefresh(region);
     this.syncAuraNative();
     this.updateActivity();
@@ -295,6 +318,10 @@ class AoeHost {
   refresh(region) {
     if (!region?.id || !this.ground || !this.spectacle) return;
     const previous = this.entries.get(region.id) ?? null;
+    /* A placeable that is already destroyed is a Region on its way out (its
+       Document was deleted, or the layer is being torn down): never rebuild or
+       revive one, or a deleted area is drawn again and never leaves. */
+    if (region.destroyed) return;
     /* Square grids use PF2e's rules lattice. Gridless Scenes use the Region's
        analytic shape. Hex Scenes keep the native mesh rather than pretending
        square cells are hexes. */
@@ -309,6 +336,9 @@ class AoeHost {
     if (previous && !reuse) this.dropView(previous);
     const anim = previous?.anim ?? new AoeAnim({ motionScale: this.options.motionScale });
     anim.motionScale = this.options.motionScale;
+    /* Foundry redraws a placeable by destroying it and drawing a new one in
+       the same tick; the destroy started a dissipate, the draw cancels it. */
+    if (anim.leaving) anim.revive();
     const entry = previous ?? {
       region, anim, view: null, viewKey: null, label: null, labelKey: null,
       markIds: new Set(), suppressedHighlights: [], settleAt: 0,
@@ -330,11 +360,7 @@ class AoeHost {
       entry.suppressedHighlights = region.glAoeAuraRenderer ? [] : suppressNativeHighlights(region);
       this.syncMarks(entry);
       if (labelKey(region, style, geometry) !== entry.labelKey) this.rebuildLabel(entry);
-      else if (entry.label) {
-        entry.label.position.set(geometry.labelAt.x, geometry.labelAt.y);
-        entry.label.glAoeBaseY = geometry.labelAt.y;
-        entry.label.glAoeRegion = region;
-      }
+      else if (entry.label) this.placeLabel(entry);
       layoutPresenters(this.entries.values());
       this.write(entry);
       this.syncAuraNative();
@@ -352,9 +378,24 @@ class AoeHost {
     entry.viewKey = null;
   }
 
+  /** Where an entry's plate stands now: its area's anchor, plus any rigid move. */
+  labelAnchor(entry) {
+    const view = entry.view;
+    const at = view?.labelAnchor;
+    if (!at) return entry.geometry.labelAt;
+    return { x: at.x + (view.offset?.x ?? 0), y: at.y + (view.offset?.y ?? 0) };
+  }
+
+  placeLabel(entry) {
+    const at = this.labelAnchor(entry);
+    entry.label.position.set(at.x, at.y);
+    entry.label.glAoeBaseY = at.y;
+    entry.label.glAoeRegion = entry.region;
+  }
+
   rebuildLabel(entry) {
     destroyNode(entry.label);
-    entry.label = createMeasurementPresenter(entry.region, entry.style, entry.geometry);
+    entry.label = createMeasurementPresenter(entry.region, entry.style, entry.geometry, this.labelAnchor(entry));
     entry.labelKey = labelKey(entry.region, entry.style, entry.geometry);
     if (entry.label) { entry.label.zIndex = 3; this.spectacle?.addChild(entry.label); }
   }
@@ -384,8 +425,7 @@ class AoeHost {
        quiet for SETTLE_MS (walls may block different squares at the new spot). */
     entry.view?.translate(geometry.quad.x - built.quad.x, geometry.quad.y - built.quad.y);
     this.syncMarks(entry);
-    entry.label?.position?.set(geometry.labelAt.x, geometry.labelAt.y);
-    if (entry.label) { entry.label.glAoeBaseY = geometry.labelAt.y; entry.label.glAoeRegion = replacement; }
+    if (entry.label) this.placeLabel(entry);
     if (moved) {
       entry.settleAt = (globalThis.performance?.now?.() ?? Date.now()) + SETTLE_MS;
       if (!this._ticking) this.updateActivity();
@@ -416,10 +456,30 @@ class AoeHost {
     }
   }
 
+  /**
+   * Take an entry off the canvas. With `release` it dissipates first: Foundry
+   * destroys the placeable before it announces the deletion, so the destroy is
+   * the only moment a deleted area can still be faded out. A second release
+   * while it is already leaving is a no-op, never a hard cut. Motion tier
+   * "none" has no frames to fade in, so there it goes at once.
+   */
   remove(id, { release = false } = {}) {
     const entry = this.entries.get(id);
     if (!entry) return;
-    if (release && !entry.anim.leaving) { entry.anim.release(); this.updateActivity(); return; }
+    if (release && !entry.anim.still) {
+      if (!entry.anim.leaving) {
+        entry.anim.release();
+        /* Hand the Region's own drawing back now rather than after the fade:
+           a Region leaving our set for any reason but deletion is still on
+           the canvas, and native is what it falls back to. */
+        for (const item of entry.suppressedHighlights ?? []) {
+          if (!item.node.destroyed) item.node.renderable = item.renderable;
+        }
+        entry.suppressedHighlights = [];
+        this.updateActivity();
+      }
+      return;
+    }
     this.entries.delete(id);
     for (const item of entry.suppressedHighlights ?? []) {
       if (!item.node.destroyed) item.node.renderable = item.renderable;
@@ -483,7 +543,7 @@ class AoeHost {
       if (full) rebuild.push(...auras);
     }
     for (const region of rebuild) {
-      if (this.entries.has(region.id)) this.tryRefresh(region);
+      if (this.entries.has(region.id) && !this.entries.get(region.id).anim.leaving) this.tryRefresh(region);
     }
     for (const entry of this.entries.values()) {
       for (const id of dirty.keys()) {
@@ -498,7 +558,7 @@ class AoeHost {
   /** Refresh every live entry whose Region passes the test, in place. */
   refreshWhere(test) {
     for (const entry of [...this.entries.values()]) {
-      if (entry.region?.glAoeAuraRenderer) continue;
+      if (entry.region?.glAoeAuraRenderer || entry.anim.leaving) continue;
       let hit = false;
       try { hit = Boolean(test(entry.region)); } catch { hit = false; }
       if (hit) this.tryRefresh(entry.region);
@@ -541,6 +601,7 @@ class AoeHost {
       time: anim.time,
       enter: anim.enter,
       eased: anim.eased,
+      settle: anim.settle,
       presence: anim.presence,
       shock: anim.shock,
       pulse: anim.pulseProgress,
@@ -550,9 +611,10 @@ class AoeHost {
       motionScale: anim.motionScale,
     });
     if (entry.label) {
-      const scale = clamp(1 / stageZoom(), 0.78, 1.35);
+      const scale = clamp(1 / stageZoom(), 0.78, 1.6);
       entry.label.scale.set(scale);
-      entry.label.setInspected?.(Boolean(entry.region?.hover || entry.region?.controlled));
+      entry.label.alpha = anim.presence;
+      entry.label.setInspected?.(!anim.leaving && Boolean(entry.region?.hover || entry.region?.controlled));
     }
   }
 
@@ -564,7 +626,7 @@ class AoeHost {
 
     const settled = [];
     for (const [id, entry] of this.entries) {
-      const renderer = entry.region.glAoeAuraRenderer;
+      const renderer = entry.anim.leaving ? null : entry.region.glAoeAuraRenderer;
       if (renderer) {
         const tokenId = renderer.token?.id ?? id.split(":")[1];
         const replacement = renderer.destroyed ? null : auraRegionFor(renderer);
@@ -581,7 +643,7 @@ class AoeHost {
     /* Outside the loop: a rebuild may replace entries, which a live Map
        iteration would then visit a second time. */
     for (const entry of settled) {
-      if (this.entries.get(entry.region?.id) !== entry) continue;
+      if (this.entries.get(entry.region?.id) !== entry || entry.anim.leaving) continue;
       entry.builtGeometry = null;
       const renderer = entry.region.glAoeAuraRenderer;
       const region = renderer ? auraRegionFor(renderer) : entry.region;

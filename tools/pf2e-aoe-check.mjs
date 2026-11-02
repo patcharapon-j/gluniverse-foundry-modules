@@ -288,14 +288,44 @@ ok(echoPhase("heartbeat", 0.3, 1, 0.5) >= 0 && echoPhase("heartbeat", 0.9, 1, 0.
 
 /* Renderer purity: no program of ours on the GPU, and nothing that reads the
    world, so the preview drives the shipped file. */
-for (const file of ["render/area.mjs", "render/outline.mjs", "render/look.mjs", "render/patterns.mjs", "host.mjs"]) {
+const RENDER_FILES = ["render/area.mjs", "render/outline.mjs", "render/look.mjs", "render/patterns.mjs",
+  "render/plate.mjs", "render/swatch.mjs"];
+for (const file of [...RENDER_FILES, "host.mjs", "measurement.mjs", "profile-view.mjs"]) {
   const src = await text(`scripts/features/pf2e-aoe/${file}`);
-  ok(!/gl_FragColor|PIXI\.Filter|PIXI\.Shader|Shader\.from|createBloomFilter|precision\s+(?:high|medium)p/.test(src),
+  ok(!/gl_FragColor|PIXI\.Filter|PIXI\.Shader|Shader\.from|createBloomFilter|precision\s+(?:high|medium)p|getContext\(["']webgl/.test(src),
     `${file} reintroduces a shader or filter — Spellglass draws with PIXI primitives only`);
 }
-for (const file of ["render/area.mjs", "render/outline.mjs", "render/look.mjs", "render/patterns.mjs"]) {
+for (const file of [...RENDER_FILES, "profile-view.mjs"]) {
   const src = (await text(`scripts/features/pf2e-aoe/${file}`)).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
   ok(!/\b(?:game|canvas|Hooks|foundry|ui)\./.test(src), `${file} reads the world — the preview would have to reimplement it`);
+}
+{
+  /* Every layer must read on parchment as well as on a dark map, which an
+     additive blend cannot: ADD over a pale floor clips to white. The look is
+     built from ink and light in normal blending; the check refuses ADD/SCREEN
+     creeping back into any layer. */
+  const areaSrc = await text("scripts/features/pf2e-aoe/render/area.mjs");
+  ok(!/BLEND_MODES\.(?:ADD|SCREEN)/.test(areaSrc), "render/area.mjs uses an additive blend — it washes out on a bright floor");
+  ok(/INK/.test(areaSrc), "render/area.mjs must lay the ink shadow under its patterns");
+  /* The plate's faces must be ones the suite bundles, or Foundry draws a
+     fallback serif and nobody is told. */
+  const fonts = await text("styles/gl-fonts.css");
+  const { PLATE_FONTS, plateFontSize } = await import("../scripts/features/pf2e-aoe/render/plate.mjs");
+  for (const [role, stack] of Object.entries(PLATE_FONTS)) {
+    const face = stack.split(",")[0].replace(/["']/g, "").trim();
+    ok(new RegExp(`font-family:\\s*["']?${face}["']?`).test(fonts), `plate ${role} face "${face}" is not declared in gl-fonts.css`);
+  }
+  ok(plateFontSize(20) >= 12 && plateFontSize(400) <= 20, "plate type must stay readable and bounded at every grid size");
+}
+{
+  /* The look's new layers must exist for every function: a function with no
+     veil draws its pattern straight over the map, and one with no cut reads as
+     a different family of template. */
+  for (const fn of FUNCTIONS) {
+    const lk = composeLook({ fn, material: "neutral", behavior: "static" });
+    ok(lk.veil > 0 && lk.veil < 0.6, `${fn} look has no ink veil, or one that hides the map`);
+    ok(lk.cuts !== undefined, `${fn} look does not say whether it cuts its corners`);
+  }
 }
 for (const [key, value] of Object.entries(SIZES)) {
   ok(Array.isArray(value) ? value.every((v) => v > 0) : value > 0, `SIZES.${key} must be positive`);
@@ -310,9 +340,19 @@ ok(SHED_ORDER[0] === "tokenMarks", "token marks must shed first");
   const anim = new AoeAnim({ motionScale: 1 });
   ok(anim.hot, "an entering area must want frames");
   anim.step(TIMING.castIn + 1);
-  ok(!anim.hot, "a landed area with no beat must not want frames of its own");
+  ok(anim.hot && anim.settle > 0.9, "the landing must follow the entrance and want frames while it plays");
+  anim.step(TIMING.settle);
+  ok(!anim.hot && anim.settle === 0, "a landed area with no beat must not want frames of its own");
   anim.pulse();
   ok(anim.hot && anim.pulseProgress >= 0, "a trigger beat must want frames");
+  const still = new AoeAnim({ motionScale: 0 });
+  ok(!still.hot && still.settle === 0 && still.enter === 1, "motion none must arrive landed and ask for no frames");
+  const leaving = new AoeAnim({ motionScale: 1 });
+  leaving.step(TIMING.castIn + TIMING.settle + 1);
+  leaving.release();
+  leaving.step(TIMING.dissipate / 2);
+  ok(leaving.hot && leaving.presence < 1 && leaving.revive() && !leaving.leaving && leaving.presence === 1,
+    "a redraw mid-dissipate must revive the area at full presence");
 }
 for (const [name, duration] of Object.entries(TIMING)) {
   ok(Number.isFinite(duration) && duration >= 0, `invalid animation duration ${name}`);
@@ -330,6 +370,14 @@ ok(/Budget\.ladder\("pf2e-aoe", SHED_ORDER/.test(host), "host must bind SHED_ORD
 ok(/Budget\.claimMotion\("pf2e-aoe"/.test(host), "host must claim motion while it ticks");
 ok(/view\?\.animated/.test(host) && /anim\?\.hot/.test(host),
   "host must stop ticking once a still look has landed");
+/* Foundry destroys a Region's placeable before deleteRegion fires, so a
+   dissipate that waits for deleteRegion never plays: the area vanished on the
+   spot for every deletion. The release starts at destroyRegion, a second
+   release must not cut it short, and a destroyed region must never be rebuilt. */
+ok(/on\("destroyRegion",[^\n]*release:\s*true/.test(mainSource), "destroyRegion must release the area so it dissipates");
+ok(/refreshAll\(\)\s*\{[\s\S]{0,1600}?this\.remove\(id,\s*\{\s*release:\s*true/.test(host), "refreshAll must release areas that left, not cut them");
+ok(/region\??\.destroyed/.test(host), "refresh must refuse a destroyed Region");
+ok(/revive\(\)/.test(host), "a redraw of a leaving area must revive it");
 const moduleJson = JSON.parse(moduleJsonText);
 ok(Number(moduleJson.compatibility?.minimum) <= 13, "PF2e AoE must not drop suite-level Foundry 13 compatibility");
 ok(moduleJson.styles.includes("styles/pf2e-aoe.css"), "module.json does not load pf2e-aoe.css");
@@ -364,6 +412,35 @@ const regionConfig = await text("scripts/features/pf2e-aoe/region-config.mjs");
 ok(regionConfig.includes("FLAGS.presentation") && regionConfig.includes("PRESENTATION_MODES")
   && regionConfig.includes("compactPresentation"),
   "Region configuration must persist normalized schema-v2 presentation data");
+{
+  /* The profile manager edits a draft. Writing the setting from Add, Duplicate
+     or Remove re-rendered from the stored list and threw away every unsaved
+     edit on the page; only the form's submit handler may write it. */
+  const profileApp = await text("scripts/features/pf2e-aoe/profile-app.mjs");
+  const writes = profileApp.match(/game\.settings\.set\(/g) ?? [];
+  ok(writes.length === 1 && /static async #submit\(\)[\s\S]{0,200}game\.settings\.set\(/.test(profileApp),
+    "only Save may write the world profiles; Add, Duplicate, Remove and Import edit the draft");
+  ok(/#capture\(\)/.test(profileApp), "the profile manager must fold typed edits into the draft before changing it");
+  const { profilesContext, profileFromFields } = await import("../scripts/features/pf2e-aoe/profile-view.mjs");
+  const ctx = profilesContext([{ id: "world:a", name: "A", semantics: { function: "harm", material: "fire", behavior: "impact" }, appearance: {} }], (k) => k);
+  const hbs = await text("templates/pf2e-aoe/profiles.hbs");
+  for (const name of hbs.matchAll(/\{\{\s*labels\.([a-zA-Z]+)\s*\}\}/g)) ok(Boolean(ctx.labels[name[1]]), `profiles.hbs reads labels.${name[1]}, which the view model never sets`);
+  for (const k of ["Name", "Duplicate", "Remove", "Empty", "Unsaved"]) ok(Boolean(lang[`GLAOE.Profiles.${k}`]), `missing GLAOE.Profiles.${k}`);
+  const round = profileFromFields({ id: "world:a", name: "  A  ", function: "harm", material: "fire", behavior: "impact", colorMode: "auto", color: "#123456", intensity: "", treatment: "" });
+  ok(round.name === "A" && round.appearance.palette === null && round.appearance.intensity === null,
+    "an automatic colour or a blank intensity must store null, not a value the GM never chose");
+  /* Tokens only: a variable the design system does not define resolves to
+     nothing and the warning state silently loses its colour. */
+  const css = await text("styles/pf2e-aoe.css");
+  const tokens = await text("styles/gl-tokens.css");
+  for (const [, name] of css.matchAll(/var\((--gl-[a-z0-9-]+)/g)) {
+    ok(new RegExp(`${name}\\s*:`).test(tokens), `pf2e-aoe.css reads ${name}, which gl-tokens.css never declares`);
+  }
+  ok(!/:root/.test(css), "pf2e-aoe.css must stay under its own roots");
+  for (const [decl] of css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/(?:transition|animation)[a-z-]*\s*:[^;}]*/g)) {
+    ok(!/(?:^|[\s,(])\d*\.?\d+m?s\b/.test(decl.split(":").slice(1).join(":")), `pf2e-aoe.css uses a raw duration: ${decl.trim()}`);
+  }
+}
 
 /* Foundry merges dotted flag updates. Verify that clearing one sparse control
    emits nested deletion markers instead of leaving an old palette or modifier

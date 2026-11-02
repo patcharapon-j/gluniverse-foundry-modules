@@ -154,7 +154,10 @@ export async function onReady() {
   on("hoverRegion", (region) => host.touch(region?.id));
   on("controlRegion", (region) => host.touch(region?.id));
   on("canvasPan", () => host.onView());
-  on("destroyRegion", (region) => host.remove(region?.id));
+  /* Foundry destroys the placeable before it calls deleteRegion, so this is
+     where a deleted area starts to dissipate. A redraw destroys and draws in
+     one tick, and the draw revives the entry before a frame of fade is seen. */
+  on("destroyRegion", (region) => host.remove(region?.id, { release: true }));
   on("createRegion", (document) => { void freezePlacement(document); refreshSoon(); });
   on("updateRegion", (document) => {
     /* A live entry refreshes in place; anything else may be joining the set

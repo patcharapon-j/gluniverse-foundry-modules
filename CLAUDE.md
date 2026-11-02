@@ -780,7 +780,14 @@ in screen pixels and divided by the stage zoom, so strokes rebuild past a 6%
 zoom change — a width in world units is a slab zoomed in and gone zoomed out.
 And a look that does not move (`view.animated` false, motion "none", or a
 static behaviour) asks for no frames once it has landed; the host's ticker
-stops. See `docs/PF2E_AOE.md` for the look tables and the layers.
+stops. Two more fail silently. Nothing blends additively: ADD over parchment
+clips to white, so the look is ink under light and the check refuses ADD or
+SCREEN in `render/area.mjs`. And Foundry destroys a Region's placeable before
+`deleteRegion` fires, so the dissipate starts at `destroyRegion`
+(`host.remove(id, { release: true })`), and a destroyed Region is never
+rebuilt; wait for `deleteRegion` and every area just vanishes. `sheet=ui`
+renders the shipped GM forms. See `docs/PF2E_AOE.md` for the look tables and
+the layers.
 
 **When touching Insight** (`features/insight/`, `styles/insight.css`,
 `templates/insight/`), re-run its consistency check. An Insight arrival is four

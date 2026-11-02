@@ -5,17 +5,25 @@
  * visual channel so two areas that differ in meaning can never look alike:
  *
  *   function  → the PATTERN laid over the floor, the RIM style, the ALERT
- *               rhythm and the ACCENT hue of the brackets, echo and marks.
+ *               rhythm and the ACCENT hue of the corner cuts, echo and marks.
  *               Twelve functions, twelve patterns, twelve rims-and-alerts.
- *   material  → the COLOUR PAIR: `body` floods the fill and the glow, `hot`
- *               draws the rim and the pattern. Twenty-six materials, twenty-six
- *               pairs, held apart in OKLab by the check tool.
+ *   material  → the COLOUR PAIR: `body` tints the floor and lights the inner
+ *               edge, `hot` draws the rim and the pattern. Twenty-six
+ *               materials, twenty-six pairs, held apart in OKLab by the check.
  *   behaviour → the MOTION: how the pattern drifts or turns, and how fast
  *               the alert beats.
  *
- * Pure and dependency-free: the check tool and the preview page import it
- * directly, and `presentation.mjs` resolves a Region against it.
+ * The language is black-leaning on purpose. An area first lays a thin ink
+ * veil over the floor, then tints it, so it reads as a region of the map on a
+ * dark dungeon and on pale parchment alike, and it never adds light to the
+ * floor outside its own rim. The rim is the brightest thing in the picture;
+ * the pattern sits a step under it; the fill a step under that.
+ *
+ * Pure: the check tool and the preview page import it directly, and
+ * `presentation.mjs` resolves a Region against it.
  */
+
+import { PALETTE } from "../../../core/theme.mjs";
 
 /** Material → [body, hot]. Order is irrelevant; ids are schema MATERIALS. */
 export const MATERIAL_COLORS = Object.freeze({
@@ -53,20 +61,21 @@ export const MATERIAL_COLORS = Object.freeze({
  *
  * Rims: solid · double · dashed · dotted · chain · tape.
  * Alerts: heartbeat · breathe · throb · strobe · none.
+ * `cuts`: whether the convex corners carry the suite's chamfer tick.
  */
 export const FUNCTION_LOOK = Object.freeze({
-  harm:    { accent: "#ff3b30", pattern: "shards",  span: 1,   patternAlpha: 0.62, fill: 0.24, rim: "solid",  rimPx: 2.8, glow: 1.25, alert: "heartbeat", period: 1.35, echo: true,  brackets: true },
-  restore: { accent: "#3dff8f", pattern: "cross",   span: 1,   patternAlpha: 0.58, fill: 0.20, rim: "double", rimPx: 2.2, glow: 1.05, alert: "breathe",   period: 3.0,  echo: false, brackets: true },
-  support: { accent: "#39d0ff", pattern: "chevron", span: 1,   patternAlpha: 0.56, fill: 0.18, rim: "solid",  rimPx: 2.2, glow: 1.0,  alert: "breathe",   period: 2.4,  echo: false, brackets: true },
-  protect: { accent: "#f0f4ff", pattern: "scales",  span: 1,   patternAlpha: 0.58, fill: 0.22, rim: "double", rimPx: 3.0, glow: 1.15, alert: "none",      period: 0,    echo: false, brackets: true },
-  hinder:  { accent: "#ff9f1c", pattern: "zigzag",  span: 1,   patternAlpha: 0.62, fill: 0.20, rim: "dashed", rimPx: 2.6, glow: 1.05, alert: "throb",     period: 2.2,  echo: false, brackets: true },
-  control: { accent: "#c77dff", pattern: "net",     span: 1,   patternAlpha: 0.60, fill: 0.20, rim: "chain",  rimPx: 2.4, glow: 1.05, alert: "breathe",   period: 2.8,  echo: false, brackets: true },
-  conceal: { accent: "#6f6a96", pattern: "fog",     span: 2,   patternAlpha: 0.70, fill: 0.36, rim: "dotted", rimPx: 2.4, glow: 0.80, alert: "none",      period: 0,    echo: false, brackets: false },
-  terrain: { accent: "#c9a46a", pattern: "cobble",  span: 1,   patternAlpha: 0.60, fill: 0.20, rim: "solid",  rimPx: 2.2, glow: 0.80, alert: "none",      period: 0,    echo: false, brackets: true },
-  detect:  { accent: "#fff4a0", pattern: "scan",    span: 1,   patternAlpha: 0.55, fill: 0.14, rim: "dashed", rimPx: 2.0, glow: 1.0,  alert: "none",      period: 0,    echo: false, brackets: true, sweep: true },
-  summon:  { accent: "#2ff2d0", pattern: "sigil",   span: 1,   patternAlpha: 0.62, fill: 0.20, rim: "double", rimPx: 2.4, glow: 1.15, alert: "breathe",   period: 2.0,  echo: true,  brackets: true },
-  hazard:  { accent: "#ffd400", pattern: "tape",    span: 1,   patternAlpha: 0.50, fill: 0.24, rim: "tape",   rimPx: 4.0, glow: 1.30, alert: "strobe",    period: 0.9,  echo: true,  brackets: true },
-  neutral: { accent: "#8593a8", pattern: "dots",    span: 1,   patternAlpha: 0.50, fill: 0.16, rim: "solid",  rimPx: 2.0, glow: 0.85, alert: "none",      period: 0,    echo: false, brackets: true },
+  harm:    { accent: "#ff3b30", pattern: "shards",  span: 1, patternAlpha: 0.62, fill: 0.20, rim: "solid",  rimPx: 2.4, glow: 1.2,  alert: "heartbeat", period: 1.35, echo: true,  cuts: true },
+  restore: { accent: "#3dff8f", pattern: "cross",   span: 1, patternAlpha: 0.58, fill: 0.17, rim: "double", rimPx: 2.0, glow: 1.0,  alert: "breathe",   period: 3.0,  echo: false, cuts: true },
+  support: { accent: "#39d0ff", pattern: "chevron", span: 1, patternAlpha: 0.56, fill: 0.16, rim: "solid",  rimPx: 2.0, glow: 0.95, alert: "breathe",   period: 2.4,  echo: false, cuts: true },
+  protect: { accent: "#f0f4ff", pattern: "scales",  span: 1, patternAlpha: 0.56, fill: 0.18, rim: "double", rimPx: 2.6, glow: 1.05, alert: "none",      period: 0,    echo: false, cuts: true },
+  hinder:  { accent: "#ff9f1c", pattern: "zigzag",  span: 1, patternAlpha: 0.60, fill: 0.17, rim: "dashed", rimPx: 2.2, glow: 1.0,  alert: "throb",     period: 2.2,  echo: false, cuts: true },
+  control: { accent: "#c77dff", pattern: "net",     span: 1, patternAlpha: 0.58, fill: 0.17, rim: "chain",  rimPx: 2.0, glow: 1.0,  alert: "breathe",   period: 2.8,  echo: false, cuts: true },
+  conceal: { accent: "#6f6a96", pattern: "fog",     span: 2, patternAlpha: 0.70, fill: 0.30, rim: "dotted", rimPx: 2.2, glow: 0.8,  alert: "none",      period: 0,    echo: false, cuts: false },
+  terrain: { accent: "#c9a46a", pattern: "cobble",  span: 1, patternAlpha: 0.56, fill: 0.16, rim: "solid",  rimPx: 2.0, glow: 0.8,  alert: "none",      period: 0,    echo: false, cuts: true },
+  detect:  { accent: "#fff4a0", pattern: "scan",    span: 1, patternAlpha: 0.55, fill: 0.13, rim: "dashed", rimPx: 2.0, glow: 0.95, alert: "none",      period: 0,    echo: false, cuts: true, sweep: true },
+  summon:  { accent: "#2ff2d0", pattern: "sigil",   span: 1, patternAlpha: 0.60, fill: 0.17, rim: "double", rimPx: 2.2, glow: 1.1,  alert: "breathe",   period: 2.0,  echo: true,  cuts: true },
+  hazard:  { accent: "#ffd400", pattern: "tape",    span: 1, patternAlpha: 0.46, fill: 0.20, rim: "tape",   rimPx: 3.4, glow: 1.2,  alert: "strobe",    period: 0.9,  echo: true,  cuts: true },
+  neutral: { accent: "#8593a8", pattern: "dots",    span: 1, patternAlpha: 0.50, fill: 0.14, rim: "solid",  rimPx: 2.0, glow: 0.8,  alert: "none",      period: 0,    echo: false, cuts: true },
 });
 
 /** The texture laid over squares that are inside the area but out of line of effect. */
@@ -76,26 +85,29 @@ export const BLOCKED_PATTERN = "hatch";
  * Behaviour → motion. `drift` is grid squares per second along the area's
  * direction (cones and lines) or the diagonal; `spin` is radians per second
  * of the pattern about the area's origin; `pace` scales the alert period
- * (higher is faster). Static is the only behaviour that never wants a frame.
+ * (higher is faster). `enter` is how the area arrives: "draw" runs a pen round
+ * the rim and lets the floor fill in behind it, "flash" strikes the whole
+ * frame at once and lets a flare settle. Static is the only behaviour that
+ * never wants a frame once it has landed.
  */
 export const BEHAVIOR_MOTION = Object.freeze({
-  impact:  { drift: 0.10, spin: 0,     pace: 1.35, enter: "flash" },
-  pulse:   { drift: 0,    spin: 0,     pace: 1.15, enter: "flash" },
-  flow:    { drift: 0.45, spin: 0,     pace: 1.0,  enter: "draw" },
-  grow:    { drift: 0.12, spin: 0,     pace: 0.8,  enter: "draw" },
-  contain: { drift: 0,    spin: 0.10,  pace: 0.75, enter: "draw" },
-  sweep:   { drift: 0,    spin: 0.55,  pace: 1.25, enter: "draw" },
-  linger:  { drift: 0.08, spin: 0,     pace: 0.7,  enter: "draw" },
-  sustain: { drift: 0,    spin: 0.04,  pace: 0.8,  enter: "draw" },
-  trigger: { drift: 0,    spin: 0,     pace: 1.5,  enter: "flash" },
-  static:  { drift: 0,    spin: 0,     pace: 0,    enter: "draw" },
+  impact:  { drift: 0.10, spin: 0,    pace: 1.35, enter: "flash" },
+  pulse:   { drift: 0,    spin: 0,    pace: 1.15, enter: "flash" },
+  flow:    { drift: 0.45, spin: 0,    pace: 1.0,  enter: "draw" },
+  grow:    { drift: 0.12, spin: 0,    pace: 0.8,  enter: "draw" },
+  contain: { drift: 0,    spin: 0.10, pace: 0.75, enter: "draw" },
+  sweep:   { drift: 0,    spin: 0.55, pace: 1.25, enter: "draw" },
+  linger:  { drift: 0.08, spin: 0,    pace: 0.7,  enter: "draw" },
+  sustain: { drift: 0,    spin: 0.04, pace: 0.8,  enter: "draw" },
+  trigger: { drift: 0,    spin: 0,    pace: 1.5,  enter: "flash" },
+  static:  { drift: 0,    spin: 0,    pace: 0,    enter: "draw" },
 });
 
 /** Treatment → channel multipliers. Grounded is the reference look. */
 export const TREATMENT_LOOK = Object.freeze({
   grounded:   { fill: 1.0,  pattern: 1.0,  glow: 1.0,  rim: 1.0 },
-  volumetric: { fill: 0.75, pattern: 1.15, glow: 1.45, rim: 0.9 },
-  airborne:   { fill: 0.55, pattern: 1.25, glow: 1.2,  rim: 0.75 },
+  volumetric: { fill: 0.8,  pattern: 1.12, glow: 1.35, rim: 0.92 },
+  airborne:   { fill: 0.6,  pattern: 1.2,  glow: 1.15, rim: 0.8 },
 });
 
 /** Functions whose areas default to a non-grounded treatment. */
@@ -112,22 +124,30 @@ export const INTENSITY_GAIN = Object.freeze({ subtle: 0.72, balanced: 1, cinemat
  * zoom; anything that is a reach across the floor is in grid squares.
  */
 export const SIZES = Object.freeze({
-  keylinePx: 2.6,        // dark line under the rim, so it survives a bright map
-  glowPx: [26, 14, 7],   // the glow stack, widest first
-  glowAlpha: [0.10, 0.17, 0.30],
+  veil: 0.3,             // the ink laid over the floor before the tint
+  keylinePx: 1.6,        // dark line each side of the rim, so it survives a bright map
+  haloPx: [26, 11],      // the ink shadow round the outside, widest first
+  haloAlpha: [0.09, 0.16],
+  edgePx: [22, 8],       // the inner edge light, widest first (half of it shows)
+  edgeAlpha: [0.12, 0.3],
   seamPx: 1,             // between two covered squares
-  bracketPx: 2.4,
-  bracketArm: 0.26,      // grid squares
-  dashPx: 14,            // one dash + gap period is 2 × this
+  tickPx: 2.2,           // the chamfer cut across a convex corner
+  tickArm: 0.2,          // grid squares from the corner along each arm
+  dashPx: 12,            // dash rims: one period is 3 × this
   dotGapPx: 9,
-  echoPx: 3,
-  echoReach: 0.55,       // grid squares the echo travels past the edge
-  markPx: 2,             // token brackets
-  chevronPx: 3,
-  shadowOffset: 0.025,   // grid squares the pattern's ink shadow sits down-right
+  echoPx: 2,
+  echoReach: 0.5,        // grid squares the echo travels past the edge
+  flarePx: 7,            // the flare's width over the rim
+  markPx: 1.6,           // token brackets
+  chevronPx: 2.2,
+  shadowOffset: 0.018,   // grid squares the pattern's ink shadow sits down-right
 });
 
 const hexInt = (hex) => Number.parseInt(String(hex).slice(1, 7), 16);
+
+/** The ink every shadow, keyline and veil is struck in (the suite's ink0). */
+export const INK_HEX = PALETTE.ink0;
+export const INK = hexInt(INK_HEX);
 
 /**
  * One area's resolved look, from its semantic ids. Everything the renderer
@@ -158,16 +178,16 @@ export function composeLook({
     bodyInt: hexInt(body), hotInt: hexInt(hot), accentInt: hexInt(accent),
     pattern: f.pattern, span: f.span,
     fill: Math.min(0.6, f.fill * t.fill * gain),
+    veil: Math.min(0.5, SIZES.veil * (0.85 + 0.15 * t.fill) * Math.min(1.15, gain)),
     patternAlpha: Math.min(0.95, f.patternAlpha * t.pattern * gain),
     glow: f.glow * t.glow * gain,
     rim: f.rim, rimPx: f.rimPx, rimAlpha: Math.min(1, t.rim * Math.max(1, gain)),
     alert, period: f.period > 0 && motion.pace > 0 ? f.period / motion.pace : 0,
     echo: f.echo && alert !== "none",
-    brackets: f.brackets,
+    cuts: f.cuts,
     sweep: Boolean(f.sweep) && motion.pace > 0,
     drift: motion.drift, spin: motion.spin, pace: motion.pace, enter: motion.enter,
     secondary: second ? Object.freeze({ pattern: second.pattern, span: second.span, color: secondColor, colorInt: hexInt(secondColor) }) : null,
     gain,
   });
 }
-

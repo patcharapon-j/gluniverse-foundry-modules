@@ -14,8 +14,9 @@
 /** Phase durations, ms. Multiplied by motionScale at every read. */
 export const TIMING = Object.freeze({
   castIn: 520,      // the rim is DRAWN on (or flashes in): the extent never grows
+  settle: 380,      // after the entrance: the rim glints once and the corner cuts land
   pulse: 520,       // the trigger beat: flash, echo, settle
-  dissipate: 640,   // everything fades out together
+  dissipate: 640,   // the floor drains first, then the rim goes
   echo: 900,        // one echo ring travelling out past the boundary
 });
 
@@ -35,7 +36,7 @@ export const SHED_ORDER = Object.freeze([
   "echo",       // rings leaving the boundary on each beat
   "drift",      // the pattern's own motion and the rim's chase
   "secondary",  // the secondary-function pattern and the detect sweep
-  "glow",       // the additive glow stack and the alert flare
+  "glow",       // the ink halo, the inner edge light and the flare
 ]);
 
 const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : n);
@@ -116,6 +117,18 @@ export class AoeAnim {
     }
   }
 
+  /**
+   * Cancel a dissipate that has not finished: the Region came back (Foundry
+   * redraws a placeable by destroying and drawing it again in one tick). The
+   * entrance is not replayed; the area simply stays.
+   */
+  revive() {
+    if (this.dead) return false;
+    this.leaving = false;
+    this.leftFor = 0;
+    return true;
+  }
+
   /** Motion tier "none" freezes every channel at its resting value. */
   get still() {
     return this.motionScale <= 0;
@@ -128,7 +141,7 @@ export class AoeAnim {
    */
   get hot() {
     if (this.dead || this.still) return false;
-    return this.leaving || this.pulseAt >= 0 || this.enter < 1;
+    return this.leaving || this.pulseAt >= 0 || this.enter < 1 || this.settle > 0;
   }
 
   step(dt) {
@@ -167,6 +180,21 @@ export class AoeAnim {
    */
   get eased() {
     return stroke(this.enter);
+  }
+
+  /**
+   * The landing, 1 → 0 over TIMING.settle once the entrance has arrived, and 0
+   * before and after it. The renderer spends it on one glint along the rim and
+   * on the corner cuts stamping in, so the moment the area is finished reads as
+   * a moment rather than as the entrance simply stopping.
+   */
+  get settle() {
+    if (this.still) return 0;
+    const s = this.motionScale;
+    const span = TIMING.settle * s;
+    const since = this.elapsed - TIMING.castIn * s;
+    if (span <= 0 || since < 0 || since >= span) return 0;
+    return 1 - smooth(since / span);
   }
 
   /** 1 -> 0 through the dissipate. */

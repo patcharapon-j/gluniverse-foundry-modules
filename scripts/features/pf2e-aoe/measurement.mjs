@@ -1,6 +1,6 @@
 /** Identity and contextual measurement presenter, separate from render resources. */
 
-import { lighten } from "../../core/theme.mjs";
+import { buildPlate } from "./render/plate.mjs";
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -39,61 +39,31 @@ export function measurementSummary(document, { gridSize = 100, gridDistance = 5,
   return "";
 }
 
-export function createMeasurementPresenter(region, style, geometry) {
-  if (!style.label && !region?.document?.displayMeasurements) return null;
-  const root = new PIXI.Container();
-  root.eventMode = "none";
-  root.position.set(geometry.labelAt.x, geometry.labelAt.y);
-  root.glAoeBaseY = geometry.labelAt.y;
-  const color = Number.parseInt(lighten(style.color, 0.48).slice(1), 16);
-  const fontSize = clamp(Math.round(geometry.grid * 0.24), 14, 30);
-  const title = new PIXI.Text(String(style.label ?? "").toUpperCase(), {
-    fontFamily: "Oxanium, Rajdhani, sans-serif", fontSize, fontWeight: "650",
-    letterSpacing: Math.max(1, Math.round(fontSize * 0.12)), fill: color, align: "center",
-    stroke: 0x030509, strokeThickness: Math.max(2, Math.round(fontSize * 0.11)),
-    dropShadow: true, dropShadowColor: color, dropShadowAlpha: 0.56,
-    dropShadowBlur: Math.max(3, fontSize * 0.28), dropShadowDistance: 0,
-  });
-  title.anchor.set(0.5);
-  title.resolution = Math.max(2, globalThis.devicePixelRatio || 2);
-  const summary = measurementSummary(region.document, {
+/**
+ * The identity plate for one Region (render/plate.mjs draws it). `anchor` is
+ * where it stands, in world pixels: the top centre of the area.
+ */
+export function createMeasurementPresenter(region, style, geometry, anchor = geometry.labelAt) {
+  const measured = Boolean(region?.document?.displayMeasurements);
+  if (!style.label && !measured) return null;
+  const summary = measured ? measurementSummary(region.document, {
     gridSize: geometry.grid,
     gridDistance: canvas?.dimensions?.distance ?? 5,
     units: canvas?.scene?.grid?.units || "ft",
+  }) : "";
+  if (!style.label && !summary) return null;
+  const root = buildPlate(PIXI, {
+    title: style.label ?? "",
+    detail: summary,
+    tone: style.look?.hot ?? style.color,
+    grid: geometry.grid,
+    resolution: clamp(Math.ceil((globalThis.devicePixelRatio || 1) * 2), 2, 4),
   });
-  const detail = new PIXI.Text(summary, {
-    fontFamily: "Rajdhani, sans-serif", fontSize: Math.max(11, Math.round(fontSize * 0.55)),
-    fontWeight: "600", letterSpacing: 1, fill: color, align: "center",
-    stroke: 0x030509, strokeThickness: 2,
-  });
-  detail.anchor.set(0.5); detail.position.y = fontSize * 0.88; detail.resolution = title.resolution;
-  const maxWidth = Math.max(geometry.grid * 1.6, geometry.bounds.width * 0.72);
-  if (title.width > maxWidth) title.scale.set(maxWidth / title.width);
-  const width = Math.max(Math.min(maxWidth, title.width), detail.width) + fontSize * 1.8;
-  /* The plate: a dark scrim so the name survives a bright floor, two rules,
-     and bracket ticks at the corners — the same corner language the frame
-     draws on the area itself, so the label reads as part of the instrument
-     rather than as a caption laid over it. */
-  const backing = new PIXI.Graphics();
-  const top = -fontSize * 0.72, bottom = fontSize * 1.45, half = width / 2;
-  const tick = Math.max(4, Math.round(fontSize * 0.34));
-  backing.beginFill(0x030509, 0.34); backing.drawRect(-half, top, width, bottom - top); backing.endFill();
-  backing.lineStyle({ width: 1, color, alpha: 0.62 }); backing.moveTo(-half + tick, top); backing.lineTo(half - tick, top);
-  backing.lineStyle({ width: 1, color, alpha: 0.38 }); backing.moveTo(-half + tick, bottom); backing.lineTo(half - tick, bottom);
-  backing.lineStyle({ width: 1.5, color, alpha: 0.9 });
-  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    const x = sx * half, y = sy < 0 ? top : bottom;
-    backing.moveTo(x, y + sy * -tick); backing.lineTo(x, y); backing.lineTo(x - sx * tick, y);
-  }
-  root.addChild(backing, title, detail);
-  root.glAoeDetail = detail;
-  root.glAoeSummary = summary;
+  root.position.set(anchor.x, anchor.y);
+  root.glAoeBaseY = anchor.y;
   /* The host keeps a plate across in-place refreshes and re-points this at the
-     live Region, so the closure must not pin the one it was built from. */
+     live Region, so nothing here may pin the one it was built from. */
   root.glAoeRegion = region;
-  root.setInspected = (inspected) => {
-    detail.visible = Boolean(summary && inspected && root.glAoeRegion?.document?.displayMeasurements);
-  };
   root.setInspected(Boolean(region?.hover || region?.controlled));
   return root;
 }

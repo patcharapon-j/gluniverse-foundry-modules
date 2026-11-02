@@ -3,6 +3,8 @@
 import { SUITE_ID } from "../../core/const.mjs";
 import { FLAGS, SETTINGS } from "./constants.mjs";
 import { inferredLabel } from "./data.mjs";
+import { lookFor } from "./presentation.mjs";
+import { paintSwatchElement } from "./render/swatch.mjs";
 import { BUILTIN_PROFILES, normalizeWorldProfiles, profileById, resolveProfile } from "./profiles.mjs";
 import {
   BEHAVIORS, FUNCTIONS, INTENSITIES, LABEL_MODES, MATERIALS, PRESENTATION_MODES,
@@ -69,7 +71,14 @@ export function injectRegionStyle(app, element) {
   section.appendChild(legend);
   const diagnostic = document.createElement("p");
   diagnostic.className = `gl-aoe-classification${resolved.needsClassification ? " is-uncertain" : ""}`;
-  diagnostic.textContent = summary(resolved); section.appendChild(diagnostic);
+  diagnostic.textContent = summary(resolved);
+  /* A swatch of what the Region will draw, repainted from the form as the GM
+     changes it: the same look tables and pattern tiles the canvas uses. */
+  const swatch = document.createElement("canvas");
+  swatch.className = "gl-aoe-swatch"; swatch.dataset.size = "56"; swatch.setAttribute("aria-hidden", "true");
+  const head = document.createElement("div"); head.className = "gl-aoe-region-head";
+  head.append(swatch, diagnostic);
+  section.appendChild(head);
   const schema = document.createElement("input"); schema.type = "hidden"; schema.name = `${prefix}.schema`; schema.value = "2"; section.appendChild(schema);
 
   const mode = select(`${prefix}.mode`, PRESENTATION_MODES, presentation.mode, "Mode");
@@ -139,6 +148,30 @@ export function injectRegionStyle(app, element) {
     mode.value = "custom"; profile.value = ""; advanced.open = true; update();
   });
   mode.addEventListener("change", update); update();
+
+  const preview = () => {
+    const draft = {};
+    for (const input of section.querySelectorAll("[name]")) {
+      if (input.disabled || !input.name.startsWith(`${prefix}.`)) continue;
+      foundry.utils.setProperty(draft, input.name.slice(prefix.length + 1), input.value);
+    }
+    if (draft._paletteEnabled !== "true") delete draft.overrides?.appearance?.palette;
+    delete draft._paletteEnabled;
+    if (presentation.snapshot) draft.snapshot = presentation.snapshot;
+    let next = resolved;
+    try {
+      next = resolveProfile(regionDoc, { suiteId: SUITE_ID, presentation: normalizePresentation(draft),
+        worldProfiles: get(SETTINGS.profiles, {}), inheritedLabel: inferredLabel(regionDoc) });
+    } catch { /* keep the saved resolution */ }
+    swatch.hidden = Boolean(next.native);
+    if (next.native) return;
+    diagnostic.textContent = summary(next);
+    diagnostic.classList.toggle("is-uncertain", Boolean(next.needsClassification));
+    paintSwatchElement(swatch, lookFor(next.semantics, next.appearance));
+  };
+  section.addEventListener("change", preview);
+  detach.addEventListener("click", preview);
+  preview();
   const footer = form.querySelector("footer.form-footer, .form-footer");
   if (footer) footer.before(section); else form.appendChild(section);
   try { app?.setPosition?.({ height: "auto" }); } catch { /* fixed sheet */ }
