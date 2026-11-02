@@ -6089,7 +6089,7 @@ export function presentCards(combatId, ids = []) {
   const combat = rail?.getCombatById?.(combatId);
   if (!rail || !combat) return null;
   const settings = rail.getRenderSettings();
-  const width = rail.root?.querySelector(".gluni-rail .gluni-card")?.offsetWidth || 188;
+  const width = rail.root?.querySelector(".gluni-rail .gluni-card:not(.gluni-card--active)")?.offsetWidth || PORTRAIT_MIN_PIXELS.normalWidth;
   const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--gl-ui-scale")) || 1;
   const layer = document.createElement("div");
   layer.className = `gluni-initiative gluni-initiative--${settings.edge} gluni-card-ghost-layer gluni-card-ghost-layer--present`;
