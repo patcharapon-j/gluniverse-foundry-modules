@@ -162,7 +162,7 @@ export function makeBolt(w, h, rand = Math.random) {
     pts.push([bx, by]);
     const n = Math.min(3, BOLT.points - pts.length);
     for (let i = 0; i < n; i++) {
-      bx += dir * r(3, 8);
+      bx = Math.max(2, Math.min(w - 2, bx + dir * r(3, 8)));
       by += (h / segs) * r(0.6, 1.1);
       pts.push([bx, by]);
     }
