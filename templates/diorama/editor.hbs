@@ -196,6 +196,8 @@
     <div class="gldio-ed-actions">
       <button type="button" class="gl-btn gldio-ed-btn" data-action="autoSetup" {{#if busy}}disabled{{/if}} data-tooltip="{{localize "GLDIO.editor.auto.hint"}}">
         <i class="fa-solid {{#if (eq busy "auto")}}fa-spinner fa-spin{{else}}fa-wand-sparkles{{/if}}"></i> {{localize "GLDIO.editor.auto.label"}}</button>
+      <button type="button" class="gl-btn gldio-ed-btn" data-action="importLayout" {{#if busy}}disabled{{/if}} data-tooltip="{{localize "GLDIO.editor.layout.hint"}}">
+        <i class="fa-solid fa-file-import"></i> {{localize "GLDIO.editor.layout.label"}}</button>
       <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--danger" data-action="clearAll" {{#if busy}}disabled{{/if}}>
         <i class="fa-solid fa-eraser"></i> {{localize "GLDIO.editor.clear.label"}}</button>
     </div>

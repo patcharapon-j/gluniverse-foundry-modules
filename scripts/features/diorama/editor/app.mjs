@@ -82,6 +82,7 @@ function EditorApp() {
         addLayer: DioramaEditor.#onAddLayer,
         removeLayer: DioramaEditor.#onRemoveLayer,
         autoSetup: DioramaEditor.#onAutoSetup,
+        importLayout: DioramaEditor.#onImportLayout,
         copyFrom: DioramaEditor.#onCopyFrom,
         clearAll: DioramaEditor.#onClearAll,
         toggleOff: DioramaEditor.#onToggleOff,
@@ -409,6 +410,14 @@ function EditorApp() {
         }
         s.saved({ difficult: readDifficult(this.scene) });
         ui.notifications.info(L("GLDIO.editor.saved", { scene: this.scene.name }));
+        // An imported layout's tokens move once its terrain is saved, onto the saved ground.
+        if (this._layoutTokens?.length) {
+          const { placeTokens } = await import("./layout-import.mjs");
+          const { moved, missing } = await placeTokens(this.scene, s.terrain, this._layoutTokens);
+          this._layoutTokens = null;
+          if (moved) ui.notifications.info(L("GLDIO.editor.layout.tokensMoved", { n: moved }));
+          if (missing.length) ui.notifications.warn(L("GLDIO.editor.layout.tokensMissing", { names: missing.join(", ") }));
+        }
         return true;
       } catch (e) {
         console.error("GLUniverse Suite | diorama editor save failed", e);
@@ -518,6 +527,49 @@ function EditorApp() {
         this._busy = null;
         this.#render();
       }
+    }
+
+    /** Paste or load a layout (docs/DIORAMA_LAYOUT.md) and replace the draft with it; one undoable step. */
+    static async #onImportLayout() {
+      const esc = (v) => foundry.utils.escapeHTML?.(v) ?? v;
+      const text = await DialogV2.prompt({
+        window: { title: L("GLDIO.editor.layout.title"), icon: "fa-solid fa-file-import" },
+        classes: ["gldio-app", "gldio-dialog"],
+        position: { width: 520 },
+        content: `<p class="gldio-dialog-text">${esc(L("GLDIO.editor.layout.body"))}</p>
+          <textarea name="layout" class="gldio-ed-layout" rows="14" spellcheck="false" placeholder='{ "format": "gluniverse-diorama-layout", … }'></textarea>
+          <input type="file" name="file" accept=".json,application/json">`,
+        ok: { label: L("GLDIO.editor.layout.apply"), icon: "fa-solid fa-file-import", callback: (_ev, button) => button.form.elements.layout.value },
+        render: (_ev, dialog) => {
+          const form = dialog.element.querySelector("form");
+          form?.elements.file?.addEventListener("change", async (ev) => {
+            const f = ev.target.files?.[0];
+            if (f) form.elements.layout.value = await f.text();
+          });
+        },
+        rejectClose: false,
+      }).catch(() => null);
+      if (!text?.trim()) return;
+      const { parseLayout, compileForScene } = await import("./layout-import.mjs");
+      let data;
+      try { data = parseLayout(text); } catch (e) {
+        ui.notifications.error(L("GLDIO.editor.layout.badJson", { error: e.message }));
+        return;
+      }
+      const s = this.session;
+      const res = compileForScene(this.scene, data, s.terrain);
+      if (!res.terrain) {
+        console.warn("GLUniverse Suite | diorama layout problems:", res.errors);
+        ui.notifications.error(L("GLDIO.editor.layout.errors", { n: res.errors.length, error: res.errors[0] }));
+        return;
+      }
+      if (res.warnings.length) console.warn("GLUniverse Suite | diorama layout warnings:", res.warnings);
+      s.replace(res.terrain, "layout");
+      this._layoutTokens = res.tokens;
+      ui.notifications.info(L(res.tokens.length ? "GLDIO.editor.layout.doneTokens" : "GLDIO.editor.layout.done", {
+        ops: Array.isArray(data.ops) ? data.ops.length : 0, tokens: res.tokens.length,
+      }));
+      if (res.warnings.length) ui.notifications.warn(L("GLDIO.editor.layout.warnings", { n: res.warnings.length, warning: res.warnings[0] }));
     }
 
     static #onCopyFrom() {

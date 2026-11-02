@@ -48,6 +48,12 @@ export const api = {
   project: (x, y, elevation = 0) => (_view?.isOpen() ? _view.projectPoint(x, y, elevation) : null),
   /** A token's on-screen anchor above its standee's head, or null when closed. */
   tokenAnchor: (tokenId) => (_view?.isOpen() ? _view.tokenAnchor(tokenId) : null),
+  /**
+   * Write a layout (docs/DIORAMA_LAYOUT.md) to a scene and place its tokens.
+   * GM only. Resolves `{ ok, errors, warnings, moved, missing }`.
+   * @param {object|string} layout  @param {{scene?: Scene, tokens?: boolean}} [o]
+   */
+  importLayout: (layout, o) => import("./editor/layout-import.mjs").then((m) => m.importLayout(layout, o)),
 };
 
 /* A `button` tool fires onChange only when the active tool changes, so clicks

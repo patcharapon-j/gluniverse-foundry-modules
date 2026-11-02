@@ -1,0 +1,98 @@
+{
+  "format": "gluniverse-diorama-layout",
+  "version": 1,
+  "name": "Czepeku Lion Garden",
+  "map": { "cols": 29, "rows": 58 },
+  "heightUnit": "q",
+  "mirror": { "cols": 29 },
+  "palette": [
+    { "name": "Floor",   "h": 0,  "kind": "floor",  "material": "earth", "color": "#9fb07a" },
+    { "name": "Void",    "h": 0,  "kind": "void",   "material": "edge",  "color": "#20242c" },
+    { "name": "Sea",     "h": -3, "kind": "water",  "material": "stone", "color": "#2f6f9f" },
+    { "name": "Pool",    "h": 23, "kind": "water",  "material": "stone", "color": "#3a9d8b" },
+    { "name": "Paving",  "h": 24, "kind": "floor",  "material": "stone", "color": "#e3d6b4" },
+    { "name": "Planter", "h": 27, "kind": "floor",  "material": "earth", "color": "#6f9a4a" },
+    { "name": "Masonry", "h": 40, "kind": "floor",  "material": "stone", "color": "#9fc9c0" },
+    { "name": "Stairs",  "h": 24, "kind": "stairs", "material": "stone", "color": "#b48ad0" }
+  ],
+  "base": "Paving",
+  "ops": [
+    { "note": "harbour", "op": "rect", "layer": "Sea", "rows": [54, 58], "cols": [0, 29] },
+    { "op": "rect", "layer": "Paving", "h": 0, "rows": [52, 54], "cols": [0, 29] },
+    { "op": "rect", "layer": "Masonry", "h": 6, "rows": [52, 53.5], "cols": [8.5, 11.5], "mirror": true },
+
+    { "note": "lower plaza", "op": "rect", "layer": "Paving", "h": 8, "rows": [46, 52], "cols": [0, 29] },
+    { "op": "rect", "layer": "Masonry", "h": 10, "rows": [51.5, 52], "cols": [0, 11.5], "mirror": true },
+    { "op": "stairs", "rows": [49, 54], "cols": [11.5, 17.5], "down": "S", "top": 8, "bottom": 0 },
+    { "op": "rect", "layer": "Planter", "h": 10, "rows": [46.5, 48.5], "cols": [0.5, 6], "mirror": true },
+    { "op": "rect", "layer": "Pool", "h": 8, "rows": [46.5, 48], "cols": [13, 16] },
+
+    { "note": "upper plaza", "op": "rect", "layer": "Paving", "h": 12, "rows": [43, 46], "cols": [0, 29] },
+    { "op": "rect", "layer": "Planter", "h": 15, "rows": [44, 46.5], "cols": [11, 18] },
+    { "op": "stairs", "rows": [45, 47], "cols": [8, 11], "down": "S", "top": 12, "bottom": 8, "mirror": true },
+    { "op": "rect", "layer": "Masonry", "h": 18, "rows": [45, 47], "cols": [6, 8], "mirror": true },
+
+    { "note": "grand stair and its walls", "op": "rect", "layer": "Masonry", "h": 20, "rows": [38, 39], "cols": [1.5, 12], "mirror": true },
+    { "op": "rect", "layer": "Planter", "h": 14, "rows": [39, 43], "cols": [1.5, 10], "mirror": true },
+    { "op": "rect", "layer": "Masonry", "h": 28, "rows": [38.5, 43], "cols": [10, 12], "mirror": true },
+    { "op": "rect", "layer": "Masonry", "h": 32, "rows": [38, 43.5], "cols": [0, 1.5], "mirror": true },
+    { "op": "stairs", "rows": [38, 43], "cols": [12, 17], "down": "S", "top": 24, "bottom": 12 },
+
+    { "note": "pool terrace and causeway", "op": "rect", "layer": "Pool", "h": 19, "rows": [34.5, 38], "cols": [1.5, 12.5], "mirror": true },
+    { "op": "rect", "layer": "Masonry", "h": 26, "rows": [34, 38], "cols": [12.5, 13], "mirror": true },
+    { "op": "rect", "layer": "Planter", "h": 26, "rows": [32, 32.5], "cols": [2.5, 10], "mirror": true },
+    { "op": "rect", "layer": "Planter", "h": 26, "rows": [34, 34.5], "cols": [2.5, 10], "mirror": true },
+
+    { "note": "ponds", "op": "rect", "layer": "Pool", "rows": [24, 28.5], "cols": [0, 3.5], "mirror": true },
+    { "op": "rect", "layer": "Pool", "rows": [28.5, 32], "cols": [0, 7.5], "mirror": true },
+    { "op": "rect", "layer": "Pool", "rows": [18.5, 22.5], "cols": [0, 4.5], "mirror": true },
+    { "op": "rect", "layer": "Paving", "rows": [22.5, 23.5], "cols": [0, 4.5], "mirror": true },
+    { "op": "circle", "layer": "Masonry", "h": 28, "center": [22.6, 0.7], "radius": 0.35, "mirror": true },
+    { "op": "circle", "layer": "Masonry", "h": 28, "center": [22.6, 3.7], "radius": 0.35, "mirror": true },
+
+    { "note": "garden beds", "op": "rect", "layer": "Planter", "rows": [20, 22.5], "cols": [3.5, 9], "mirror": true },
+    { "op": "rect", "layer": "Planter", "rows": [22.5, 24], "cols": [5.5, 9], "mirror": true },
+    { "op": "circle", "layer": "Planter", "h": 26, "center": [24.6, 9.5], "radius": 1.1, "mirror": true },
+    { "op": "rect", "layer": "Planter", "rows": [24.5, 28], "cols": [4.5, 8.5], "mirror": true },
+    { "op": "rect", "layer": "Planter", "rows": [21.5, 25], "cols": [10, 12.5], "mirror": true },
+    { "op": "rect", "layer": "Planter", "h": 26, "rows": [28.5, 31.5], "cols": [8, 10], "mirror": true },
+    { "op": "circle", "layer": "Planter", "h": 34, "center": [27.85, 11.6], "radius": 0.36, "mirror": true },
+    { "op": "circle", "layer": "Planter", "h": 34, "center": [26.85, 13.1], "radius": 0.36, "mirror": true },
+
+    { "note": "lion plinths, pillars, corner towers", "op": "rect", "layer": "Masonry", "h": 33, "rows": [30.5, 34], "cols": [10, 13], "mirror": true },
+    { "op": "circle", "layer": "Masonry", "center": [30, 10], "radius": 0.8, "mirror": true },
+    { "op": "circle", "layer": "Masonry", "center": [35, 10], "radius": 0.8, "mirror": true },
+    { "op": "circle", "layer": "Masonry", "center": [32.6, 1.1], "radius": 1.6, "mirror": true },
+
+    { "note": "hedge terrace, dais, colonnade", "op": "rect", "layer": "Paving", "h": 32, "rows": [11.5, 17], "cols": [3.5, 11], "mirror": true },
+    { "op": "rect", "layer": "Planter", "h": 34, "rows": [14, 14.5], "cols": [4, 9.5], "mirror": true },
+    { "op": "rect", "layer": "Planter", "h": 34, "rows": [15.5, 16], "cols": [4.5, 9.5], "mirror": true },
+    { "op": "rect", "layer": "Paving", "h": 32, "rows": [13, 17], "cols": [0, 3.5], "mirror": true },
+    { "op": "rect", "layer": "Masonry", "h": 26, "rows": [17, 18.5], "cols": [0, 4.5], "mirror": true },
+    { "op": "rect", "layer": "Pool", "rows": [16.5, 19.5], "cols": [4.5, 7.5], "mirror": true },
+    { "op": "stairs", "rows": [17, 20], "cols": [7.5, 9.5], "down": "S", "top": 32, "bottom": 24, "mirror": true },
+    { "op": "ellipse", "layer": "Paving", "h": 32, "center": [12, 14.5], "radii": [6.5, 4.8], "clip": { "rows": [11, 18.5] } },
+    { "op": "circle", "layer": "Masonry", "h": 36, "center": [19.3, 10.2], "radius": 0.3, "mirror": true },
+    { "op": "circle", "layer": "Masonry", "h": 36, "center": [21.2, 11.1], "radius": 0.3, "mirror": true },
+    { "op": "circle", "layer": "Masonry", "h": 36, "center": [21.8, 12.8], "radius": 0.3, "mirror": true },
+
+    { "note": "palace", "op": "rect", "layer": "Paving", "h": 40, "rows": [0, 11.5], "cols": [3.5, 14.5], "mirror": true },
+    { "op": "rect", "layer": "Masonry", "h": 52, "rows": [0, 1.5], "cols": [3.5, 10], "mirror": true },
+    { "op": "rect", "layer": "Planter", "h": 42, "rows": [7.5, 10], "cols": [5.5, 8], "mirror": true },
+    { "op": "rect", "layer": "Pool", "h": 39, "rows": [7.5, 10], "cols": [8, 10], "mirror": true },
+    { "op": "rect", "layer": "Pool", "h": 39, "rows": [4.5, 9.5], "cols": [10.5, 12], "mirror": true },
+    { "op": "ellipse", "layer": "Planter", "h": 44, "center": [0.5, 14.5], "radii": [3.5, 4.2] },
+    { "op": "rect", "layer": "Masonry", "h": 50, "rows": [5.5, 10.5], "cols": [12.5, 16.5] },
+    { "op": "rect", "layer": "Masonry", "h": 44, "rows": [10.5, 17.5], "cols": [13.5, 15.5] },
+    { "op": "rect", "layer": "Masonry", "h": 36, "rows": [17.5, 18.5], "cols": [13.5, 15.5] },
+    { "note": "giant lions", "op": "rect", "layer": "Masonry", "h": 64, "rows": [4, 13], "cols": [0, 3.5], "mirror": true },
+    { "op": "rect", "layer": "Masonry", "h": 52, "rows": [0, 4], "cols": [0, 3.5], "mirror": true }
+  ],
+  "tokens": [
+    { "name": "Valeros", "cell": [31, 13] },
+    { "name": "Seelah", "cell": [31, 15] },
+    { "name": "Ezren", "cell": [29, 14] },
+    { "name": "Goblin Boss", "cell": [43, 14] },
+    { "name": "Harpy", "cell": [44, 9], "altitude": 16 }
+  ]
+}

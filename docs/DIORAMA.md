@@ -117,8 +117,22 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   edge pixels), `ice`, `wood`, `brick`.
 - Walls: per wall, presets `stone` (stone with timber posts and a cap, default),
   `plaster`, `palisade`, `hedge`, `cave`, `map` (map pixels under the wall line).
-- Water: an animated surface slightly below the cell top. Pits fade to dark.
-  Void is not drawn.
+- Cliff faces take the map colour at their lip, softened through the map's mips
+  so one texel never streaks down the whole face, under the material's relief.
+  A ragged overhang band hangs from each lip (earth most, wood none), grime runs
+  down from it, and each lip gets a bevel highlight and a device-pixel hairline.
+- Water: refracts the map under it, tints with depth, throws caustics, glints the
+  sun (shadowed where the sun is blocked), reflects the sky at grazing angles and
+  laces foam along its banks. Banks standing in water (side flag +4) darken below
+  a waterline and carry caustics. Pits fade to dark. Void is not drawn.
+- The terrain field (`render/terrain-field.mjs`, rebuilt on every terrain change,
+  8 texels per square): R is horizon AO on tops, G the signed distance to the
+  nearest lip, B the distance from water to its bank. Tops, sides and water all
+  read it, so creases darken, lips catch light and foam finds the shore at any zoom.
+- Light: one sun with a 12-tap rotated Poisson soft shadow, a warm bounce on
+  faces, a cool sky fill, a gentle height grade (higher reads lighter), and a
+  dithered colour grade. The board stands on a plinth with a trim line, and casts
+  a soft shadow on the table away from the sun.
 
 ## Performance
 
@@ -145,6 +159,12 @@ copy from another scene with the same map image. **Difficult terrain** is not ou
 the brush writes native v14 Regions with the `modifyMovementCost` behaviour, so
 Foundry's ruler, PF2e and the view all agree. **Save** writes the flag once; players
 only ever see saved terrain.
+
+**Import layout** takes a layout: the terrain written as JSON (palette, then
+shapes in map squares), usually by an AI agent following the
+`diorama-map-setup` skill, which can read a map far better than Auto setup can.
+It replaces the draft as one undoable step. Format and API:
+`docs/DIORAMA_LAYOUT.md`; offline compile and overlay: `tools/diorama-layout.mjs`.
 
 ## Module map
 
@@ -213,8 +233,10 @@ node tools/diorama-preview.mjs && node tools/preview-server.mjs   # /.preview/di
 
 Zero problems required. The check covers the terrain codec and queries, cliff
 edges, the 3D ray and cover, path analysis and system readouts, the auto-setup
-heuristics, editor tools, renderer purity, every uniform written, `SHED_ORDER`
-bound, and every dynamic i18n family (`GLDIO.kind.*`, `GLDIO.material.*`,
+heuristics, editor tools, layouts (every op, every refusal, the worked example
+compiled and held to symmetry), the terrain field and the wet bank flag,
+renderer purity, every uniform written, `SHED_ORDER` bound, and every dynamic
+i18n family (`GLDIO.kind.*`, `GLDIO.material.*`,
 `GLDIO.band.*`, `GLDIO.cover.*`). The preview drives the shipped renderer with a
 fabricated map; serve it (a `file://` page does not run module scripts). Nothing
 there proves the sight backend, movement or Foundry's own vision; those need a live

@@ -474,8 +474,8 @@
 .gldio-ed .gldio-ed-btn--danger { --gl-accent: var(--gl-hazard); }
 .gldio-ed .gldio-ed-btn--danger:hover:not(:disabled) { color: var(--gl-hazard-hot); }
 
-.gldio-ed-actions { display: flex; gap: var(--gl-sp-2); }
-.gldio-ed-actions > .gldio-ed-btn { flex: 1 1 0; }
+.gldio-ed-actions { display: flex; flex-wrap: wrap; gap: var(--gl-sp-2); }
+.gldio-ed-actions > .gldio-ed-btn { flex: 1 1 40%; }
 
 /* ── footer ───────────────────────────────────────────────────────────── */
 
@@ -506,6 +506,21 @@
   color: var(--gl-text);
   font-size: var(--gl-fs-sm);
   line-height: var(--gl-lh-normal);
+}
+
+/* The layout paste box: JSON, so the tech face, and tall enough to see a palette. */
+.gldio-dialog .gldio-ed-layout {
+  width: 100%;
+  min-height: 14em;
+  margin: var(--gl-sp-2) 0;
+  resize: vertical;
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-xs);
+  line-height: var(--gl-lh-normal);
+  color: var(--gl-text);
+  background: var(--gl-surface-inset);
+  border: 1px solid var(--gl-line-strong);
+  border-radius: var(--gl-radius);
 }
 
 /* ── 3D preview window ────────────────────────────────────────────────── */
