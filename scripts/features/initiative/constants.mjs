@@ -398,9 +398,15 @@ export const COMBATANT_RENDER_UPDATE_KEYS = new Set([
 export const ACTOR_RENDER_UPDATE_KEYS = new Set(["flags", "img", "items", "name", "prototypeToken", "system"]);
 
 export const FALLBACK_PORTRAIT = "icons/svg/mystery-man.svg";
+// The two boxes the card art fills, in CSS px: the resting card, and the active
+// card with the art's overhang above its frame. styles/initiative.css states the
+// same numbers (--gluni-card-w, the surface min-heights, --gluni-card-overflow);
+// the auto face framing composes its crops for exactly these boxes.
 export const PORTRAIT_MIN_PIXELS = Object.freeze({
-  normalHeight: 58,
-  activeHeight: 166
+  normalWidth: 196,
+  normalHeight: 50,
+  activeWidth: 220,
+  activeHeight: 144
 });
 export const CONFIGURABLE_ACTOR_TYPES = new Set(["character", "npc", "pc"]);
 export const PORTRAIT_FRAME_DEFAULTS = Object.freeze({

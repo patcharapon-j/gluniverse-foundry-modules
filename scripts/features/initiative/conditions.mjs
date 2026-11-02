@@ -262,16 +262,6 @@ export function getConditionTags(combatant) {
   return tags.length ? tags : null;
 }
 
-export function renderConditionRepeatText(conditions) {
-  const text = conditions.map(condition => condition.text).join("  •  ");
-  const line = Array.from({ length: 4 }, () => `<span>${escapeHTML(text)}</span>`).join("");
-  return Array.from({ length: 4 }, (_, index) => `
-    <div class="gluni-card-condition-repeat-line${index % 2 ? " gluni-card-condition-repeat-line--alt" : ""}">
-      ${line}
-    </div>
-  `).join("");
-}
-
 // PF2e exposes no positive/negative flag on conditions; tone is "neutral" for
 // now (single colour) but kept as a hook so a future classifier can colour the
 // labels without touching the markup.
@@ -297,26 +287,6 @@ export function findPF2eGuardBreakEffects(actor) {
     item?.type === "effect" &&
     (item.getFlag?.(MODULE_ID, "init.guardBreak") === true || getItemSlug(item) === PF2E_GUARD_BREAK_EFFECT_SLUG)
   );
-}
-
-export function renderDyingRepeatText(dying) {
-  const text = `${localize("GLUNI.Dying.Label").toUpperCase()} ${dying.value}`;
-  const line = Array.from({ length: 5 }, () => `<span>${escapeHTML(text)}</span>`).join("");
-  return Array.from({ length: 6 }, (_, index) => `
-    <div class="gluni-card-dying-repeat-line${index % 2 ? " gluni-card-dying-repeat-line--alt" : ""}">
-      ${line}
-    </div>
-  `).join("");
-}
-
-export function renderGuardBreakRepeatText() {
-  const text = localize("GLUNI.GuardBreak").toUpperCase();
-  const line = Array.from({ length: 6 }, () => `<span>${escapeHTML(text)}</span>`).join("");
-  return Array.from({ length: 5 }, (_, index) => `
-    <div class="gluni-card-guard-break-repeat-line${index % 2 ? " gluni-card-guard-break-repeat-line--alt" : ""}">
-      ${line}
-    </div>
-  `).join("");
 }
 
 export function getGuardBreakState(combatant) {
@@ -402,15 +372,5 @@ export function renderDeathSavePips(state) {
     ${row("success", successes, "GLUNI.DeathSaves.Success.Aria")}
     ${row("failure", failures, "GLUNI.DeathSaves.Failure.Aria")}
   </div>`;
-}
-
-export function renderDeathSaveRepeatText(state) {
-  const text = (state.stable ? localize("GLUNI.DeathSaves.Stable") : localize("GLUNI.DeathSaves.Label")).toUpperCase();
-  const line = Array.from({ length: 5 }, () => `<span>${escapeHTML(text)}</span>`).join("");
-  return Array.from({ length: 6 }, (_, index) => `
-    <div class="gluni-card-dying-repeat-line${index % 2 ? " gluni-card-dying-repeat-line--alt" : ""}">
-      ${line}
-    </div>
-  `).join("");
 }
 

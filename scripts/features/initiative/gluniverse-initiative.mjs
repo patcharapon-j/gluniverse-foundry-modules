@@ -59,7 +59,7 @@ import { TokenOverlayManager, getMarkerSheets, prewarmStatusShaders } from "./to
  */
 import { bossBadge } from "../pf2e-variant-rules/boss/profile.mjs";
 import { turnMarker } from "../pf2e-variant-rules/boss/initiative.mjs";
-import { getPF2eDyingState, getDnd5eDeathState, getDyingState, COVERED_CONDITION_SLUGS, isPrimaryCondition, getConditionBadgeValue, getHiddenConditionKeys, getPrimaryConditionTags, getConditionTags, renderConditionRepeatText, getConditionTone, renderConditionLabels, findPF2eGuardBreakEffects, renderDyingRepeatText, renderGuardBreakRepeatText, getGuardBreakState, getBreakGaugeState, renderBreakGaugeBar, renderDyingPips, renderDeathSavePips, renderDeathSaveRepeatText } from "./conditions.mjs";
+import { getPF2eDyingState, getDnd5eDeathState, getDyingState, COVERED_CONDITION_SLUGS, isPrimaryCondition, getConditionBadgeValue, getHiddenConditionKeys, getPrimaryConditionTags, getConditionTags, getConditionTone, renderConditionLabels, findPF2eGuardBreakEffects, getGuardBreakState, getBreakGaugeState, renderBreakGaugeBar, renderDyingPips, renderDeathSavePips } from "./conditions.mjs";
 
 
 // Exported as a live binding: token-overlay.mjs reads `overlay` (enabled state,
@@ -1975,7 +1975,15 @@ export class GLUniverseInitiativeOverlay {
       added += 1;
     }
 
-    const activeKey = normal.find(item => item.type === "combatant" && item.active)?.key ?? null;
+    const activeIndex = normal.findIndex(item => item.type === "combatant" && item.active);
+    const activeKey = activeIndex >= 0 ? normal[activeIndex].key : null;
+    // "Who is up after this?" is the question the rail is asked most. The answer
+    // is the first card this viewer can see after the active one, so a hidden
+    // creature in between is skipped here exactly as it is skipped on the rail.
+    if (activeIndex >= 0) {
+      const next = normal.slice(activeIndex + 1).find(item => item.type === "combatant" && item.id !== activeId);
+      if (next) next.next = true;
+    }
     return { normal, delayed, activeId, activeKey };
   }
 
@@ -2042,6 +2050,7 @@ export class GLUniverseInitiativeOverlay {
     const classes = [
       "gluni-card",
       card.active ? "gluni-card--active" : "",
+      card.next ? "gluni-card--next" : "",
       this.lastActiveKey === card.key && !card.active ? "gluni-card--outgoing-active" : "",
       card.delayed ? "gluni-card--delayed" : "",
       card.adhoc ? "gluni-card--adhoc" : "",
@@ -2095,63 +2104,30 @@ export class GLUniverseInitiativeOverlay {
         ? (card.boss.tier === "supreme" ? 1.45 : 1) * (card.bossTurn ? 0.6 : 1)
         : 1;
 
+    // One quiet layer per state, never a watermark: the state is said once by its
+    // chip, coloured into the edge, and drawn on the art by the WebGL effect (or,
+    // with no WebGL, by the plain field below the content).
     return `
       <article class="${classes}" data-gluni-key="${escapeAttr(card.key)}" data-combatant-id="${card.id}" data-round-offset="${card.roundOffset}"${style}>
         <div class="gluni-card-surface">
         <div class="gluni-card-accent" aria-hidden="true"></div>
-        <div class="gluni-card-spec" aria-hidden="true"></div>
-        <div class="gluni-card-bracket" aria-hidden="true"></div>
-        <div class="gluni-card-hud" aria-hidden="true"><span class="gluni-card-hud-code">${localize("GLUNI.Hud.Init")}</span></div>
         ${game.user.isGM ? this.renderGMVisibilityMarker(card) : ""}
         ${card.adhoc && !card.mystery
-          ? `
-            <div class="gluni-card-adhoc-repeat" aria-hidden="true">
-              ${renderAdhocRepeatText(card.name)}
-            </div>
-            <div class="gluni-card-adhoc-bg" aria-hidden="true"><i class="${escapeAttr(card.adhoc.icon)}"></i></div>
-          `
+          ? `<div class="gluni-card-adhoc-bg" aria-hidden="true"><i class="${escapeAttr(card.adhoc.icon)}"></i></div>`
           : `<div class="gluni-card-portrait-wrap">
               ${card.mystery
                 ? `<div class="gluni-card-mystery-mark" aria-hidden="true">?</div>`
                 : `<img class="gluni-card-portrait" src="${escapeAttr(card.portrait)}" alt="" decoding="async">`}
               <div class="gluni-card-glass" aria-hidden="true"></div>
             </div>`}
-        ${card.delayed
-          ? `
-            <div class="gluni-card-delayed-bg" aria-hidden="true"></div>
-            <div class="gluni-card-delayed-repeat" aria-hidden="true">
-              ${renderDelayedRepeatText(card.name)}
-            </div>
-          `
-          : ""}
-        ${card.dying
-          ? `
-            ${fxMode === "dying" || fxMode === "scramble" ? "" : `<div class="gluni-card-dying-bg" aria-hidden="true"></div>`}
-            <div class="gluni-card-dying-repeat" aria-hidden="true">
-              ${card.dying.kind === "deathsaves" ? renderDeathSaveRepeatText(card.dying) : renderDyingRepeatText(card.dying)}
-            </div>
-          `
-          : ""}
-        ${card.guardBroken
-          ? `
-            ${fxMode === "break" || fxMode === "scramble" ? "" : `<div class="gluni-card-guard-break-bg" aria-hidden="true"></div>`}
-            <div class="gluni-card-guard-break-repeat" aria-hidden="true">
-              ${renderGuardBreakRepeatText()}
-            </div>
-          `
-          : ""}
-        ${card.conditions
-          ? `
-            <div class="gluni-card-condition-bg" aria-hidden="true"></div>
-            <div class="gluni-card-condition-repeat" aria-hidden="true">
-              ${renderConditionRepeatText(card.conditions)}
-            </div>
-          `
-          : ""}
+        ${card.delayed ? `<div class="gluni-card-delayed-bg" aria-hidden="true"></div>` : ""}
+        ${card.dying && fxMode !== "dying" && fxMode !== "scramble" ? `<div class="gluni-card-dying-bg" aria-hidden="true"></div>` : ""}
+        ${card.guardBroken && fxMode !== "break" && fxMode !== "scramble" ? `<div class="gluni-card-guard-break-bg" aria-hidden="true"></div>` : ""}
         ${fxMode ? `<canvas class="gluni-card-portrait-fx gluni-card-portrait-fx--${fxMode}" data-fx="${fxMode}" data-fx-intensity="${fxIntensity}" aria-hidden="true"></canvas>` : ""}
         <div class="gluni-card-content">
           <div class="gluni-card-kicker">
             ${card.active ? `<span class="gluni-active-tag">${localize("GLUNI.Controls.Turn").toUpperCase()}</span>` : ""}
+            ${card.next ? `<span class="gluni-next-tag">${localize("GLUNI.TurnMarker.Next").toUpperCase()}</span>` : ""}
             ${card.guardBroken ? `<span class="gluni-guard-break-tag">${localize("GLUNI.GuardBreak").toUpperCase()}</span>` : ""}
             ${card.dying ? (card.dying.kind === "deathsaves"
               ? `<span class="gluni-dying-tag${card.dying.stable ? " gluni-dying-tag--stable" : ""}">${(card.dying.stable ? localize("GLUNI.DeathSaves.Stable") : localize("GLUNI.DeathSaves.Label")).toUpperCase()}</span>`
@@ -4946,8 +4922,8 @@ function computePortraitScaleCap(width, height) {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return 1;
   const pixels = width * height;
   if (pixels <= 0) return 1;
-  const normalArea = 188 * PORTRAIT_MIN_PIXELS.normalHeight;
-  const activeArea = 200 * PORTRAIT_MIN_PIXELS.activeHeight;
+  const normalArea = PORTRAIT_MIN_PIXELS.normalWidth * PORTRAIT_MIN_PIXELS.normalHeight;
+  const activeArea = PORTRAIT_MIN_PIXELS.activeWidth * PORTRAIT_MIN_PIXELS.activeHeight;
   const targetArea = Math.max(normalArea, activeArea);
   const ratio = Math.sqrt(pixels / targetArea);
   return clamp(ratio, 0.22, 1);
@@ -5093,7 +5069,6 @@ function renderPortraitConfigPanel(mode, label, values, portrait, actorName) {
       <article class="${previewClasses}" data-frame-preview="${mode}" style="${escapeAttr(frameStyle)}" title="${localize("GLUNI.PortraitConfig.PreviewHint")}">
         <div class="gluni-card-surface">
         <div class="gluni-card-accent" aria-hidden="true"></div>
-        <div class="gluni-card-bracket" aria-hidden="true"></div>
         <div class="gluni-card-portrait-wrap">
           <img class="gluni-card-portrait" src="${escapeAttr(portrait)}" alt="${escapeAttr(actorName)}" draggable="false">
         </div>
@@ -5375,26 +5350,6 @@ function normalizeAdhocIcon(value) {
   return ADHOC_TYPES[ADHOC_DEFAULT_TYPE].icon;
 }
 
-function renderAdhocRepeatText(name) {
-  const text = escapeHTML(name);
-  const line = Array.from({ length: 5 }, () => `<span>${text}</span>`).join("");
-  return Array.from({ length: 6 }, (_, index) => `
-    <div class="gluni-card-adhoc-repeat-line${index % 2 ? " gluni-card-adhoc-repeat-line--alt" : ""}">
-      ${line}
-    </div>
-  `).join("");
-}
-
-function renderDelayedRepeatText(name) {
-  const text = `${localize("GLUNI.Delayed").toUpperCase()} / ${escapeHTML(name)}`;
-  const line = Array.from({ length: 4 }, () => `<span>${text}</span>`).join("");
-  return Array.from({ length: 4 }, (_, index) => `
-    <div class="gluni-card-delayed-repeat-line${index % 2 ? " gluni-card-delayed-repeat-line--alt" : ""}">
-      ${line}
-    </div>
-  `).join("");
-}
-
 function getAdhocData(combatant) {
   const value = combatant?.getFlag?.(MODULE_ID, FLAGS.adhoc);
   if (!value || typeof value !== "object") return null;
@@ -5510,8 +5465,8 @@ function getPortraitFrame(actor, portrait = actor?.img) {
  * shot with the head up in the overhang.
  */
 const AUTO_PORTRAIT_SHOTS = Object.freeze({
-  normal: { box: [188, PORTRAIT_MIN_PIXELS.normalHeight], frame: { aspect: 188 / PORTRAIT_MIN_PIXELS.normalHeight, headRatio: 0.72, eyeLine: 0.5 } },
-  expanded: { box: [200, PORTRAIT_MIN_PIXELS.activeHeight], frame: { aspect: 200 / PORTRAIT_MIN_PIXELS.activeHeight, headRatio: 0.42, eyeLine: 0.38 } }
+  normal: { box: [PORTRAIT_MIN_PIXELS.normalWidth, PORTRAIT_MIN_PIXELS.normalHeight], frame: { aspect: PORTRAIT_MIN_PIXELS.normalWidth / PORTRAIT_MIN_PIXELS.normalHeight, headRatio: 0.72, eyeLine: 0.5 } },
+  expanded: { box: [PORTRAIT_MIN_PIXELS.activeWidth, PORTRAIT_MIN_PIXELS.activeHeight], frame: { aspect: PORTRAIT_MIN_PIXELS.activeWidth / PORTRAIT_MIN_PIXELS.activeHeight, headRatio: 0.42, eyeLine: 0.38 } }
 });
 const autoFramePending = new Set();
 

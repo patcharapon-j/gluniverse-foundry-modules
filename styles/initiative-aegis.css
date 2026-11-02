@@ -3,16 +3,16 @@
  *
  * A SCOPED SKIN (docs/adr/0001-scoped-skins.md). Every rule here is matched
  * under `[data-gl-skin="aegis"]` on one of this feature's own roots: the rail
- * (#gluni-initiative), its leave-ghost layer, the round and guard-break
- * splashes, the context menu and the break-gauge editor. The initiative
- * feature stamps that attribute on each of them from the `init.skin` world
- * setting. Nothing here writes on :root and nothing matches a bare
- * `[data-gl-skin]`.
+ * (#gluni-initiative), its ghost layers and status ghosts, the round and
+ * guard-break splashes, the context menu and the break-gauge editor. The
+ * initiative feature stamps that attribute on each of them from the
+ * `init.skin` world setting. Nothing here writes on :root and nothing matches a
+ * bare `[data-gl-skin]`.
  *
  * What it may change, per the ADR: `--gl-accent` (the sanctioned identity
  * route), this feature's own `--gluni-*` tokens, its `--gluni-aegis-*` skin
- * palette, surface material and fonts. Layout and every motion rule are the
- * rail's own and are not restated.
+ * palette, surface material and fonts. Layout and motion are the rail's own and
+ * are not restated, apart from type sizes for the wide display face.
  *
  * `--gl-glow`, `--gl-bloom`, `--gl-accent-soft` and `--gl-accent-faint` are
  * resolved at :root against the suite accent, so they would paint Etched blue
@@ -27,7 +27,7 @@
  * ==========================================================================*/
 
 /* ---- Palette + token remap on every skin root ---------------------------- */
-:is(#gluni-initiative, .gluni-card-ghost-layer, .gluni-round-splash, .gluni-break-splash, .gluni-context-menu, .gluni-break-gauge-editor)[data-gl-skin="aegis"] {
+:is(#gluni-initiative, .gluni-card-ghost-layer, .gluni-status-slide-ghost, .gluni-round-splash, .gluni-break-splash, .gluni-context-menu, .gluni-break-gauge-editor)[data-gl-skin="aegis"] {
   --gl-accent: #ff3b2f;
 
   --gluni-aegis-accent: var(--gl-accent);
@@ -48,12 +48,11 @@
   --gluni-aegis-muted: #bfaeab;
   --gluni-aegis-subtle: #7d6966;
   --gluni-aegis-mystery: #c98a83;
-  --gluni-aegis-notch: 18px;
+  --gluni-aegis-notch: 14px;
   --gluni-aegis-hud: "Google Sans Code", var(--gl-tech);
   --gluni-aegis-display: "Google Sans Flex", var(--gl-display);
   /* Red halftone, "print through a monitor": a dot screen in the accent. */
-  --gluni-aegis-halftone: radial-gradient(circle, color-mix(in srgb, var(--gl-accent) 24%, transparent) 0 0.7px, transparent 1.15px) 0 0 / 4px 4px;
-  --gluni-aegis-screen: radial-gradient(circle, transparent 0 0.8px, color-mix(in srgb, var(--gluni-aegis-void) 46%, transparent) 1.25px) 0 0 / 3px 3px;
+  --gluni-aegis-halftone: radial-gradient(circle, color-mix(in srgb, var(--gl-accent) 22%, transparent) 0 0.7px, transparent 1.15px) 0 0 / 4px 4px;
   --gluni-aegis-tape: repeating-linear-gradient(-45deg, var(--gluni-aegis-amber) 0 6px, var(--gluni-aegis-ink) 6px 12px);
   --gluni-aegis-hatch: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--gluni-aegis-amber) 16%, transparent) 0 2px, transparent 2px 8px);
   /* The skin's own tape for non-danger beats (the round): red on ink, so amber
@@ -78,7 +77,6 @@
   --gluni-red: var(--gluni-aegis-accent);
   --gluni-neutral: var(--gluni-aegis-muted);
   --gluni-violet: var(--gluni-aegis-mystery);
-  --gluni-magenta: var(--gluni-aegis-deep);
   --gluni-delay: var(--gluni-aegis-muted);
   --gluni-delay-hot: var(--gluni-aegis-text);
   --gluni-condition: var(--gluni-aegis-pale);
@@ -88,18 +86,18 @@
   --gluni-break-deep: color-mix(in srgb, var(--gluni-aegis-amber) 55%, var(--gluni-aegis-ink));
   --gluni-dying: var(--gluni-aegis-amber);
   --gluni-dying-hot: var(--gluni-aegis-amber-hot);
+  --gluni-stable: var(--gluni-aegis-muted);
+  --gluni-stable-hot: var(--gluni-aegis-text);
   --gluni-tyrant: var(--gluni-aegis-strong);
   --gluni-tyrant-hot: var(--gluni-aegis-pale);
   --gluni-tyrant-deep: var(--gluni-aegis-deep);
-  --gluni-holo-a: var(--gluni-aegis-accent);
-  --gluni-holo-b: var(--gluni-aegis-pale);
-  --gluni-holo-c: var(--gluni-aegis-deep);
   --gluni-ink: var(--gluni-aegis-ink);
   --gluni-line: color-mix(in srgb, var(--gluni-aegis-border-strong) 80%, transparent);
   --gluni-line-strong: var(--gluni-aegis-border-strong);
   --gluni-text-dim: var(--gluni-aegis-muted);
   --gluni-font-family: var(--gluni-aegis-hud);
   --gluni-display-font: var(--gluni-aegis-display);
+  --gluni-cut: var(--gluni-aegis-notch);
 
   /* Card effect colours, probed off this element by CardFXManager
      (gluniverse-initiative.mjs, cardFxPalette). Break and dying are danger:
@@ -117,17 +115,9 @@
 
 /* ---- Header: round plate, drag handle, start button ---------------------- */
 #gluni-initiative[data-gl-skin="aegis"] .gluni-round-chip {
-  gap: 8px;
   padding: 0 10px 0 0;
   background: var(--gluni-aegis-halftone), var(--gluni-aegis-panel);
-  box-shadow:
-    inset 0 0 0 1px var(--gluni-aegis-border-strong),
-    0 2px 12px color-mix(in srgb, var(--gluni-aegis-void) 70%, transparent);
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
-}
-
-#gluni-initiative[data-gl-skin="aegis"].gluni-initiative--left .gluni-round-chip {
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  box-shadow: inset 0 0 0 1px var(--gluni-aegis-border-strong);
 }
 
 #gluni-initiative[data-gl-skin="aegis"] .gluni-round-chip-label {
@@ -138,17 +128,11 @@
   color: var(--gluni-aegis-ink);
   background: var(--gluni-aegis-accent);
   font-family: var(--gluni-aegis-hud);
-  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.08em;
 }
 
 #gluni-initiative[data-gl-skin="aegis"] .gluni-round-chip-divider {
   background: linear-gradient(90deg, var(--gluni-aegis-border-strong), color-mix(in srgb, var(--gl-accent) 70%, transparent));
-}
-
-#gluni-initiative[data-gl-skin="aegis"] .gluni-round-chip-divider::after {
-  color: var(--gluni-aegis-accent);
-  background: var(--gluni-aegis-surface);
 }
 
 #gluni-initiative[data-gl-skin="aegis"] .gluni-round-chip-num {
@@ -157,11 +141,6 @@
   font-stretch: 151%;
   font-weight: 800;
   letter-spacing: -0.02em;
-  text-shadow: 0 0 14px color-mix(in srgb, var(--gl-accent) 55%, transparent);
-}
-
-#gluni-initiative[data-gl-skin="aegis"] .gluni-round-chip::after {
-  border-color: var(--gluni-aegis-accent);
 }
 
 #gluni-initiative[data-gl-skin="aegis"] .gluni-cinematic-start {
@@ -169,7 +148,6 @@
   border: 0;
   background: var(--gluni-aegis-accent);
   font-family: var(--gluni-aegis-hud);
-  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.12em;
   clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
   box-shadow: inset 0 -3px 0 var(--gluni-aegis-deep);
@@ -181,7 +159,6 @@
 
 #gluni-initiative[data-gl-skin="aegis"] .gluni-cinematic-start:hover:not(:disabled) {
   background: var(--gluni-aegis-pale);
-  box-shadow: inset 0 -3px 0 var(--gluni-aegis-accent), 0 0 18px color-mix(in srgb, var(--gl-accent) 50%, transparent);
 }
 
 #gluni-initiative[data-gl-skin="aegis"] :is(.gluni-drag-handle, .gluni-turn-controls button) {
@@ -195,46 +172,25 @@
 }
 
 /* ---- Cards ---------------------------------------------------------------- */
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card-surface {
-  /* NOTCH: one 18px cut at the top-right, riding the art's overhang like the
-     Etched chamfer it replaces. */
+/* The notch is --gluni-cut above; the rail's clip-path reads it, so the shape
+   is not restated here and a boss keeps its own cut. */
+:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card-surface,
+.gluni-status-slide-ghost[data-gl-skin="aegis"] .gluni-card-surface {
   background:
     var(--gluni-aegis-halftone),
     linear-gradient(180deg, var(--gluni-aegis-raised), var(--gluni-aegis-surface));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--gl-accent) 22%, transparent),
-    inset 0 0 0 1px var(--gluni-aegis-border),
-    inset 0 0 26px color-mix(in srgb, var(--gluni-aegis-void) 60%, transparent);
-  clip-path: polygon(
-    0 calc(-1 * var(--gluni-card-overflow)),
-    calc(100% - var(--gluni-aegis-notch)) calc(-1 * var(--gluni-card-overflow)),
-    100% calc(var(--gluni-aegis-notch) - var(--gluni-card-overflow)),
-    100% 100%,
-    0 100%
-  );
 }
 
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card-surface::before {
-  background: linear-gradient(
-    95deg,
-    color-mix(in srgb, var(--gluni-aegis-ink) 95%, transparent),
-    color-mix(in srgb, var(--gluni-aegis-ink) 50%, transparent) 50%,
-    transparent
-  );
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gluni-aegis-ink) 94%, transparent), color-mix(in srgb, var(--gluni-aegis-ink) 46%, transparent) 52%, transparent 84%);
 }
 
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"].gluni-initiative--left .gluni-card-surface::before {
-  background: linear-gradient(
-    -95deg,
-    color-mix(in srgb, var(--gluni-aegis-ink) 95%, transparent),
-    color-mix(in srgb, var(--gluni-aegis-ink) 50%, transparent) 50%,
-    transparent
-  );
+  background: linear-gradient(270deg, color-mix(in srgb, var(--gluni-aegis-ink) 94%, transparent), color-mix(in srgb, var(--gluni-aegis-ink) 46%, transparent) 52%, transparent 84%);
 }
 
 /* A red multiply wash over the art, never a filter on the art itself (the
-   state rules own that). No dot screen: a halftone over a face read as noise,
-   so the print texture lives on the plates around the art instead. */
+   state rules own that). No dot screen over a face. */
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card-glass {
   background: linear-gradient(180deg, color-mix(in srgb, var(--gluni-aegis-deep) 22%, transparent), color-mix(in srgb, var(--gluni-aegis-void) 34%, transparent));
   mix-blend-mode: multiply;
@@ -244,102 +200,68 @@
   background: linear-gradient(180deg, transparent 40%, color-mix(in srgb, var(--gluni-aegis-void) 30%, transparent));
 }
 
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card-spec {
-  background: linear-gradient(115deg, color-mix(in srgb, var(--gl-accent) 12%, transparent) 0%, transparent 30%);
-}
-
-/* 12px L-bracket corner marks, top and bottom. */
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card-bracket {
-  width: 12px;
-  height: 12px;
-  border-color: var(--gluni-accent, var(--gluni-aegis-accent));
-}
-
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card-hud::after {
-  width: 12px;
-  height: 12px;
-  border-color: color-mix(in srgb, var(--gluni-accent, var(--gluni-aegis-accent)) 70%, transparent);
-}
-
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card-hud::before {
-  right: calc(var(--gluni-aegis-notch) + 2px);
-  color: var(--gluni-aegis-subtle);
-  font-family: var(--gluni-aegis-hud);
-}
-
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"].gluni-initiative--left .gluni-card-hud::before {
-  right: auto;
-}
-
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card-hud-code {
-  color: var(--gluni-aegis-muted);
-  font-family: var(--gluni-aegis-hud);
-  letter-spacing: 0.08em;
-}
-
-/* The wide display face is set a size down from Etched's, since at 135% it
-   takes far more of the row; the magic move reads these as computed sizes. */
+/* The wide display face takes far more of the row at 135%, so it is set a size
+   down from Etched; the magic move reads these as computed sizes. */
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card h3 {
   font-family: var(--gluni-aegis-display);
-  font-size: 10px;
+  font-size: 11px;
   font-stretch: 135%;
   font-weight: 800;
   letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card--active h3 {
-  font-size: 13px;
+  font-size: 15px;
 }
 
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-initiative-badge {
   font-family: var(--gluni-aegis-display);
-  font-size: 17px;
+  font-size: 16px;
   font-stretch: 151%;
   font-weight: 800;
   letter-spacing: -0.04em;
 }
 
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card--active .gluni-initiative-badge {
-  font-size: 25px;
+  font-size: 26px;
 }
 
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card-hud-code {
-  bottom: 24px;
+/* Wide numerals need a wider lane, or a two-digit roll runs into the name. */
+:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"].gluni-initiative--right .gluni-card--active .gluni-card-content {
+  padding-right: 78px;
 }
 
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card--active .gluni-card-hud-code {
-  bottom: 36px;
+:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"].gluni-initiative--left .gluni-card--active .gluni-card-content {
+  padding-left: 78px;
 }
 
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] :is(.gluni-active-tag, .gluni-adhoc-tag, .gluni-boss-tag, .gluni-delayed-tag, .gluni-guard-break-tag, .gluni-dying-tag) {
+:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] :is(.gluni-active-tag, .gluni-next-tag, .gluni-adhoc-tag, .gluni-boss-tag, .gluni-delayed-tag, .gluni-guard-break-tag, .gluni-dying-tag) {
   font-family: var(--gluni-aegis-hud);
-  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.08em;
   clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 0 100%);
 }
 
-/* The active card: the accent plate, a red band and a tape strip at its foot. */
+/* The active card: an accent plate with a hard red line along its top. */
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card--active .gluni-card-surface {
-  /* No halftone: this plate is almost all art on the active card. */
-  background:
-    linear-gradient(98deg, color-mix(in srgb, var(--gluni-accent, var(--gl-accent)) 18%, var(--gluni-aegis-raised-strong)), var(--gluni-aegis-surface) 64%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gluni-accent) 16%, var(--gluni-aegis-raised-strong)), var(--gluni-aegis-surface) 70%);
   box-shadow:
-    inset 0 2px 0 var(--gluni-accent, var(--gl-accent)),
-    inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent, var(--gl-accent)) 60%, var(--gluni-aegis-border)),
-    inset 0 0 30px color-mix(in srgb, var(--gluni-aegis-void) 55%, transparent),
-    0 18px 36px color-mix(in srgb, var(--gluni-aegis-void) 80%, transparent),
-    0 0 30px color-mix(in srgb, var(--gluni-accent, var(--gl-accent)) 30%, transparent);
+    inset 0 2px 0 var(--gluni-accent),
+    inset 0 0 0 1px color-mix(in srgb, var(--gluni-accent) 60%, var(--gluni-aegis-border)),
+    0 14px 30px color-mix(in srgb, var(--gluni-aegis-void) 80%, transparent);
 }
 
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card--active .gluni-card-hud {
-  background:
-    linear-gradient(90deg, var(--gluni-accent, var(--gl-accent)), transparent) left top / 60% 1px no-repeat,
-    repeating-linear-gradient(-45deg, var(--gluni-accent, var(--gl-accent)) 0 4px, var(--gluni-aegis-ink) 4px 8px) left bottom / 100% 4px no-repeat;
+/* The foot of the active card carries a strip of tape in its side colour. */
+:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card--active .gluni-card-sheen {
+  top: auto;
+  bottom: 0;
+  height: 3px;
+  background: repeating-linear-gradient(-45deg, var(--gluni-accent) 0 4px, var(--gluni-aegis-ink) 4px 8px);
 }
 
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] .gluni-card--active .gluni-active-tag {
   color: var(--gluni-aegis-ink);
-  background: var(--gluni-accent, var(--gl-accent));
+  background: var(--gluni-accent);
 }
 
 /* ---- Danger states: amber + hazard hatch --------------------------------- */
@@ -348,18 +270,13 @@
   --gluni-break-accent: var(--gluni-aegis-amber);
 }
 
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] :is(.gluni-card--guard-broken, .gluni-card--dying, .gluni-card--defeated) .gluni-card-hud,
-:is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] :is(.gluni-card--guard-broken, .gluni-card--dying, .gluni-card--defeated).gluni-card--active .gluni-card-hud {
-  background:
-    var(--gluni-aegis-tape) left bottom / 100% 4px no-repeat,
-    var(--gluni-aegis-hatch);
-}
-
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] :is(.gluni-card--guard-broken, .gluni-card--dying) .gluni-card-surface {
+  background:
+    var(--gluni-aegis-hatch),
+    linear-gradient(180deg, var(--gluni-aegis-raised), var(--gluni-aegis-surface));
   box-shadow:
     inset 0 2px 0 var(--gluni-aegis-amber),
-    inset 0 0 0 1px color-mix(in srgb, var(--gluni-aegis-amber) 70%, var(--gluni-aegis-border)),
-    0 0 22px color-mix(in srgb, var(--gluni-aegis-amber) 34%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--gluni-aegis-amber) 70%, var(--gluni-aegis-border));
 }
 
 :is(#gluni-initiative, .gluni-card-ghost-layer)[data-gl-skin="aegis"] :is(.gluni-guard-break-tag, .gluni-dying-tag) {
@@ -388,200 +305,93 @@
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
 }
 
-/* ---- Round splash ---------------------------------------------------------- */
-.gluni-round-splash[data-gl-skin="aegis"].gluni-round-splash--show {
-  background:
-    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--gl-accent) 10%, transparent) 0%, transparent 40%),
-    radial-gradient(ellipse at 50% 50%, transparent 24%, color-mix(in srgb, var(--gluni-aegis-void) 30%, transparent) 58%, color-mix(in srgb, var(--gluni-aegis-void) 58%, transparent) 100%);
+/* ---- Splashes -------------------------------------------------------------- */
+.gluni-round-splash[data-gl-skin="aegis"] {
+  --gluni-splash-line: var(--gluni-aegis-accent);
 }
 
-.gluni-round-splash[data-gl-skin="aegis"] .gluni-round-deck {
-  inset: -10px -22px;
-  border-radius: 0;
+.gluni-break-splash[data-gl-skin="aegis"] {
+  --gluni-splash-line: var(--gluni-aegis-amber);
+}
+
+:is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] :is(.gluni-round-deck, .gluni-break-deck) {
   background:
-    linear-gradient(var(--gluni-aegis-accent), var(--gluni-aegis-accent)) left top / 100% 3px no-repeat,
+    linear-gradient(var(--gluni-splash-line), var(--gluni-splash-line)) left top / 100% 3px no-repeat,
     var(--gluni-aegis-halftone),
     linear-gradient(180deg, var(--gluni-aegis-panel), color-mix(in srgb, var(--gluni-aegis-surface) 88%, transparent));
   box-shadow:
     inset 0 0 0 1px var(--gluni-aegis-border-strong),
-    inset 0 0 40px color-mix(in srgb, var(--gl-accent) 10%, transparent),
     0 26px 70px color-mix(in srgb, var(--gluni-aegis-void) 70%, transparent);
   clip-path: polygon(0 0, calc(100% - var(--gluni-aegis-notch)) 0, 100% var(--gluni-aegis-notch), 100% 100%, 0 100%);
-  -webkit-mask-image: none;
-  mask-image: none;
 }
 
-.gluni-round-splash[data-gl-skin="aegis"] .gluni-round-label span:last-child {
-  color: var(--gluni-aegis-accent);
-  font-family: var(--gluni-aegis-hud);
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.4em;
-}
-
-.gluni-round-splash[data-gl-skin="aegis"] .gluni-round-num {
-  color: var(--gluni-aegis-text);
-  font-family: var(--gluni-aegis-display);
-  font-stretch: 151%;
-  font-weight: 800;
-  letter-spacing: -0.035em;
-  text-shadow:
-    0 0 28px color-mix(in srgb, var(--gl-accent) 55%, transparent),
-    0 14px 42px color-mix(in srgb, var(--gluni-aegis-void) 86%, transparent);
-}
-
-/* Hazard tape under the number, the subtitle printed on it. */
-.gluni-round-splash[data-gl-skin="aegis"] .gluni-round-sub {
-  bottom: -34px;
-  left: -22px;
-  right: -22px;
-  padding: 4px 0;
-  background: var(--gluni-aegis-tape-red);
-  box-shadow: 0 0 0 1px var(--gluni-aegis-void), 0 8px 24px color-mix(in srgb, var(--gluni-aegis-void) 66%, transparent);
-}
-
-.gluni-round-splash[data-gl-skin="aegis"] .gluni-round-sub span {
-  padding: 2px 10px;
-  color: var(--gluni-aegis-text);
-  background: var(--gluni-aegis-ink);
-  font-family: var(--gluni-aegis-hud);
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.24em;
-}
-
-/* ---- Guard-break splash: danger, so amber and tape --------------------------- */
 .gluni-break-splash[data-gl-skin="aegis"] .gluni-break-deck {
-  inset: -10px -22px;
-  border-radius: 0;
   background:
     linear-gradient(var(--gluni-aegis-amber), var(--gluni-aegis-amber)) left top / 100% 3px no-repeat,
     var(--gluni-aegis-hatch),
     linear-gradient(180deg, var(--gluni-aegis-panel), color-mix(in srgb, var(--gluni-aegis-surface) 88%, transparent));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--gluni-aegis-amber) 40%, var(--gluni-aegis-border-strong)),
-    0 26px 74px color-mix(in srgb, var(--gluni-aegis-void) 70%, transparent);
-  clip-path: polygon(0 0, calc(100% - var(--gluni-aegis-notch)) 0, 100% var(--gluni-aegis-notch), 100% 100%, 0 100%);
-  -webkit-mask-image: none;
-  mask-image: none;
-}
-
-.gluni-break-splash[data-gl-skin="aegis"] :is(.gluni-break-splash-label, .gluni-break-splash-name) {
-  font-family: var(--gluni-aegis-hud);
-}
-
-.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-text {
-  font-family: var(--gluni-aegis-display);
-  font-stretch: 151%;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-name span {
-  padding: 2px 10px;
-  color: var(--gluni-aegis-amber);
-  background: var(--gluni-aegis-ink);
-  box-shadow: 0 0 0 4px var(--gluni-aegis-ink), 0 0 0 6px var(--gluni-aegis-amber);
-}
-
-/* ---- Splash HUD pieces, struck in the skin --------------------------------- */
-/* The deck's notch clips anything outside it, so the Etched corner brackets
-   stand down; the data code stays, in the HUD face. */
-:is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] :is(.gluni-round-deck, .gluni-break-deck)::before {
-  content: none;
-}
-
-:is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] :is(.gluni-round-deck, .gluni-break-deck)::after {
-  color: var(--gluni-splash-line);
-  font-family: var(--gluni-aegis-hud);
 }
 
 :is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] :is(.gluni-round-label, .gluni-break-splash-label) span:last-child {
   padding: 4px 12px 4px calc(10px + 0.4em);
   color: var(--gluni-aegis-ink);
-  border-left: 0;
   background: var(--gluni-splash-line);
   font-family: var(--gluni-aegis-hud);
-  font-weight: var(--gl-weight-bold);
   letter-spacing: 0.4em;
-  text-shadow: none;
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
-}
-
-:is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] :is(.gluni-round-label, .gluni-break-splash-label) span:last-child::before {
-  color: var(--gluni-aegis-ink);
 }
 
 :is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] .tick {
   height: 2px;
-  background: var(--gluni-splash-line);
-  box-shadow: none;
 }
 
-:is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] :is(.gluni-round-sub, .gluni-break-splash-name) span::before {
-  color: var(--gluni-splash-line);
+.gluni-round-splash[data-gl-skin="aegis"] .gluni-round-num,
+.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-text {
+  font-family: var(--gluni-aegis-display);
+  font-stretch: 151%;
+  font-weight: 800;
+  letter-spacing: -0.03em;
 }
 
-/* Round: hard red rules, a halftone band edged in red, no soft glow. */
-.gluni-round-splash[data-gl-skin="aegis"] {
-  --gluni-splash-line: var(--gluni-aegis-accent);
+.gluni-round-splash[data-gl-skin="aegis"] .gluni-round-num {
+  color: var(--gluni-aegis-text);
+  text-shadow: 0 14px 42px color-mix(in srgb, var(--gluni-aegis-void) 86%, transparent);
+}
+
+.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-text {
+  color: var(--gluni-aegis-amber);
+  text-shadow: 4px 4px 0 var(--gluni-aegis-ink);
+}
+
+:is(.gluni-round-splash, .gluni-break-splash)[data-gl-skin="aegis"] :is(.gluni-round-sub, .gluni-break-splash-name) span {
+  padding: 2px 10px;
+  color: var(--gluni-aegis-text);
+  background: var(--gluni-aegis-ink);
+  font-family: var(--gluni-aegis-hud);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-name span {
+  color: var(--gluni-aegis-amber);
+  box-shadow: 0 0 0 1px var(--gluni-aegis-amber);
 }
 
 .gluni-round-splash[data-gl-skin="aegis"] .gluni-round-rule {
   height: 2px;
   background: var(--gluni-aegis-accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gluni-aegis-void) 60%, transparent);
-}
-
-.gluni-round-splash[data-gl-skin="aegis"] .gluni-round-rule::before {
-  content: none;
-}
-
-.gluni-round-splash[data-gl-skin="aegis"] .gluni-round-rule::after {
-  background: color-mix(in srgb, var(--gluni-aegis-accent) 60%, transparent);
 }
 
 .gluni-round-splash[data-gl-skin="aegis"] .gluni-splash-band {
   border-block: 2px solid var(--gluni-aegis-accent);
   background:
     var(--gluni-aegis-halftone),
-    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--gluni-aegis-accent) 22%, transparent) 0 8px, transparent 8px 16px),
     color-mix(in srgb, var(--gluni-aegis-void) 55%, transparent);
-}
-
-/* Guard break: danger, so amber hatch, amber tape and an amber fracture (the
-   WebGL layer reads --gluni-fx-break off this element). */
-.gluni-break-splash[data-gl-skin="aegis"] {
-  --gluni-splash-line: var(--gluni-aegis-amber);
-}
-
-.gluni-break-splash[data-gl-skin="aegis"].gluni-break-splash--show {
-  background:
-    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--gluni-aegis-amber) 8%, transparent) 0%, transparent 40%),
-    radial-gradient(ellipse at 50% 50%, transparent 20%, color-mix(in srgb, var(--gluni-aegis-void) 34%, transparent) 60%, color-mix(in srgb, var(--gluni-aegis-void) 62%, transparent) 100%);
-}
-
-.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-burst {
-  background:
-    radial-gradient(
-      circle,
-      color-mix(in srgb, var(--gluni-aegis-amber) 22%, transparent) 0%,
-      color-mix(in srgb, var(--gluni-aegis-amber) 8%, transparent) 30%,
-      transparent 56%
-    );
 }
 
 .gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-rule {
   height: 6px;
   background: var(--gluni-aegis-tape);
-  box-shadow: 0 0 0 1px var(--gluni-aegis-void);
-}
-
-.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-rule::before {
-  content: none;
-}
-
-.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-rule::after {
-  top: 9px;
-  background: color-mix(in srgb, var(--gluni-aegis-amber) 55%, transparent);
 }
 
 .gluni-break-splash[data-gl-skin="aegis"] .gluni-splash-band {
@@ -589,21 +399,10 @@
   background:
     var(--gluni-aegis-tape) left top / 100% 5px no-repeat,
     var(--gluni-aegis-tape) left bottom / 100% 5px no-repeat,
-    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--gluni-aegis-amber) 26%, transparent) 0 6px, transparent 6px 16px),
+    var(--gluni-aegis-hatch),
     color-mix(in srgb, var(--gluni-aegis-void) 60%, transparent);
 }
 
-/* The wide face at the Etched size runs off a laptop screen, so it is set
-   a size down here. */
-.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-text {
-  font-size: clamp(72px, 11vw, 168px);
-  color: var(--gluni-aegis-amber);
-  text-shadow:
-    4px 4px 0 var(--gluni-aegis-ink),
-    0 0 30px color-mix(in srgb, var(--gluni-aegis-amber) 34%, transparent),
-    0 16px 48px color-mix(in srgb, var(--gluni-aegis-void) 88%, transparent);
-}
-
-.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-name span {
-  text-shadow: none;
+.gluni-break-splash[data-gl-skin="aegis"] .gluni-break-splash-burst {
+  background: radial-gradient(circle, color-mix(in srgb, var(--gluni-aegis-amber) 14%, transparent), transparent 56%);
 }
