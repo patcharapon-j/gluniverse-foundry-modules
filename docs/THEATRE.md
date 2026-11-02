@@ -137,7 +137,8 @@ with a cue already played — settles on the end state with no animation. Every
 client preloads every shot of the scene it is looking at.
 
 The GM chooses the next shot privately in the filmstrip (a GM-only preview with
-the title and notes), then presses Go.
+the title and notes), then presses Go. The filmstrip reads like a vision mixer:
+the program (on air) is marked red, the preview (cued up) green.
 
 ## The timeline
 
@@ -299,3 +300,12 @@ node tools/theatre-preview.mjs --out=.preview/theatre.html && node tools/preview
 ```
 
 Serve the preview — a `file://` page does not run its module script.
+
+The filmstrip and the shot editor have no templates. `apps/filmstrip-view.mjs`
+and `apps/editor-view.mjs` build each panel's model and markup as a string; the
+apps set it and bind events. `node tools/theatre-apps-preview.mjs` writes
+`.preview/theatre-apps.html` (`app=filmstrip|editor`, `tab=scene`, `dirty=1`,
+`collapsed=1`, `black=1`, `empty=1`), which draws the shipped markup over
+`styles/theatre-apps.css`. The skin is shared with Stage's Director
+(docs/adr/0004-stage-theatre-console.md), and `theatre-check` holds the two
+ramps equal.
