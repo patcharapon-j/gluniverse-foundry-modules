@@ -300,6 +300,32 @@ The model, view and renderer are pure, which is what
 `styles/clocks-tracker-trackers.css`, independent of the time HUD's sheet. See
 `docs/RESOURCE_TRACKERS.md`.
 
+**When touching the time HUD's weather and delving effects**
+(`features/clocks-tracker/weather/effects.js`, `weather/fx/`,
+`styles/clocks-tracker-{hud,weather,delving}.css`), re-run its check:
+
+```bash
+node tools/weather-fx-check.mjs
+```
+
+Zero problems required. Every surface (the bar's weather and delve layers, the
+weather window's hero, the editors' previews) draws through **one** WebGL2
+context on a detached canvas (`fx/renderer.mjs`) and copies its corner onto its
+own 2D canvas in the same task, so five strips never cost five of the browser's
+contexts. Each archetype maps to a look in `fx/looks.mjs`, and a few kinds draw a
+richer look of their own only while the hex still uses that kind's archetype.
+Four things fail silently: an archetype with no entry draws "clear"; a uniform a
+look declares and the renderer never writes holds the driver's value; a rate on
+`uPhase` that is not `turns(k)` steps once every 64 s loop; and a CSS
+`background` on `.bar-wx`/`.bar-dx` paints one tinted pane over every look.
+`fx/` stays pure (no `game`, no `core/`), which is what the gallery drives:
+`node tools/weather-fx-preview.mjs && node tools/preview-server.mjs`, then
+`/.preview/weather.html` (`?seek=12` for stills, `?impl=old` beside `--old`). The
+whole HUD runs in `/.preview/time.html` (`tools/time-tracker-preview.mjs`;
+`wx`, `delve`, `collapsed`, `gm`, `seek`). The check cannot compile GLSL: a look
+that fails warns once and draws nothing, so look at the gallery after touching
+`fx/shaders.mjs`. See `docs/TIME_TRACKER.md`.
+
 **When touching Stream Pacer** (`features/stream-pacer/`, `styles/stream-pacer.css`,
 `templates/stream-pacer/`, `assets/stream-pacer/`), re-run its check. Two of its
 failures happen on somebody else's screen: a safety signal that reaches the
