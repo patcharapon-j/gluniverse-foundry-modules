@@ -10,15 +10,10 @@
  * and a check tool importing an app must not take the tooling down with it.
  */
 
-import { featurePath, SUITE_ID } from "../../../core/const.mjs";
+import { SUITE_ID } from "../../../core/const.mjs";
 import { Suite } from "../../../core/registry.mjs";
-import { DEFAULT_FACE, DEFAULT_SHAKE, FACE_KEYS, FACES, FEATURE_ID, MODES, STYLES, VIDEO_RE } from "../constants.mjs";
+import { DEFAULT_FACE, DEFAULT_SHAKE, FACES, VIDEO_RE } from "../constants.mjs";
 import { titleFromFilename } from "../model.mjs";
-
-export const tpl = (name) => featurePath(FEATURE_ID, `templates/${name}.hbs`);
-
-/** Every template the apps render, for optional preloading. */
-export const APP_TEMPLATES = Object.freeze(["filmstrip", "editor"].map(tpl));
 
 /** Where dropped OS files are uploaded: worlds/<world id>/theatre. */
 export const uploadFolder = () => `worlds/${globalThis.game?.world?.id ?? "world"}/theatre`;
@@ -67,32 +62,6 @@ export function stageEnabled() {
 }
 
 export const suiteApi = () => globalThis.game?.modules?.get(SUITE_ID)?.api ?? null;
-
-/* ── Choice lists (dynamic i18n families are W5's: GLTH.style/face.*) ── */
-
-export const styleLabel = (k) => L(`GLTH.style.${k}.name`);
-export const faceLabel = (k) => L(`GLTH.face.${k}`);
-
-/**
- * Options for an override select: first "Scene default (<resolved>)" (value ""),
- * then every key. `selected` null means the default row. `defaultKey` names the
- * default row's label (the scene's, or for the scene itself the GM's).
- */
-export function overrideOptions(keys, label, selected, sceneValue, defaultKey = "GLTH.editor.sceneDefault") {
-  return [
-    { value: "", label: L(defaultKey, { value: label(sceneValue) }), selected: selected == null },
-    ...keys.map((k) => ({ value: k, label: label(k), selected: k === selected })),
-  ];
-}
-
-export function plainOptions(keys, label, selected) {
-  return keys.map((k) => ({ value: k, label: label(k), selected: k === selected }));
-}
-
-export const styleKeys = () => [...STYLES];
-export const modeKeys = () => [...MODES];
-export const modeLabel = (k) => L(`GLTH.mode.${k}.name`);
-export const faceKeys = () => [...FACE_KEYS];
 
 /** Inline style for a type specimen in a given FACES entry (data from constants, never users). */
 export function faceSpecimenStyle(key) {

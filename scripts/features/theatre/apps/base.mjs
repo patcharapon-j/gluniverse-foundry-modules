@@ -13,6 +13,10 @@
  *
  * Hooks are registered in `_onFirstRender` and removed in `_onClose`, so a
  * closed app leaves nothing listening.
+ *
+ * No templates: each app renders a pure view module to a string (`_renderView`),
+ * which the preview page renders too. A re-render keeps every column marked
+ * `data-keep-scroll` where the GM left it.
  */
 
 import { currentStore, storeModule } from "./shared.mjs";
@@ -21,9 +25,9 @@ let _Base = null;
 
 export function TheatreAppBase() {
   if (_Base) return _Base;
-  const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+  const { ApplicationV2 } = foundry.applications.api;
 
-  _Base = class TheatreApp extends HandlebarsApplicationMixin(ApplicationV2) {
+  _Base = class TheatreApp extends ApplicationV2 {
     /** The scene this app edits. Set on construction, or on first render from the viewed scene. */
     sceneId = null;
     _hooks = [];
@@ -56,6 +60,23 @@ export function TheatreAppBase() {
         if (!isTheatre) this._onSceneSwitch(null);
       });
       on("deleteScene", (scene) => { if (scene?.id === this.sceneId) this.close(); });
+    }
+
+    /** The markup for a prepared context. Every app overrides it. */
+    _renderView() { return ""; }
+
+    async _renderHTML(context) {
+      return this._renderView(context);
+    }
+
+    _replaceHTML(result, content) {
+      const keep = new Map();
+      content.querySelectorAll("[data-keep-scroll]").forEach((n) => keep.set(n.dataset.keepScroll, [n.scrollLeft, n.scrollTop]));
+      content.innerHTML = result;
+      content.querySelectorAll("[data-keep-scroll]").forEach((n) => {
+        const at = keep.get(n.dataset.keepScroll);
+        if (at) [n.scrollLeft, n.scrollTop] = at;
+      });
     }
 
     /** The frame is drawn before context resolves; restate a computed title once rendered. */

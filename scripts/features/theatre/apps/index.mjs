@@ -5,4 +5,3 @@
 
 export { openFilmstrip, closeFilmstrip, toggleFilmstrip, isFilmstripOpen, refreshFilmstrip, FILMSTRIP_ID } from "./filmstrip.mjs";
 export { openEditor, closeEditor, toggleEditor, EDITOR_ID } from "./editor.mjs";
-export { APP_TEMPLATES } from "./shared.mjs";
