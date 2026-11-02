@@ -1,5 +1,5 @@
 import { CLASSES, HOOKS, MODULE_ID } from "./constants.js";
-import { animate, prefersCalmMotion, remove } from "./motion/engine.js";
+import { OVERLAY_EASE, OVERLAY_EASE_EXIT, animate, overlayTiming, prefersCalmMotion, remove } from "./motion/engine.js";
 import { getDialogSettings } from "./settings.js";
 
 const BACKDROP_ALPHA = 0.25;
@@ -132,23 +132,24 @@ export class DialogOverlay {
 }
 
 /**
- * Presentations rise into place with a small overshoot. The dialog's own `transform` is pinned by the
- * overlay stylesheet, so the scale and lift go through the independent `scale`/`translate` properties
+ * Presentations rise into place and settle, with no overshoot. The dialog's own `transform` is pinned by
+ * the overlay stylesheet, so the scale and lift go through the independent `scale`/`translate` properties
  * via CSS variables. Inline values are cleared afterwards so Foundry's own window styling is untouched.
  */
 function animateIn(element) {
   remove(element);
+  const d = overlayTiming(element);
   const clear = () => clearMotionStyles(element);
   if (prefersCalmMotion()) {
-    animate(element, { opacity: [0, 1], duration: 220, ease: "linear", onComplete: clear });
+    animate(element, { opacity: [0, 1], duration: d("calmResize"), ease: "linear", onComplete: clear });
     return;
   }
-  animate(element, { opacity: [0, 1], duration: 260, ease: "outQuad" });
+  animate(element, { opacity: [0, 1], duration: d("dialogFade"), ease: OVERLAY_EASE });
   animate(element, {
-    "--stream-dialog-scale": [0.94, 1],
-    "--stream-dialog-y": ["14px", "0px"],
-    duration: 460,
-    ease: "outBack(1.4)",
+    "--stream-dialog-scale": [0.96, 1],
+    "--stream-dialog-y": ["12px", "0px"],
+    duration: d("dialogIn"),
+    ease: OVERLAY_EASE,
     onComplete: clear
   });
 }
@@ -156,17 +157,21 @@ function animateIn(element) {
 function animateOut(element) {
   if (!element?.isConnected) return Promise.resolve();
   remove(element);
+  const d = overlayTiming(element);
   return new Promise(resolve => {
+    // Settles on a timer too: `onComplete` never fires for an element pulled out of the page mid-tween.
+    const total = prefersCalmMotion() ? d("calmFade") : d("dialogOut");
+    window.setTimeout(resolve, total + d("calmFade"));
     if (prefersCalmMotion()) {
-      animate(element, { opacity: [1, 0], duration: 180, ease: "linear", onComplete: resolve });
+      animate(element, { opacity: [1, 0], duration: d("calmFade"), ease: "linear", onComplete: resolve });
       return;
     }
-    animate(element, { opacity: [1, 0], duration: 240, ease: "inQuad" });
     animate(element, {
-      "--stream-dialog-scale": [1, 0.96],
-      "--stream-dialog-y": ["0px", "8px"],
-      duration: 260,
-      ease: "inCubic",
+      opacity: [1, 0],
+      "--stream-dialog-scale": [1, 0.98],
+      "--stream-dialog-y": ["0px", "6px"],
+      duration: d("dialogOut"),
+      ease: OVERLAY_EASE_EXIT,
       onComplete: resolve
     });
   });
@@ -179,7 +184,8 @@ function fadeBackdrop(root, alpha) {
     root.style.setProperty("--stream-dialog-backdrop", String(alpha));
     return;
   }
-  animate(root, { "--stream-dialog-backdrop": [current, alpha], duration: alpha > current ? 260 : 220, ease: "outQuad" });
+  const d = overlayTiming(root);
+  animate(root, { "--stream-dialog-backdrop": [current, alpha], duration: alpha > current ? d("backdropIn") : d("backdropOut"), ease: OVERLAY_EASE });
 }
 
 function clearMotionStyles(element) {

@@ -19,10 +19,28 @@
  * default loop like every other feature's UI.
  */
 
-import { animate, createTimeline, createTimer, cubicBezier, eases, remove } from "../../../core/motion.mjs";
-import { MODULE_ID } from "../constants.js";
+import { animate, createTimeline, createTimer, cubicBezier, eases, motionDuration, remove } from "../../../core/motion.mjs";
+import { MODULE_ID, OVERLAY_MOTION } from "../constants.js";
 
 export { animate, createTimeline, createTimer, cubicBezier, eases, remove };
+
+/** The suite's `--gl-ease`: decelerate to rest. Overlay motion has no overshoot. */
+export const OVERLAY_EASE = cubicBezier(0.16, 1, 0.3, 1);
+/** Exits decelerate too, faster: an ease-in exit reads as a stall on a stream. */
+export const OVERLAY_EASE_EXIT = cubicBezier(0.4, 0, 0.2, 1);
+
+/**
+ * The motion scale for one overlay gesture, read once from the element it animates so a scoped motion
+ * tier reaches it. Returns `d(name)` for an OVERLAY_MOTION entry, and throws on a name it does not know.
+ */
+export function overlayTiming(element = null) {
+  const scale = motionDuration(1000, element) / 1000;
+  return (name) => {
+    const ms = OVERLAY_MOTION[name];
+    if (!Number.isFinite(ms)) throw new Error(`stream overlay: no OVERLAY_MOTION entry "${name}"`);
+    return Math.round(ms * scale);
+  };
+}
 
 /**
  * Canvas-bound work runs just after Foundry's token animations advance and just
