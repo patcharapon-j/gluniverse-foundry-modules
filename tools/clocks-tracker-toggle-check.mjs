@@ -332,9 +332,10 @@ let run = drive({ features: TRACKERS_ON, halves: ["trackers"] });
 check("trackers only → the scene-control group is wired",
   count(run.log.hooks, "getSceneControlButtons") === 1);
 check("trackers only → the keybindings are registered", run.log.keys.length > 0);
-check("trackers only → the dock's stylesheet is injected",
-  run.log.styles.some((h) => h.includes("clocks-tracker-hud.css")) &&
-  run.log.styles.some((h) => h.includes("clocks-tracker-tracker-sheet.css")));
+check("trackers only → the dock's own stylesheet is injected",
+  run.log.styles.some((h) => h.includes("clocks-tracker-trackers.css")));
+check("trackers only → the time HUD's stylesheet is not needed",
+  !run.log.styles.some((h) => h.includes("clocks-tracker-hud.css")));
 check("trackers only → the PF2e sheet tab is wired", run.log.sheet === 1);
 check("trackers only → no calendar is installed", run.log.calendar === 0);
 check("trackers only → no world-time hook is wired",

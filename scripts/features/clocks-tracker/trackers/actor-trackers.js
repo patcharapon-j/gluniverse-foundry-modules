@@ -1,173 +1,164 @@
 /**
- * ActorTrackerStore — per-PC private trackers, stored in actor flags.
+ * ActorTrackerStore: a PC's private trackers, in the actor's flags.
  *
- * A counterpart to the world-scope {@link TrackerStore}: instead of one shared
- * array every client sees, these trackers live on a single actor
- * (`flags.<module>.trackers`) and are private to that PC — only the actor's
- * owner(s) and the GM ever see or edit them (the sheet tab that hosts them is
- * itself owner-gated). Surfaced as a dedicated tab on the PF2e character sheet,
- * never on the global dock.
+ * The counterpart to the world {@link TrackerStore}: these live on one actor
+ * (`flags[MODULE_ID].ct.trackers`) and show only on that PC's sheet tab, which
+ * opens only for the actor's owners and the GM. The owner owns the actor, so
+ * they write directly: no GM relay. A pool roll persists its own new count and
+ * whispers the dice and the card to the owners and the GM.
  *
- * Because the owning player *owns the actor*, they can write its flags directly:
- * there is none of the world store's GM-round-trip dance. A pool roll persists
- * its own new count and whispers its result card to the owner + GM, keeping the
- * "private stuff" private. The class mirrors TrackerStore's small interface
- * (`canWrite`, `isActor`, `makeNew`, `get`, `create`, `update`) so the shared
- * editor can target either backend uniformly.
+ * Writes are queued per actor, exactly like the world store, so two quick
+ * clicks land as two steps rather than one. The queue is keyed by the actor's
+ * UUID: an unlinked token's actor shares its base actor's id, and keying on the
+ * id let one sheet's writes queue behind (and read) the other's.
  */
 
 import { MODULE_ID, FLAG_NS } from "../const.js";
-import { makeNewTracker, sanitizeTracker, stepTracker, rollPoolDice, poolCardContent, tInt, clamp } from "./tracker-model.js";
+import {
+  makeNewTracker, sanitizeTracker, stepTracker, setTrackerValue, normalizeList,
+  reorderList, tallyPool, rangeOf,
+} from "./tracker-model.js";
+import { rollPool } from "./pool-roll.js";
 
-// Per-feature flag sub-key prefix: actor trackers live at flags[MODULE_ID].ct.trackers.
 const FLAG = `${FLAG_NS}.trackers`;
+const queues = new Map();   // actor uuid -> tail promise
 
 export class ActorTrackerStore {
   /** @param {Actor} actor */
   constructor(actor) { this.actor = actor; }
 
-  /** This backend is actor-scoped (lets the editor hide world-only fields). */
   get isActor() { return true; }
 
-  /** Owner of the actor (the player whose PC this is) or any GM may write. */
+  /** The actor's owners and any GM may write. */
   get canWrite() { return !!this.actor?.isOwner; }
+
+  get key() { return this.actor?.uuid ?? this.actor?.id ?? ""; }
 
   /* ------------------------------- reads ------------------------------- */
 
   get all() {
-    try { return foundry.utils.deepClone(this.actor?.getFlag(MODULE_ID, FLAG) ?? []); }
-    catch { return []; }
+    let raw = [];
+    try { raw = this.actor?.getFlag(MODULE_ID, FLAG) ?? []; } catch { /* no flags */ }
+    return normalizeList(raw);
   }
 
-  /** Every tracker, ordered. These are private to owner + GM, so there is no
-   *  per-tracker visibility filter — anyone who can see the tab sees them all. */
-  visible() {
-    return this.all.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  /** Every tracker: a private tab has no per-tracker visibility. */
+  visible() { return this.all; }
+
+  get(id) { return this.all.find((t) => t.id === id) ?? null; }
+
+  /* ------------------------------- writes ------------------------------- */
+
+  #mutate(fn) {
+    const run = async () => {
+      if (!this.canWrite) return false;
+      const list = this.all;
+      if (!(await fn(list))) return false;
+      // {render:false}: the open tab repaints itself in place off updateActor
+      // (TrackerSheet), so a value change animates instead of redrawing the sheet.
+      await this.actor.update({ [`flags.${MODULE_ID}.${FLAG}`]: list }, { render: false });
+      return true;
+    };
+    const tail = queues.get(this.key) ?? Promise.resolve();
+    const p = tail.then(run, run);
+    queues.set(this.key, p.catch((err) => console.error(`${MODULE_ID} | sheet tracker write failed`, err)));
+    return p;
   }
-
-  get(id) { return this.all.find(t => t.id === id) ?? null; }
-
-  /* ------------------------------- writes (owner / GM) ------------------------------- */
 
   async save(trackers) {
-    if (!this.canWrite) return;
-    // {render:false} suppresses the heavy full sheet re-render this write would
-    // otherwise trigger; the open Trackers tab repaints itself in place off the
-    // updateActor hook instead (see TrackerSheet._repaint), so value changes
-    // animate. The update still persists + broadcasts normally.
-    await this.actor.update({ [`flags.${MODULE_ID}.${FLAG}`]: trackers }, { render: false });
+    return this.#mutate((list) => { list.splice(0, list.length, ...normalizeList(trackers)); return true; });
   }
 
-  /** Build a fresh tracker of `type`, ordered after this actor's existing ones. */
-  makeNew(type, overrides = {}) {
-    return makeNewTracker(type, overrides, this.all);
-  }
+  makeNew(type, overrides = {}) { return makeNewTracker(type, overrides, this.all); }
 
   async create(type, overrides = {}) {
-    if (!this.canWrite) return null;
-    const tracker = this.makeNew(type, overrides);
-    const all = this.all;
-    all.push(tracker);
-    await this.save(all);
-    return tracker;
+    let made = null;
+    await this.#mutate((list) => { made = makeNewTracker(type, overrides, list); list.push(made); return true; });
+    return made;
   }
 
   async update(id, patch) {
-    if (!this.canWrite) return;
-    const all = this.all;
-    const t = all.find(x => x.id === id);
-    if (!t) return;
-    Object.assign(t, patch);
-    sanitizeTracker(t);
-    await this.save(all);
+    return this.#mutate((list) => {
+      const t = list.find((x) => x.id === id);
+      if (!t) return false;
+      const { id: _id, type: _type, ...rest } = patch ?? {};
+      Object.assign(t, rest);
+      sanitizeTracker(t);
+      return true;
+    });
   }
 
   async delete(id) {
-    if (!this.canWrite) return;
-    await this.save(this.all.filter(t => t.id !== id));
+    return this.#mutate((list) => {
+      const i = list.findIndex((t) => t.id === id);
+      if (i < 0) return false;
+      list.splice(i, 1);
+      return true;
+    });
   }
 
-  async reorder(idsInOrder) {
-    if (!this.canWrite) return;
-    const all = this.all;
-    idsInOrder.forEach((id, i) => { const t = all.find(x => x.id === id); if (t) t.order = i; });
-    await this.save(all);
+  async duplicate(id) {
+    return this.#mutate((list) => {
+      const i = list.findIndex((t) => t.id === id);
+      if (i < 0) return false;
+      const { id: _id, ...source } = list[i];
+      list.splice(i + 1, 0, makeNewTracker(source.type, source, []));
+      list.forEach((t, n) => { t.order = n; });
+      return true;
+    });
   }
 
-  /* ------------------------------- value mutations ------------------------------- */
+  async reorder(idsInOrder) { return this.#mutate((list) => reorderList(list, idsInOrder)); }
 
   async step(id, delta) {
-    if (!this.canWrite) return;
-    const all = this.all;
-    const t = all.find(x => x.id === id);
-    if (!t) return;
-    if (!stepTracker(t, delta)) return;
-    await this.save(all);
+    return this.#mutate((list) => {
+      const t = list.find((x) => x.id === id);
+      return !!t && stepTracker(t, delta);
+    });
+  }
+
+  async setTo(id, end) {
+    return this.#mutate((list) => {
+      const t = list.find((x) => x.id === id);
+      if (!t) return false;
+      const { min, max } = rangeOf(t);
+      const v = end === "max" ? max : (min ?? 0);
+      return v !== null && setTrackerValue(t, v);
+    });
   }
 
   async resetPool(id) {
-    if (!this.canWrite) return;
-    const all = this.all;
-    const t = all.find(x => x.id === id);
-    if (!t || t.type !== "pool") return;
-    t.current = tInt(t.count, 0);
-    await this.save(all);
+    return this.#mutate((list) => {
+      const t = list.find((x) => x.id === id);
+      return t?.type === "pool" && setTrackerValue(t, t.count);
+    });
   }
 
   /* ------------------------------- pool rolling ------------------------------- */
 
-  /**
-   * Roll a private pool. The owner owns the actor, so — unlike the world store —
-   * they persist the new count directly with no responsible-GM relay. The dice
-   * animation and the result card are whispered to the owner + GM only, so the
-   * rest of the party never learns this private resource exists.
-   */
+  /** Roll a private pool: the owner persists it, the owners and GMs see it. */
   async rollPool(id) {
-    if (!this.canWrite) return;          // only the owner / GM roll a PC's private pool
+    if (!this.canWrite) return;
     const t = this.get(id);
     if (!t || t.type !== "pool") return;
-
-    const rolled = await rollPoolDice(t);
-    if (!rolled) return;                 // an exhausted pool stays empty until reset
-    const { roll, faces, size, discard, remaining } = rolled;
-
-    const recipients = this._recipients();
-
-    // Whisper the 3D dice to owner + GM only (DSN's 4th arg restricts the audience).
-    if (game.dice3d) {
-      try { await game.dice3d.showForRoll(roll, game.user, true, recipients); }
-      catch (err) { console.warn(`${MODULE_ID} | Dice So Nice roll failed`, err); }
-    }
-
-    // Owner-writes-own-flag: persist the new count straight away, no relay.
-    await this._applyPoolResult(id, remaining);
-
-    const content = poolCardContent({ tracker: t, faces, discard, size, remaining });
-    const speaker = ChatMessage.implementation.getSpeaker({ actor: this.actor, alias: t.name ?? this.actor.name });
-    await ChatMessage.implementation.create({
-      speaker, content,
-      whisper: recipients,
-      // actorPool flags this so the world store's GM-persist handler ignores it.
-      flags: { [MODULE_ID]: { [FLAG_NS]: { poolRoll: true, actorPool: true, requestedBy: game.user.id, actorId: this.actor.id, trackerId: t.id, current: remaining } } }
+    const whisper = this._recipients();
+    await rollPool(t, {
+      key: `actor:${this.key}:${t.id}`,
+      whisper,
+      speaker: ChatMessage.implementation.getSpeaker({ actor: this.actor, alias: t.name || this.actor.name }),
+      flags: { actorPool: true, actorId: this.actor.id },
+      // Spend exactly the dice that were rolled, from the pool as it stands
+      // when the write runs: a refill that landed meanwhile is not undone.
+      before: (remaining, faces) => this.#mutate((list) => {
+        const p = list.find((x) => x.id === id);
+        if (!p || p.type !== "pool" || p.current !== faces.length) return false;
+        return setTrackerValue(p, tallyPool(faces, p.discard));
+      }),
     });
   }
 
-  /** Persist a rolled pool's new count (clamped to its full count). */
-  async _applyPoolResult(id, current) {
-    if (!this.canWrite) return;
-    const all = this.all;
-    const t = all.find(x => x.id === id);
-    if (!t || t.type !== "pool") return;
-    const v = clamp(tInt(current, 0), 0, tInt(t.count, 0));
-    if (t.current === v) return;
-    t.current = v;
-    await this.save(all);
-  }
-
-  /** User ids who may see this PC's private trackers: its owners + every GM. */
+  /** The owners of this PC and every GM. */
   _recipients() {
-    return game.users
-      .filter(u => u.isGM || this.actor.testUserPermission(u, "OWNER"))
-      .map(u => u.id);
+    return game.users.filter((u) => u.isGM || this.actor.testUserPermission(u, "OWNER")).map((u) => u.id);
   }
 }

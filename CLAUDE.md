@@ -90,8 +90,9 @@ etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
   parse/format vocabulary (e.g. statsblock parsing tokens).
 - **CSS** — read `docs/DESIGN_SYSTEM.md`. Etched Glass is the suite's ONLY
   theme (the exceptions are the scoped Aegis skin of the initiative rail and
-  Combat Intro, docs/adr/0001-scoped-skins.md, and Stream Pacer's black skin,
-  docs/adr/0003-stream-pacer-skin.md — each lives only under its features' own
+  Combat Intro, docs/adr/0001-scoped-skins.md, Stream Pacer's black skin,
+  docs/adr/0003-stream-pacer-skin.md, and Resource Trackers' skin,
+  docs/adr/0004-resource-trackers-skin.md — each lives only under its features' own
   roots and never on `:root`); `styles/gl-tokens.css` is the single source of truth and
   `styles/gl-motion.css` the single keyframe pool. Use the `--gl-*` tokens and
   the `.gl-*` utilities. The non-negotiables:
@@ -282,6 +283,22 @@ the imports stripped and the collaborators injected (the technique
 `tools/clocks-pacer-motion-check.mjs` uses on this same feature), because none
 of the wiring above can be proved by reading the file: it drives a trackers-only
 world, then both halves in **both orders**, and asks what was actually wired.
+
+Resource Trackers' own internals have a check of their own:
+
+```bash
+node tools/resource-trackers-check.mjs
+```
+
+Zero problems required. Read and write trackers only through `TrackerStore` /
+`ActorTrackerStore`: reads repair missing or duplicate ids deterministically
+(every row control resolves by id), and writes are queued so two quick clicks
+are two steps. A pool result is persisted by the GM only when its faces fit the
+pool as it stands (`verifyPoolResult`), never from the count a message carries.
+The model, view and renderer are pure, which is what
+`node tools/trackers-preview.mjs` drives. The skin is
+`styles/clocks-tracker-trackers.css`, independent of the time HUD's sheet. See
+`docs/RESOURCE_TRACKERS.md`.
 
 **When touching Stream Pacer** (`features/stream-pacer/`, `styles/stream-pacer.css`,
 `templates/stream-pacer/`, `assets/stream-pacer/`), re-run its check. Two of its

@@ -42,7 +42,7 @@ function ensureFeatureStyle(file) {
 function ensureHudStyles() { ensureFeatureStyle("hud"); }
 function ensureWeatherStyles() { ensureFeatureStyle("weather"); }
 function ensureDelvingStyles() { ensureFeatureStyle("delving"); }
-function ensureSheetTrackerStyles() { ensureFeatureStyle("tracker-sheet"); }
+function ensureTrackerStyles() { ensureFeatureStyle("trackers"); }
 
 /* ---------------------------------------------------------------------------
  * Lifecycle.
@@ -105,12 +105,11 @@ export async function onReady() {
 
 /**
  * Init lifecycle for RESOURCE TRACKERS (only when `clocks-trackers` is enabled).
- * The dock wears the same stylesheet as the time HUD, so it ensures that sheet
- * itself rather than relying on the engine having been here first.
+ * The dock, the sheet tab, the editor and the pool card all wear their own
+ * scoped stylesheet, which shares nothing with the time HUD's.
  */
 export function onTrackersInit() {
-  ensureHudStyles();
-  ensureSheetTrackerStyles();
+  ensureTrackerStyles();
   // PF2e per-PC private trackers: wire the character-sheet tab (no-op off-PF2e).
   TrackerSheet.register();
   wireShared();
