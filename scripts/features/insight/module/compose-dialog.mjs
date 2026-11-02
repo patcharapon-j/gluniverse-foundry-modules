@@ -80,6 +80,9 @@ export class InsightComposeDialog extends HandlebarsApplicationMixin(Application
       if (event.target.checked) InsightComposeDialog._picked.add(event.target.value);
       else InsightComposeDialog._picked.delete(event.target.value);
     });
+    // Enter in the label field would otherwise submit the form natively and
+    // navigate away with the draft. Sending is the Send button's job.
+    form?.addEventListener("submit", (event) => event.preventDefault());
     form?.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
