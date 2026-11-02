@@ -48,7 +48,7 @@ const MAX_STEPS = 12;
  * feet to face the camera's pitch, capped so a top-down view does not lay them
  * flat into whatever stands behind them.
  */
-const MAX_LEAN = (60 * Math.PI) / 180;
+export const MAX_LEAN = (60 * Math.PI) / 180;
 /**
  * Display scale of the figure card only. A creature's height rules (cover,
  * occlusion, sight) use its real height; the card is drawn this much taller so a

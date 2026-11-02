@@ -12,6 +12,7 @@
  *   f.frame(dt, towardCamera, snap) → bool   true while something still fades
  *   f.changed                             the shown values moved this frame
  *   f.shown(id) → { alpha, holeK, visionK, holes, seen, open, opaque }
+ *                 holes as the camera sees them: [{ x, z, x2, z2, r }] (projectHole)
  *   f.propAlphas() → Map<propId, alpha>   for PropsLayer#setRoofFade
  *
  * A fade is exponential damping that lands inside TIMING.roofFade: frame-rate
@@ -69,12 +70,44 @@ export function hidesFocus(roof, focus, dir) {
 const FOCUS_AT = [0.15, 0.6];
 const _p = { x: 0, y: 0, z: 0 };
 
+/**
+ * The standee card as drawn (render/standees.mjs FIGURE_SCALE, MAX_LEAN): taller
+ * than the rules height, and leaned back about its feet toward the camera's
+ * pitch. Restated here to keep this module free of three.js; the check pins both.
+ */
+export const CARD_SCALE = 1.35;
+export const CARD_MAX_LEAN = (60 * Math.PI) / 180;
+
+/**
+ * A RADIAL hole as the camera sees it: the figure's feet and the top of its
+ * card carried up the view ray (dir, toward the camera) onto the roof's plane
+ * y, so the hole is a capsule over the whole figure on screen rather than a
+ * circle straight above its feet. A hole without a height, or a camera looking
+ * flat, stays a circle.
+ * @returns {{x:number, z:number, x2:number, z2:number, r:number}}
+ */
+export function projectHole(h, y, dir) {
+  const x = Number(h.x), z = Number(h.z), r = Math.max(0, Number(h.r) || 0);
+  const foot = Number(h.footY), head = Number(h.headY);
+  if (!dir || !(dir.y > 0.05) || !Number.isFinite(foot) || !Number.isFinite(head) || !Number.isFinite(y)) return { x, z, x2: x, z2: z, r };
+  const onRoof = (px, py, pz) => { const t = Math.max(0, y - py) / dir.y; return [px + dir.x * t, pz + dir.z * t]; };
+  // the card's top: its drawn height, leaned back away from the camera
+  const lean = Math.min(CARD_MAX_LEAN, Math.asin(Math.min(1, dir.y)));
+  const hl = Math.hypot(dir.x, dir.z);
+  const H = Math.max(0, head - foot) * CARD_SCALE, back = hl > 1e-6 ? (Math.sin(lean) * H) / hl : 0;
+  const [fx, fz] = onRoof(x, foot, z);
+  const [tx, tz] = onRoof(x - dir.x * back, foot + Math.cos(lean) * H, z - dir.z * back);
+  return { x: fx, z: fz, x2: tx, z2: tz, r };
+}
+
 export class RoofFader {
   constructor() {
     /** id → { state, alpha, holeK, visionK, target } */
     this.roofs = new Map();
     this.focus = [];
     this.changed = false;
+    /** The last toward-camera direction (frame), for projectHole. */
+    this.dir = null;
     this._props = new Map();
   }
 
@@ -110,6 +143,12 @@ export class RoofFader {
    */
   frame(dt, dir, snap = false) {
     let moving = false;
+    // a turned camera moves every RADIAL hole (projectHole), so they are drawn again
+    if (dir && (!this.dir || Math.abs(dir.x - this.dir.x) + Math.abs(dir.y - this.dir.y) + Math.abs(dir.z - this.dir.z) > 1e-4)) {
+      this.dir ??= { x: 0, y: 1, z: 0 };
+      this.dir.x = dir.x; this.dir.y = dir.y; this.dir.z = dir.z;
+      for (const r of this.roofs.values()) if (r.holes?.length) { this.changed = true; break; }
+    }
     const k = snap ? 1 : 1 - Math.exp(-ROOF_RATE * Math.max(0, Number(dt) || 0));
     for (const r of this.roofs.values()) {
       const s = r.state;
@@ -142,7 +181,8 @@ export class RoofFader {
     if (!r) return null;
     const s = r.state;
     return {
-      alpha: r.alpha, holeK: r.holeK, visionK: r.visionK, holes: r.holes,
+      alpha: r.alpha, holeK: r.holeK, visionK: r.visionK,
+      holes: (r.holes ?? []).map((h) => projectHole(h, Number(s.baseY), this.dir)),
       seen: Number(s.seen ?? 1), open: Number(s.open ?? 0),
       opaque: r.alpha >= 0.999 && r.holeK <= 0 && r.visionK <= 0 && r.target >= 0.999,
     };

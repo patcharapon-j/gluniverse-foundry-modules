@@ -58,9 +58,9 @@ const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
  * @param {boolean} c.cutaway     the GM's cut-away toggle
  * @param {boolean} c.inside      a viewer's figure is under it, inside its outline
  * @param {boolean} c.below       a viewer's figure is anywhere below it (VISION)
- * @param {{x:number, z:number, r:number}[]} c.holes   viewer figures under it, cells
+ * @param {{x:number, z:number, r:number, footY?:number, headY?:number}[]} c.holes   viewer figures under it, cells
  * @param {boolean} c.visionMap   the view bakes this viewer's sight (a player, or view-as-players)
- * @returns {{alpha:number, holes:{x:number,z:number,r:number}[], vision:boolean}}
+ * @returns {{alpha:number, holes:{x:number,z:number,r:number,footY:number,headY:number}[], vision:boolean}}
  */
 export function roofTarget(roof, { gmView = false, cutaway = false, inside = false, below = false, holes = [], visionMap = false } = {}) {
   if (cutaway && gmView) return { alpha: ROOF_CUTAWAY_ALPHA, holes: [], vision: false };
@@ -74,7 +74,7 @@ export function roofTarget(roof, { gmView = false, cutaway = false, inside = fal
     else if (inside) alpha = open;
   }
   if ((mask & OCC.FADE) && inside) alpha = open;
-  if (mask & OCC.RADIAL) out = (holes ?? []).slice(0, MAX_HOLES).map((h) => ({ x: Number(h.x), z: Number(h.z), r: Math.max(0, Number(h.r)) }));
+  if (mask & OCC.RADIAL) out = (holes ?? []).slice(0, MAX_HOLES).map((h) => ({ x: Number(h.x), z: Number(h.z), r: Math.max(0, Number(h.r)), footY: Number(h.footY), headY: Number(h.headY) }));
   return { alpha, holes: out, vision };
 }
 
@@ -226,7 +226,7 @@ export function readRoofs({ tiles = [], props = [], isGM, asPlayers, cutaway, vi
       return pointInPoly(v.x, v.z, poly);
     });
     const below = viewers.some((v) => v.footY < y - UNDER_MARGIN);
-    const holes = viewers.filter((v) => v.footY < y - UNDER_MARGIN && circleNearPoly(v, v.r, poly)).map((v) => ({ x: v.x, z: v.z, r: v.r }));
+    const holes = viewers.filter((v) => v.footY < y - UNDER_MARGIN && circleNearPoly(v, v.r, poly)).map((v) => ({ x: v.x, z: v.z, r: v.r, footY: v.footY, headY: v.headY }));
     const tgt = roofTarget({ source: "tile", mask: t.mask, occludedAlpha: t.occludedAlpha }, { gmView, cutaway, inside, below, holes, visionMap });
     roofs.push({ id: t.id, source: "tile", poly, baseY: y, topY: y, ...tgt, open: t.occludedAlpha, seen: t.ghost ? 1 : seenOf(t.box) });
   }
