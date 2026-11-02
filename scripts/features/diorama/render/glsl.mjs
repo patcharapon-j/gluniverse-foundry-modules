@@ -29,6 +29,12 @@ float dioNoise(vec2 p) {
 float dioFbm(vec2 p) {
   return dioNoise(p) * 0.6 + dioNoise(p * 2.13 + 7.1) * 0.3 + dioNoise(p * 4.7 - 3.3) * 0.1;
 }
+/** Sunlight through moving water: thin bright lines where two drifts agree. */
+float dioCaustic(vec2 p, float t) {
+  float a = dioNoise(p + vec2(t * 0.35, -t * 0.21));
+  float b = dioNoise(p * 1.7 - vec2(t * 0.27, t * 0.31) + 4.7);
+  return pow(1.0 - abs(a - b), 7.0);
+}
 `;
 
 /** The map art, placed over its px rect (here in cells). */
@@ -41,6 +47,17 @@ vec3 mapAt(vec2 xz) {
   vec2 uv = (xz - uMapRect.xy) / uMapRect.zw;
   if (uHasMap < 0.5 || uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return uGroundColor;
   return texture2D(uMap, uv).rgb;
+}
+/**
+ * The map softened to about two thirds of a cell, from its mip chain: the
+ * colour of a place rather than of one texel. A fixed level in cells, so it
+ * reads the same at every zoom.
+ */
+vec3 mapSoft(vec2 xz) {
+  vec2 uv = (xz - uMapRect.xy) / uMapRect.zw;
+  if (uHasMap < 0.5 || uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return uGroundColor;
+  float pxPerCell = float(textureSize(uMap, 0).x) / max(uMapRect.z, 1e-3);
+  return texture2DLodEXT(uMap, uv, max(log2(max(pxPerCell, 1.0)) - 0.6, 0.0)).rgb;
 }
 `;
 
@@ -63,8 +80,32 @@ uniform vec4 uEffPos[8];
 uniform vec3 uEffCol[8];
 uniform float uEffCount;
 uniform float uAOOn;
+uniform sampler2D uField;
+uniform float uFieldOn;
+uniform vec2 uHeightRange;
 
 bool dioInWorld(vec2 uv) { return uv.x >= 0.0 && uv.y >= 0.0 && uv.x <= 1.0 && uv.y <= 1.0; }
+
+/**
+ * The terrain field (terrain-field.mjs): r occlusion, g signed distance to the
+ * nearest cliff lip, b distance to the bank in water. Neutral without one.
+ */
+vec4 fieldAt(vec2 xz) {
+  vec2 uv = xz / uWorldSize;
+  if (uFieldOn < 0.5 || !dioInWorld(uv)) return vec4(1.0, 1.0, 0.0, 1.0);
+  return texture2D(uField, uv);
+}
+
+/**
+ * Depth grading: low ground a little deeper and cooler, the heights a touch
+ * warmer, so the levels of a tall board read apart at a glance.
+ */
+vec3 heightGrade(vec3 c, float y) {
+  float span = max(uHeightRange.y - uHeightRange.x, 0.75);
+  float hn = clamp((y - uHeightRange.x) / span, 0.0, 1.0);
+  c *= mix(0.86, 1.03, hn);
+  return mix(c * vec3(0.92, 0.97, 1.06), c, 0.35 + 0.65 * hn);
+}
 
 vec3 lightAt(vec2 xz) {
   vec2 uv = xz / uWorldSize;
@@ -94,9 +135,16 @@ float shadowAt(vec3 wp, vec3 n) {
   vec3 p = lp.xyz / lp.w * 0.5 + 0.5;
   if (!dioInWorld(p.xy) || p.z > 1.0) return 1.0;
   if (uShadowMode < 1.5) return shadowTap(p, vec2(0.0));
+  // a golden-angle disc turned per pixel: a smooth penumbra, no grid steps
+  float rot = dioHash(gl_FragCoord.xy) * 6.2831853;
   float s = 0.0;
-  for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) s += shadowTap(p, vec2(float(x), float(y)) * 1.25);
-  return s / 9.0;
+  for (int i = 0; i < 12; i++) {
+    float fi = float(i);
+    float r = sqrt((fi + 0.5) / 12.0) * 2.4;
+    float a = fi * 2.3999632 + rot;
+    s += shadowTap(p, vec2(cos(a), sin(a)) * r);
+  }
+  return s / 12.0;
 }
 
 vec3 effectLight(vec3 wp, vec3 n) {
@@ -120,11 +168,14 @@ vec3 effectLight(vec3 wp, vec3 n) {
  */
 const vec3 SKY_FILL = vec3(0.46, 0.50, 0.58);
 const vec3 SUN_KEY = vec3(0.86, 0.80, 0.70);
+/** Warm light thrown back up by the sunlit ground: faces that look down or out. */
+const vec3 BOUNCE = vec3(0.10, 0.08, 0.055);
 
 /** The sun alone, for a surface with normal n and shadow term sh. */
 vec3 sunlight(vec3 n, float sh) {
   float ndl = max(dot(n, uKeyDir), 0.0);
-  return uAmbient * (SKY_FILL + SUN_KEY * ndl * sh);
+  float down = clamp(1.0 - n.y, 0.0, 1.0);
+  return uAmbient * (SKY_FILL * (0.9 + 0.1 * n.y) + SUN_KEY * ndl * sh + BOUNCE * down);
 }
 
 /** Albedo under the sun + the light bake + effect lights. */
@@ -139,6 +190,12 @@ vec3 shade(vec3 albedo, vec3 wp, vec3 n, float ao, vec2 lightXZ) {
 vec3 finish(vec3 c, float vis) {
   vec3 over = max(c - 0.82, 0.0);
   c = min(c, 0.82) + 0.18 * (1.0 - exp(-over / 0.18));
+  // a light grade: a touch of saturation and contrast about mid-grey
+  float lg = dot(c, vec3(0.299, 0.587, 0.114));
+  c = max(mix(vec3(lg), c, 1.07), 0.0);
+  c = max((c - 0.45) * 1.04 + 0.45, 0.0);
+  // half a level of dither hides banding in the long dark gradients
+  c += (dioHash(gl_FragCoord.xy + 17.0) - 0.5) / 255.0;
   if (vis < 0.75) {
     float l = dot(c, vec3(0.299, 0.587, 0.114));
     c = mix(vec3(l), c, 0.22) * 0.5;
@@ -188,11 +245,27 @@ float gridLine(vec2 xz) {
   return line * (1.0 - smoothstep(0.07, 0.2, dense));
 }
 
+/** terrain-field.mjs LIP_RANGE: the lip distance is stored over ±this. */
+const float LIP_RANGE = 0.5;
+
 void main() {
   float vis = visionAt(vWorld.xz);
   if (vis <= 0.0) discard;
+  vec4 f = fieldAt(vWorld.xz);
   vec3 albedo = mapAt(vWorld.xz) * vTint;
-  vec3 c = shade(albedo, vWorld, normalize(vNormal), vAO, vWorld.xz);
+  // the field's soft horizon occlusion, a little of the voxel corners kept
+  float ao = f.r * mix(1.0, vAO, 0.3);
+  vec3 c = shade(albedo, vWorld, normalize(vNormal), ao, vWorld.xz);
+  // The cliff lip catches the light: a soft bevel a few hundredths of a cell
+  // deep, and one hairline sized in DEVICE px from the field's own derivative.
+  float lip = (f.g - 0.5) * 2.0 * LIP_RANGE;
+  float fw = max(fwidth(lip), 1e-5);
+  if (lip > -fw) {
+    float bevel = 1.0 - smoothstep(0.0, 0.09, lip);
+    float hair = smoothstep(-0.6 * fw, 0.1 * fw, lip) * (1.0 - smoothstep(1.0 * fw, 2.1 * fw, lip));
+    c *= 1.0 + 0.11 * bevel;
+    c += (c * 0.5 + vec3(0.07, 0.064, 0.054)) * hair * 0.7;
+  }
   if (uGrid.a > 0.0) {
     // Ink at the lit surface's own brightness: a dark grid darkens, a light
     // one tints, and neither glows brighter than the ground it lies on.
@@ -200,6 +273,7 @@ void main() {
     vec3 ink = min(uGrid.rgb * (0.25 + lum), vec3(1.0));
     c = mix(c, ink, gridLine(vWorld.xz) * uGrid.a);
   }
+  c = heightGrade(c, vWorld.y);
   gl_FragColor = vec4(finish(c, vis), 1.0);
 }
 `;
@@ -230,6 +304,9 @@ void main() {
 
 export const SIDE_FRAG = HEAD + /* glsl */ `
 uniform float uSidePaint;
+uniform float uTime;
+uniform vec3 uPlinth;
+uniform vec3 uTrim;
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec2 vLip;
@@ -312,22 +389,25 @@ vec3 sideBase(int m, vec3 lipC) {
 }
 
 /*
- * A cliff face continues the paint of the top it hangs from: its colour is the
- * map at the lip (vLip, fixed down the face, so it streaks straight down), and
- * the material only adds relief, its pattern's light and dark at RELIEF
- * strength. uSidePaint is how much of the paint wins over the material's own
- * colour (1 = all paint).
+ * A cliff face continues the paint of the top it hangs from. Its colour is the
+ * map around the lip, softened to about a cell (mapSoft): the colour of the
+ * place. One texel held fixed down the face drew every brushstroke of the
+ * edge as a vertical streak. The material adds the relief, its pattern's
+ * light and dark at RELIEF strength. uSidePaint is how much of the paint wins
+ * over the material's own colour (1 = all paint).
  */
-const float RELIEF = 0.3;
+const float RELIEF = 0.42;
 vec3 paintedSide(int m, vec3 lipC, float a, float d, float y) {
   vec3 pat = sideAlbedo(m, lipC, a, d, y);
   float l = dot(pat, vec3(0.299, 0.587, 0.114));
   float l0 = max(dot(sideBase(m, lipC), vec3(0.299, 0.587, 0.114)), 0.04);
   float relief = clamp(l / l0, 0.35, 1.7);
-  float streak = 0.9 + 0.2 * dioNoise(vec2(a * 13.0, y * 0.8)) + 0.06 * dioNoise(vec2(a * 41.0, y * 2.0));
-  vec3 paint = lipC * streak * mix(1.0, relief, RELIEF);
+  vec3 paint = lipC * mix(1.0, relief, RELIEF);
   return mix(pat, paint, uSidePaint);
 }
+
+/** Cells from the foot of a bank face to the waterline (terrain-mesh bed and surface). */
+const float WATERLINE = 0.325;
 
 void main() {
   float vis = visionAt(vLip);
@@ -335,20 +415,59 @@ void main() {
   vec3 n = normalize(vNormal);
   // the paint just inside the lip, on the top the face hangs from, not the
   // ground beyond its edge
-  vec3 lipC = mapAt(vLip - n.xz * 0.05);
+  vec3 lipSharp = mapAt(vLip - n.xz * 0.05);
+  vec3 lipC = mix(mapSoft(vLip - n.xz * 0.3), lipSharp, 0.18);
   int m = int(vMat + 0.5);
-  vec3 c = paintedSide(m, lipC, vAlong, vDepth, vWorld.y);
-  // darker with depth (a tall face keeps its paint well down), a lit lip
-  c *= mix(1.0, 0.6, smoothstep(0.0, 3.6, vDepth));
-  c *= 1.0 + 0.2 * (1.0 - smoothstep(0.0, 0.05, vDepth));
   float flag = vFlag;
-  if (flag >= 1.5) {
-    c = mix(c, vec3(0.015, 0.012, 0.02), smoothstep(0.05, 1.4, vDepth));
-    flag -= 2.0;
+  bool wet = flag >= 3.5;
+  if (wet) flag -= 4.0;
+  bool pit = flag >= 1.5;
+  if (pit) flag -= 2.0;
+  bool cut = flag < 0.5;      // the board's own edge: the map border, or void
+  // derivatives up front: fwidth inside a branch is undefined
+  float fwD = max(fwidth(vDepth), 1e-5);
+  float fwY = max(fwidth(vWorld.y), 1e-5);
+  float up = vDrop - vDepth;  // cells above the foot
+
+  vec3 c = paintedSide(m, lipC, vAlong, vDepth, vWorld.y);
+  // the top's own paint hangs over the lip in a ragged band: turf on earth,
+  // a cap course on stone, none on planks
+  float band = (m == 0 ? 0.08 : m == 4 ? 0.0 : 0.032) * (0.5 + dioNoise(vec2(vAlong * 7.0, 3.1)));
+  c = mix(lipSharp * 0.95, c, smoothstep(band, band + fwD * 1.5, vDepth));
+  // runs of grime from the lip, deepening toward the foot
+  float drip = dioNoise(vec2(vAlong * 5.0, vWorld.y * 0.7));
+  c *= 1.0 - 0.1 * drip * smoothstep(0.1, 0.9, vDepth);
+  c *= mix(1.0, 0.6, smoothstep(0.0, 3.6, vDepth));
+  if (cut) c *= 0.84;
+  if (pit) c = mix(c, vec3(0.015, 0.012, 0.02), smoothstep(0.05, 1.4, vDepth));
+  if (wet) {
+    float damp = 1.0 - smoothstep(WATERLINE, WATERLINE + 0.16, up);
+    float under = 1.0 - smoothstep(WATERLINE - 0.015, WATERLINE + 0.015, up);
+    c = mix(c, c * vec3(0.64, 0.72, 0.76), damp);
+    c = mix(c, c * vec3(0.52, 0.68, 0.74), under);
   }
   float ao = 1.0;
-  if (flag > 0.5) ao = mix(0.5, 1.0, smoothstep(0.0, 0.32, vDrop - vDepth));
+  if (flag > 0.5) ao = mix(0.4, 1.0, smoothstep(0.0, 0.4, up));
   vec3 lit = shade(c, vWorld, n, ao, vWorld.xz + n.xz * 0.12);
+  if (wet) {
+    // sun thrown off the water, moving on the bank just above the line
+    float near = 1.0 - smoothstep(0.0, 0.24, abs(up - WATERLINE - 0.06));
+    lit += dioCaustic(vec2(vAlong * 2.7, vWorld.y * 5.0), uTime) * near * 0.2 * uAmbient;
+  }
+  // the lip itself: one device-px line of light where the top turns down
+  float hair = 1.0 - smoothstep(fwD * 0.8, fwD * 2.0, vDepth);
+  lit += (lit * 0.4 + vec3(0.055, 0.05, 0.045)) * hair * 0.75;
+  if (cut) {
+    // below the lowest ground, the board's plinth: dark, one trim line on top
+    float yb = uHeightRange.x - 0.05;
+    if (vWorld.y < yb) {
+      float g = smoothstep(yb - 1.0, yb, vWorld.y);
+      lit = uPlinth * (0.6 + 0.5 * g) * (0.8 + 0.35 * max(dot(n, uKeyDir), 0.0)) * uAmbient;
+    }
+    float trim =1.0 - smoothstep(fwY * 0.5, fwY * 1.5, abs(vWorld.y - yb));
+    lit = mix(lit, uTrim * (0.55 + 0.45 * uAmbient), trim * 0.85);
+  }
+  lit = heightGrade(lit, vWorld.y);
   gl_FragColor = vec4(finish(lit, vis), 1.0);
 }
 `;
@@ -365,27 +484,66 @@ void main() {
 }
 `;
 
+/*
+ * Water keeps the map's own painted colour (a teal garden pool stays teal, a
+ * blue harbour blue) and adds what paint cannot do: it moves. The bank
+ * distance from the terrain field sets depth, so shallows show the bed and
+ * open water deepens; the surface normal comes from drifting noise, which
+ * bends the bed, throws sun glints and a little sky, and foam laces the bank
+ * with soft lines rolling in toward it.
+ */
 export const WATER_FRAG = HEAD + /* glsl */ `
 uniform float uTime;
 varying vec3 vWorld;
 varying float vShore;
-const vec3 WATER = vec3(0.20, 0.47, 0.66);
-const vec3 FOAM = vec3(0.86, 0.94, 0.97);
+/** terrain-field.mjs SHORE_RANGE: the bank distance is stored over this. */
+const float SHORE_RANGE = 1.5;
+const vec3 SKY = vec3(0.72, 0.82, 0.92);
+const vec3 FOAM = vec3(0.93, 0.97, 0.99);
+const vec3 GLINT = vec3(1.0, 0.95, 0.84);
+
+/** The small waves' height: three drifting octaves. */
+float waveH(vec2 p, float t) {
+  return dioNoise(p * 1.6 + vec2(t * 0.20, t * 0.12)) * 0.5
+       + dioNoise(p * 3.4 - vec2(t * 0.16, -t * 0.25)) * 0.3
+       + dioNoise(p * 7.3 + vec2(-t * 0.31, t * 0.27)) * 0.2;
+}
+
 void main() {
   float vis = visionAt(vWorld.xz);
   if (vis <= 0.0) discard;
   vec2 p = vWorld.xz;
   float t = uTime;
-  vec2 w = vec2(sin(p.y * 3.1 + t * 1.3) + sin(p.x * 2.3 - t * 0.9),
-                cos(p.x * 2.7 + t * 1.1) + sin(p.y * 1.9 + t * 0.7));
-  vec3 under = mapAt(p + w * 0.012);
-  vec3 col = mix(under * vec3(0.55, 0.72, 0.82), WATER, 0.42);
-  float rip = dioNoise(p * 3.6 + vec2(t * 0.32, -t * 0.22)) * dioNoise(p * 6.5 - vec2(t * 0.18, t * 0.27));
-  col += smoothstep(0.36, 0.55, rip) * 0.2;
-  float foam = smoothstep(0.5, 1.0, vShore) * (0.55 + 0.45 * dioNoise(p * 9.0 + t * 0.4));
-  col = mix(col, FOAM, foam * 0.5);
+  float shore = fieldAt(p).b * SHORE_RANGE;          // cells to the bank
+  // a field-less board falls back to the mesh's own bank flag
+  if (uFieldOn < 0.5) shore = mix(1.0, 0.0, smoothstep(0.5, 1.0, vShore));
+  float deep = smoothstep(0.04, 1.2, shore);
+  float e = 0.035;
+  float h0 = waveH(p, t);
+  vec2 g = vec2(waveH(p + vec2(e, 0.0), t) - h0, waveH(p + vec2(0.0, e), t) - h0) / e;
+  vec3 n = normalize(vec3(-g.x * 0.1, 1.0, -g.y * 0.1));
+
+  vec3 under = mapAt(p + n.xz * (0.06 + 0.1 * deep));
+  vec3 body = mapSoft(p);
+  vec3 col = under * mix(vec3(0.95, 1.0, 1.0), vec3(0.6, 0.76, 0.84), deep);
+  col = mix(col, body * vec3(0.5, 0.7, 0.8), deep * 0.32);
+  col += dioCaustic(p * 2.3, t) * (1.0 - deep * 0.7) * 0.11;
+
   vec3 lit = shade(col, vWorld, vec3(0.0, 1.0, 0.0), 1.0, p);
-  gl_FragColor = vec4(finish(lit, vis), 0.8 + foam * 0.15);
+  float sh = shadowAt(vWorld, vec3(0.0, 1.0, 0.0));
+  vec3 V = normalize(cameraPosition - vWorld);
+  float fres = pow(1.0 - max(dot(n, V), 0.0), 3.0);
+  lit = mix(lit, SKY * uAmbient, fres * 0.4);
+  float spec = pow(max(dot(n, normalize(uKeyDir + V)), 0.0), 160.0) * sh;
+  lit += GLINT * spec * 1.1 * uAmbient;
+
+  float lace = 1.0 - smoothstep(0.02, 0.1 + 0.07 * dioNoise(p * 6.0 + t * 0.3), shore);
+  float roll = smoothstep(0.8, 1.0, sin(shore * 17.0 - t * 1.5) * 0.5 + 0.5);
+  roll *= (1.0 - smoothstep(0.06, 0.55, shore)) * smoothstep(0.3, 0.7, dioNoise(p * 3.7 + vec2(t * 0.12, 0.0)));
+  float foam = max(lace, roll * 0.65);
+  lit = mix(lit, FOAM * uAmbient, foam * 0.7);
+  lit = heightGrade(lit, vWorld.y);
+  gl_FragColor = vec4(finish(lit, vis), mix(0.7, 0.9, deep) + foam * 0.1);
 }
 `;
 
@@ -952,6 +1110,37 @@ void main() {
 }
 `;
 
+/**
+ * The board's shadow on the table it stands on: a soft rounded box under the
+ * plinth, pushed away from the sun. It is what makes the diorama an object.
+ */
+export const TABLE_VERT = /* glsl */ `
+varying vec2 vXZ;
+void main() {
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vXZ = wp.xz;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}
+`;
+
+export const TABLE_FRAG = NOISE + /* glsl */ `
+uniform vec4 uBounds;   // x0, z0, x1, z1 in cells
+uniform vec3 uKeyDir;
+uniform vec3 uColor;
+uniform float uOpacity;
+varying vec2 vXZ;
+void main() {
+  vec2 away = -normalize(uKeyDir.xz + vec2(1e-4));
+  vec2 c = (uBounds.xy + uBounds.zw) * 0.5 + away * 0.9;
+  vec2 halfSize = (uBounds.zw - uBounds.xy) * 0.5;
+  vec2 q = abs(vXZ - c) - halfSize + 0.8;
+  float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.8;
+  float a = (1.0 - smoothstep(-0.6, 3.4, d)) * uOpacity;
+  a = max(a + (dioHash(gl_FragCoord.xy) - 0.5) / 255.0, 0.0);
+  gl_FragColor = vec4(uColor, a);
+}
+`;
+
 /** Depth-only pass for the key light's shadow map. */
 export const DEPTH_VERT = /* glsl */ `
 void main() {
@@ -1017,7 +1206,8 @@ export const PROGRAMS = Object.freeze({
   link: { vertex: LINK_VERT, fragment: LINK_FRAG },
   ribbon: { vertex: RIBBON_VERT, fragment: RIBBON_FRAG },
   backdrop: { vertex: BACKDROP_VERT, fragment: BACKDROP_FRAG },
-  depth: { vertex: DEPTH_VERT, fragment: DEPTH_FRAG },
+  table: { vertex: TABLE_VERT, fragment: TABLE_FRAG },
+  depth:{ vertex: DEPTH_VERT, fragment: DEPTH_FRAG },
   blur: { vertex: POST_VERT, fragment: BLUR_FRAG },
 });
 

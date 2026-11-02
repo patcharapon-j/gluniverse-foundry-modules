@@ -52,6 +52,11 @@ export function createShared() {
     uEffCol: { value: Array.from({ length: MAX_EFFECT_LIGHTS }, () => new THREE.Vector3()) },
     uEffCount: { value: 0 },
     uAOOn: { value: 1 },
+    // The terrain field (terrain-field.mjs), written by the terrain layer on
+    // every terrain change; uHeightRange is the lowest and highest ground (y).
+    uField: { value: blankTexture([255, 255, 0, 255]) },
+    uFieldOn: { value: 0 },
+    uHeightRange: { value: new THREE.Vector2(0, 1) },
     uTime: { value: 0 },
     // The square grid on tops: rgb colour, a strength (0 = off). setOptions({grid}).
     uGrid: { value: new THREE.Vector4(0, 0, 0, 0) },
@@ -88,7 +93,29 @@ export const MATERIALS = {
       name: "dio.side",
       vertexShader: PROGRAMS.side.vertex,
       fragmentShader: PROGRAMS.side.fragment,
-      uniforms: uniformsFor(shared, { uSidePaint: { value: paint } }),
+      uniforms: uniformsFor(shared, {
+        uSidePaint: { value: paint },
+        // the board's plinth and the one trim line along its top
+        uPlinth: { value: vec3(mix(PALETTE.ink2, PALETTE.ink3, 0.7)) },
+        uTrim: { value: vec3(mix(PALETTE.textDim, PALETTE.accent, 0.35)) },
+      }),
+    });
+  },
+
+  /** The board's soft shadow on the table under it (TABLE_FRAG). */
+  table(shared, { color = PALETTE.ink0, opacity = 0.6 } = {}) {
+    return new THREE.ShaderMaterial({
+      name: "dio.table",
+      vertexShader: PROGRAMS.table.vertex,
+      fragmentShader: PROGRAMS.table.fragment,
+      uniforms: {
+        uBounds: { value: new THREE.Vector4(0, 0, 1, 1) },
+        uKeyDir: shared?.uKeyDir ?? { value: new THREE.Vector3(0, 1, 0) },
+        uColor: { value: vec3(color) },
+        uOpacity: { value: opacity },
+      },
+      transparent: true,
+      depthWrite: false,
     });
   },
 
@@ -346,7 +373,7 @@ export const MATERIALS = {
 /** Which program each factory compiles (for the check tool). */
 export const MATERIAL_PROGRAM = Object.freeze({
   top: "top", side: "side", water: "water", wall: "wall", card: "card", solid: "solid",
-  unlit: "unlit", ring: "ring", glass: "glass", footprint: "footprint", reticle: "reticle", link: "link", ribbon: "ribbon", backdrop: "backdrop", depth: "depth", blur: "blur",
+  unlit: "unlit", ring: "ring", glass: "glass", footprint: "footprint", reticle: "reticle", link: "link", ribbon: "ribbon", backdrop: "backdrop", table: "table", depth: "depth", blur: "blur",
 });
 
 /** "#rrggbb" / any CSS colour → THREE.Color, total. */
