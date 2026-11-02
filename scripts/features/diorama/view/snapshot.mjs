@@ -9,13 +9,17 @@
  * Two rules that are easy to break and invisible on the GM's own screen:
  *   • A secret door is a plain wall to a player (an open one is just an open
  *     door, since the gap is visible anyway).
- *   • Standee art for an actor the viewer cannot Observe never uses the actor
- *     portrait: a disguised creature (a mimic's chest token) stays disguised.
+ *   • Standee art is the actor portrait for every viewer, so a bestiary
+ *     creature stands as its full art. The one exception is a disguise: to a
+ *     viewer who cannot Observe the actor, a token whose image was deliberately
+ *     changed from the prototype's (a mimic's chest token) shows that token
+ *     image, so it stays disguised. The GM's `dio.standee` override always wins.
  */
 
 import { SUITE_ID } from "../../../core/const.mjs";
 import { FLAG_STANDEE, WALL_MATERIALS } from "../constants.mjs";
 import { distToQ } from "../terrain/model.mjs";
+import { artMarksOf, standeeMarks } from "../rules/creature.mjs";
 import { canViewMode, barsFor } from "../integrations/bars.mjs";
 import { conditionsFor } from "../integrations/conditions.mjs";
 import { userColor } from "./util.mjs";
@@ -113,18 +117,44 @@ export function readWalls({ isGM, terrain, grid, defaultMaterial }) {
 
 /* ───────────────────────────── tokens ───────────────────────────── */
 
+/** A prototype token image that picks a file per token: not a deliberate choice of this token's. */
+const isWildcard = (src) => /[*?]/.test(String(src ?? ""));
+
 /**
- * Standee art.
- * @param {{standee?:string|null, canObserve:boolean, actorImg?:string|null, tokenImg?:string|null}} o
+ * Is this token disguised? Its own image was deliberately changed from the
+ * actor's prototype token image (and the prototype does not pick a random or
+ * wildcard image, where every token differs anyway).
+ * @param {{tokenImg?:string|null, protoImg?:string|null, protoRandom?:boolean}} o
  */
-export function tokenArtFor({ standee = null, canObserve, actorImg = null, tokenImg = null }) {
+export function isDisguised({ tokenImg = null, protoImg = null, protoRandom = false }) {
+  if (!tokenImg || !protoImg || protoRandom || isWildcard(protoImg)) return false;
+  return String(tokenImg) !== String(protoImg);
+}
+
+/**
+ * Standee art. The GM's override, else the actor portrait (for every viewer),
+ * except a disguised token to a viewer who cannot Observe the actor, which
+ * shows its token image. A missing or mystery-man portrait falls back to the
+ * token image.
+ * @param {{standee?:string|null, canObserve:boolean, actorImg?:string|null, tokenImg?:string|null,
+ *   protoImg?:string|null, protoRandom?:boolean}} o
+ */
+export function tokenArtFor({ standee = null, canObserve = false, actorImg = null, tokenImg = null, protoImg = null, protoRandom = false }) {
   if (standee) return String(standee);
-  if (!canObserve) return tokenImg || DEFAULT_ART;
+  if (!canObserve && isDisguised({ tokenImg, protoImg, protoRandom })) return String(tokenImg);
   if (actorImg && actorImg !== DEFAULT_ART) return actorImg;
   return tokenImg || actorImg || DEFAULT_ART;
 }
 
-function standeeOf(actor) {
+/** The standee art an actor shows an observer, with no token: what the Standee window marks. */
+export function actorArtFor(actor) {
+  return tokenArtFor({
+    standee: standeeOf(actor), canObserve: true, actorImg: actor?.img ?? null,
+    tokenImg: actor?.prototypeToken?.texture?.src ?? null,
+  });
+}
+
+export function standeeOf(actor) {
   try {
     const v = actor?.getFlag?.(SUITE_ID, FLAG_STANDEE);
     return typeof v === "string" && v.trim() ? v.trim() : null;
@@ -147,10 +177,10 @@ function playersObserve(actor) {
  * @param {object} o
  * @param {boolean} o.isGM
  * @param {boolean} o.asPlayers       GM "view as players"
- * @param {{size:number, distance:number}} o.grid
+ * @param {{size:number, distance:number, units?:string}} o.grid
  * @param {string|null} o.hoveredId
  * @param {{current:string|null, next:string|null}} o.turns
- * @param {(actor:object, doc:object) => number} o.heightOf  distance units
+ * @param {(actor:object, doc:object, units?:string) => number} o.heightOf  distance units
  * @param {((doc:object) => number)|null} [o.groundOf]  ground under the footprint, distance units
  * @param {((x:number, y:number) => boolean)|null} o.seen      player-view sight test (asPlayers)
  * @param {string} o.systemId
@@ -174,9 +204,16 @@ export function readTokens({ isGM, asPlayers, grid, hoveredId, turns, heightOf, 
     const center = token.center ?? { x: doc.x + (token.w ?? 0) / 2, y: doc.y + (token.h ?? 0) / 2 };
     const targets = [];
     for (const u of token.targeted ?? []) { const c = userColor(u); if (c) targets.push(c); }
-    const heightDist = heightOf ? heightOf(actor, doc) : 6;
+    const heightDist = heightOf ? heightOf(actor, doc, grid.units) : 6;
     const footQ = distToQ(Number(doc.elevation) || 0, grid.distance);
     const groundD = groundOf ? Number(groundOf(doc)) : NaN;
+    const proto = actor?.prototypeToken ?? null;
+    const art = tokenArtFor({
+      standee: standeeOf(actor), canObserve, actorImg: actor?.img ?? null, tokenImg: doc.texture?.src ?? null,
+      protoImg: proto?.texture?.src ?? null, protoRandom: !!proto?.randomImg,
+    });
+    // The head and feet lines, only on the art they were marked on.
+    const marks = standeeMarks(artMarksOf(actor), art);
     out.push({
       id: token.id,
       x: center.x,
@@ -186,7 +223,9 @@ export function readTokens({ isGM, asPlayers, grid, hoveredId, turns, heightOf, 
       groundQ: Number.isFinite(groundD) ? distToQ(groundD, grid.distance) : footQ,
       heightQ: distToQ(heightDist, grid.distance),
       widthCells: Number(doc.width) || 1,
-      art: tokenArtFor({ standee: standeeOf(actor), canObserve, actorImg: actor?.img ?? null, tokenImg: doc.texture?.src ?? null }),
+      art,
+      artTop: marks ? marks.top : null,
+      artBottom: marks ? marks.bottom : null,
       disposition: doc.disposition,
       visible: true,
       ghost,

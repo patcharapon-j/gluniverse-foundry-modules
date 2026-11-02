@@ -23,6 +23,17 @@
  *   is a teleport with no cost and no wall test (config.mjs L2439), so it does
  *   not spend anybody's movement.
  *
+ *   ON PURPOSE. Two seams run on the client that makes the change, so they
+ *   hold with no GM connected and land in the same write. `preUpdateToken`: an
+ *   elevation set while the token stays on its square (the Token HUD's field,
+ *   the token config, the keyboard's up / down, a macro) re-derives the
+ *   altitude flag (max(0, elevation − ground)), so the figure keeps that height
+ *   and later moves carry it. TokenDocument#_preUpdate has already turned a
+ *   move into the destination's x / y / elevation by then (documents/token.mjs
+ *   #preUpdateMovement), so "stays on its square" is read against `_source`.
+ *   `preCreateToken`: a new token (a drop, a paste) stands on the ground under
+ *   it, or keeps its altitude flag over it.
+ *
  * Imports cleanly under Node: Foundry classes are reached inside functions.
  */
 
@@ -32,7 +43,7 @@ import { FLAG_ALTITUDE } from "../constants.mjs";
 import { qToDist } from "../terrain/model.mjs";
 import { isGroundAction } from "../rules/path.mjs";
 import { PF2E } from "../rules/systems.mjs";
-import { activeContext, anyContext } from "./context.mjs";
+import { activeContext, anyContext, rulesOn } from "./context.mjs";
 
 const EPS = 1e-4;
 const ALTITUDE_PATH = `flags.${SUITE_ID}.${FLAG_ALTITUDE}`;
@@ -263,6 +274,66 @@ export function onUpdateToken(doc, changes, options) {
   if (!plan) return;
   const { _id, ...data } = plan.update;
   doc.update(data, correctionOptions([plan])).catch((e) => err("Diorama: elevation sync failed", e));
+}
+
+/**
+ * Is this update an elevation set on purpose, with the token staying where it
+ * is? Pure. `changes` are the candidate changes (a move's destination already in them).
+ */
+export function isElevationEdit(src, changes) {
+  if (!src || !changes || !("elevation" in changes)) return false;
+  const e = Number(changes.elevation);
+  if (!Number.isFinite(e) || Math.abs(e - (Number(src.elevation) || 0)) <= EPS) return false;
+  for (const k of ["x", "y", "width", "height"]) {
+    if (k in changes && Math.abs((Number(changes[k]) || 0) - (Number(src[k]) || 0)) > EPS) return false;
+  }
+  return true;
+}
+
+/** `preUpdateToken` hook: an elevation set on purpose re-derives the altitude flag in the same update. */
+export function onPreUpdateToken(doc, changes, options) {
+  if (options?.dioSync) return;
+  try {
+    const src = doc?._source;
+    if (!isElevationEdit(src, changes)) return;
+    const fu = globalThis.foundry?.utils;
+    if (!fu || fu.hasProperty(changes, ALTITUDE_PATH) || ALTITUDE_PATH in changes) return; // an explicit altitude wins
+    // Not only where the rules run: the 3D view moves a token at ground + altitude on a flat or
+    // unprepared scene too, so an edit there must land in the flag or the next drag drops it.
+    if (!rulesOn()) return;
+    const ground = groundDistAt(doc.parent, src.x, src.y, src.width ?? 1, src.height ?? 1);
+    const p = planElevation({ elevation: changes.elevation, action: doc.movementAction, ground,
+      altFlag: altitudeFlag(doc), elevationChanged: true });
+    if (p?.writeAltitude) fu.setProperty(changes, ALTITUDE_PATH, p.altitude);
+  } catch (e) {
+    err("Diorama: altitude from an elevation edit failed", e);
+  }
+}
+
+/**
+ * `preCreateToken` hook: a new token stands on the ground under it. With an
+ * altitude flag (a pasted flyer) it keeps that altitude over the new ground;
+ * without one, an elevation above the ground is taken as its altitude.
+ */
+export function onPreCreateToken(doc, _data, options) {
+  if (options?.dioSync) return;
+  try {
+    const live = activeContext(doc?.parent);
+    const src = doc?._source;
+    if (!live || !src) return;
+    const altFlag = altitudeFlag(doc);
+    let action;
+    try { action = doc.movementAction; } catch { action = src.movementAction; }
+    const p = planElevation({ elevation: src.elevation, action, altFlag, elevationChanged: altFlag === undefined,
+      ground: groundFrom(live, src.x, src.y, src.width ?? 1, src.height ?? 1) });
+    if (!p) return;
+    const patch = {};
+    if (p.writeElevation) patch.elevation = p.elevation;
+    if (p.writeAltitude) globalThis.foundry.utils.setProperty(patch, ALTITUDE_PATH, p.altitude);
+    doc.updateSource(patch);
+  } catch (e) {
+    err("Diorama: seating a new token failed", e);
+  }
 }
 
 /**

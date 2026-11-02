@@ -108,6 +108,34 @@ export default async function check(ctx) {
   ctx.ok("token size for other systems", creatureHeightDist({ system: {} }, { width: 2, height: 2 }) === 10
     && creatureHeightDist(null, { width: 0.5, height: 0.5 }) === 2.5 && creatureHeightDist(null, { width: 3, height: 3 }) === 15);
   ctx.ok("fallback is 6", creatureHeightDist(null, null) === 6);
+  const CR = await import(ctx.url("scripts/features/diorama/rules/creature.mjs"));
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  const cm = (v, extra = {}) => ({ flags: { [SUITE_ID]: { dio: { heightCm: v, ...extra } } } });
+  ctx.ok("height in cm converts to feet", near(creatureHeightDist(cm(182.88), null, "ft"), 6) && near(creatureHeightDist(cm(30.48), null, "feet"), 1)
+    && near(creatureHeightDist(cm(30.48), null, "ft."), 1));
+  ctx.ok("height in cm converts to metres", near(creatureHeightDist(cm(180), null, "m"), 1.8)
+    && near(creatureHeightDist(cm(180), null, "metres"), 1.8) && near(creatureHeightDist(cm(180), null, "Meters"), 1.8));
+  ctx.ok("unknown units read as feet", near(creatureHeightDist(cm(182.88), null, "parsecs"), 6) && near(creatureHeightDist(cm(182.88), null), 6));
+  ctx.ok("the token's scene units are used", near(creatureHeightDist(cm(150), { parent: { grid: { units: "m" } }, width: 1, height: 1 }), 1.5));
+  ctx.ok("cm beats the legacy flag, which still reads", creatureHeightDist(cm(91.44, { height: 12 }), null, "ft") === 3
+    && creatureHeightDist(flagged, null, "m") === 12);
+  ctx.ok("size heights follow the scene's units", near(creatureHeightDist({ system: { traits: { size: { value: "med" } } } }, null, "m"), 1.8288)
+    && creatureHeightDist({ system: { traits: { size: { value: "med" } } } }, null, "ft") === 6);
+  ctx.ok("a bad cm value falls through", creatureHeightDist(cm(-5), null, "ft") === 6 && creatureHeightDist(cm("x"), null, "ft") === 6
+    && creatureHeightDist(cm(""), null, "ft") === 6);
+  ctx.ok("autoHeight names the size it came from", CR.autoHeight({ system: { traits: { size: { value: "large" } } } }).size === "lg"
+    && CR.autoHeight(null, { width: 3, height: 3 }).size === "huge" && CR.autoHeight(null, null).ft === 6);
+  const fi = CR.cmToFtIn(182.88);
+  const fi2 = CR.cmToFtIn(182.87);
+  ctx.ok("cm ↔ ft + in round-trips, and inches never read 12", fi.ft === 6 && fi.in === 0 && near(CR.ftInToCm(5, 11), 180.34)
+    && fi2.ft === 6 && fi2.in === 0);
+  const M = CR.standeeMarks;
+  ctx.ok("marks: valid fractions with the head above the feet", JSON.stringify(M({ top: 0.1, bottom: 0.9 })) === JSON.stringify({ top: 0.1, bottom: 0.9 }));
+  ctx.ok("marks: inverted, too thin, out of range or missing are none", M({ top: 0.9, bottom: 0.1 }) === null && M({ top: 0.5, bottom: 0.52 }) === null
+    && M({ top: -0.1, bottom: 0.9 }) === null && M({ top: 0.1, bottom: 1.2 }) === null && M({ top: null, bottom: 0.9 }) === null && M(null) === null);
+  ctx.ok("marks apply only to the art they were made on", M({ top: 0.1, bottom: 0.9, src: "a.webp" }, "a.webp") !== null
+    && M({ top: 0.1, bottom: 0.9, src: "a.webp" }, "chest.webp") === null);
+  ctx.ok("marks are read off the actor flag", JSON.stringify(CR.artMarksOf({ flags: { [SUITE_ID]: { dio: { artMarks: { top: 0.2, bottom: 0.8 } } } } })) === JSON.stringify({ top: 0.2, bottom: 0.8 }));
   const e = eyeQ({ elevation: 10, width: 1, height: 1, actor: null }, grid);
   ctx.ok("eyeQ: elevation + 0.9 x height, in q", Math.abs(e - (10 + 5.4) / 5 * 4) < 1e-9, String(e));
 
@@ -173,6 +201,38 @@ export default async function check(ctx) {
     ctx.ok("sync: a flagless token uses the ground before a repaint",
       plan({ elevation: 20, action: "walk", ground: 0, altFlag: undefined, fallbackAlt: 20 })?.writeAltitude === true
       && plan({ elevation: 20, action: "walk", ground: 0, altFlag: undefined, fallbackAlt: 20 }).writeElevation === false);
+    // A new token (a drop, a paste): no flag reads its elevation as set on purpose, a flag rides the ground.
+    const dropped = plan({ elevation: 0, action: "walk", ground: 10, altFlag: undefined, elevationChanged: true });
+    ctx.ok("create: a token dropped on high ground stands on it", dropped?.elevation === 10 && dropped.writeElevation && !dropped.writeAltitude);
+    const pasted = plan({ elevation: 30, action: "walk", ground: 0, altFlag: 20 });
+    ctx.ok("create: a pasted flyer keeps its altitude over the new ground", pasted?.elevation === 20 && !pasted.writeAltitude);
+  }
+  const edit = mods["movement.mjs"]?.isElevationEdit;
+  ctx.ok("foundry/movement.mjs exports the elevation-edit seams",
+    typeof edit === "function" && typeof mods["movement.mjs"]?.onPreUpdateToken === "function" && typeof mods["movement.mjs"]?.onPreCreateToken === "function");
+  if (edit) {
+    const src = { x: 100, y: 200, width: 1, height: 1, elevation: 10 };
+    ctx.ok("edit: a new elevation on the same square is an edit (the HUD's move carries x and y unchanged)",
+      edit(src, { x: 100, y: 200, width: 1, height: 1, elevation: 25 }) && edit(src, { elevation: 25 }));
+    ctx.ok("edit: a move is not an edit, and an unchanged elevation is nothing",
+      !edit(src, { x: 200, y: 200, elevation: 25 }) && !edit(src, { elevation: 10 }) && !edit(src, { x: 100 }) && !edit(src, null));
+  }
+  const preUpdate = mods["movement.mjs"]?.onPreUpdateToken, ctxMod = mods["context.mjs"];
+  if (preUpdate && ctxMod?.setRulesOn) {
+    // A flat or unprepared scene (no terrain at all) still has the 3D view moving tokens at ground +
+    // altitude, so the HUD's elevation must land in the flag there too, or the next drag drops the token.
+    const had = globalThis.foundry, path = (o, p) => p.split(".").reduce((a, k) => a?.[k], o);
+    const set = (o, p, v) => { const ks = p.split("."); let a = o; for (const k of ks.slice(0, -1)) a = a[k] ??= {}; a[ks.at(-1)] = v; };
+    globalThis.foundry = { utils: { hasProperty: (o, p) => path(o, p) !== undefined, setProperty: set } };
+    const wasOn = ctxMod.rulesOn();
+    ctxMod.setRulesOn(true);
+    const doc = { parent: null, movementAction: "walk", flags: {}, _source: { x: 100, y: 200, width: 1, height: 1, elevation: 0 } };
+    const changes = { elevation: 20 };
+    preUpdate(doc, changes, {});
+    ctxMod.setRulesOn(wasOn);
+    globalThis.foundry = had;
+    ctx.ok("edit: a HUD elevation on a scene with no terrain becomes altitude, so a 3D drag keeps it",
+      path(changes, "flags.gluniverse-foundry-modules.dio.altitude") === 20, JSON.stringify(changes));
   }
   const foot = mods["movement.mjs"]?.footprintTopQ;
   if (foot) {

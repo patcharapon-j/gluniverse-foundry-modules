@@ -14,6 +14,10 @@
  * pips, bars and (out of halo mode) condition icons, which always faces the
  * camera and is never hidden behind terrain.
  *
+ * Card size (cardLayout): the whole art is the creature's height, unless the
+ * token carries art marks (artTop / artBottom), when the head-to-feet span is,
+ * the feet line stands on the base and art above the head draws above it.
+ *
  * Position changes tween with a hop per grid step (TIMING.standeeStep); state
  * changes (outline, lift) follow with frame-rate independent damping.
  *
@@ -110,6 +114,44 @@ export function targetRgb(c) {
     }
   }
   return cssRgb(typeof c === "string" ? c : null, PALETTE.signal);
+}
+
+/**
+ * A TokenState's art marks (artTop / artBottom: the top of the head and the
+ * soles of the feet, fractions 0..1 of the art's height), rounded so they key
+ * a card cache steadily, or null when it has none usable. Pure.
+ * @returns {{top:number, bottom:number}|null}
+ */
+export function cardMarks(t) {
+  if (t?.artTop == null || t?.artBottom == null) return null;
+  const top = Number(t.artTop), bottom = Number(t.artBottom);
+  if (!Number.isFinite(top) || !Number.isFinite(bottom) || top < 0 || bottom > 1 || bottom - top < 0.01) return null;
+  const r = (v) => Math.round(v * 10000) / 10000;
+  return { top: r(top), bottom: r(bottom) };
+}
+
+/**
+ * The card's size (cells) and how far it sinks below the base top. Unmarked
+ * art: the whole card is the figure, FIGURE_SCALE × the creature's height,
+ * narrowed (and so shortened) to 1.25 × its footprint. Marked art: the span
+ * from the head line to the feet line is FIGURE_SCALE × the height, whatever the
+ * width (the GM marked it), and the card drops by its clear border so the feet
+ * line stands on the base. Pure.
+ * @param {{aspect?:number, figure?:number, foot?:number}|null} card  composeCard's result
+ * @param {number} heightCells  @param {number} width  footprint, cells
+ * @returns {{h:number, w:number, foot:number}}
+ */
+export function cardLayout(card, heightCells, width) {
+  const aspect = card?.aspect ?? 0.7;
+  const fig = Number(card?.figure);
+  if (Number.isFinite(fig) && fig > 0) {
+    const h = (heightCells * FIGURE_SCALE) / Math.min(1, fig);
+    return { h, w: h * aspect, foot: Math.max(0, Number(card.foot) || 0) * h };
+  }
+  let h = heightCells * FIGURE_SCALE, w = h * aspect;
+  const maxW = width * 1.25 * FIGURE_SCALE;
+  if (w > maxW) { h *= maxW / w; w = maxW; }
+  return { h, w, foot: 0 };
 }
 
 /**
@@ -354,7 +396,7 @@ export class StandeesLayer {
       look: null, lookTo: null,
       state: null, artUrl: null, cardData: null,
       move: null, pos: null, phase: (hashStr(id) % 1000) / 1000 * Math.PI * 2,
-      plateSig: "", plateCanvas: null, plateTex: null, plateH: 0, cardH: 1, cardW: 1,
+      plateSig: "", plateCanvas: null, plateTex: null, plateH: 0, cardH: 1, cardW: 1, cardFoot: 0,
     };
     this.entries.set(id, e);
     return e;
@@ -397,14 +439,15 @@ export class StandeesLayer {
     e.shadow.scale.set(r * 3.1, 1, r * 3.1);
     e.heightCells = Math.max(0.3, (Number(t.heightQ) || 4) / 4);
     e.state = t;
-    // art
+    // art: one card per url and marks, so two actors sharing art with different marks each get their own
     const url = t.art ? String(t.art) : "";
-    const artKey = `${url}|${url ? "" : t.name ?? ""}`;
+    const marks = url ? cardMarks(t) : null;
+    const artKey = `${url}|${url ? "" : t.name ?? ""}|${marks ? `${marks.top},${marks.bottom}` : ""}`;
     if (artKey !== e.artUrl) {
       this.releaseArt(e.artUrl);
       e.artUrl = artKey;
       e.card.visible = false;
-      this.acquireArt(artKey, url, t.name).then((entry) => {
+      this.acquireArt(artKey, url, t.name, marks).then((entry) => {
         if (e.artUrl !== artKey || !this.entries.has(e.id) || !entry.texture) return;
         e.cardData = entry.card;
         for (const m of [e.card, e.xray, e.aura]) m.material.uniforms.uCard.value = entry.texture;
@@ -478,16 +521,14 @@ export class StandeesLayer {
   }
 
   layoutCard(e) {
-    const aspect = e.cardData?.aspect ?? 0.7;
-    let h = e.heightCells * FIGURE_SCALE, w = h * aspect;
-    const maxW = e.width * 1.25 * FIGURE_SCALE;
-    if (w > maxW) { h *= maxW / w; w = maxW; }
-    e.cardH = h; e.cardW = w;
-    e.card.scale.set(w, h, 1);
+    const l = cardLayout(e.cardData, e.heightCells, e.width);
+    e.cardH = l.h; e.cardW = l.w; e.cardFoot = l.foot;
+    e.card.scale.set(l.w, l.h, 1);
+    e.card.position.y = BASE_H - l.foot;
     if (e.plateH) {
       const pw = PLATE_W;
       e.plate.scale.set(pw, pw * e.plateH, 1);
-      e.plate.position.y = BASE_H + h + 0.1 + (pw * e.plateH) / 2;
+      e.plate.position.y = BASE_H + l.h - l.foot + 0.1 + (pw * e.plateH) / 2;
     }
   }
 
@@ -700,13 +741,13 @@ export class StandeesLayer {
     });
   }
 
-  acquireArt(key, url, name) {
+  acquireArt(key, url, name, marks = null) {
     let a = this.art.get(key);
     if (!a) {
       a = { refs: 0, texture: null, card: null, promise: null };
       a.promise = (url ? loadDrawable(url) : Promise.resolve(null)).then((img) => {
         let card;
-        try { card = composeCard(img, name); } catch { card = composeCard(null, name); }
+        try { card = composeCard(img, name, marks); } catch { card = composeCard(null, name); }
         a.card = card;
         a.texture = new THREE.CanvasTexture(card.canvas);
         a.texture.anisotropy = 4;
@@ -831,7 +872,7 @@ export class StandeesLayer {
       if (!h && e.hoverW > 0) e.body.rotation.z += this._hv.roll * e.hoverW;
       e.plate.quaternion.copy(camera.quaternion);
       // Above the card's leaned top, along the card's own up axis.
-      const along = (e.cardH ?? 1) + 0.1 + (PLATE_W * (e.plateH ?? 0)) / 2;
+      const along = (e.cardH ?? 1) - (e.cardFoot ?? 0) + 0.1 + (PLATE_W * (e.plateH ?? 0)) / 2;
       const back = Math.sin(lean) * along;
       e.plate.position.set(-back * Math.sin(yaw), BASE_H + Math.cos(lean) * along, -back * Math.cos(yaw));
       // the hover is left out of the cast shadow: it would redraw the shadow map every frame
@@ -935,7 +976,7 @@ export class StandeesLayer {
     const c = e.caster;
     const ghost = !!e.state?.ghost;
     const vis = e.root.visible && e.card.visible && !ghost && !!c.material.map;
-    const y = p.y + BASE_H + hop;
+    const y = p.y + BASE_H - (e.cardFoot ?? 0) + hop;
     const sig = vis ? `${p.x.toFixed(3)},${y.toFixed(3)},${p.z.toFixed(3)},${e.cardW.toFixed(3)},${e.cardH.toFixed(3)},${sunYaw.toFixed(3)}` : "";
     if (sig === e.casterSig) return;
     e.casterSig = sig;
@@ -1104,7 +1145,7 @@ export class StandeesLayer {
     if (!e || !e.root.visible) return false;
     const p = e.root.position;
     if (which === "base") { out.set(p.x, p.y + BASE_H + 0.02, p.z); return true; }
-    const lean = this.lean ?? 0, yaw = this.yaw ?? 0, along = (e.cardH ?? 1) * 0.58;
+    const lean = this.lean ?? 0, yaw = this.yaw ?? 0, along = ((e.cardH ?? 1) - (e.cardFoot ?? 0)) * 0.58;
     const back = Math.sin(lean) * along;
     out.set(p.x - back * Math.sin(yaw), p.y + e.body.position.y + BASE_H + Math.cos(lean) * along, p.z - back * Math.cos(yaw));
     return true;
@@ -1113,13 +1154,15 @@ export class StandeesLayer {
   /** World anchor above a token's head (for labels). */
   headOf(id) {
     const e = this.entries.get(id);
-    if (!e) return null;
+    // a standee this viewer is not shown anchors nothing (bubbles, badges, the HUD)
+    if (!e || !e.root.visible) return null;
     // The card's leaned top, which is where it reads on screen.
     const lean = this.lean ?? 0, yaw = this.yaw ?? 0;
-    const back = Math.sin(lean) * e.cardH;
+    const top = e.cardH - (e.cardFoot ?? 0);
+    const back = Math.sin(lean) * top;
     return new THREE.Vector3(
       e.root.position.x - back * Math.sin(yaw),
-      e.root.position.y + BASE_H + Math.cos(lean) * e.cardH,
+      e.root.position.y + BASE_H + Math.cos(lean) * top,
       e.root.position.z - back * Math.cos(yaw),
     );
   }

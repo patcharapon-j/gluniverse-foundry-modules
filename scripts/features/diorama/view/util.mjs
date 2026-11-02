@@ -57,6 +57,22 @@ export function typingTarget(ev) {
   return t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
 }
 
+/**
+ * The keys a suite keybinding is bound to right now, as Foundry prints them
+ * ("Shift + V"), joined with " / "; "" when it is unbound. Read at call time,
+ * so a rebinding shows up the next time a tooltip is built.
+ * @param {string} action  e.g. "dio.toggle"
+ */
+export function keyHint(action) {
+  try {
+    const binds = globalThis.game?.keybindings?.get?.(SUITE_ID, action) ?? [];
+    const human = globalThis.foundry?.applications?.sidebar?.apps?.ControlsConfig?.humanizeBinding;
+    return binds.map((b) => (typeof human === "function" ? human(b) : b.key)).filter(Boolean).join(" / ");
+  } catch {
+    return "";
+  }
+}
+
 /** A Foundry user's colour as a CSS string. */
 export function userColor(u) {
   const c = u?.color;

@@ -20,6 +20,16 @@ export { MAX_EFFECT_LIGHTS };
 /** Foundry lights that shade and flicker at once (LIT uTorch*[8]). */
 export const MAX_TORCHES = 8;
 
+/**
+ * A target line's size in DEVICE pixels, the same at every zoom: the ribbon's
+ * half width (10 px across), the arrowhead's length and half width at its
+ * base, and the dark ink edge both carry. The head is longer than it is wide
+ * (a 41° point) so it reads as pointing one way; an equilateral head reads in
+ * any direction. It is over twice the ribbon's width at its base and still
+ * wider than the ribbon where the ribbon stops under it (LINK_FRAG, 0.6 back).
+ */
+export const LINK_PX = Object.freeze({ half: 5, headLength: 44, headHalf: 17, ink: 1.6 });
+
 /** The fallback ground colour where the map art does not reach. */
 const GROUND_FALLBACK = mix(PALETTE.ink3, PALETTE.textDim, 0.25);
 
@@ -337,9 +347,10 @@ export const MATERIALS = {
   },
 
   /**
-   * A target line (see LINK_VERT). Drawn over the board, never depth tested:
-   * it reads like the 2D canvas's targeting lines. `viewport` is shared by
-   * reference so one write per resize serves every line.
+   * A target line and its arrowhead (see LINK_VERT). Drawn over the board,
+   * never depth tested: it reads like the 2D canvas's targeting lines.
+   * `viewport` is shared by reference so one write per resize serves every
+   * line; uTip / uTipFrom are written by LinksLayer.layout when an end moves.
    */
   link(_shared, { color = "#ffffff", opacity = 1, viewport } = {}) {
     return new THREE.ShaderMaterial({
@@ -348,7 +359,10 @@ export const MATERIALS = {
       fragmentShader: PROGRAMS.link.fragment,
       uniforms: {
         uViewport: viewport ?? { value: new THREE.Vector2(1, 1) },
-        uWidth: { value: 2.4 },
+        uWidth: { value: LINK_PX.half },
+        uHead: { value: new THREE.Vector3(LINK_PX.headLength, LINK_PX.headHalf, LINK_PX.ink) },
+        uTip: { value: new THREE.Vector3() },
+        uTipFrom: { value: new THREE.Vector3(0, 1, 0) },
         uColor: { value: vec3(color) },
         uOpacity: { value: opacity },
         uPhase: { value: 0 },
