@@ -414,71 +414,70 @@ vec2 fogSoftAt(vec2 xz) {
   return texture2D(uFogMap, uv).rg;
 }
 
+/** Cells the fog drifts down the wind per tick of its clock (render/fog.mjs FOG_DRIFT_CELLS). */
+const float FOG_DRIFT_CELLS = 3.0;
+
 /*
- * The fog of war's clouds at layer k (0 the floor of the bank, 1 its top),
- * 0..1. Each layer drifts down the wind at its own pace, so the bank shears a
- * little as it moves and reads as depth rather than as one printed sheet. The
- * drift is a straight translation of non-repeating noise: it never loops, so
- * it never snaps.
+ * The fog of war's density at height k in the bank (0 its floor, 1 its top),
+ * 0..1: long soft streaks laid along the wind and curled a little, each sheet
+ * drifting down the wind at its own pace, so the bank shears as it moves and
+ * reads as depth rather than as one printed sheet. The drift is a straight
+ * translation of non-repeating noise: it never loops, so it never snaps.
  */
-float dioCloudNoise(vec2 xz, float k) {
+float dioFogNoise(vec2 xz, float k) {
   vec2 wind = dot(uEnvClouds.zw, uEnvClouds.zw) > 1e-4 ? normalize(uEnvClouds.zw) : vec2(0.8, 0.6);
-  vec2 p = xz * (0.42 - 0.1 * k) - wind * uFogStyle.y * (1.0 + 0.45 * k) + vec2(k * 5.3, -k * 2.9);
-  return dioFbm(p) * 0.72 + dioNoise(p * 2.9 + 1.3) * 0.28;
+  vec2 q = vec2(dot(xz, wind), dot(xz, vec2(-wind.y, wind.x)));
+  q.x -= uFogStyle.y * FOG_DRIFT_CELLS * (1.0 + 0.45 * k);
+  vec2 p = q * vec2(0.2, 0.42) + vec2(k * 5.3, -k * 2.9);
+  p += (vec2(dioNoise(p * 0.7 + 3.1), dioNoise(p * 0.7 - 1.7)) - 0.5) * 0.9;
+  return dioFbm(p) * 0.75 + dioNoise(p * 2.6 + 1.3) * 0.25;
 }
 
-/**
- * Cloud lit like the sky it sits under: the fill all round, the key on its
- * top, a lightning flash on it. A night cloud is a deep slate, never a hole.
+/*
+ * Fog lit by the sky alone: a cool slate well below the lit board, so what the
+ * party sees stands out of it. No sun on its top (a lit top is what makes a
+ * bank read as a solid), a little more sky caught by the thin wisps above (k)
+ * and the denser streaks (n), and a lightning flash through it. Never black: a
+ * night fog is deep blue, not a hole.
  */
-vec3 dioCloudColor(float k, float n) {
-  vec3 base = mix(vec3(0.80, 0.82, 0.87), uEnvSky, 0.28);
-  float top = clamp(k * 0.55 + (n - 0.35) * 0.9, 0.0, 1.0);
-  vec3 light = uEnvFill * (0.82 + 0.25 * top) + uEnvKey * (0.16 + 0.5 * top) * (1.0 - 0.6 * uEnvOvercast);
-  vec3 c = base * light * uAmbient + uEnvFlash * vec3(0.5, 0.55, 0.66) * (0.4 + 0.6 * top);
-  return max(c, base * vec3(0.085, 0.095, 0.13) * (0.85 + 0.3 * top));
+vec3 dioFogColor(float k, float n) {
+  vec3 tint = mix(vec3(0.30, 0.35, 0.46), uEnvSky, 0.12);
+  vec3 sky = mix(vec3(dot(uEnvFill, DIO_LUMA)), uEnvFill, 0.35);
+  vec3 c = tint * sky * (0.36 + 1.1 * n * n + 0.9 * k) * uAmbient;
+  c += uEnvFlash * vec3(0.3, 0.33, 0.4) * (0.4 + 0.6 * k);
+  return max(c, vec3(0.028, 0.034, 0.055));
 }
 
 /*
  * The fog of war over a lit surface (fogStyle clouds; nothing for the GM or a
- * flat fog). Seen-before ground (vis < 0.75) gets a thin low mist over the
- * desaturation finish() already did. Near what nobody has seen, the cloud
- * creeps over the edge: a ragged shoulder about a third of a cell wide that
- * reaches full cloud exactly where the bank's opaque floor (FOG_FRAG) begins,
- * in the same colour, so the two meet without a seam.
+ * flat fog). Out of sight now, the ground is the map as remembered, dim and
+ * grey under a faint low mist, faded in over the soft map rather than switched
+ * at a line. Near what nobody has seen, shadow creeps in: a ragged falloff
+ * across the soft map's blur that reaches the fog's own colour exactly where
+ * the bank's opaque floor (FOG_FRAG) begins, so the two meet without a seam.
  */
 vec3 dioFogOfWar(vec3 c, float vis, vec3 wp) {
   if (uUseVision < 0.5 || uFogStyle.x < 0.5) return c;
-  float n = dioCloudNoise(wp.xz, 0.0);
-  if (vis < 0.75) {
-    float m = 0.14 + 0.2 * smoothstep(0.3, 0.8, n);
-    c = mix(c, dioCloudColor(0.0, n) * 0.7, m);
-  }
-  float unseen = 1.0 - fogSoftAt(wp.xz).y;
-  float shoulder = smoothstep(0.06 + 0.3 * n, 0.5, unseen);
-  return mix(c, dioCloudColor(0.0, n), shoulder);
+  float n = dioFogNoise(wp.xz, 0.0);
+  vec2 s = fogSoftAt(wp.xz);
+  float away = 1.0 - smoothstep(0.2, 0.8, s.x);
+  vec3 memory = mix(vec3(dot(c, DIO_LUMA)), c, 0.25) * 0.5;
+  memory = mix(memory, dioFogColor(0.0, n), 0.12 + 0.2 * smoothstep(0.3, 0.8, n));
+  c = mix(c, memory, away);
+  float unseen = 1.0 - s.y;
+  float shadow = smoothstep(0.16 * n, 0.5, unseen);
+  return mix(c, dioFogColor(0.0, n), shadow);
 }
 
 /**
  * The last step of every lit surface, with its world position: the
  * atmosphere (fog, haze) under the grade, then the fog of war. Surfaces call
  * this, never finish() directly, so the environment reaches all of them.
+ * Under fog the remembered look is the fog's own (soft), not finish()'s step.
  */
 vec3 dioFinish(vec3 c, float vis, vec3 wp) {
-  return dioFogOfWar(finish(dioAtmosphere(c, wp), vis), vis, wp);
-}
-
-/*
- * Ground nobody has seen, under clouds: painted flat in the bank's own colour
- * instead of discarded. The bank floats above the ground it covers, so at the
- * edge of sight the camera looks under its lifted rim; a discarded surface
- * there is a black hole, a cloud-coloured one reads as more cloud. Flat and
- * unlit, so it tells nothing about what is there. True when it wrote the pixel.
- */
-bool dioUnseenCloud(float vis, vec2 xz) {
-  if (vis > 0.0 || uUseVision < 0.5 || uFogStyle.x < 0.5) return false;
-  gl_FragColor = vec4(dioCloudColor(0.0, dioCloudNoise(xz, 0.0)), 1.0);
-  return true;
+  bool fogged = uUseVision > 0.5 && uFogStyle.x > 0.5;
+  return dioFogOfWar(finish(dioAtmosphere(c, wp), fogged ? 1.0 : vis), vis, wp);
 }
 
 /**
@@ -492,6 +491,34 @@ vec3 dioFinishFigure(vec3 c, vec3 wp) {
 
 /** Noise, the map and the lit chunk: what a lit program outside this file includes. */
 export const HEAD = NOISE + MAP + LIT;
+
+/*
+ * The ground's own surfaces (tops, cliff faces, water) under fog. Each of these
+ * programs writes its depth itself, starting every fragment at its own depth
+ * (dioGroundDepth). Ground nobody has seen is painted flat in the bank floor's
+ * colour, unlit, so it tells nothing about what is there. Beyond the first
+ * square or so past the edge of sight (the soft map's seen value under
+ * FOG_SOLID) it is a BACKDROP at the far plane: it hides nothing, so an unseen
+ * tower casts no silhouette over what the party can see and its shape cannot be
+ * read off its outline, and it leaves no hole (where the camera looks under the
+ * bank's rim it finds more fog, not the clear colour). Right at the edge it
+ * keeps its depth, so the pillar beside the party still stands there as a dark
+ * shape rather than as two lit faces with nothing on top. True when it wrote
+ * the pixel. Only these programs include it: a program that assigns
+ * gl_FragDepth anywhere must assign it on every path.
+ */
+const UNSEEN = /* glsl */ `
+const float FOG_SOLID = 0.12;
+/** The bank height whose colour unseen ground takes: the floor with its wisps over it, on average. */
+const float FOG_PAINT = 0.3;
+void dioGroundDepth() { gl_FragDepthEXT = gl_FragCoord.z; }
+bool dioUnseenFog(float vis, vec2 xz) {
+  if (vis > 0.0 || uUseVision < 0.5 || uFogStyle.x < 0.5) return false;
+  gl_FragColor = vec4(dioFogColor(FOG_PAINT, dioFogNoise(xz, 0.0)), 1.0);
+  if (fogSoftAt(xz).y < FOG_SOLID) gl_FragDepthEXT = 1.0;
+  return true;
+}
+`;
 
 /* ---------------------------------------------------------------- terrain */
 
@@ -512,7 +539,7 @@ void main() {
 }
 `;
 
-export const TOP_FRAG = HEAD + /* glsl */ `
+export const TOP_FRAG = HEAD + UNSEEN + /* glsl */ `
 uniform vec4 uGrid;   // rgb = line colour, a = strength (0 = grid off)
 varying vec3 vWorld;
 varying vec3 vNormal;
@@ -536,8 +563,9 @@ float gridLine(vec2 xz) {
 const float LIP_RANGE = 0.5;
 
 void main() {
+  dioGroundDepth();
   float vis = visionAt(vWorld.xz);
-  if (dioUnseenCloud(vis, vWorld.xz)) return;
+  if (dioUnseenFog(vis, vWorld.xz)) return;
   if (vis <= 0.0) discard;
   vec4 f = fieldAt(vWorld.xz);
   vec3 albedo = mapAt(vWorld.xz) * vTint;
@@ -590,7 +618,7 @@ void main() {
 }
 `;
 
-export const SIDE_FRAG = HEAD + /* glsl */ `
+export const SIDE_FRAG = HEAD + UNSEEN + /* glsl */ `
 uniform float uSidePaint;
 uniform float uTime;
 uniform vec3 uPlinth;
@@ -728,13 +756,14 @@ vec3 fallSheet(vec3 lipC, float a, float d, float up, bool intoWater) {
 }
 
 void main() {
+  dioGroundDepth();
   float vis = visionAt(vLip);
   // Under cloud (fogStyle clouds), the board keeps its plinth where nobody has
   // seen: it is dark, unpainted and the same everywhere, so it tells nothing,
   // and the bank sits on it instead of floating over the room.
   bool plinthOnly = vis <= 0.0 && uFogStyle.x > 0.5 && mod(vFlag + 0.25, 2.0) < 1.0
     && vWorld.y < uHeightRange.x - 0.05;
-  if (!plinthOnly && dioUnseenCloud(vis, vLip)) return;
+  if (!plinthOnly && dioUnseenFog(vis, vLip)) return;
   if (vis <= 0.0 && !plinthOnly) discard;
   vec3 n = normalize(vNormal);
   if (plinthOnly) {
@@ -840,7 +869,7 @@ void main() {
  * bends the bed, throws sun glints and a little sky, and foam laces the bank
  * with soft lines rolling in toward it.
  */
-export const WATER_FRAG = HEAD + /* glsl */ `
+export const WATER_FRAG = HEAD + UNSEEN + /* glsl */ `
 uniform float uTime;
 varying vec3 vWorld;
 varying float vShore;
@@ -882,8 +911,9 @@ float ripples(vec2 p, float t, float amount) {
  * Simple water: the map's own colour, flat and tinted, a still foam line.
  */
 void main() {
+  dioGroundDepth();
   float vis = visionAt(vWorld.xz);
-  if (dioUnseenCloud(vis, vWorld.xz)) return;
+  if (dioUnseenFog(vis, vWorld.xz)) return;
   if (vis <= 0.0) discard;
   vec2 p = vWorld.xz;
   float t = uTime;
@@ -1862,17 +1892,18 @@ void main() {
 /* ---------------------------------------------------------------- fog of war */
 
 /*
- * The fog of war as a bank of cloud (render/fog.mjs): FOG_LAYERS sheets over the
- * board, one geometry, drawn floor first. The sheets drape over the ground: each
- * vertex sits above the highest top around it (the atmosphere layer's height
- * texture), so a hill under cloud is a cloud-covered hill and a pit is a pit
- * filled with cloud. The floor is OPAQUE on every point the vision bake says
- * nobody has seen (seen ≤ 0.5, the same threshold visionAt() discards by): what
- * is under it is never drawn and never shows through, and a curtain hangs from
- * its edge down the board's side to the plinth, so the side cannot be seen
- * through either. The sheets above it are cloud tops: thinner, lighter,
- * pulled back from the edge of sight so the bank has a soft shoulder, each
- * drifting at its own pace.
+ * The fog of war as a bank of dark mist (render/fog.mjs): FOG_LAYERS sheets over
+ * the board, one geometry, drawn floor first. The sheets lie along the ground
+ * blurred over a few squares (the atmosphere layer's height texture), so the mist
+ * follows the terraces and keeps no shape of anything standing in it. What is
+ * under it was never drawn as itself: unseen ground is a flat backdrop at the far
+ * plane (UNSEEN), unseen props and walls are discarded. The floor is a dark matte
+ * slate lit by the sky alone, dense over every point nobody has seen (seen ≤ 0.5,
+ * the threshold visionAt() uses), thinning where it turns edge-on to the camera
+ * and fading out as a veil over the edge of sight; a curtain hangs from it down
+ * the board's side to the plinth. The sheets above it are wisps: thin,
+ * translucent streaks along the wind, each drifting at its own pace, reaching a
+ * little past the edge of sight so the reveal is soft.
  */
 export const FOG_LAYERS = 4;
 export const FOG_VERT = GROUND_AT + /* glsl */ `
@@ -1884,16 +1915,21 @@ uniform float uFogCell;   // cells between two vertices of the bank
 varying vec3 vWorld;
 varying float vLayer;
 varying float vSkirt;
-/** The highest ground anywhere around a vertex, so the bank never dips into a top it covers. */
+/*
+ * The ground around a vertex, blurred over about four squares: the bank lies
+ * along the lie of the land, a terrace's worth of mist on a terrace, and never
+ * stands up into the shape of a single tower. It does not have to cover what it
+ * lies over: unseen ground is a backdrop that hides nothing (UNSEEN).
+ */
 float fogGround(vec2 xz) {
-  float h = uHeightRange.x;
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
-      vec2 o = (vec2(float(i), float(j)) - 1.5) * 0.5 * uFogCell;
-      h = max(h, groundAt(xz + o));
+  float h = 0.0;
+  for (int i = 0; i < 8; i++) {
+    for (int j = 0; j < 8; j++) {
+      vec2 o = (vec2(float(i), float(j)) - 3.5) * 0.5 * uFogCell;
+      h += max(groundAt(xz + o), uHeightRange.x);
     }
   }
-  return h;
+  return h / 64.0;
 }
 void main() {
   float top = fogGround(position.xz) + uFogLevel.x + layer * uFogLevel.y;
@@ -1906,32 +1942,46 @@ void main() {
 `;
 
 export const FOG_FRAG = HEAD + /* glsl */ `
+/** The floor's opacity where it is edge-on to the camera (1 facing it). */
+const float FOG_FLANK = 0.55;
 uniform vec2 uFogLevel;
 uniform float uFogLayers;
 varying vec3 vWorld;
 varying float vLayer;
 varying float vSkirt;
 void main() {
+  // derivatives up front: fwidth inside a branch is undefined
+  vec3 nrm = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
   if (uUseVision < 0.5 || uFogStyle.x < 0.5) discard;
   vec2 uv = vWorld.xz / uWorldSize;
   if (!dioInWorld(uv)) discard;
   vec4 v = texture2D(uVisionMap, uv);
   float seen = max(v.r, v.g);
   float k = vLayer / max(uFogLayers - 1.0, 1.0);
-  float n = dioCloudNoise(vWorld.xz, k);
+  float n = dioFogNoise(vWorld.xz, k);
+  float unseen = 1.0 - fogSoftAt(vWorld.xz).y;
+  // where the bank turns edge-on to the camera (the flank of a mound of mist):
+  // a fog has no hard outline, so there it thins
+  vec3 fwd = vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]);
+  float flank = 1.0 - smoothstep(0.08, 0.7, abs(dot(nrm, fwd)));
   float a;
   if (vLayer < 0.5) {
-    // the floor: exactly 1 wherever seen <= 0.5
-    a = 1.0 - smoothstep(0.5, 0.8, seen);
+    // the floor: opaque wherever seen <= 0.5 and it faces the camera, thinning on
+    // its flanks to FOG_FLANK, then fading out over the soft map's blur, so its
+    // rim is a fading veil and never a cut edge
+    float veil = 0.6 * smoothstep(0.04, 0.5, unseen + 0.2 * (n - 0.5));
+    a = max((1.0 - smoothstep(0.5, 0.8, seen)) * (1.0 - (1.0 - FOG_FLANK) * flank), veil);
   } else {
-    float unseen = 1.0 - fogSoftAt(vWorld.xz).y;
-    float body = unseen * (0.38 + 0.8 * n) - 0.16 * k;
-    // cloud tops thin out over the board's edge (the floor and its curtain close it)
+    // wisps: densest over the unseen, reaching a little past the edge of sight, never solid
+    float reach = smoothstep(0.04, 0.55, unseen + 0.25 * (n - 0.5));
+    float wisp = smoothstep(0.28 + 0.1 * k, 0.75, n);
+    // they thin out over the board's edge (the floor and its curtain close it)
     float rim = min(min(vWorld.x, uWorldSize.x - vWorld.x), min(vWorld.z, uWorldSize.y - vWorld.z));
-    a = smoothstep(0.44, 0.66, body) * mix(0.9, 0.6, k) * smoothstep(0.0, 0.5 + 0.9 * n, rim);
+    a = reach * wisp * mix(0.6, 0.34, k) * smoothstep(0.0, 0.5 + 0.9 * n, rim) * (1.0 - 0.6 * flank);
   }
   if (a < 0.004) discard;
-  vec3 col = dioCloudColor(k, n) * (0.93 + 0.12 * k);
+  // the wisps a shade lighter than the floor they drift over, so they read as moving air
+  vec3 col = dioFogColor(k, n) * (1.0 + 0.5 * k);
   // the curtain down the board's side darkens towards the plinth
   col *= 1.0 - 0.3 * vSkirt;
   col += (dioHash(gl_FragCoord.xy + vLayer * 7.0) - 0.5) / 255.0;

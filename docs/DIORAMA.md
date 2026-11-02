@@ -171,18 +171,25 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
 - Visible: full colour. Explored, not visible: desaturated and dim, no tokens.
   Unexplored: not drawn. GM: everything, hidden tokens ghosted (40%, hatched);
   a "view as players" toggle applies a player's view.
-- **Fog of war as cloud** (`dio.fogStyle`, client; Low quality keeps the flat
-  look). Unexplored ground lies under a bank of slowly drifting cloud
-  (`render/fog.mjs`): sheets draped over the highest ground around each point,
-  the floor sheet **opaque** wherever the bake says nobody has seen (the same
-  0.5 threshold the ground discards by) with a curtain down the board's side, so
-  nothing under it is drawn or shows through. Cloud tops thin out towards the
-  edge of sight and ground near it fades into the same cloud colour, so the
-  bank has a soft shoulder; explored ground gets a thin low mist over its
-  desaturation. Clouds are lit by the scene's sky and time of day. Figures are
-  never fogged. The drift is a straight translation of the noise (one cloud per
-  `TIMING.fogDrift`), so it never repeats and never wraps. With no vision bake
-  (the GM) there are no clouds at all.
+- **Fog of war as dark mist** (`dio.fogStyle` "clouds", client; Low quality
+  keeps the flat look). Unexplored ground lies under a bank of slowly drifting
+  mist (`render/fog.mjs`): a cool dark slate lit by the sky alone, well below
+  the lit board so what the party sees stands out. It lies along the ground
+  blurred over a few squares, so it follows the terraces and keeps no shape of
+  anything standing in it; its floor is dense wherever the bake says nobody has
+  seen, thins where it turns edge-on to the camera and fades out as a veil over
+  the edge of sight, and translucent wisps streak above it down the wind.
+  **Unseen ground is never drawn as itself**: tops, cliff faces and water there
+  are painted flat in the fog's colour, and beyond the first square past the
+  edge of sight they are a backdrop at the far plane, so an unseen tower hides
+  nothing and casts no silhouette to read its shape from, and the camera never
+  finds a hole under the bank's rim. Unseen props and walls are discarded. Lit
+  ground falls into the fog's shadow over most of a square at the edge of sight,
+  and ground out of sight now fades to its remembered look (dim, grey, a faint
+  mist) rather than switching at a line. Figures are never fogged. The drift is
+  a straight translation of the noise (`FOG_DRIFT_CELLS` per `TIMING.fogDrift`),
+  so it never repeats and never wraps. With no vision bake (the GM) there is no
+  fog at all.
 - **Living light** (`dio.lightFx`, client; off at Low). The bake already holds
   every light; living light only shapes it (`render/torches.mjs`). Lights flicker
   by their Foundry animation: `torch`/`flame`/`fire` (and candle, campfire,
@@ -234,7 +241,7 @@ The view renders **on demand**: a frame only when the camera, a token, a light o
 an effect changes; `Budget.claimMotion` is held only while something animates.
 The WebGL context is registered with `Surfaces`. `SHED_ORDER` (cheapest loss
 first): tilt-shift, atmosphere, embers, weather particles, the fog of war's drift
-(the clouds hold still and stay opaque), ambient occlusion, soft shadows, torch
+(the mist holds still), ambient occlusion, soft shadows, torch
 shadows and torch-side shading, prop detail, shadows, torch flicker (lights burn
 steady, flames hold still), water animation, landing dust, standee sway (and a
 flyer's hover), marker motion (the

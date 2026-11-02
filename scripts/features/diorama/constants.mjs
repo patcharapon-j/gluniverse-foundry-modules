@@ -101,7 +101,7 @@ export const SHED_ORDER = Object.freeze([
   "atmosphere",       // fog, haze, light shafts, cloud shadows
   "embers",           // the sparks rising off fires (render/torches.mjs)
   "weatherParticles", // full → reduced particle counts first, then none
-  "fogDrift",         // the fog of war's clouds hold still (they stay opaque)
+  "fogDrift",         // the fog of war's mist holds still
   "ambientOcclusion",
   "softShadows",
   "torchShadows",     // figures' shadows away from torches, torch-side shading
@@ -147,7 +147,7 @@ export const TIMING = Object.freeze({
   torchFade: 450,    // a light joining or leaving the few lights that shade figures
   flameLick: 620,    // a flame's tongues rising through its own height
   emberRise: 2400,   // one spark's life, from the fire to gone
-  fogDrift: 40000,   // the fog of war's clouds drifting one cloud (about 2.4 cells) across
+  fogDrift: 40000,   // the fog of war's mist drifting FOG_DRIFT_CELLS (3) cells downwind
   areaDrift: 7200,   // one glow band rising through a spell area, floor to crown
 });
 

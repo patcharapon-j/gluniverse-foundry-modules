@@ -1,18 +1,20 @@
 /**
- * Diorama — the fog of war as cloud. Pure (no game/canvas/foundry): it draws
- * from the vision bake the renderer is handed (setLighting `vision`).
+ * Diorama — the fog of war as dark drifting mist. Pure (no game/canvas/foundry):
+ * it draws from the vision bake the renderer is handed (setLighting `vision`).
  *
  * Two parts, one look (glsl.mjs FOG_FRAG and LIT dioFogOfWar):
  *   • The bank: FOG_LAYERS sheets over the board, draped over the highest
- *     ground around each vertex (the atmosphere layer's height texture), the
- *     floor with a curtain down the board's sides to the plinth. The floor is
- *     opaque on every point the bake says nobody has seen (the same threshold
- *     the surfaces discard by), so nothing under it is drawn or shows through;
- *     the sheets above are cloud tops, thinner and pulled back from the edge.
- *   • The shoulder: every lit surface near unseen ground fades into the same
- *     cloud colour, reaching it exactly where the floor begins, and seen-before
- *     ground gets a thin low mist. Both read the SOFT map built here: the vision
- *     bake drawn down to FOG_PX per cell and blurred about half a cell.
+ *     ground around each vertex (the atmosphere layer's height texture) and
+ *     slumping away from tall tops, the floor with a curtain down the board's
+ *     sides to the plinth. The floor is a dark slate, opaque on every point the
+ *     bake says nobody has seen (the same threshold the surfaces discard by), so
+ *     nothing under it is drawn or shows through; the sheets above are thin
+ *     translucent wisps along the wind that reach a little past the edge.
+ *   • The reveal: every lit surface near unseen ground falls into shadow in the
+ *     fog's colour, reaching it exactly where the floor begins, and ground out of
+ *     sight now fades to its remembered look under a faint mist. Both read the
+ *     SOFT map built here: the vision bake drawn down to FOG_PX per cell and
+ *     blurred over most of a cell.
  *
  * The GM (no vision bake) and the flat style draw none of it: the uniforms say
  * off, the sheets discard, and the surfaces look exactly as before.
@@ -34,13 +36,13 @@ import { TIMING } from "../constants.mjs";
 export { FOG_LAYERS };
 /** The soft map's resolution, px per cell. */
 export const FOG_PX = 6;
-/** Its blur, in cells (about half a cell either side of the edge of sight). */
-export const FOG_BLUR = 0.42;
+/** Its blur, in cells: the width of the shadow the unseen casts into sight. */
+export const FOG_BLUR = 0.75;
 /** The floor of the bank over the highest ground it covers, and the step between sheets (cells). */
 export const FOG_FLOOR = 0.06;
-export const FOG_STEP = 0.22;
-/** Cloud features per cell in the floor's noise (FOG_FRAG dioCloudNoise: xz × 0.42). */
-const NOISE_PER_CELL = 0.42;
+export const FOG_STEP = 0.26;
+/** Cells the fog drifts down the wind per TIMING.fogDrift (glsl.mjs dioFogNoise FOG_DRIFT_CELLS). */
+export const FOG_DRIFT_CELLS = 3;
 const MAX_SIDE = 2048;
 
 /** Most vertices along a side of one sheet (a big map gets coarser cells, not more vertices). */
@@ -196,16 +198,16 @@ export class FogLayer {
     this.mesh.visible = on;
     const s = this.shared.uFogStyle.value;
     s.x = on ? 1 : 0;
-    // the clock is in cloud features: one (1 / NOISE_PER_CELL cells) drifts by per TIMING.fogDrift
+    // the clock ticks once per TIMING.fogDrift; the shader moves FOG_DRIFT_CELLS per tick
     const drift = this.animated(fx);
     if (drift) this._t += (dt * 1000) / TIMING.fogDrift;
     s.y = this._t;
     return drift;
   }
 
-  /** Cells the floor's clouds drift per second (for the docs and the check). */
+  /** Cells the floor's mist drifts per second (for the docs and the check). */
   static cellsPerSecond() {
-    return 1000 / TIMING.fogDrift / NOISE_PER_CELL;
+    return (FOG_DRIFT_CELLS * 1000) / TIMING.fogDrift;
   }
 
   dispose() {

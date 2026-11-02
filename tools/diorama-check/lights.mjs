@@ -184,26 +184,49 @@ export default async function check(ctx) {
   ctx.ok("figure shadows only on ground seen now, only where the light reaches", /if \(visionAt\(vWorld\.xz\) < 0\.75\) discard;/.test(G.TORCH_SHADOW_FRAG) && /lightAt\(vWorld\.xz\)/.test(G.TORCH_SHADOW_FRAG));
 
   // ── the fog of war ──
-  // The floor's alpha, as FOG_FRAG writes it, must be exactly 1 everywhere the
-  // surfaces discard (visionAt: seen only when r or g > 0.5).
-  const floor = /if \(vLayer < 0\.5\) \{[\s\S]*?a = 1\.0 - smoothstep\(0\.5, 0\.8, seen\);/.test(G.FOG_FRAG);
-  const seenExpr = /float seen = max\(v\.r, v\.g\);/.test(G.FOG_FRAG);
+  // Where nobody has seen, the ground is discarded, or (mist on) painted flat in
+  // the bank's colour by dioUnseenFog: never the map, its light or its shading,
+  // so neither its colour nor its shape reaches a player. Deep in the unseen it
+  // is a backdrop at the far plane (hides nothing, so no holes); near the edge it
+  // keeps its depth, so what borders the party reads as a fog-coloured shape.
   const discardRule = /if \(v\.r > 0\.5\) return 1\.0;\s*if \(v\.g > 0\.5\) return 0\.5;\s*return 0\.0;/.test(LITSRC);
-  const opaque = Array.from({ length: 51 }, (_, i) => i / 100).every((s) => 1 - smoothstep(0.5, 0.8, s) === 1);
-  ctx.ok("the fog floor is opaque on every never-seen point (the same threshold the ground discards by)", floor && seenExpr && discardRule && opaque);
-  // Where nobody has seen, the ground is discarded, or under clouds painted flat
-  // in the bank's colour (dioUnseenCloud), never with the map or its light.
-  const unseenCloud = /bool dioUnseenCloud\(float vis, vec2 xz\) \{\s*if \(vis > 0\.0 \|\| uUseVision < 0\.5 \|\| uFogStyle\.x < 0\.5\) return false;\s*gl_FragColor = vec4\(dioCloudColor\(0\.0, dioCloudNoise\(xz, 0\.0\)\), 1\.0\);\s*return true;\s*\}/.test(LITSRC);
-  ctx.ok("the ground is still not drawn where nobody has seen (flat cloud or nothing)",
-    unseenCloud && /float vis = visionAt\(vWorld\.xz\);\s*if \(dioUnseenCloud\(vis, vWorld\.xz\)\) return;\s*if \(vis <= 0\.0\) discard;/.test(G.TOP_FRAG));
-  ctx.ok("the GM (no vision bake) and the flat style get no clouds",
+  const unseenBody = /bool dioUnseenFog\(float vis, vec2 xz\) \{\s*if \(vis > 0\.0 \|\| uUseVision < 0\.5 \|\| uFogStyle\.x < 0\.5\) return false;\s*gl_FragColor = vec4\(dioFogColor\(FOG_PAINT, dioFogNoise\(xz, 0\.0\)\), 1\.0\);\s*if \(fogSoftAt\(xz\)\.y < FOG_SOLID\) gl_FragDepthEXT = 1\.0;\s*return true;\s*\}/;
+  const groundFrags = [["TOP", G.TOP_FRAG], ["SIDE", G.SIDE_FRAG], ["WATER", G.WATER_FRAG]];
+  const paintsFlat = groundFrags.every(([, s]) => unseenBody.test(s));
+  ctx.ok("unseen ground is painted flat in the mist's colour (no map, no light), a backdrop away from the edge",
+    discardRule && paintsFlat && /const float FOG_SOLID = 0\.\d+;/.test(G.TOP_FRAG),
+    groundFrags.filter(([, s]) => !unseenBody.test(s)).map(([k]) => k).join(", "));
+  ctx.ok("the ground is still not drawn where nobody has seen (flat mist or nothing)",
+    /float vis = visionAt\(vWorld\.xz\);\s*if \(dioUnseenFog\(vis, vWorld\.xz\)\) return;\s*if \(vis <= 0\.0\) discard;/.test(G.TOP_FRAG)
+    && /float vis = visionAt\(vWorld\.xz\);\s*if \(dioUnseenFog\(vis, vWorld\.xz\)\) return;\s*if \(vis <= 0\.0\) discard;/.test(G.WATER_FRAG)
+    && /if \(!plinthOnly && dioUnseenFog\(vis, vLip\)\) return;/.test(G.SIDE_FRAG));
+  // A program that writes gl_FragDepth anywhere must write it on every path, or
+  // the paths that do not are undefined depth. So each ground program writes its
+  // own depth first, and nothing else in the shared head touches it.
+  const depthFirst = groundFrags.every(([, s]) => /void main\(\) \{\s*dioGroundDepth\(\);/.test(s));
+  ctx.ok("every program that pushes unseen ground back writes its depth on every path, and only those do",
+    depthFirst && !/gl_FragDepthEXT/.test(G.HEAD) && !/gl_FragDepthEXT/.test(G.FOG_FRAG) && !/gl_FragDepthEXT/.test(G.CARD_FRAG));
+  // The floor is dense over every never-seen point (even thinned on a flank),
+  // and clears where the party has seen.
+  const floor = /if \(vLayer < 0\.5\) \{[\s\S]*?a = max\(\(1\.0 - smoothstep\(0\.5, 0\.8, seen\)\) \* \(1\.0 - \(1\.0 - FOG_FLANK\) \* flank\), veil\);/.test(G.FOG_FRAG);
+  const flankMatch = /const float FOG_FLANK = ([\d.]+);/.exec(G.FOG_FRAG);
+  const flankK = flankMatch ? Number(flankMatch[1]) : 0;
+  const dense = Array.from({ length: 51 }, (_, i) => i / 100).every((s) => (1 - smoothstep(0.5, 0.8, s)) * flankK >= 0.5);
+  ctx.ok("the fog floor is dense on every never-seen point and clear where seen",
+    floor && /float seen = max\(v\.r, v\.g\);/.test(G.FOG_FRAG) && dense && 1 - smoothstep(0.5, 0.8, 1) === 0, `flank ${flankK}`);
+  ctx.ok("the GM (no vision bake) and the flat style get no mist",
     /if \(uUseVision < 0\.5 \|\| uFogStyle\.x < 0\.5\) discard;/.test(G.FOG_FRAG) && /if \(uUseVision < 0\.5 \|\| uFogStyle\.x < 0\.5\) return c;/.test(LITSRC));
-  ctx.ok("the shoulder reaches full cloud where the floor begins", /smoothstep\(0\.06 \+ 0\.3 \* n, 0\.5, unseen\)/.test(LITSRC) && /return mix\(c, dioCloudColor\(0\.0, n\), shoulder\)/.test(LITSRC)
-    && /dioCloudColor\(k, n\)/.test(G.FOG_FRAG));
-  ctx.ok("the fog's drift is a straight translation (non-repeating, no wrap)", /- wind \* uFogStyle\.y \*/.test(LITSRC) && !/fract\([^)]*uFogStyle/.test(LITSRC) && !/mod\([^)]*uFogStyle/.test(LITSRC));
-  ctx.ok("the bank drapes over the highest ground around each vertex, the floor above it",
+  ctx.ok("the shadow reaches full mist where nobody has seen, in the bank's own colour",
+    /float shadow = smoothstep\(0\.16 \* n, 0\.5, unseen\);/.test(LITSRC) && /return mix\(c, dioFogColor\(0\.0, n\), shadow\)/.test(LITSRC)
+    && /dioFogColor\(k, n\)/.test(G.FOG_FRAG));
+  const driftMatch = /const float FOG_DRIFT_CELLS = ([\d.]+);/.exec(LITSRC);
+  ctx.ok("the fog's drift is a straight translation (non-repeating, no wrap) at fog.mjs's rate",
+    /q\.x -= uFogStyle\.y \* FOG_DRIFT_CELLS/.test(LITSRC) && !/fract\([^)]*uFogStyle/.test(LITSRC) && !/mod\([^)]*uFogStyle/.test(LITSRC)
+    && !!driftMatch && Number(driftMatch[1]) === Fg.FOG_DRIFT_CELLS, driftMatch?.[1]);
+  ctx.ok("the bank lies along the mean ground around each vertex (no tower-shaped mounds), the floor above it",
     Fg.FOG_FLOOR > 0 && /float top = fogGround\(position\.xz\) \+ uFogLevel\.x \+ layer \* uFogLevel\.y;/.test(G.FOG_VERT)
-    && /h = max\(h, groundAt\(xz \+ o\)\);/.test(G.FOG_VERT) && /\(vec2\(float\(i\), float\(j\)\) - 1\.5\) \* 0\.5 \* uFogCell/.test(G.FOG_VERT));
+    && /h \+= max\(groundAt\(xz \+ o\), uHeightRange\.x\);/.test(G.FOG_VERT) && /\(vec2\(float\(i\), float\(j\)\) - 3\.5\) \* 0\.5 \* uFogCell/.test(G.FOG_VERT)
+    && /return h \/ 64\.0;/.test(G.FOG_VERT));
   ctx.ok("the curtain hangs to the plinth (where the side faces' own plinth begins)",
     /mix\(top, uHeightRange\.x - 0\.05, skirt\)/.test(G.FOG_VERT) && /vWorld\.y < uHeightRange\.x - 0\.05 && uFogStyle\.x > 0\.5/.test(G.SIDE_FRAG));
   const geo = Fg.fogGeometry(4, 3);
@@ -228,16 +251,17 @@ export default async function check(ctx) {
   const fog = new Fg.FogLayer(fogShared);
   const fxOn = { fog: 1, fogDrift: true };
   fog.setVision(null);
-  ctx.ok("no vision bake: the clouds are off and ask for no frames", fog.frame(0.1, fxOn) === false && fogShared.uFogStyle.value.x === 0 && fog.mesh.visible === false);
+  ctx.ok("no vision bake: the mist is off and asks for no frames", fog.frame(0.1, fxOn) === false && fogShared.uFogStyle.value.x === 0 && fog.mesh.visible === false);
   fog.setVision({ width: 160, height: 128 });   // a stand-in canvas: under Node the soft map stays blank
   const drifting = fog.frame(0.5, fxOn);
   const t1 = fogShared.uFogStyle.value.y;
-  ctx.ok("with vision and cloud fog: drawn, drifting at one cloud per TIMING.fogDrift", drifting && fogShared.uFogStyle.value.x === 1 && fog.mesh.visible
+  ctx.ok("with vision and mist: drawn, its clock one tick per TIMING.fogDrift", drifting && fogShared.uFogStyle.value.x === 1 && fog.mesh.visible
     && Math.abs(t1 - 500 / C.TIMING.fogDrift) < 1e-9);
-  ctx.ok("fogDrift shed: the clouds hold still and ask for no frames", fog.frame(0.5, { fog: 1, fogDrift: false }) === false && fogShared.uFogStyle.value.y === t1 && fogShared.uFogStyle.value.x === 1);
-  ctx.ok("flat fog: no clouds", fog.frame(0.5, { fog: 0, fogDrift: true }) === false && fogShared.uFogStyle.value.x === 0);
+  ctx.ok("fogDrift shed: the mist holds still and asks for no frames", fog.frame(0.5, { fog: 1, fogDrift: false }) === false && fogShared.uFogStyle.value.y === t1 && fogShared.uFogStyle.value.x === 1);
+  ctx.ok("flat fog: no mist", fog.frame(0.5, { fog: 0, fogDrift: true }) === false && fogShared.uFogStyle.value.x === 0);
   const cps = Fg.FogLayer.cellsPerSecond();
-  ctx.ok("the clouds drift slowly (under a tenth of a cell a second)", cps > 0.005 && cps < 0.1, cps.toFixed(4));
+  ctx.ok("the mist drifts slowly (under a tenth of a cell a second)", cps > 0.005 && cps < 0.1
+    && Math.abs(cps - (Fg.FOG_DRIFT_CELLS * 1000) / C.TIMING.fogDrift) < 1e-9, cps.toFixed(4));
   ctx.ok("the bank is fitted to the board", (() => { fog.frame(0.1, fxOn); const a = fog.mesh.geometry.getAttribute("position").array; return Math.max(...a.filter((_, i) => i % 3 === 0)) === 10 && Math.max(...a.filter((_, i) => i % 3 === 2)) === 8; })());
   fog.dispose();
 
