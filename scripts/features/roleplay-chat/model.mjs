@@ -93,6 +93,34 @@ export function chooseIc(state, ic, hasSpeaker) {
   return { ...s, ic: Boolean(ic) && Boolean(hasSpeaker) };
 }
 
+/**
+ * The mode strip's tabs, in order. A character gets OOC, Say, Do and Think; the Narrator speaks in one
+ * voice, so it gets OOC and Narrate. With nobody to speak as, every in-character tab is there but
+ * disabled, so the strip keeps its shape and says what is missing rather than vanishing.
+ *
+ * @returns {{id: string, pressed: boolean, disabled: boolean}[]}
+ */
+export function modeTabs({ mode, canIc, narrator = false }) {
+  const ids = narrator ? ["ooc", "narrator"] : ["ooc", ...SUB_MODES];
+  return ids.map((id) => ({ id, pressed: id === mode, disabled: id !== "ooc" && !canIc }));
+}
+
+/**
+ * The picker's arrow keys: the row focus moves to, or null when the key is not one of them. Up and
+ * Down wrap; Home and End jump.
+ */
+export function pickerStep(index, count, key) {
+  if (!Number.isInteger(count) || count <= 0) return null;
+  const at = Number.isInteger(index) && index >= 0 && index < count ? index : -1;
+  switch (key) {
+    case "ArrowDown": return at < 0 ? 0 : (at + 1) % count;
+    case "ArrowUp": return at < 0 ? count - 1 : (at - 1 + count) % count;
+    case "Home": return 0;
+    case "End": return count - 1;
+    default: return null;
+  }
+}
+
 /* ── slash commands ────────────────────────────────────────────────────────── */
 
 /**
@@ -451,6 +479,37 @@ export function overlayScale(zoom) {
   return Math.min(ZOOM_CLAMP.max, Math.max(ZOOM_CLAMP.min, Math.sqrt(z)));
 }
 
+/** The caption lane's widest, its margin from the sidebar and window, its gap above the hotbar. */
+export const LANE = Object.freeze({ max: 760, gutter: 16, gap: 14, fallbackBottom: 84 });
+
+/**
+ * Where the caption lane sits: centred over the hotbar (which Foundry centres in the space left of the
+ * sidebar, not in the window), as wide as that space allows, and clear above the hotbar. Centred on
+ * the window instead, a wide lane runs under an open sidebar on any screen narrower than about 1700px.
+ *
+ * @param {object} p
+ * @param {number} p.width              the window's width
+ * @param {number} p.height             the window's height
+ * @param {{left: number, right: number, top: number}|null} p.hotbar   its rect, when it is laid out
+ * @param {number|null} p.sidebarLeft   the sidebar's left edge, when it is laid out
+ * @returns {{center: number, width: number, bottom: number}}  px; `bottom` from the window's bottom edge
+ */
+export function laneBox({ width, height, hotbar = null, sidebarLeft = null }) {
+  const w = Number.isFinite(width) && width > 0 ? width : 1280;
+  const h = Number.isFinite(height) && height > 0 ? height : 720;
+  const right = Number.isFinite(sidebarLeft) && sidebarLeft > 0 && sidebarLeft <= w ? sidebarLeft : w;
+  const laid = hotbar && Number.isFinite(hotbar.left) && Number.isFinite(hotbar.right) && hotbar.right > hotbar.left;
+  const center = laid ? (hotbar.left + hotbar.right) / 2 : right / 2;
+  // As wide as fits on both sides of the centre, inside the window and left of the sidebar.
+  const room = 2 * Math.max(0, Math.min(center - LANE.gutter, right - LANE.gutter - center));
+  const top = laid && Number.isFinite(hotbar.top) && hotbar.top > 0 ? hotbar.top : null;
+  return {
+    center: Math.round(center),
+    width: Math.round(Math.max(240, Math.min(LANE.max, room))),
+    bottom: Math.round(top === null ? LANE.fallbackBottom : Math.max(12, h - top + LANE.gap))
+  };
+}
+
 /** Whether a point lies within the viewport, with a margin so a token at the very edge counts as off. */
 export function onScreen(point, viewport, margin = 24) {
   if (!point || !viewport) return false;
@@ -506,7 +565,7 @@ export const I18N = Object.freeze({
 
 export const I18N_FAMILIES = Object.freeze({
   label: RP_MODES,
-  sub: SUB_MODES,
+  sub: [...SUB_MODES, "ooc", "narrator"],
   placeholder: ["say", "do", "think", "narrator", "ooc"],
   source: ["auto", "pinned"]
 });

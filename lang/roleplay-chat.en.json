@@ -18,6 +18,7 @@
   "GLRP.switch.say": "Say",
   "GLRP.switch.do": "Do",
   "GLRP.switch.think": "Think",
+  "GLRP.switch.narrator": "Narrate",
 
   "GLRP.placeholder.say": "Speak as {name}…",
   "GLRP.placeholder.do": "What does {name} do?",
@@ -28,6 +29,7 @@
   "GLRP.chip.auto": "AUTO",
   "GLRP.chip.pinned": "PINNED",
   "GLRP.chip.title": "Choose who you are speaking as",
+  "GLRP.chip.as": "As",
 
   "GLRP.picker.label": "Speakers",
   "GLRP.picker.speakAs": "Speak as",
