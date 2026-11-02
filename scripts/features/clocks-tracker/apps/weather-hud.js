@@ -156,7 +156,7 @@ export class WeatherHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (host) {
       if (!this._wx) this._wx = WeatherEffect.create(host, e);
       else this._wx.setSpec(e);
-      if (this._wx) { if (document.hidden) this._wx.pause(); else { this._wx.resize(); this._wx.resume(); } }
+      if (this._wx) { this._wx.resize(); this._wx.resume(); }
     }
   }
 

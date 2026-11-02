@@ -129,12 +129,14 @@ export class CalendarView extends HandlebarsApplicationMixin(ApplicationV2) {
     );
 
     const band = (e, d, column) => {
+      // At a month edge a range carries on unless this cell is its own first or
+      // last day (which also holds for a range that wraps past the year's end).
       const continuesLeft = (d > 1)
         ? onDay(e, d - 1)
-        : (e.scope === "range" && monthIdx > (e.month ?? 0));
+        : (e.scope === "range" && !(monthIdx === (e.month ?? 0) && d === (e.day ?? 1)));
       const continuesRight = (d < dayCount)
         ? onDay(e, d + 1)
-        : (e.scope === "range" && monthIdx < (e.endMonth ?? 0));
+        : (e.scope === "range" && !(monthIdx === (e.endMonth ?? 0) && d === (e.endDay ?? 1)));
       return {
         id: e.id,
         name: e.name,

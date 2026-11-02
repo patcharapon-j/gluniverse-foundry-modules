@@ -350,22 +350,19 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     // full-bar diorama + the legibility scrim behind the left text. The diorama
     // keeps animating whether the bar is full or collapsed — when compact, the live
     // particle field plays behind the pill (re-seeded to the smaller area by resize)
-    // so the current weather reads at a glance with its glass-edge refraction. Only
-    // a backgrounded tab fully drops it (decision D4).
+    // so the current weather reads at a glance. A backgrounded tab is NOT a reason
+    // to hide it here: nothing repaints on visibilitychange, so a weather change
+    // that landed while a player was alt-tabbed used to leave the layer off for
+    // good. The frame loop runs on rAF (which a hidden tab does not fire) and the
+    // shared context is released through Surfaces, so a hidden tab costs nothing.
     if (host) {
-      if (document.hidden) {
-        host.classList.add("off");
-        scrim?.classList.add("off");
-        this._wx?.pause();          // nothing visible to paint while backgrounded
-      } else {
-        host.classList.remove("off");
-        scrim?.classList.remove("off");
-        bar?.classList.add("has-wx");
-        if (!this._wx) this._wx = WeatherEffect.create(host, e);
-        else this._wx.setSpec(e);
-        this._wx?.resize();
-        this._wx?.resume();   // keep the field animating in full and compact modes
-      }
+      host.classList.remove("off");
+      scrim?.classList.remove("off");
+      bar?.classList.add("has-wx");
+      if (!this._wx) this._wx = WeatherEffect.create(host, e);
+      else this._wx.setSpec(e);
+      this._wx?.resize();
+      this._wx?.resume();   // keep the field animating in full and compact modes
     }
   }
 
@@ -506,7 +503,7 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this._buildDelveChips(data, feat);
 
     if (host) {
-      if (document.hidden || !efx) { host.classList.add("off"); scrim?.classList.add("off"); bar?.classList.remove("has-dx"); bar?.classList.remove("dx-terminal"); this._dx?.pause(); }
+      if (!efx) { host.classList.add("off"); scrim?.classList.add("off"); bar?.classList.remove("has-dx"); bar?.classList.remove("dx-terminal"); this._dx?.pause(); }
       else {
         host.classList.remove("off");
         scrim?.classList.remove("off");

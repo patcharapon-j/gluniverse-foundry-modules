@@ -7,99 +7,57 @@
    its shift colour.
    ============================================================ */
 
-/* shared flat-top hexagon silhouette */
-:root { --wx-hex-clip: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+/* shared flat-top hexagon silhouette, declared on the elements that use it (it
+   used to sit on :root, which a feature sheet must never write) */
+.wx-hex,.wx-marker{--wx-hex-clip:polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)}
 
 /* ============================================================
    1) IN-BAR WEATHER — a full-bar diorama layer + a compact readout cell.
    ============================================================ */
 
-/* Full-bar diorama: a Pixi canvas spanning the whole bar, behind the content
-   (.main is z-index:2). Rendered at full strength with NORMAL blend so the tinted
-   particles read solidly over the dark glass (screen blend only ever *added light*,
-   which is why the effect used to look perpetually faint). The effect washes across
-   the bar's LEFT EDGE and feathers toward the centre, so the active weather tints/
-   reflects down the left side of the card without reaching the clock/meter. */
-/* No global fade: legibility is preserved by the .bar-wx-scrim below, a dark/tinted
-   backdrop that sits between the diorama and the text. z-index:1 keeps it behind
-   .main (z-index:2). */
+/* The weather layer: a 2D canvas the shared WebGL renderer copies each frame into
+   (weather/fx/). The shader brings its own atmosphere, so there is no CSS colour
+   wash behind it any more (that wash is what flattened every kind into the same
+   tinted glass). It reads at full strength across the left half of the bar, where
+   the date and the condition sit, and carries on at a quiet level behind the
+   clock and the meter instead of stopping dead. z-index:1, under .main (2). */
 #glct-hud .bar-wx{position:absolute;inset:0;z-index:1;pointer-events:none;
-  opacity:1;mix-blend-mode:normal;border-radius:inherit;overflow:hidden;
-  /* A tinted colour wash sits BEHIND the particles so the gaps between them are
-     filled with weather colour — the effect reads as a solid pane rather than a
-     sparse scatter of dots. Confined to the left edge by the mask below. */
-  background:linear-gradient(100deg,
-    color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 38%,transparent) 0%,
-    color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 18%,transparent) 26%,
-    transparent 52%);
-  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 18%,transparent 46%,transparent 100%);
-  mask-image:linear-gradient(90deg,#000 0,#000 18%,transparent 46%,transparent 100%);
+  opacity:1;border-radius:inherit;overflow:hidden;
+  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 30%,rgb(0 0 0 / .32) 56%,rgb(0 0 0 / .16) 100%);
+  mask-image:linear-gradient(90deg,#000 0,#000 30%,rgb(0 0 0 / .32) 56%,rgb(0 0 0 / .16) 100%);
   transition:opacity var(--gl-d-reveal) ease}
 #glct-hud .bar-wx.off{opacity:0}
 #glct-hud .bar-wx .glct-wx-canvas{position:absolute;inset:0}
 
-/* Legibility scrim: a soft dark wash anchored to the left edge (where the date
-   stack lives) that darkens the bright screen-blended weather just enough for the
-   text above it to stay readable, plus a thin tinted glow hugging the left rim so
-   the weather "reflects" down the edge. Sits above the diorama (later in DOM, same
-   z-index) and below .main (z-index:2). Toggled with the diorama. */
+/* Legibility: an ink pool under the date stack, and a fainter one under the clock,
+   so paper text stays readable over the brightest look. One hairline of the
+   weather's glow runs down the left rim; nothing else frames it. */
 #glct-hud .bar-wx-scrim{position:absolute;inset:0;z-index:1;pointer-events:none;
   border-radius:inherit;overflow:hidden;opacity:1;transition:opacity var(--gl-d-reveal) ease;
   background:
-    linear-gradient(90deg, color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 26%,transparent) 0, transparent 4px),
-    linear-gradient(100deg, color-mix(in srgb, var(--gl-ink-1) 60%, transparent) 0%, color-mix(in srgb, var(--gl-ink-1) 36%, transparent) 17%, transparent 40%)}
+    linear-gradient(90deg, color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 70%,transparent) 0, color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 70%,transparent) 1px, transparent 1px),
+    radial-gradient(42% 120% at 50% 50%, rgb(var(--gl-tint-dark) / .38), transparent 80%),
+    linear-gradient(90deg, rgb(var(--gl-tint-dark) / .44) 0%, rgb(var(--gl-tint-dark) / .26) 22%, transparent 44%)}
 #glct-hud .bar-wx-scrim.off{opacity:0}
 #glct-hud .bar.wx-ominous .bar-wx-scrim{
   background:
-    linear-gradient(90deg, color-mix(in srgb,var(--gl-hazard) 34%,transparent) 0, transparent 4px),
-    linear-gradient(100deg, rgba(14,8,9,.64) 0%, rgba(14,8,9,.4) 17%, rgba(14,8,9,0) 40%)}
+    linear-gradient(90deg, var(--gl-hazard) 0, var(--gl-hazard) 1px, transparent 1px),
+    radial-gradient(42% 120% at 50% 50%, rgb(var(--gl-tint-dark) / .42), transparent 80%),
+    linear-gradient(90deg, color-mix(in srgb, var(--gl-hazard) 18%, rgb(var(--gl-tint-dark) / .5)) 0%, rgb(var(--gl-tint-dark) / .3) 22%, transparent 44%)}
 
-/* Liquid-glass edge refraction — confined to the LEFT ~third of the bar, matching
-   the weather wash (not the whole rim). A thin overlay drawn on top of the content
-   (z-index:3, above .main) bends the colour around the inside of the rim: a tinted
-   inner ring, a brighter tinted top highlight, and a soft bloom feathering in from
-   the left edge. The same left→transparent mask as the diorama clips the inset
-   ring to the left third, so it hugs the left edge and fades out before the clock.
-   pointer-events:none and clipped to the rounded rect by the bar's overflow. */
-#glct-hud .bar.has-wx::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;
-  border-radius:inherit;
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 55%,transparent),
-    inset 0 1px 0 color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 62%,rgb(var(--gl-tint-light))),
-    inset 0 0 14px -2px color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 42%,transparent),
-    inset 14px 0 26px -16px color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 75%,transparent);
-  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 20%,transparent 38%,transparent 100%);
-  mask-image:linear-gradient(90deg,#000 0,#000 20%,transparent 38%,transparent 100%);
-  transition:box-shadow var(--gl-d-reveal) ease}
-
-/* ---- Compact pill weather: the diorama hugs the LEFT HALF of the pill ----
-   When the bar is collapsed the live particle field, tint wash, legibility scrim
-   and liquid-glass rim sit behind the ring on the left half of the pill and feather
-   out before the clock/date on the right — they do NOT span the whole pill. The
-   same left→transparent mask as the full bar clips all three layers; only the stop
-   positions widen to ~half (vs. the full bar's left third). Styling follows the
-   collapsed class so a value-flash peek (which un-collapses) returns to full-bar. */
+/* ---- Compact pill: the pill is small, so the weather fills it, still quieter
+   on the right where the clock sits. ---- */
 #glct-hud .bar.collapsed.has-wx .bar-wx{
-  background:linear-gradient(100deg,
-    color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 30%,transparent) 0%,
-    color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 13%,transparent) 30%,
-    transparent 58%);
-  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 36%,transparent 58%,transparent 100%);
-  mask-image:linear-gradient(90deg,#000 0,#000 36%,transparent 58%,transparent 100%)}
+  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 42%,rgb(0 0 0 / .4) 100%);
+  mask-image:linear-gradient(90deg,#000 0,#000 42%,rgb(0 0 0 / .4) 100%)}
 #glct-hud .bar.collapsed.has-wx .bar-wx-scrim{
-  background:linear-gradient(100deg, color-mix(in srgb, var(--gl-ink-1) 50%, transparent) 0%, color-mix(in srgb, var(--gl-ink-1) 30%, transparent) 30%, transparent 56%);
-  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 40%,transparent 60%,transparent 100%);
-  mask-image:linear-gradient(90deg,#000 0,#000 40%,transparent 60%,transparent 100%)}
+  background:
+    linear-gradient(90deg, color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 70%,transparent) 0, color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 70%,transparent) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--gl-tint-dark) / .18) 0%, rgb(var(--gl-tint-dark) / .4) 55%, rgb(var(--gl-tint-dark) / .3) 100%)}
 #glct-hud .bar.collapsed.wx-ominous .bar-wx-scrim{
-  background:linear-gradient(100deg, rgba(14,8,9,.56) 0%, rgba(14,8,9,.34) 30%, rgba(14,8,9,0) 56%)}
-#glct-hud .bar.collapsed.has-wx::after{
-  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 40%,transparent 60%,transparent 100%);
-  mask-image:linear-gradient(90deg,#000 0,#000 40%,transparent 60%,transparent 100%);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 55%,transparent),
-    inset 0 1px 0 color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 60%,rgb(var(--gl-tint-light))),
-    inset 0 0 16px -3px color-mix(in srgb,var(--glct-weather-glow,#7fb4e6) 50%,transparent),
-    inset 14px 0 26px -16px color-mix(in srgb,var(--glct-weather-tint,#cfe8ff) 70%,transparent)}
+  background:
+    linear-gradient(90deg, var(--gl-hazard) 0, var(--gl-hazard) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--gl-tint-dark) / .2) 0%, rgb(var(--gl-tint-dark) / .44) 55%, rgb(var(--gl-tint-dark) / .32) 100%)}
 
 /* Under an active effect the date stack gets a deeper shadow so it reads cleanly
    against the brighter, tinted left edge. The day/month line is gradient-clipped
@@ -134,18 +92,18 @@
   height:auto;min-height:0;border-radius:0;justify-content:flex-start}
 #glct-hud .date .wxmini.hidden{display:none}
 #glct-hud .date .wxmini:hover .wxmini-label{background:none;-webkit-text-fill-color:rgb(var(--gl-tint-light));color:rgb(var(--gl-tint-light))}
-#glct-hud .date .wxmini-ico{display:grid;place-items:center;width:23px;height:23px;flex:none;border-radius:7px;
+#glct-hud .date .wxmini-ico{display:grid;place-items:center;width:23px;height:23px;flex:none;border-radius:2px;
   color:color-mix(in srgb,var(--glct-weather-tint) 72%,rgb(var(--gl-tint-light)));font-size:13px;
-  background:radial-gradient(120% 120% at 50% 0%,color-mix(in srgb,var(--glct-weather-tint) 26%,#0a0e15),transparent 76%);
-  box-shadow:inset 0 0 0 1px rgb(var(--gl-tint-light) / .07);
-  filter:drop-shadow(0 0 6px color-mix(in srgb,var(--glct-weather-glow) 55%,transparent))}
+  background:rgb(var(--gl-tint-dark) / .45);
+  box-shadow:inset 0 0 0 1px rgb(var(--gl-tint-light) / .08)}
 #glct-hud .date .wxmini-text{display:flex;flex-direction:column;line-height:1.05;min-width:0}
-/* A long condition name wraps to (at most) two lines instead of being cut off with
-   an ellipsis; the readout stays narrow so it never widens the date cluster. */
+/* A long condition name wraps to (at most) two lines between words. It never
+   breaks inside one: `word-break:break-word` used to split "Thunderstorm" into
+   "Thunde/rstorm", so the width is set to hold the longest shipped single word. */
 #glct-hud .date .wxmini-label{font-family:var(--gl-display);font-size:11px;font-weight: var(--gl-weight-bold);
-  letter-spacing:.02em;max-width:92px;line-height:1.12;overflow-wrap:break-word;word-break:break-word;hyphens:auto;
+  letter-spacing:.02em;max-width:108px;line-height:1.12;overflow-wrap:normal;word-break:normal;hyphens:manual;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
-  background:linear-gradient(180deg,rgb(var(--gl-tint-light)),#d6deec);-webkit-background-clip:text;background-clip:text;color:transparent}
+  color:var(--gl-text-bright);text-shadow:0 1px 2px rgb(var(--gl-tint-dark) / .7)}
 #glct-hud .date .wxmini-temp{font-size:7px;letter-spacing:.13em;text-transform:uppercase;color:#9aa3b6;font-weight: var(--gl-weight-bold);white-space:nowrap}
 #glct-hud .date .wxmini-temp:empty{display:none}
 #glct-hud .date .wxmini-haz{display:none;color:#ff7a6f;font-size:10px;
@@ -176,13 +134,10 @@
 #glct-weather-hud .glct-wx-root{pointer-events:none}
 #glct-weather-hud .glct-wx-root > *{pointer-events:auto}
 
-#glct-weather-hud .wx-dock{width:268px;border-radius:14px;overflow:hidden;isolation:isolate;position:relative;
-  background:linear-gradient(180deg,rgb(var(--gl-tint-light) / .10),rgb(var(--gl-tint-light) / 0) 26%),
-    linear-gradient(180deg,rgb(var(--gl-tint-light) / .02),rgb(var(--gl-tint-dark) / .22)),linear-gradient(160deg,var(--gl-ink-3),var(--gl-ink-1) 74%);
-  border:1px solid var(--edge);
-  box-shadow:0 26px 64px rgb(var(--gl-tint-dark) / .6),0 2px 0 rgb(var(--gl-tint-dark) / .4),inset 0 1px 0 rgb(var(--gl-tint-light) / .15),
-    inset 0 -14px 30px rgb(var(--gl-tint-dark) / .36),0 0 40px color-mix(in srgb,var(--glct-weather-glow) 18%,transparent);
-  backdrop-filter:blur(var(--gl-blur)) saturate(var(--gl-saturation))}
+#glct-weather-hud .wx-dock{width:268px;border-radius:4px;overflow:hidden;isolation:isolate;position:relative;
+  background:var(--gl-ink-0);
+  border:1px solid var(--hair);
+  box-shadow:0 22px 56px rgb(var(--gl-tint-dark) / .6),0 2px 0 rgb(var(--gl-tint-dark) / .4),inset 0 1px 0 rgb(var(--gl-tint-light) / .08)}
 
 #glct-weather-hud .wx-head{display:flex;align-items:center;gap:7px;height:24px;padding:0 6px 0 9px;position:relative;z-index:5;
   border-bottom:1px solid var(--hair);cursor:grab;user-select:none}
