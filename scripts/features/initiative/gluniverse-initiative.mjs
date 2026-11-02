@@ -3698,6 +3698,9 @@ export class GLUniverseInitiativeOverlay {
     window.removeEventListener("pointermove", this.onPointerMove);
     this.root.classList.remove("gluni-initiative--dragging");
     this.drag = null;
+    // A move changes which side has room for the delayed column; the markup does
+    // not change, so nothing else would place it again.
+    this.applyFloatingControls(this.measureFloatingControls());
 
     const rect = this.root.getBoundingClientRect();
     await game.settings.set(MODULE_ID, SETTINGS.position, {
