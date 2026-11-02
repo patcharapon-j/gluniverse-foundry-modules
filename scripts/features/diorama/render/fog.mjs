@@ -14,7 +14,9 @@
  *     bank a box over the board's whole footprint is drawn from inside at the
  *     far plane in the floor's mist (`backdrop`). It reads no terrain, so the
  *     only shape it can show is the board's bounding box; whatever is seen draws
- *     over it, and no ray into the board finds a hole.
+ *     over it, and no ray into the board finds a hole. Where to paint it reads
+ *     the COVERAGE map built here (fogCoverage): the unseen grown far enough
+ *     that a ray's sparse taps cannot step over a narrow patch of it.
  *   • The reveal: every lit surface near unseen ground falls into shadow in the
  *     fog's colour, reaching it exactly where the floor begins, and ground out of
  *     sight now fades to its remembered look under a faint mist. Both read the
@@ -35,7 +37,7 @@
 
 import * as THREE from "./three.mjs";
 import { MATERIALS } from "./materials.mjs";
-import { FOG_LAYERS } from "./glsl.mjs";
+import { FOG_LAYERS, FOG_RAY_TAPS } from "./glsl.mjs";
 import { TIMING } from "../constants.mjs";
 
 export { FOG_LAYERS };
@@ -52,6 +54,81 @@ const MAX_SIDE = 2048;
 
 /** Most vertices along a side of one sheet (a big map gets coarser cells, not more vertices). */
 export const FOG_MAX_SIDE = 160;
+
+/** The backdrop's coverage map: texels per cell, at most, and its longest side. */
+export const FOG_COVER_PX = 2;
+const COVER_MAX_SIDE = 1024;
+
+/*
+ * The backdrop's coverage map (FOG_BACKDROP_FRAG reads it, nearest filtered).
+ *
+ * The backdrop tests a pixel's ray at FOG_RAY_TAPS points spread evenly over the
+ * ray's run through the board's box, each in the middle of its own stretch. On
+ * the map (x, z) that run is a segment inside the board's rectangle, so it is
+ * at most the board's diagonal D long, the taps lie at most D / TAPS apart, and
+ * every point of the run is within R = D / (2 · TAPS) of a tap. On a 40 × 40
+ * board that is 1.18 squares: a one-square unseen patch can sit between two
+ * taps that both read explored, and the backdrop would leave the room showing.
+ *
+ * So the map is the unseen grown by R. First every texel is marked that an
+ * unseen bake pixel, widened by one bake pixel either side (the reach of the
+ * bilinear lookup the ground's own discard uses), touches: any point the ground
+ * discards lies in a marked texel. Then each mark is spread to every texel
+ * within ceil(R / texel) on each axis, a square that holds the disc of radius R.
+ * The tap nearest an unseen point is within R of it, so within that many texels
+ * on both axes, so it reads a mark. Covering more is harmless: the backdrop is
+ * at the far plane, and wherever something seen is drawn it draws over it.
+ */
+
+/** How many texels a mark is spread on each axis, for a board of cols × rows in a w × h map. */
+export function fogCoverReach(cols, rows, w, h, taps = FOG_RAY_TAPS) {
+  const r = Math.hypot(cols, rows) / (2 * Math.max(1, taps));
+  return { x: Math.ceil(r / (cols / w)), z: Math.ceil(r / (rows / h)), r };
+}
+
+/**
+ * @param {Uint8ClampedArray|Uint8Array} rgba  the vision bake's pixels (G explored; visible is explored)
+ * @param {number} vw @param {number} vh       the bake's size, px
+ * @param {number} cols @param {number} rows   the board, cells
+ * @returns {{data:Uint8Array, width:number, height:number, reach:{x:number, z:number, r:number}}}
+ *   one byte a texel, 255 where the backdrop may paint
+ */
+export function fogCoverage(rgba, vw, vh, cols, rows, taps = FOG_RAY_TAPS) {
+  const w = Math.max(1, Math.min(COVER_MAX_SIDE, Math.ceil(cols * FOG_COVER_PX)));
+  const h = Math.max(1, Math.min(COVER_MAX_SIDE, Math.ceil(rows * FOG_COVER_PX)));
+  // the texels a bake pixel touches, widened by a bake pixel either side
+  const span = (n, from, to) => {
+    const lo = new Int32Array(n), hi = new Int32Array(n);
+    for (let i = 0; i < n; i++) {
+      lo[i] = Math.max(0, Math.floor(((i - 1) * to) / from));
+      hi[i] = Math.min(to - 1, Math.ceil(((i + 2) * to) / from) - 1);
+    }
+    return [lo, hi];
+  };
+  const [x0, x1] = span(vw, vw, w), [y0, y1] = span(vh, vh, h);
+  const mark = new Uint8Array(w * h);
+  for (let y = 0; y < vh; y++) {
+    for (let x = 0; x < vw; x++) {
+      if (rgba[(y * vw + x) * 4 + 1] > 127) continue;
+      for (let ty = y0[y]; ty <= y1[y]; ty++) mark.fill(255, ty * w + x0[x], ty * w + x1[x] + 1);
+    }
+  }
+  const reach = fogCoverReach(cols, rows, w, h, taps);
+  // spread each mark over a square, one axis at a time
+  const grow = (src, n, lines, k, at) => {
+    const out = new Uint8Array(src.length);
+    for (let l = 0; l < lines; l++) {
+      let last = -Infinity;
+      for (let i = 0; i < n; i++) { if (src[at(l, i)]) last = i; if (i - last <= k) out[at(l, i)] = 255; }
+      last = Infinity;
+      for (let i = n - 1; i >= 0; i--) { if (src[at(l, i)]) last = i; if (last - i <= k) out[at(l, i)] = 255; }
+    }
+    return out;
+  };
+  const rowsDone = grow(mark, w, h, reach.x, (l, i) => l * w + i);
+  const data = grow(rowsDone, h, w, reach.z, (l, i) => i * w + l);
+  return { data, width: w, height: h, reach };
+}
 
 /** Cells between two vertices of the bank for a board this size. */
 export function fogCell(cols, rows) {
@@ -125,6 +202,10 @@ export class FogLayer {
     const box = new THREE.BoxGeometry(1, 1, 1);
     box.translate(0.5, 0.5, 0.5);
     this.backdrop = new THREE.Mesh(box, MATERIALS.fogBackdrop(shared));
+    // the coverage map (fogCoverage); until there is one, nothing is hidden
+    this.cover = this.backdrop.material.uniforms.uFogCover;
+    this._noCover = this.cover.value;
+    this.coverTexture = null;
     this.backdrop.name = "dio.fog.backdrop";
     this.backdrop.frustumCulled = false;
     this.backdrop.raycast = () => {};
@@ -161,9 +242,11 @@ export class FogLayer {
     this.hasVision = !!vision;
     if (!vision || typeof document === "undefined") {
       this.shared.uFogMap.value = this._blank;
+      this.cover.value = this._noCover;
       return;
     }
     const ws = this.shared.uWorldSize.value;
+    this.setCoverage(vision, ws.x, ws.y);
     const ppc = Math.max(2, Math.min(FOG_PX, Math.floor(MAX_SIDE / Math.max(ws.x, ws.y, 1))));
     const w = Math.max(1, Math.round(ws.x * ppc)), h = Math.max(1, Math.round(ws.y * ppc));
     if (!this.soft) this.soft = document.createElement("canvas");
@@ -196,6 +279,44 @@ export class FogLayer {
       this.texture.needsUpdate = true;
     }
     this.shared.uFogMap.value = this.texture;
+  }
+
+  /**
+   * Rebuild the backdrop's coverage map from the bake's own pixels (fogCoverage).
+   * A bake that cannot be read leaves every texel marked: the mist then fills
+   * the whole box behind whatever is seen, which hides nothing it should show.
+   */
+  setCoverage(vision, cols, rows) {
+    let cov;
+    try {
+      const vw = vision.width, vh = vision.height;
+      let g = vision.getContext?.("2d");
+      if (!g) {
+        const tmp = document.createElement("canvas");
+        tmp.width = vw; tmp.height = vh;
+        g = tmp.getContext("2d");
+        g.drawImage(vision, 0, 0);
+      }
+      cov = fogCoverage(g.getImageData(0, 0, vw, vh).data, vw, vh, Math.max(1, cols), Math.max(1, rows));
+    } catch (e) {
+      console.warn("GLUniverse Suite | diorama: fog coverage fell back to the whole board", e);
+      cov = { data: new Uint8Array([255]), width: 1, height: 1 };
+    }
+    let t = this.coverTexture;
+    if (!t || t.image.width !== cov.width || t.image.height !== cov.height) {
+      t?.dispose();
+      t = new THREE.DataTexture(cov.data, cov.width, cov.height, THREE.RedFormat, THREE.UnsignedByteType);
+      t.unpackAlignment = 1;   // rows of one byte a texel, any width
+      t.flipY = false;
+      t.generateMipmaps = false;
+      t.minFilter = t.magFilter = THREE.NearestFilter;
+      t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+      this.coverTexture = t;
+    } else {
+      t.image.data = cov.data;
+    }
+    t.needsUpdate = true;
+    this.cover.value = t;
   }
 
   /** Whether the clouds are drawn, and drift, this frame. */
@@ -232,6 +353,8 @@ export class FogLayer {
     this.material.dispose();
     this.backdrop.geometry.dispose();
     this.backdrop.material.dispose();
+    this.coverTexture?.dispose();
+    this._noCover?.dispose?.();
     this.texture?.dispose();
     this.shared.uFogMap.value = this._blank;
     this._blank.dispose();

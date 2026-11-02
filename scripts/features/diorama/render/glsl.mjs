@@ -2002,8 +2002,16 @@ void main() {
  * would stand a wall of mist over an explored edge), and the colour is the bank
  * floor's, sampled where the ray crosses the floor sheet, so every point on one
  * ray paints the same mist and the noise runs on across any outline in front.
+ *
+ * The ray is tested at FOG_RAY_TAPS points, which on a big board lie more than
+ * a square apart, so the raw bake could fall between them and miss a narrow
+ * unseen patch (behind a pillar), leaving the room showing through. So the
+ * test reads uFogCover instead (render/fog.mjs fogCoverage): the unseen
+ * grown by at least half the widest spacing the taps can have, so the tap
+ * nearest any unseen point on the ray always lands inside it.
  */
 export const FOG_BOX_OVER = 0.9;
+export const FOG_RAY_TAPS = 24;
 export const FOG_BACKDROP_VERT = /* glsl */ `
 uniform vec2 uWorldSize;
 uniform vec2 uHeightRange;
@@ -2022,10 +2030,12 @@ void main() {
 
 export const FOG_BACKDROP_FRAG = HEAD + /* glsl */ `
 const float FOG_BOX_OVER = ${FOG_BOX_OVER.toFixed(2)};
-/** Points of the ray tested against the vision bake (one every half square or so). */
-const int FOG_RAY_TAPS = 24;
+/** Points of the ray tested against the coverage map (render/fog.mjs sizes its reach from this). */
+const int FOG_RAY_TAPS = ${FOG_RAY_TAPS};
 /** The bank floor's sheet (render/fog.mjs FOG_FLOOR) over the lowest ground. */
 const float FOG_SHEET0 = 0.06;
+/** r > 0.5: unseen, or close enough to it that a tap may stand for it (nearest filtered). */
+uniform sampler2D uFogCover;
 varying vec3 vWorld;
 void main() {
   gl_FragDepthEXT = 1.0;
@@ -2043,16 +2053,14 @@ void main() {
   for (int i = 0; i < FOG_RAY_TAPS; i++) {
     vec3 q = vWorld + fwd * (len * (float(i) + 0.5) / float(FOG_RAY_TAPS));
     // an explicit level: an implicit one in this loop is a gradient in divergent flow
-    vec4 v = textureLod(uVisionMap, clamp(q.xz / uWorldSize, 0.0, 1.0), 0.0);
-    if (max(v.r, v.g) <= 0.5) { hidden = true; break; }
+    if (textureLod(uFogCover, clamp(q.xz / uWorldSize, 0.0, 1.0), 0.0).r > 0.5) { hidden = true; break; }
   }
   if (!hidden) discard;
   vec2 slide = fwd.xz / fwd.y;
   float y0 = uHeightRange.x + FOG_SHEET0;
   vec3 col = dioFogColor(0.0, dioFogNoise(vWorld.xz - slide * (vWorld.y - y0), 0.0));
   col += (dioHash(gl_FragCoord.xy) - 0.5) / 255.0;
-  gl_FragColor = vec4(col, 1.0);
-}
+  gl_FragColor = vec4(col, 1.0);}
 `;
 
 /* ---------------------------------------------------------------- fire */

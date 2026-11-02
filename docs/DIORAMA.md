@@ -194,8 +194,12 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   a mist backdrop: a box over the board's footprint, from the plinth to above
   the tallest ground, drawn from inside at the far plane. Its shape is the
   board's bounding box, and it reads no terrain: it paints where some point of
-  the pixel's ray inside the box is unseen (the vision bake alone), in the bank
-  floor's colour, so whatever the party can see draws over it, the camera
+  the pixel's ray inside the box is unseen, in the bank floor's colour. The ray
+  is tested at 24 taps, which on a big board lie more than a square apart, so
+  it reads a coverage map built from the vision bake with the unseen grown by
+  half the widest tap spacing (the board's diagonal over 48); a narrow unseen
+  wedge behind a pillar cannot fall between two taps. Whatever the party can
+  see draws over it, the camera
   finds no hole under the bank's rim or down the board's side, and an unseen
   tower is no prism and no silhouette, even where it would stand past the
   board's edge against the room. Nothing unseen throws a sun shadow either (the

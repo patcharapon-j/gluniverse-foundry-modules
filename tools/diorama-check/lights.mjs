@@ -214,10 +214,74 @@ export default async function check(ctx) {
   const bdOwn = G.FOG_BACKDROP_FRAG.slice(G.HEAD.length);
   const noTerrain = !/groundAt|uHeightTex|mapAt|lightAt|fieldAt|sunlight|shadowAt|torchLight|uMap\b|uField\b|uLightMap/.test(bdOwn)
     && !/groundAt|uHeightTex/.test(G.FOG_BACKDROP_VERT);
-  ctx.ok("the mist backdrop reads no terrain: the vision bake decides, the bank floor's mist paints",
-    noTerrain && /textureLod\(uVisionMap, clamp\(q\.xz \/ uWorldSize, 0\.0, 1\.0\), 0\.0\)/.test(bdMain)
-    && /if \(max\(v\.r, v\.g\) <= 0\.5\) \{ hidden = true; break; \}/.test(bdMain) && /if \(!hidden\) discard;/.test(bdMain)
+  ctx.ok("the mist backdrop reads no terrain: the coverage map decides, the bank floor's mist paints",
+    noTerrain && /if \(textureLod\(uFogCover, clamp\(q\.xz \/ uWorldSize, 0\.0, 1\.0\), 0\.0\)\.r > 0\.5\) \{ hidden = true; break; \}/.test(bdMain)
+    && !/uVisionMap/.test(bdMain) && /if \(!hidden\) discard;/.test(bdMain)
     && /dioFogColor\(0\.0, dioFogNoise\(/.test(bdMain) && /gl_FragColor = vec4\(col, 1\.0\);/.test(bdMain));
+  // The ray's taps are sparse (over a square apart on a 40 × 40 board), so the
+  // raw bake can fall between two of them and the backdrop leaves the room
+  // showing through a narrow unseen wedge. The coverage map is the unseen grown
+  // so the nearest tap always lands in it. Driven: the shader's sampler
+  // restated, rays through the box at several pitches and yaws, a one-square
+  // unseen patch in several places, against the ground truth along each ray.
+  const fogSrc = read(`${DIO}/render/fog.mjs`);
+  const taps = Number(/const int FOG_RAY_TAPS = (\d+);/.exec(G.FOG_BACKDROP_FRAG)?.[1]);
+  const coverTex = /new THREE\.DataTexture\(cov\.data, cov\.width, cov\.height, THREE\.RedFormat, THREE\.UnsignedByteType\)/.test(fogSrc)
+    && /t\.unpackAlignment = 1;/.test(fogSrc) && /t\.minFilter = t\.magFilter = THREE\.NearestFilter;/.test(fogSrc)
+    && /this\.setCoverage\(vision, ws\.x, ws\.y\);/.test(fogSrc);
+  const skip = (() => {
+    const PPC = 4;   // bake px per cell
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    // the shader's ray, restated: from the back face towards the camera, TAPS midpoints
+    const tapsOf = (P, f, W, D, lo, hi) => {
+      const t = [0, 1, 2].map((a) => Math.max((lo[a] - P[a]) / f[a], (hi[a] - P[a]) / f[a]));
+      const len = Math.max(Math.min(...t), 0);
+      const at = (s) => P.map((p, a) => p + f[a] * len * s);
+      return { pts: Array.from({ length: taps }, (_, i) => at((i + 0.5) / taps)), at };
+    };
+    const res = { cover: 0, raw: 0, rays: 0 };
+    const boards = [[40, 40, 32], [29, 58, 16.75], [100, 24, 8]];
+    for (const [W, D, top] of boards) {
+      const vw = W * PPC, vh = D * PPC;
+      for (let p = 0; p < 4; p++) {
+        const cx = Math.floor(2 + rnd() * (W - 4)), cz = Math.floor(2 + rnd() * (D - 4));
+        const px = new Uint8ClampedArray(vw * vh * 4).fill(255);
+        for (let y = cz * PPC; y < (cz + 1) * PPC; y++) for (let x = cx * PPC; x < (cx + 1) * PPC; x++) px[(y * vw + x) * 4 + 1] = 0;
+        const cov = Fg.fogCoverage(px, vw, vh, W, D, taps);
+        const near = (q, m, w, h) => m[Math.min(h - 1, Math.floor(Math.min(1, Math.max(0, q[2] / D)) * h)) * w + Math.min(w - 1, Math.floor(Math.min(1, Math.max(0, q[0] / W)) * w))];
+        const rawMap = Uint8Array.from({ length: vw * vh }, (_, k) => (px[k * 4 + 1] <= 127 ? 255 : 0));
+        const lo = [0, -0.05, 0], hi = [W, top + G.FOG_BOX_OVER, D];
+        for (const pitch of [20, 30, 45, 60]) for (const yaw of [15, 45, 100, 225, 300]) {
+          const pr = (pitch * Math.PI) / 180, yr = (yaw * Math.PI) / 180;
+          const f = [Math.cos(pr) * Math.cos(yr), Math.sin(pr), Math.cos(pr) * Math.sin(yr)];
+          for (let n = 0; n < 60; n++) {
+            // a line through a point near the patch, entered at its back face
+            const X = [cx + 0.5 + (rnd() - 0.5) * 6, rnd() * top, cz + 0.5 + (rnd() - 0.5) * 6];
+            const tb = Math.min(...[0, 1, 2].map((a) => Math.max((lo[a] - X[a]) / -f[a], (hi[a] - X[a]) / -f[a])));
+            if (!(tb >= 0)) continue;
+            const P = X.map((x, a) => x - f[a] * tb);
+            const { pts, at } = tapsOf(P, f, W, D, lo, hi);
+            // the ground truth: does the ray's run through the box pass over the patch?
+            const crosses = Array.from({ length: 2001 }, (_, i) => at(i / 2000)).some(([x, , z]) =>
+              x > cx + 0.02 && x < cx + 0.98 && z > cz + 0.02 && z < cz + 0.98);
+            if (!crosses) continue;
+            res.rays++;
+            if (!pts.some((q) => near(q, cov.data, cov.width, cov.height))) res.cover++;
+            if (!pts.some((q) => near(q, rawMap, vw, vh))) res.raw++;
+          }
+        }
+      }
+    }
+    return res;
+  })();
+  ctx.ok("the backdrop's taps cannot step over an unseen patch (coverage grown by half the widest tap spacing)",
+    taps === G.FOG_RAY_TAPS && coverTex && skip.rays > 200 && skip.cover === 0 && skip.raw > 0,
+    `${skip.rays} rays over a one-square patch: ${skip.cover} missed (raw bake would miss ${skip.raw})`);
+  // Sol's case, exactly: 40 × 40, the reach is half the diagonal over the taps
+  const sol = Fg.fogCoverReach(40, 40, 80, 80, G.FOG_RAY_TAPS);
+  ctx.ok("the coverage reach is ceil(diagonal / (2 · taps) / texel) on each axis",
+    Math.abs(sol.r - Math.hypot(40, 40) / (2 * G.FOG_RAY_TAPS)) < 1e-9 && sol.x === Math.ceil(sol.r / 0.5) && sol.z === sol.x, `${sol.r.toFixed(3)} cells, ${sol.x} texels`);
   // It writes the far plane on every path (first thing, so a discard cannot
   // leave a path undefined), off for the GM and the flat style.
   ctx.ok("the backdrop sits at the far plane on every path, and is off for the GM and the flat style",

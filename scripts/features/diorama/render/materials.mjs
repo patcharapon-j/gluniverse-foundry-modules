@@ -486,12 +486,13 @@ export const MATERIALS = {
    * The mist behind the fog of war's bank (FOG_BACKDROP_FRAG): a unit box drawn
    * from inside, at the far plane, so whatever is seen draws over it.
    */
-  fogBackdrop(shared) {
+  fogBackdrop(shared, { cover } = {}) {
     return new THREE.ShaderMaterial({
       name: "dio.fog.backdrop",
       vertexShader: PROGRAMS.fogBackdrop.vertex,
       fragmentShader: PROGRAMS.fogBackdrop.fragment,
-      uniforms: uniformsFor(shared),
+      // the coverage map (render/fog.mjs fogCoverage); blank is nothing hidden
+      uniforms: uniformsFor(shared, { uFogCover: cover ?? { value: blankTexture([0, 0, 0, 255]) } }),
       side: THREE.BackSide,
     });
   },
