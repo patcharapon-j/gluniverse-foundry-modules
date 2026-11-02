@@ -4,7 +4,7 @@
 // design system's sanctioned way to give a feature or a mood its own identity
 // is to remap the ONE accent channel (`--gl-accent`) on a scoped element and
 // let every derived surface, glow and rim follow. That is all a preset does
-// here — the glass material, etching and typography are shared and live in
+// here; the plate, the type and the shape are shared and live in
 // styles/gl-tokens.css + styles/insight.css.
 //
 // Each preset also names a sound profile (see sound.mjs), which is why this is
@@ -31,12 +31,11 @@ const PRESETS = {
       // Signal amber — warm arcane ceremony.
       "--gl-accent": "var(--gl-signal)",
       "--insight-body-style": "italic",
-      // Amber sits far higher on the luminance ramp than violet AND the
-      // bands blend with `screen` over a cool canvas, where yellow carries
-      // much further than a matched luminance would predict. Left on the
-      // shared burn, this preset washes the whole frame rather than lighting
-      // its edges. The edge is the one place the accent covers a whole
-      // viewport, so it is the one place that has to be corrected per hue.
+      // Amber sits far higher on the luminance ramp than violet, and over a
+      // cool map yellow carries much further than a matched luminance would
+      // predict. Left on the shared burn, this preset washes the whole frame
+      // rather than lighting its edges. The edge is the one place the accent
+      // covers a whole viewport, so it is the one place corrected per hue.
       "--insight-burn": "0.42",
       "--insight-reach-y": "19%",
       "--insight-reach-x": "15%",
@@ -96,10 +95,16 @@ export function getThemeIds() {
  * @param {object} config - Config with `label` and `vars` properties
  */
 export function registerTheme(id, config) {
-  if (!config.label || !config.vars) {
+  if (!config?.label || !config?.vars || typeof config.vars !== "object") {
     console.error(`Insight | Invalid preset config for "${id}": needs label and vars`);
     return;
   }
-  PRESETS[id] = config;
-  console.log(`Insight | Registered custom accent preset: ${config.label}`);
+  // Held to the same rule as the shipped presets (tools/insight-check.mjs):
+  // the accent channel and this feature's own tokens, nothing else.
+  const vars = {};
+  for (const [prop, value] of Object.entries(config.vars)) {
+    if (prop === "--gl-accent" || prop.startsWith("--insight-")) vars[prop] = String(value);
+    else console.warn(`Insight | Preset "${id}" may not set ${prop}; ignored.`);
+  }
+  PRESETS[id] = { label: config.label, vars };
 }

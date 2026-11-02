@@ -41,8 +41,10 @@ export async function runInsightDestinyMotionChecks() {
     assert(opacity(stage.querySelector('.insight-body')) < .1, 'Insight initially conceals its body');
     await wait(2550);
     assert(opacity(stage.querySelector('.insight-body')) > .99, 'Insight actual timeline reveals readable body');
-    assert(opacity(stage.querySelector('.insight-fracture-card')) > .99, 'Insight actual timeline opens card');
-    assert(getComputedStyle(stage.querySelector('.insight-fracture-card')).clipPath === 'none', 'Insight settled card releases clipping so depth slab can extend');
+    assert(opacity(stage.querySelector('.insight-card')) > .99, 'Insight actual timeline opens card');
+    assert(Number(getComputedStyle(stage.querySelector('.insight-card')).getPropertyValue('--insight-open')) > .99, 'Insight settled card is fully open');
+    assert(opacity(stage.querySelector('.insight-edge-glow')) > .5, 'Insight edge is lit while the card waits');
+    assert(stage.classList.contains('insight-settled'), 'Insight finished arrival carries its settled state');
     const beforeExit = stage.querySelector('.insight-notification').getBoundingClientRect();
     const button = stage.querySelector('.insight-dismiss');
     button.dispatchEvent(new MouseEvent('click')); button.dispatchEvent(new MouseEvent('click'));

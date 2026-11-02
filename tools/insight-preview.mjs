@@ -1,30 +1,24 @@
 /**
- * tools/insight-preview.mjs — write a live preview page for the Insight arrival.
+ * tools/insight-preview.mjs — a live preview page for the Insight arrival.
  *
- * The whole point of this feature is what a full viewport does when a message
- * lands, and none of it is visible in a diff: the four edge bands rushing in,
- * the vignette, the frame strike, the corner registration, the scan, and the
- * way the card unfolds out of the cut. So the page loads the REAL stylesheets
- * (gl-fonts / gl-tokens / gl-motion / insight.css) and the REAL template markup
- * — never a hand-copied lookalike, which would drift the moment either changes
- * and then quietly stop proving anything.
+ * The feature is what a whole screen does when a message lands, and none of it
+ * shows in a diff. So the page loads the REAL stylesheets and the REAL
+ * templates, and plays every row through the SHIPPED renderer
+ * (module/notification.mjs). The stage clock is therefore the runtime's by
+ * construction: this file declares no timings of its own, and the beat list it
+ * prints is read out of the renderer's exported TIMINGS.
  *
- *   node tools/insight-preview.mjs --out=.preview/insight.html
- *   node tools/preview-server.mjs        # then open the URL it prints
+ *   node tools/insight-preview.mjs [--out=.preview/insight.html] [--artifact=<path>]
+ *   node tools/preview-server.mjs 8973      # then /.preview/insight.html
  *
- * SERVE it. A file:// page loads the CSS but not the module script that drives
- * the stages, so you get a card frozen at its pre-entry values and conclude,
- * wrongly, that the reveal is broken.
+ * SERVE it. A file:// page loads the CSS but not the module script, so every
+ * card stays hidden at its pre-arrival values and the reveal looks broken.
  *
- * ── Why the page draws its own "screens" ────────────────────────────────
- * A real arrival is 1600×900 of screen. A preview pane is whatever it is, and
- * the shot has to show the whole frame at once or the edge is not what is being
- * judged. So each row renders the stage into a fixed-size box (1200×675, a real
- * 16:9 desktop) and scales the box to fit. `position: fixed` resolves against a
- * transformed ancestor, so the stage fills that box exactly as it fills a
- * viewport — no changes to the shipped CSS, and one harness override
- * (`.insight-notification` width, whose `84vw` guard would otherwise read the
- * real pane rather than the box).
+ * URL params: `speed=normal|fast|instant`, `only=a,b` (rows to play).
+ *
+ * Each row draws a fixed 1200×675 "screen" scaled to fit. `position: fixed`
+ * resolves against a transformed ancestor, so the stage fills that box exactly
+ * as it fills a viewport, with no change to the shipped CSS.
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -34,185 +28,184 @@ const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const outArg = process.argv.find((a) => a.startsWith("--out="));
 const OUT = resolve(ROOT, outArg ? outArg.slice(6) : ".preview/insight.html");
 
-/**
- * Render the shipped Handlebars template with the small subset of the syntax it
- * actually uses ({{#if}}, {{localize}}, {{{triple}}}, {{plain}}).
- */
-function renderTemplate(src, ctx, i18n) {
-  let out = src.replace(/\{\{!--[\s\S]*?--\}\}/g, "");
+/* The shipped presets and the shipped clock. Both modules touch no Foundry
+   global at module scope, so they import cleanly here; a mirror of either
+   would drift on the next retune and the page would flatter a look nobody ships. */
+const { getPresets } = await import("../scripts/features/insight/module/themes.mjs");
+const { TIMINGS, DURATIONS } = await import("../scripts/features/insight/module/notification.mjs");
+const { safeBody, composeBody } = await import("../scripts/features/insight/module/body.mjs");
+const PRESETS = Object.fromEntries(Object.entries(getPresets()).map(([id, cfg]) => [id, cfg.vars]));
 
-  const ifRe = /\{\{#if (\w+)\}\}([\s\S]*?)(?:\{\{else\}\}([\s\S]*?))?\{\{\/if\}\}/g;
-  for (let pass = 0; pass < 4; pass++) {
-    if (!ifRe.test(out)) break;
+const LANG = JSON.parse(await readFile(resolve(ROOT, "lang/insight.en.json"), "utf8"));
+
+/**
+ * The small subset of Handlebars the two templates use: comments, {{#if}}
+ * (with {{else}}), {{#each}} over an array of objects, {{localize}},
+ * {{{triple}}}, {{plain}} and {{this.x}}.
+ */
+function renderTemplate(src, ctx) {
+  let out = src.replace(/\{\{!--[\s\S]*?--\}\}/g, "");
+  const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const get = (scope, path) => path.replace(/^this\./, "").split(".").reduce((o, k) => (o == null ? undefined : o[k]), scope);
+
+  out = out.replace(/\{\{#each ([\w.]+)\}\}([\s\S]*?)\{\{\/each\}\}/g, (_m, key, body) =>
+    (get(ctx, key) ?? []).map((item) => renderTemplate(body, { ...ctx, ...item, this: item })).join(""));
+
+  const ifRe = /\{\{#if ([\w.]+)\}\}((?:(?!\{\{#if)[\s\S])*?)(?:\{\{else\}\}((?:(?!\{\{#if)[\s\S])*?))?\{\{\/if\}\}/g;
+  for (let pass = 0; pass < 6 && ifRe.test(out); pass++) {
     ifRe.lastIndex = 0;
-    out = out.replace(ifRe, (_m, key, yes, no) => (ctx[key] ? yes : no ?? ""));
+    out = out.replace(ifRe, (_m, key, yes, no) => {
+      const v = get(ctx, key);
+      return (Array.isArray(v) ? v.length : v) ? yes : no ?? "";
+    });
   }
 
-  out = out.replace(/\{\{localize "([^"]+)"\}\}/g, (_m, k) => i18n[k] ?? k);
-  out = out.replace(/\{\{\{(\w+)\}\}\}/g, (_m, k) => ctx[k] ?? "");
-  out = out.replace(/\{\{(\w+)\}\}/g, (_m, k) => String(ctx[k] ?? ""));
+  out = out.replace(/\{\{localize "([^"]+)"\}\}/g, (_m, k) => esc(LANG[k] ?? k));
+  out = out.replace(/\{\{\{([\w.]+)\}\}\}/g, (_m, k) => get(ctx, k) ?? "");
+  out = out.replace(/\{\{([\w.]+)\}\}/g, (_m, k) => esc(get(ctx, k)));
   return out;
 }
 
-const I18N = {
-  "INSIGHT.Dismiss": "Acknowledge",
-  "INSIGHT.SenseDefault": "Insight",
-};
-
-/* The real preset table, straight out of the feature. themes.mjs touches no
-   Foundry global at module scope, so it imports cleanly here — which is the
-   point: a mirror of it in this file would drift on the next retune and the
-   preview would go on showing a look nobody ships. */
-const { getPresets } = await import("../scripts/features/insight/module/themes.mjs");
-const PRESETS = Object.fromEntries(
-  Object.entries(getPresets()).map(([id, cfg]) => [id, cfg.vars])
-);
+/* A stand-in picture for the image row: a dim room, drawn inline. */
+const IMAGE = "data:image/svg+xml," + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="260" viewBox="0 0 640 260">` +
+  `<defs><radialGradient id="g" cx="62%" cy="40%" r="70%"><stop offset="0" stop-color="#6d5a44"/><stop offset=".55" stop-color="#2a2420"/><stop offset="1" stop-color="#0d0c0c"/></radialGradient></defs>` +
+  `<rect width="640" height="260" fill="url(#g)"/><rect x="360" y="40" width="70" height="170" fill="#0b0a0a" opacity=".85"/>` +
+  `<circle cx="395" cy="70" r="5" fill="#e9c27a"/></svg>`);
 
 const SAMPLES = {
   whisper: {
     id: "insight-1730000000-a4f2",
-    serial: "A4F2",
-    title: "",
-    sense: "",
-    body:
-      "The hairs on the back of your neck rise. Something behind the shrine " +
-      "has been <b>watching you</b> since you crossed the threshold, and it " +
-      "has just decided you are worth the trouble.",
+    body: safeBody("<p>The hairs on the back of your neck rise. Something behind the shrine has been <b>watching you</b> since you crossed the threshold, and it has just decided you are worth the trouble.</p>"),
   },
   titled: {
     id: "insight-1730000001-9c1d",
-    serial: "9C1D",
-    title: "You Recognise the Sigil",
-    sense: "Perception · DC 22",
-    body:
-      "It is the same mark that was burned into the cellar door in Vethkar — " +
-      "the one your sister told you never to open. <i>Whoever is here has " +
-      "been here before you.</i>",
+    title: "You recognise the sigil",
+    sense: "Perception",
+    body: safeBody("<p>It is the same mark that was burned into the cellar door in Vethkar, the one your sister told you never to open. <i>Whoever is here has been here before you.</i></p>"),
+    pending: 2,
   },
   divine: {
     id: "insight-1730000002-77b0",
-    serial: "77B0",
-    title: "A Warmth Behind the Ribs",
+    title: "A warmth behind the ribs",
     sense: "Divine Sense",
-    body:
-      "Your god is paying attention. Not approving — <b>attending</b>. The " +
-      "difference will matter before this room is finished with you.",
+    body: safeBody("<p>Your god is paying attention. Not approving: <b>attending</b>. The difference will matter before this room is finished with you.</p>"),
+  },
+  recall: {
+    // Exactly the shape Recall Knowledge hands over: no title, a fixed label.
+    id: "insight-1730000003-3e10",
+    sense: "Recall Knowledge",
+    body: safeBody("<p>Barrow trolls regrow what you cut off unless it is burned or soaked in acid. The one at the back is <strong>older than the barrow</strong>, and it remembers who built it.</p>"),
+  },
+  image: {
+    id: "insight-1730000004-c0de",
+    title: "The far door is open",
+    sense: "Perception",
+    image: IMAGE,
+    body: composeBody("Light spills across the floor from the room beyond.\n\nIt was shut when you came in."),
   },
 };
 
 /** Each row of the sheet: one simulated screen. */
 const ROWS = [
-  { key: "a", note: "Full edge · Dreadlight · titled", sample: "titled", preset: "dreadlight", intensity: "full" },
-  { key: "b", note: "Full edge · Fantasy accent · the amber preset", sample: "divine", preset: "fantasy", intensity: "full" },
-  { key: "c", note: "Subtle edge · no vignette, half burn", sample: "whisper", preset: "dreadlight", intensity: "subtle" },
-  { key: "d", note: "Edge off · the card carries it alone", sample: "whisper", preset: "dreadlight", intensity: "off" },
+  { key: "a", note: "Full edge · Dreadlight · titled, two more waiting", sample: "titled", preset: "dreadlight", intensity: "full" },
+  { key: "b", note: "Full edge · Fantasy accent", sample: "divine", preset: "fantasy", intensity: "full" },
+  { key: "c", note: "Recall Knowledge hand-off · no title, fixed label", sample: "recall", preset: "dreadlight", intensity: "full" },
+  { key: "d", note: "Subtle edge · no vignette, half burn · with a picture", sample: "image", preset: "dreadlight", intensity: "subtle" },
+  { key: "e", note: "Edge off · the card carries it alone", sample: "whisper", preset: "fantasy", intensity: "off" },
 ];
 
 const template = await readFile(resolve(ROOT, "templates/insight/notification.hbs"), "utf8");
+const composeTpl = await readFile(resolve(ROOT, "templates/insight/compose-dialog.hbs"), "utf8");
 
-const rows = ROWS.map((r) => ({
-  ...r,
-  html: renderTemplate(template, SAMPLES[r.sample], I18N),
-}));
+const rows = ROWS.map((r) => ({ ...r, html: renderTemplate(template, SAMPLES[r.sample]), data: SAMPLES[r.sample] }));
+const detail = renderTemplate(template, SAMPLES.titled);
 
-/** The card row, shown at 1:1 so the typography can be judged. */
-const detail = renderTemplate(template, SAMPLES.titled, I18N);
+const compose = (ctx) => `<div class="application insight-compose mock-window" data-preset="dreadlight">
+  <header class="window-header"><h1 class="window-title">${LANG["INSIGHT.ComposeTitle"]}</h1></header>
+  <section class="window-content">${renderTemplate(composeTpl, ctx)}</section>
+</div>`;
+const COMPOSE_FULL = compose({
+  hasPlayers: true,
+  people: [
+    { id: "u1", name: "Aoife", color: "#e0703b", selected: true },
+    { id: "u2", name: "Bram", color: "#4fa3d9", selected: false },
+    { id: "u3", name: "Seri", color: "#9bd46a", selected: true },
+    { id: "u4", name: "Tomas (GM)", color: "#c39cf0", selected: false },
+  ],
+  sense: "Perception",
+  message: "The hairs on your neck rise.",
+});
+const COMPOSE_EMPTY = compose({ hasPlayers: false, people: [], sense: "", message: "" });
+
+/* The beat list, read off the shipped clock. */
+const beats = (t) => [
+  [t.edge, "The edge. The room dims, the accent rises from all four sides, one hairline traces the screen."],
+  [t.line, "The cut draws out from the centre, wider than the card."],
+  [t.card, "The card opens down out of the cut and one light crosses it."],
+  [t.contentStart, `The words arrive in reading order, ${t.contentStagger} ms apart: label, who can see it, title, picture, body, the control.`],
+];
 
 const page = `<!doctype html>
 <meta charset="utf-8">
-<title>Insight — arrival preview</title>
+<title>Insight preview</title>
 <link rel="stylesheet" href="/styles/gl-fonts.css">
 <link rel="stylesheet" href="/styles/gl-tokens.css">
 <link rel="stylesheet" href="/styles/gl-motion.css">
 <link rel="stylesheet" href="/styles/insight.css">
 <style>
-  :root { --screen-w: 1200px; --screen-h: 675px; }
-  html { background: #05070a; }
-  body {
-    margin: 0; padding: 0 0 60px;
-    font-family: var(--gl-display); color: var(--gl-text);
-    background: #05070a;
-  }
-
-  header {
+  html, body { margin: 0; background: #05070a; }
+  body { padding: 0 0 60px; font-family: system-ui, sans-serif; color: #eef1f7; }
+  header.bar {
     position: sticky; top: 0; z-index: 500;
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-    padding: 12px 16px;
-    background: rgb(5 7 10 / .94);
+    padding: 12px 16px; background: rgb(5 7 10 / .94);
     border-bottom: 1px solid rgb(255 255 255 / .14);
-    font: 700 11px/1 var(--gl-tech, monospace);
-    letter-spacing: .12em; text-transform: uppercase;
+    font: 700 11px/1 system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
   }
-  header button, header select {
+  header.bar button, header.bar select {
     font: inherit; color: #eef1f7; padding: 8px 10px; cursor: pointer;
-    background: rgb(255 255 255 / .08);
-    border: 1px solid rgb(255 255 255 / .22); border-radius: 4px;
+    background: rgb(255 255 255 / .08); border: 1px solid rgb(255 255 255 / .22);
   }
-  header button:hover { background: rgb(255 255 255 / .18); }
-  header .muted { opacity: .5; }
+  header.bar .muted { opacity: .5; }
+  .caption { padding: 22px 16px 8px; font: 700 11px/1.5 system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8b97ac; }
+  .caption b { color: #eef1f7; }
 
-  .caption {
-    padding: 22px 16px 8px;
-    font: 700 10px/1.5 var(--gl-tech, monospace);
-    letter-spacing: .2em; text-transform: uppercase; color: #8b97ac;
-  }
-  .caption b { color: #eef1f7; font-weight: 700; }
-
-  /* A simulated desktop. Fixed pixel metrics inside, scaled to fit outside;
-     the transform is also what makes the stage's position:fixed resolve here
-     instead of against the real viewport. */
   .fit { width: 100%; overflow: hidden; }
   .screen {
-    position: relative;
-    width: var(--screen-w); height: var(--screen-h);
-    transform-origin: top left;
-    overflow: hidden;
-    isolation: isolate;
-    /* stand-in for a lit Foundry canvas — over pure black every glow is a
-       triumph, which is exactly the judgement this page must not flatter. */
+    position: relative; width: 1200px; height: 675px;
+    transform-origin: top left; overflow: hidden; isolation: isolate;
+    /* a lit map, not pure black: over black every glow flatters itself */
     background:
-      radial-gradient(70% 55% at 30% 28%, #2a3a4d, transparent 70%),
-      radial-gradient(60% 50% at 78% 74%, #3a2c3d, transparent 72%),
-      repeating-linear-gradient(0deg, rgb(255 255 255 / .04) 0 1px, transparent 1px 74px),
-      repeating-linear-gradient(90deg, rgb(255 255 255 / .04) 0 1px, transparent 1px 74px),
-      #131a22;
+      radial-gradient(70% 55% at 30% 28%, #3b4a3a, transparent 70%),
+      radial-gradient(60% 50% at 78% 74%, #4a3a2c, transparent 72%),
+      repeating-linear-gradient(0deg, rgb(255 255 255 / .05) 0 1px, transparent 1px 74px),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / .05) 0 1px, transparent 1px 74px),
+      #1c2219;
   }
-
-  /* HARNESS OVERRIDE — the only one. The shipped width guard is min(640px,
-     84vw), and 84vw here reads the real pane, not the simulated screen. */
-  .screen .insight-notification { width: 640px; }
-
-  /* mock Foundry furniture, so the card is judged against real neighbours */
-  .mock-sidebar {
-    position: absolute; right: 0; top: 0; bottom: 0; width: 300px;
-    background: rgb(0 0 0 / .42); border-left: 1px solid rgb(255 255 255 / .09);
+  .screen.parchment {
+    background:
+      radial-gradient(80% 70% at 40% 40%, #d9c79f, #a8915f 75%),
+      #c2ad7f;
   }
+  .mock-sidebar { position: absolute; right: 0; top: 0; bottom: 0; width: 300px; background: rgb(0 0 0 / .5); border-left: 1px solid rgb(255 255 255 / .09); }
   .mock-hotbar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 5px; }
-  .mock-hotbar i { width: 50px; height: 50px; border: 1px solid rgb(255 255 255 / .13); background: rgb(0 0 0 / .45); border-radius: 4px; }
-  .mock-token {
-    position: absolute; width: 104px; height: 104px; border-radius: 50%;
-    border: 2px solid rgb(255 255 255 / .3);
-    background: radial-gradient(circle at 36% 30%, #7d6a55, #35281c);
-  }
+  .mock-hotbar i { width: 50px; height: 50px; border: 1px solid rgb(255 255 255 / .13); background: rgb(0 0 0 / .45); }
+  .mock-token { position: absolute; width: 104px; height: 104px; border-radius: 50%; border: 2px solid rgb(255 255 255 / .3); background: radial-gradient(circle at 36% 30%, #7d6a55, #35281c); }
 
-  /* 1:1 card row — no scaling, no canvas, just the panel */
-  .detail {
-    /* a transform, like .screen, so the stage's position:fixed resolves here
-       rather than escaping to the real viewport and covering the whole sheet */
-    transform: translateZ(0);
-    position: relative; height: 470px; overflow: hidden;
-    background: #0c1017;
-    border-top: 1px solid rgb(255 255 255 / .1);
-    border-bottom: 1px solid rgb(255 255 255 / .1);
-  }
-  .detail .insight-notification { width: 640px; }
+  .detail { transform: translateZ(0); position: relative; height: 470px; overflow: hidden; background: #0c1017; }
   .detail .insight-edge { display: none; }
+
+  .compose-row { display: flex; gap: 32px; flex-wrap: wrap; padding: 16px; background: #0c1017; }
+  .mock-window { width: 400px; box-shadow: 0 0 0 1px rgb(255 255 255 / .1), 0 20px 50px rgb(0 0 0 / .6); }
+  .mock-window .window-header { display: flex; align-items: center; height: 34px; padding: 0 12px; }
+  .mock-window .window-title { margin: 0; }
+  .mock-window button { font: inherit; }
 </style>
 
-<header>
+<header class="bar">
   <span class="muted">insight</span>
-  <button id="replay">Replay all ⏎</button>
-  <button id="freeze">Hold settled</button>
+  <button id="replay">Replay ⏎</button>
   <select id="speed">
     <option value="normal">Normal</option>
     <option value="fast">Fast</option>
@@ -221,41 +214,56 @@ const page = `<!doctype html>
   <span class="muted" id="fit"></span>
 </header>
 
-${rows
-  .map(
-    (r) => `<div class="caption"><b>${r.key.toUpperCase()}</b> · ${r.note}</div>
-<div class="fit"><div class="screen" data-screen="${r.key}" data-preset="${r.preset}" data-intensity="${r.intensity}">
+${rows.map((r) => `<section data-row="${r.key}"><div class="caption"><b>${r.key.toUpperCase()}</b> · ${r.note}</div>
+<div class="fit"><div class="screen${r.key === "e" ? " parchment" : ""}" data-screen="${r.key}" data-preset="${r.preset}" data-intensity="${r.intensity}">
   <div class="mock-sidebar"></div>
   <div class="mock-hotbar"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
   <div class="mock-token" style="left: 20%; top: 30%"></div>
-  <div class="mock-token" style="left: 31%; top: 56%"></div>
+  <div class="mock-token" style="left: 31%; top: 62%"></div>
   <template>${r.html}</template>
-</div></div>`
-  )
-  .join("\n")}
+  <script type="application/json">${JSON.stringify(r.data)}</script>
+</div></div></section>`).join("\n")}
 
-<div class="caption"><b>E</b> · The card at 1:1 — type, spacing, the commit control</div>
-<div class="detail" data-screen="e" data-preset="dreadlight" data-intensity="off">
+<section data-row="f"><div class="caption"><b>F</b> · The card at 1:1</div>
+<div class="detail" data-screen="f" data-preset="dreadlight" data-intensity="off">
   <template>${detail}</template>
-</div>
+  <script type="application/json">${JSON.stringify(SAMPLES.titled)}</script>
+</div></section>
+
+<section data-row="g"><div class="caption"><b>G</b> · The GM's compose window, with players connected and alone</div>
+<div class="compose-row">${COMPOSE_FULL}${COMPOSE_EMPTY}</div></section>
 
 <script type="module">
 import { renderNotification, disposeNotification } from "/scripts/features/insight/module/notification.mjs";
-const boxes = [...document.querySelectorAll("[data-screen]")];
+import { applyTheme } from "/scripts/features/insight/module/themes.mjs";
+const params = new URLSearchParams(location.search);
+const speedSel = document.getElementById("speed");
+if (params.get("speed")) speedSel.value = params.get("speed");
+const only = params.get("only")?.split(",");
+if (only) for (const s of document.querySelectorAll("[data-row]")) s.hidden = !only.includes(s.dataset.row);
+if (params.get("zoom")) document.body.style.zoom = params.get("zoom");
+const boxes = [...document.querySelectorAll("[data-screen]")].filter((b) => !only || only.includes(b.dataset.screen));
 let currentBox;
 let generation = 0;
-globalThis.game = { settings: { get: (_id, key) => ({
-  "insight.animationSpeed": document.getElementById("speed").value,
-  "insight.edgeIntensity": currentBox?.dataset.intensity,
-  "insight.soundEnabled": false,
-  "insight.theme": currentBox?.dataset.preset,
-})[key] } };
+const LANG = ${JSON.stringify({ "INSIGHT.Queued": LANG["INSIGHT.Queued"] })};
+globalThis.game = {
+  settings: { get: (_id, key) => ({
+    "insight.animationSpeed": speedSel.value,
+    "insight.edgeIntensity": currentBox?.dataset.intensity,
+    "insight.soundEnabled": false,
+    "insight.theme": currentBox?.dataset.preset ?? "dreadlight",
+  })[key] },
+  i18n: {
+    localize: (k) => LANG[k] ?? k,
+    format: (k, d) => (LANG[k] ?? k).replace(/\\{(\\w+)\\}/g, (_m, x) => d[x]),
+  },
+};
 globalThis.foundry = { applications: { handlebars: { renderTemplate: async () => currentBox.querySelector("template").innerHTML } } };
 
-/* Scale each simulated desktop to the page width and reserve its scaled
-   height, so the whole 16:9 frame is in one shot however wide the pane is. */
+for (const w of document.querySelectorAll(".mock-window")) applyTheme(w, w.dataset.preset);
+
 function fitScreens() {
-  const width = document.querySelector(".fit").clientWidth;
+  const width = document.documentElement.clientWidth;
   const z = Math.min(1, width / 1200);
   for (const s of document.querySelectorAll(".screen")) {
     s.style.transform = "scale(" + z + ")";
@@ -270,28 +278,17 @@ async function play() {
     const previous = box.querySelector(".insight-stage");
     if (previous) disposeNotification(previous);
     currentBox = box;
-    const el = await renderNotification({ id: box.dataset.screen, theme: box.dataset.preset });
+    const data = JSON.parse(box.querySelector('script[type="application/json"]').textContent);
+    const el = await renderNotification({ ...data, theme: box.dataset.preset });
     if (run !== generation) { disposeNotification(el); return; }
     box.appendChild(el);
   }
 }
 
-/* Freeze the ambient CSS decorations after the real timeline has settled. */
-async function freeze() {
-  await play();
-  setTimeout(() => {
-    for (const a of document.getAnimations()) {
-      if (a.effect?.target?.closest?.(".insight-stage")) a.pause();
-    }
-  }, 2500);
-}
-
 document.getElementById("replay").addEventListener("click", play);
-document.getElementById("freeze").addEventListener("click", freeze);
-document.getElementById("speed").addEventListener("change", play);
-addEventListener("keydown", (e) => { if (e.key === "Enter") play(); });
+speedSel.addEventListener("change", play);
+addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.target.closest?.("textarea")) play(); });
 addEventListener("resize", fitScreens);
-
 fitScreens();
 play();
 </script>
@@ -301,147 +298,58 @@ await mkdir(dirname(OUT), { recursive: true });
 await writeFile(OUT, page, "utf8");
 const rel = OUT.slice(ROOT.length).replace(/\\/g, "/");
 console.log("wrote " + OUT);
-console.log("serve it:  node tools/preview-server.mjs");
-console.log("then open: http://localhost:8931/" + rel);
+console.log("serve it:  node tools/preview-server.mjs 8973");
+console.log("then open: http://localhost:8973/" + rel);
 
 /* ────────────────────────────────────────────────────────────────────────
-   --artifact=<path> — a portable, settled-state design reference.
-   The served preview links the stylesheets off the repo, which only works
-   behind preview-server. For a page that has to open anywhere (a review link,
-   a phone), inline the very same three files and swap the bundled font layer
-   for the one web host that will serve those two faces. Derived from the page
-   above rather than written a second time, so the two cannot drift into
-   showing different designs.
+   --artifact=<path>: a portable, settled-state reference. It inlines the same
+   stylesheets and shows every row at rest (`insight-settled`), so it opens
+   anywhere without a server. It is derived from the page above, and its beat
+   list is the shipped clock, so the two cannot describe different designs.
    ──────────────────────────────────────────────────────────────────────── */
 const artifactArg = process.argv.find((a) => a.startsWith("--artifact="));
 if (artifactArg) {
   const ART = resolve(ROOT, artifactArg.slice(11));
-
   const sheets = [];
   for (const f of ["styles/gl-tokens.css", "styles/gl-motion.css", "styles/insight.css"]) {
     sheets.push("/* ==== " + f + " ==== */\n" + (await readFile(resolve(ROOT, f), "utf8")));
   }
-
-  // The artifact host supplies the document skeleton, and the bundled faces
-  // are not reachable from a published page.
   const settledScript = `<script>
 const presets = ${JSON.stringify(PRESETS)};
 for (const box of document.querySelectorAll("[data-screen]")) {
   const stage = box.querySelector("template").content.firstElementChild.cloneNode(true);
-  stage.classList.add("insight-speed-instant");
+  stage.classList.add("insight-settled");
   if (box.dataset.intensity !== "full") stage.classList.add("insight-intensity-" + box.dataset.intensity);
   for (const [key, value] of Object.entries(presets[box.dataset.preset])) stage.style.setProperty(key, value);
-  stage.querySelectorAll(".insight-edge, .insight-notification, .insight-fracture-line, .insight-fracture-card").forEach(el => el.classList.add("insight-visible"));
-  stage.querySelectorAll(".insight-icon, .insight-sense, .insight-serial, .insight-title, .insight-divider, .insight-image, .insight-body, .insight-datastrip, .insight-dismiss").forEach(el => el.classList.add("insight-fade-in"));
   stage.querySelector(".insight-dismiss").disabled = true;
   box.appendChild(stage);
 }
+for (const w of document.querySelectorAll(".mock-window")) for (const [k, v] of Object.entries(presets[w.dataset.preset])) w.style.setProperty(k, v);
 function fit() {
   const z = Math.min(1, document.querySelector(".fit").clientWidth / 1200);
-  for (const screen of document.querySelectorAll(".screen")) {
-    screen.style.transform = "scale(" + z + ")";
-    screen.parentElement.style.height = Math.round(675 * z) + "px";
-  }
+  for (const s of document.querySelectorAll(".screen")) { s.style.transform = "scale(" + z + ")"; s.parentElement.style.height = Math.round(675 * z) + "px"; }
 }
 addEventListener("resize", fit); fit();
 </script>`;
   const body = page
     .replace(/<script type="module">[\s\S]*?<\/script>/, settledScript)
-    .replace(/<header>[\s\S]*?<\/header>/, '<header>Insight &middot; static settled-state reference</header>')
+    .replace(/<header class="bar">[\s\S]*?<\/header>/, "")
     .replace(/^<!doctype html>\n<meta charset="utf-8">\n<title>[^<]*<\/title>\n/, "")
     .replace(/<link rel="stylesheet" href="\/styles\/[^"]*">\n/g, "");
-
+  const t = TIMINGS.normal;
+  const intro = `<div style="max-width:64ch;padding:32px 16px 4px;line-height:1.55;color:#c9ced8">
+  <h1 style="margin:0 0 12px;font-size:28px;color:#f3f5f9">Insight arrival</h1>
+  <p>One private message on one player's screen. The edge lands first and alone, then the cut, then the card, then the words. These frames are the <b>settled state</b>; serve the repository preview to watch the motion.</p>
+  <ul style="padding-left:18px">${beats(t).map(([ms, what]) => `<li><b>${ms} ms</b> · ${what}</li>`).join("")}
+  <li><b>then</b> · The edge breathes on a ${DURATIONS.breathe} ms cycle until the player acknowledges.</li></ul>
+</div>`;
   const head = [
-    // The artifact host wraps this in its own head, which declares utf-8 —
-    // but the same file also has to open straight off disk and from
-    // preview-server, neither of which sends a charset. Without this the
-    // em dashes and middots in the copy (and in the card body) come out as
-    // mojibake, which is exactly the kind of thing a review page must not
-    // teach the reviewer to ignore.
     '<meta charset="utf-8">',
-    '<title>Insight Arrival</title>',
-    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@200..800&family=JetBrains+Mono:wght@100..800&display=swap">',
-    "<style>",
-    sheets.join("\n\n"),
-    "</style>",
-    "<style>",
-    "  /* The suite bundles both faces locally; a published page has to reach",
-    "     them by the same two custom properties, so that nothing else in the",
-    "     design system has to know the difference. */",
-    "  :root {",
-    '    --gl-display: "Oxanium", "Segoe UI", system-ui, sans-serif;',
-    '    --gl-tech: "Bahnschrift", "JetBrains Mono", Consolas, monospace;',
-    "  }",
-    "  .intro {",
-    "    max-width: 62ch;",
-    "    padding: 36px 16px 4px;",
-    "    font-family: var(--gl-display);",
-    "    color: var(--gl-text);",
-    "  }",
-    "  .intro .eyebrow {",
-    "    font-family: var(--gl-tech);",
-    "    font-size: var(--gl-fs-2xs);",
-    "    font-weight: var(--gl-weight-bold);",
-    "    letter-spacing: var(--gl-track-xwide);",
-    "    text-transform: uppercase;",
-    "    color: var(--gl-violet);",
-    "    margin-bottom: 10px;",
-    "  }",
-    "  .intro h1 {",
-    "    margin: 0 0 14px;",
-    "    font-size: var(--gl-fs-3xl);",
-    "    font-weight: var(--gl-weight-heavy);",
-    "    letter-spacing: var(--gl-track-tight);",
-    "    line-height: var(--gl-lh-tight);",
-    "    text-wrap: balance;",
-    "  }",
-    "  .intro p { line-height: var(--gl-lh-loose); color: #b3bece; margin: 0 0 14px; }",
-    "  .intro em { color: var(--gl-text-bright); font-style: normal; font-weight: var(--gl-weight-medium); }",
-    "  .beats {",
-    "    display: grid; margin: 24px 0 0; padding: 0; list-style: none;",
-    "    border-top: 1px solid rgb(var(--gl-tint-light) / .1);",
-    "  }",
-    "  .beats li {",
-    "    display: grid; grid-template-columns: 76px 1fr; gap: 14px;",
-    "    padding: 11px 0; border-bottom: 1px solid rgb(var(--gl-tint-light) / .1);",
-    "    line-height: var(--gl-lh-normal); color: #b3bece;",
-    "  }",
-    "  .beats b {",
-    "    font-family: var(--gl-tech); font-size: var(--gl-fs-3xs);",
-    "    font-weight: var(--gl-weight-bold); letter-spacing: var(--gl-track-wide);",
-    "    text-transform: uppercase; color: var(--gl-text-faint);",
-    "    font-variant-numeric: tabular-nums; padding-top: 3px;",
-    "  }",
-    "</style>",
+    "<title>Insight Arrival</title>",
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wdth,wght@6..144,25..151,1..1000&display=swap">',
+    "<style>", sheets.join("\n\n"), "</style>",
   ].join("\n");
-
-  const intro = [
-    '<div class="intro">',
-    '  <div class="eyebrow">GLUniverse Suite &middot; Insight &middot; rework</div>',
-    "  <h1>Insight Arrival</h1>",
-    "  <p>A private whisper used to slide in at 348&nbsp;px against the right",
-    "  margin and wait to be noticed. It now arrives in two layers. The",
-    "  <em>screen edge</em> takes the accent first &mdash; four bands rushing in,",
-    "  a hairline frame striking, the corner marks registering, one scan crossing",
-    "  &mdash; and only then does the cut open and the card unfold at centre",
-    "  stage, 640&nbsp;px wide with the body set at 17&nbsp;px. The edge keeps",
-    "  breathing until the message is acknowledged.</p>",
-    "  <p>Nothing on the stage takes the pointer except the card, so the canvas",
-    "  stays playable underneath. These frames show the <em>static settled state</em>.",
-    "  Run the repository preview to review the production Anime.js arrival and dismissal.</p>",
-    '  <ul class="beats">',
-    "    <li><b>0 ms</b><span>Impact. The edge flares, the four bands rush in, the sub thump lands.</span></li>",
-    "    <li><b>120 ms</b><span>The frame strikes, the corner marks register in sequence, one scan crosses the view.</span></li>",
-    "    <li><b>280 ms</b><span>The cut draws from the centre outwards, wider than the card it opens.</span></li>",
-    "    <li><b>760 ms</b><span>The panel unfolds out of the cut and the sheen sweeps across it.</span></li>",
-    "    <li><b>1060 ms</b><span>Content cascades in behind the sheen &mdash; mark, kicker, title, rule, body, strip, control.</span></li>",
-    "    <li><b>then</b><span>The edge settles into a slow breath and holds there until Acknowledge.</span></li>",
-    "  </ul>",
-    "</div>",
-    "",
-  ].join("\n");
-
   await mkdir(dirname(ART), { recursive: true });
   await writeFile(ART, head + "\n" + intro + body, "utf8");
-  console.log("wrote " + ART + "  (portable static reference)");
+  console.log("wrote " + ART + "  (portable settled-state reference)");
 }

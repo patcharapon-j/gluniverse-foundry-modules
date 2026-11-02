@@ -783,36 +783,38 @@ static behaviour) asks for no frames once it has landed; the host's ticker
 stops. See `docs/PF2E_AOE.md` for the look tables and the layers.
 
 **When touching Insight** (`features/insight/`, `styles/insight.css`,
-`templates/insight/`), re-run its consistency check. An Insight arrival is a
-sequence of classes applied to elements by a clock, over CSS that is almost
-entirely one-shot keyframes — so nothing here throws when it breaks, a beat of
-the reveal just never happens, on a player's screen, once, while the GM's own
-screen looks correct. It pins every element the renderer reaches for against
-the template (a rename makes `querySelector` return null, which drops a beat
-silently and throws outright on the two that are not optional); the *reverse*
-direction too, because most of the arrival — the flash, the scan, the four
-corner marks, the frame — is nodes JS never touches and CSS alone animates, so
-a rename on either side simply deletes that beat; the stage clock in
-`tools/insight-preview.mjs` against the one in `notification.mjs`, since the
-preview is where this feature is judged and a preview on its own timings
-flatters a reveal nobody ships; that every setting the renderer reads is
-registered (`game.settings.get` on an unregistered key throws *inside* the
-render, losing the whole notification rather than degrading it); that every
-edge-intensity tier names a class the CSS defines, since a tier that resolves
-to nothing renders as "full" — the one outcome a player who turned the edge
-down did not consent to; that every sound profile carries all three stages,
-because a missing one is a designed no-op and a profile that lost its `impact`
-is a silent alert on the exact beat the alert exists for; and that a preset
-only ever remaps `--gl-accent` plus this feature's own `--insight-*` tokens,
-because presets are **not** themes and one that repaints a surface forks
-Etched Glass while looking perfectly fine in its own file:
+`templates/insight/`), re-run its consistency check. An Insight arrival is four
+beats (edge, cut, card, words) on ONE anime.js timeline in `notification.mjs`,
+over a stylesheet that only states resting values and hides every animated node
+until its beat (`.insight-stage:not(.insight-settled) :is(...)`). Nothing there
+throws when it breaks: a beat just never happens, on a player's screen, once,
+while the GM's own screen looks correct. The check pins every element the
+renderer reaches for against the template and every styled class against the
+markup, both ways; that the nodes CSS hides are exactly the nodes the timeline
+reveals (hidden and never revealed never appears, revealed and not hidden
+flashes in early); that the preview plays the shipped renderer and prints the
+shipped `TIMINGS`, so its clock cannot drift; that every setting the renderer
+reads is registered; that every edge-intensity tier names a class the CSS
+defines, since one that resolves to nothing renders as "full"; that every sound
+profile carries all three stages; that a preset only remaps `--gl-accent` plus
+`--insight-*` (`registerTheme` enforces the same at runtime); and that every
+duration the renderer passes is tier-scaled:
 
 ```bash
 node tools/insight-check.mjs
 ```
 
-Zero problems required. Two of its rules are there because this feature got
-both wrong on the way in.
+Zero problems required. Two more are about who sees what, and both were wrong
+until the remake. **An Insight is private, so it rides `recipients`**, which
+the server filters; it used to be broadcast with a `target` field each client
+checked itself, which put every whisper in every player's socket traffic. And
+**only a server-attested GM may put a card on a screen** (`accepts()` in
+`socket.mjs`, on `meta.attested`): the body prints through a triple-stache, so
+before that any player could put markup on anyone's screen. The body is reduced
+to a bare-tag allow-list on the RECEIVING side (`body.mjs` `safeBody`), and the
+check proves Recall Knowledge's hand-off passes through it byte for byte.
+
+Two older rules are there because this feature got both wrong on the way in.
 
 `--gl-glow`, `--gl-bloom`, `--gl-accent-soft` and `--gl-accent-faint` are
 declared at `:root` **against the `:root` accent**, so they do not follow a
@@ -823,8 +825,8 @@ that happen to use it. Every accent-derived value in `styles/insight.css` is
 struck inline with `color-mix()` for that reason; the check refuses the four.
 
 And **an accent that covers a whole viewport has to be corrected per hue.**
-The edge bands blend with `screen` over a cool canvas, where amber carries far
-further than a luminance-matched violet would predict: on the shared burn the
+Over a cool map amber carries far further than a luminance-matched violet
+would predict: on the shared burn the
 Fantasy preset washed the entire frame yellow instead of lighting its edges,
 and looked deliberate in every file involved. That is why a preset may set
 `--insight-burn` and `--insight-reach-*` at all — the edge is the one place a
@@ -833,12 +835,15 @@ preset carries its own correction.
 
 It cannot show you how any of this looks, and a still cannot either — the
 arrival *is* the feature. For that, `node tools/insight-preview.mjs` writes a
-page that drives the real stylesheets and the real template through the real
-stage order across four simulated 1200×675 desktops, plus the card at 1:1.
-**Serve it** (`node tools/preview-server.mjs`) — a `file://` page loads the CSS
-but not the module script, so you get a card frozen at its pre-entry values and
-conclude, wrongly, that the reveal is broken. Add `--artifact=<path>` for a
-self-contained copy that opens anywhere.
+page that plays the shipped renderer over the real stylesheets and templates
+across five simulated 1200×675 desktops (one on parchment), the card at 1:1 and
+the compose window (`?only=a,f&speed=fast&zoom=2`). **Serve it**
+(`node tools/preview-server.mjs`): a `file://` page loads the CSS but not the
+module script, so every card stays hidden and the reveal looks broken. Add
+`--artifact=<path>` for a settled-state copy that opens anywhere. The lifecycle
+checks are `node tools/insight-destiny-motion-check.mjs` and the motion
+workshop's in-browser suite (`tools/templates/motion-preview.html`). See
+`docs/INSIGHT.md`.
 
 **When touching the PF2e variant rules** (`features/pf2e-variant-rules/`), re-run
 its consistency check. Everything it covers fails *silently*.

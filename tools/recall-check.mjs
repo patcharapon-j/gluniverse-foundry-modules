@@ -21,10 +21,12 @@
 
 import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FEATURE = join(ROOT, "scripts/features/pf2e-recall");
+// A bare Windows path is not an import specifier; a file URL works everywhere.
+const featureModule = (name) => import(pathToFileURL(join(FEATURE, name)).href);
 
 const problems = [];
 const notes = [];
@@ -47,15 +49,13 @@ const {
   TELL_WINDOW,
   presentationByKey,
   presentationForText,
-} = await import(
-  join(FEATURE, "constants.mjs")
-);
-const { HEADINGS, VERSION_MARK, buildPayload } = await import(join(FEATURE, "prompt.mjs"));
-const { parseLadder, formatLadder } = await import(join(FEATURE, "parse.mjs"));
-const { flattenEnrichers, capText, subjectBrief } = await import(join(FEATURE, "extract.mjs"));
-const { pickMistakenIdentity } = await import(join(FEATURE, "mistaken.mjs"));
-const { inlineMarkdownToHtml, stripInlineMarkdown } = await import(join(FEATURE, "markdown.mjs"));
-const { buildInsightMessage, playerFacingText } = await import(join(FEATURE, "share.mjs"));
+} = await featureModule("constants.mjs");
+const { HEADINGS, VERSION_MARK, buildPayload } = await featureModule("prompt.mjs");
+const { parseLadder, formatLadder } = await featureModule("parse.mjs");
+const { flattenEnrichers, capText, subjectBrief } = await featureModule("extract.mjs");
+const { pickMistakenIdentity } = await featureModule("mistaken.mjs");
+const { inlineMarkdownToHtml, stripInlineMarkdown } = await featureModule("markdown.mjs");
+const { buildInsightMessage, playerFacingText } = await featureModule("share.mjs");
 
 const lang = JSON.parse(readFileSync(join(ROOT, "lang/pf2e-recall.en.json"), "utf8"));
 const statsblockLang = JSON.parse(

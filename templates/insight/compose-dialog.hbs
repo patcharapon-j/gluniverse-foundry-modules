@@ -1,24 +1,38 @@
 <form class="insight-compose-form" autocomplete="off">
-  <div class="insight-compose-kicker">
-    {{localize "INSIGHT.ModuleTitle"}}
-    <span class="insight-compose-serial">SEC&middot;04 / GRID&middot;NW</span>
-  </div>
-  <label>
-    {{localize "INSIGHT.ComposeTarget"}}
-    <select name="target">
-      {{#each players}}
-      <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.name}}</option>
+  <fieldset class="insight-compose-to">
+    <legend class="insight-compose-heading">
+      <span>{{localize "INSIGHT.ComposeTarget"}}</span>
+      {{#if hasPlayers}}
+      <button type="button" class="insight-compose-all" data-action="pickPlayers">{{localize "INSIGHT.ComposeAllPlayers"}}</button>
+      {{/if}}
+    </legend>
+    {{#if people.length}}
+    <div class="insight-compose-people">
+      {{#each people}}
+      <label class="insight-person" style="--insight-person: {{this.color}}">
+        <input type="checkbox" name="target" value="{{this.id}}" {{#if this.selected}}checked{{/if}}>
+        <span class="insight-person-swatch" aria-hidden="true"></span>
+        <span>{{this.name}}</span>
+      </label>
       {{/each}}
-    </select>
+    </div>
+    {{else}}
+    <p class="insight-compose-empty">{{localize "INSIGHT.ComposeNobody"}}</p>
+    {{/if}}
+  </fieldset>
+
+  <label class="insight-compose-field">
+    <span class="insight-compose-heading">{{localize "INSIGHT.ComposeLabel"}}</span>
+    <input type="text" name="sense" maxlength="60" value="{{sense}}" placeholder="{{localize "INSIGHT.SenseDefault"}}">
   </label>
 
-  <label>
-    {{localize "INSIGHT.ComposeMessage"}}
-    <textarea name="message" placeholder="The hairs on your neck rise..." required>{{message}}</textarea>
-    <span class="hint">{{localize "INSIGHT.ComposeMessageHint"}}</span>
+  <label class="insight-compose-field">
+    <span class="insight-compose-heading">{{localize "INSIGHT.ComposeMessage"}}</span>
+    <textarea name="message" placeholder="{{localize "INSIGHT.ComposeMessagePlaceholder"}}">{{message}}</textarea>
+    <span class="insight-compose-hint">{{localize "INSIGHT.ComposeMessageHint"}}</span>
   </label>
 
-  <button type="button" class="insight-send-btn" data-action="send">
-    {{localize "INSIGHT.ComposeSend"}}
-  </button>
+  <footer class="insight-compose-foot">
+    <button type="button" class="insight-send-btn" data-action="send">{{localize "INSIGHT.ComposeSend"}}</button>
+  </footer>
 </form>

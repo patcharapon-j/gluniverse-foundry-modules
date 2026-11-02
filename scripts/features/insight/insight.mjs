@@ -10,8 +10,6 @@ export { registerSettings };
 
 /** Everything that used to run in the `init` hook. */
 export function onInit() {
-  console.log("Insight | Initializing module");
-
   // Add scene control button (GM only) under the suite's own top-level group.
   Hooks.on("getSceneControlButtons", (controls) => {
     if (!game.user.isGM) return;
@@ -41,12 +39,18 @@ export function onInit() {
     if (!game.user.isGM) return;
     bindSuiteToolClicks(html, { insight: () => openComposeDialog() });
   });
+
+  // The recipient list is who is connected. Someone joining or leaving while
+  // the window is open would otherwise be missing from it, or still offered.
+  Hooks.on("userConnected", () => {
+    if (!game.user.isGM) return;
+    foundry.applications.instances.get(COMPOSE_DIALOG_ID)?.render();
+  });
 }
 
 /** Everything that used to run in the `ready` hook (+ socket wiring). */
 export function onReady() {
   registerSocket();
-  console.log("Insight | Module ready");
 }
 
 /** Open the compose dialog, reusing the open instance instead of stacking a new one. */

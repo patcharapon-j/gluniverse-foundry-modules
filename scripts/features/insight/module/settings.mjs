@@ -73,6 +73,4 @@ export function registerSettings() {
       instant: "INSIGHT.AnimationInstant",
     },
   });
-
-  console.log("Insight | Settings registered");
 }

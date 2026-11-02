@@ -37,7 +37,7 @@ globalThis.HTMLElement = Node;
 globalThis.getComputedStyle = () => ({ getPropertyValue: () => "1" });
 globalThis.__motion = { animate: (_target, options) => createTimeline(options), createTimeline, createMotionOwner, motionDuration: n => n, stagger: n => n };
 async function production(path, preamble) {
-  const source = (await readFile(new URL(path, import.meta.url), 'utf8')).replace(/^import .*;\n/gm, '');
+  const source = (await readFile(new URL(path, import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '');
   return import(`data:text/javascript;base64,${Buffer.from(`const { animate, createTimeline, createMotionOwner, motionDuration, stagger } = globalThis.__motion;\n${preamble}\n${source}`).toString('base64')}`);
 }
 const insight = await production('../scripts/features/insight/module/notification.mjs', 'const SUITE_ID="suite", featurePath=()=>"", applyTheme=()=>{}, playSound=()=>{}, playCustomSound=()=>{};');
