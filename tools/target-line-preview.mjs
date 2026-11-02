@@ -211,6 +211,76 @@ try {
   requestAnimationFrame(frame);
 
   if (phase === "handoff") setTimeout(() => lines[2].retarget("seri"), 900);
+
+  // ── the odds on the line (pf2e-odds), placed by the shipped line-place.mjs ──
+  if (q.has("odds")) {
+    const { buildModel } = await import("/scripts/features/pf2e-odds/view-model.mjs");
+    const R = await import("/scripts/features/pf2e-odds/render.mjs");
+    const P = await import("/scripts/features/pf2e-odds/line-place.mjs");
+    const EN = {
+      "GLOD.attack.first": "1st", "GLOD.attack.second": "2nd", "GLOD.attack.third": "3rd",
+      "GLOD.chip.map": "MAP", "GLOD.unseen.attack": "Attack unseen", "GLOD.unseen.defence": "Defence unseen",
+      "GLOD.word.hit": "Hit", "GLOD.word.success": "Success", "GLOD.word.crit": "Crit", "GLOD.word.theyFail": "They fail", "GLOD.word.critFail": "Crit fail", "GLOD.word.dc": "DC", "GLOD.word.vs": "vs",
+      "GLOD.stat.ac": "AC", "GLOD.gm.true": "True", "GLOD.gm.players": "Players see", "GLOD.gm.exact": "exact",
+      "GLOD.stamp.fumble": "Fumble", "GLOD.stamp.miss": "Miss", "GLOD.stamp.hit": "Hit", "GLOD.stamp.crit": "Crit", "GLOD.outOfRange": "Out of range",
+    };
+    const t = (k) => EN[k] ?? k;
+    const gm = q.has("gm");
+    const MODS = [{ slug: "multiple-attack-penalty", label: "MAP", value: -5, kind: "untyped", enabled: true }];
+    const pc = { rollerIsCreature: false, defenderIsCreature: true, isGM: gm };
+    const foe = { rollerIsCreature: true, defenderIsCreature: false, isGM: gm };
+    const SPEC = {
+      "seri>ogre": { who: pc, mod: 17, mods: MODS, dc: 23, known: { lo: 23, hi: 23 }, label: "Longsword", sub: "GLOD.attack.second", target: "Ogre" },
+      "seri>hag": { who: pc, mod: 17, mods: MODS, dc: 25, known: null, label: "Longsword", sub: "GLOD.attack.second", target: "Hag" },
+      "tavi>gob": { who: pc, mod: 12, mods: [], dc: 18, known: { lo: 16, hi: 19 }, label: "Shortbow", sub: "GLOD.attack.first", target: "Goblin" },
+      "ogre>ally": { who: foe, mod: 15, mods: [], dc: 21, known: { lo: 14, hi: 17 }, label: "Club", sub: "GLOD.attack.first", target: "Aldric" },
+    };
+    const acting = q.get("acting") ?? "seri";
+    const hover = q.get("hover");
+    const box = document.getElementById("badges");
+    const views = PAIRS.filter(([s, tg]) => s !== tg).map(([s, tg, color]) => {
+      const key = s + ">" + tg;
+      const sp = SPEC[key];
+      const model = buildModel({ probe: { mod: sp.mod, mods: sp.mods, dc: { value: sp.dc, slug: "armor" }, options: [] }, bareDc: sp.dc, who: sp.who, known: sp.known, label: sp.label, sub: sp.sub, dcLabel: "GLOD.stat.ac", playersKnown: gm ? sp.known : undefined });
+      const full = s === acting || key === hover;
+      const el = document.createElement("div");
+      el.className = "glod-line " + (full ? "is-full" : "is-compact");
+      el.style.setProperty("--glod-line", P.lineCss(color));
+      if (full) el.style.zIndex = "2";
+      el.innerHTML = R.compactHTML(model, { t }) + R.badgeHTML(model, { t, target: sp.target, gm });
+      box.append(el);
+      return { s, tg, el, full, acting: s === acting, hot: key === hover, path: null };
+    });
+    const place = () => {
+      const items = views.map((v) => {
+        const a = T[v.s], b = T[v.tg];
+        const path = P.linePath({ from: a.center, to: b.center, sourceSize: Math.max(a.w, a.h), targetSize: Math.max(b.w, b.h), gridSize: GRID });
+        const tag = v.el.querySelector(".glod-tag").getBoundingClientRect();
+        const plate = v.full ? v.el.querySelector(".glod-badge").getBoundingClientRect() : null;
+        const at = (share) => { const p = P.tagAnchor(path, share, GRID); const sc = toScreen(p); return { x: sc.x, y: sc.y, nx: p.nx, ny: p.ny }; };
+        return { v, at, w: tag.width, h: tag.height, plate: plate ? { w: plate.width, h: plate.height } : null };
+      });
+      const rank = (v) => (v.hot ? 4 : 0) + (v.acting ? 2 : 0) + (v.full ? 1 : 0);
+      items.sort((x, y) => rank(y.v) - rank(x.v));
+      const obstacles = Object.values(T).map((tk) => { const c = toScreen(tk.center); const w = tk.w * zoom; return { x: c.x - w / 2, y: c.y - w / 2, w, h: w }; });
+      const spots = P.placeLines(items, { w: W, h: H }, { obstacles });
+      items.forEach((it, i) => {
+        const placed = spots[i];
+        if (placed.side) it.v.el.dataset.side = placed.side;
+        it.v.el.querySelector(".glod-tag").style.translate = placed.tag.x + "px " + placed.tag.y + "px";
+        if (placed.plate) it.v.el.querySelector(".glod-badge").style.translate = placed.plate.x + "px " + placed.plate.y + "px";
+      });
+    };
+    await document.fonts.ready;
+    place();
+    window.__placeOdds = place;
+    if (q.has("land")) setTimeout(() => {
+      const ogre = views.find((v) => v.tg === "ogre");
+      R.playLanding(ogre.el.querySelector(".glod-badge"), { face: 14, degree: 2, t });
+      const gob = views.find((v) => v.tg === "gob");
+      R.playTagLanding(gob.el.querySelector(".glod-tag"), { degree: 3, t });
+    }, 700);
+  }
   if (!freeze) setInterval(() => {
     lines.forEach((l) => l.hide?.());
     setTimeout(launch, 700);
