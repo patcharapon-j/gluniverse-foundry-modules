@@ -3922,6 +3922,13 @@ export class GLUniverseInitiativeOverlay {
       if (menu.contains(closeEvent.target)) return;
       this.closeInitiativeContextMenu();
     };
+    // Escape closes it, as it does the gauge editor this menu opens.
+    menu.addEventListener("keydown", keyEvent => {
+      if (keyEvent.key !== "Escape") return;
+      keyEvent.preventDefault();
+      keyEvent.stopPropagation();
+      this.closeInitiativeContextMenu();
+    });
     window.setTimeout(() => {
       if (this.contextMenu?.element !== menu) return;
       document.addEventListener("pointerdown", closeOnOutside);
