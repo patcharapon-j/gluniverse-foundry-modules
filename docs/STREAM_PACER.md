@@ -22,8 +22,10 @@ is about and the buttons that answer it. Highest priority first:
 
 **The HUD** is a small draggable panel. The GM's has the calls, the room (campfire
 and Dire Peril), the table with spotlight marks, and a footer to check in, lower
-every hand and reset the marks. A player's has Raise hand, Need time, the
-traffic light and their sound and desktop alert toggles.
+every hand and reset the marks. A player's sits over the map all session, so it
+is two rows: Raise hand and Need time, then the traffic light with the current
+answer beside it. Sound and desktop alerts are icons in the header, and the
+header collapses the panel to one 32px line.
 
 **Spotlight is marks, not time.** Click a player's row to mark that they had the
 spotlight; mark twice for a big one; right-click to take one back. The row two

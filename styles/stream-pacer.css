@@ -433,7 +433,8 @@
   top: 200px;
   left: 96px;
   z-index: var(--gl-z-hud);
-  width: 248px;
+  /* a player's panel sits over the map all session: two rows, as small as the labels allow */
+  width: 234px;
   background:
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.035), transparent 120px),
     color-mix(in oklab, var(--sp-ink-1) 95%, transparent);
@@ -445,50 +446,52 @@
   font-size: 13px;
   user-select: none;
 }
-#stream-pacer-hud.is-gm { width: 332px; }
+#stream-pacer-hud.is-gm { width: 304px; }
 #stream-pacer-hud.is-dragging { cursor: grabbing; }
 
 #stream-pacer-hud .sp-hud-head {
   display: flex;
   align-items: center;
-  gap: 9px;
-  height: 36px;
-  padding: 0 6px 0 12px;
+  gap: 6px;
+  height: 30px;
+  padding: 0 3px 0 10px;
   cursor: grab;
 }
 #stream-pacer-hud:not(.is-collapsed) .sp-hud-head { border-bottom: 1px solid var(--sp-line); }
 #stream-pacer-hud .sp-hud-mark {
-  width: 14px;
-  height: 14px;
+  width: 11px;
+  height: 11px;
   background: var(--sp-paper);
   clip-path: polygon(0 0, 100% 0, 45% 100%, 0 100%);
 }
 #stream-pacer-hud .sp-hud-title {
   flex: 1;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 750;
   font-stretch: 118%;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 #stream-pacer-hud .sp-hud-icon {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
+  font-size: 11.5px;
   color: var(--sp-faint);
   border-radius: var(--sp-radius);
 }
+#stream-pacer-hud .sp-hud-head .sp-hud-icon.is-on { color: var(--sp-dim); }
 @media (hover: hover) and (pointer: fine) {
   #stream-pacer-hud .sp-hud-icon:hover:not(:disabled) { color: var(--sp-text); background: var(--sp-hover); }
 }
 
-#stream-pacer-hud .sp-hud-body { padding: 4px 0 0; }
-#stream-pacer-hud .sp-hud-sec { padding: 8px 12px; }
+#stream-pacer-hud .sp-hud-body { padding: 3px 0; }
+#stream-pacer-hud .sp-hud-sec { padding: 4px 8px; }
 #stream-pacer-hud .sp-hud-label {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 7px;
+  margin-bottom: 4px;
   font-size: 10.5px;
   font-weight: 700;
   font-stretch: 114%;
@@ -504,26 +507,33 @@
   text-transform: none;
   color: var(--sp-faint);
 }
-#stream-pacer-hud .sp-hud-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#stream-pacer-hud .sp-hud-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 #stream-pacer-hud .sp-hud-grid-2 { grid-template-columns: 1fr 1fr; }
+#stream-pacer-hud .sp-hud-grid.has-end { grid-template-columns: 1fr 1fr auto; }
+/* a player's two buttons share the row by their labels, not half and half */
+#stream-pacer-hud:not(.is-gm) .sp-hud-grid { display: flex; }
+#stream-pacer-hud:not(.is-gm) .sp-hud-grid > .sp-hud-btn { flex: 1 1 auto; padding: 0 7px 0 9px; gap: 6px; }
 
 /* a HUD button: ink slab, tone edge on the left, solid tone when pressed */
 #stream-pacer-hud .sp-hud-btn {
   position: relative;
   justify-content: flex-start;
-  gap: 8px;
-  height: 34px;
-  padding: 0 10px 0 12px;
+  gap: 7px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px 0 10px;
+  white-space: nowrap;
   background: var(--sp-ink-3);
   color: var(--sp-text);
   box-shadow: inset 2px 0 0 var(--sp-tone, var(--sp-faint)), inset 0 0 0 1px var(--sp-line);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 650;
-  font-stretch: 106%;
+  font-stretch: 104%;
   text-align: left;
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);
 }
-#stream-pacer-hud .sp-hud-btn i { width: 14px; color: var(--sp-tone, var(--sp-dim)); font-size: 12.5px; }
+#stream-pacer-hud .sp-hud-btn > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#stream-pacer-hud .sp-hud-btn i { flex: none; width: 13px; color: var(--sp-tone, var(--sp-dim)); font-size: 11.5px; }
 #stream-pacer-hud .sp-hud-btn.is-pressed {
   background: var(--sp-tone, var(--sp-paper));
   color: var(--sp-ink-0);
@@ -533,7 +543,14 @@
 @media (hover: hover) and (pointer: fine) {
   #stream-pacer-hud .sp-hud-btn:not(.is-pressed):not(.sp-hud-split):hover { background: var(--sp-ink-4); }
 }
-#stream-pacer-hud .sp-hud-end { --sp-tone: var(--sp-faint); color: var(--sp-dim); }
+/* ending the call: a square beside Wrap and Ready, only while one is running */
+#stream-pacer-hud .sp-hud-end {
+  width: 28px;
+  height: 28px;
+  background: var(--sp-ink-3);
+  box-shadow: inset 0 0 0 1px var(--sp-line);
+  color: var(--sp-dim);
+}
 
 /* countdown: one slab, three lengths */
 #stream-pacer-hud .sp-hud-split {
@@ -541,15 +558,14 @@
   align-items: center;
   grid-column: 1 / -1;
   cursor: default;
-  padding-right: 5px;
+  padding-right: 3px;
 }
-#stream-pacer-hud .sp-hud-end { grid-column: 1 / -1; }
 #stream-pacer-hud .sp-hud-split > span:first-of-type { flex: 1; }
 #stream-pacer-hud .sp-segs { display: flex; gap: 3px; }
 #stream-pacer-hud .sp-seg {
-  height: 24px;
-  min-width: 40px;
-  padding: 0 8px;
+  height: 22px;
+  min-width: 36px;
+  padding: 0 7px;
   background: var(--sp-ink-5);
   color: var(--sp-dim);
   font-size: 11px;
@@ -561,15 +577,18 @@
   #stream-pacer-hud .sp-seg:hover { background: var(--sp-amber); color: var(--sp-ink-0); }
 }
 
+/* calls and room are two groups without labels; a hairline keeps them apart */
+#stream-pacer-hud .sp-hud-room { padding-top: 0; }
+#stream-pacer-hud .sp-hud-table { margin-top: 3px; padding-top: 6px; border-top: 1px solid var(--sp-line); }
+
 /* the table */
-#stream-pacer-hud .sp-hud-table { padding-top: 4px; }
-#stream-pacer-hud .sp-rows { display: flex; flex-direction: column; gap: 2px; }
+#stream-pacer-hud .sp-rows { display: flex; flex-direction: column; gap: 1px; }
 #stream-pacer-hud .sp-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 4px 0 2px;
+  gap: 7px;
+  height: 28px;
+  padding: 0 2px;
   border-radius: var(--sp-radius);
 }
 @media (hover: hover) and (pointer: fine) {
@@ -583,7 +602,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 #stream-pacer-hud .sp-quiet-tag {
@@ -597,10 +616,11 @@
 }
 #stream-pacer-hud .sp-chip {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 4px;
-  height: 20px;
-  padding: 0 6px;
+  height: 18px;
+  padding: 0 5px;
   font-size: 11px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -665,47 +685,49 @@
 
 #stream-pacer-hud .sp-empty { margin: 4px 0; color: var(--sp-faint); font-size: 12px; }
 
+/* the GM's footer: one row */
 #stream-pacer-hud .sp-hud-foot {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 12px 12px;
+  gap: 4px;
+  padding: 6px 8px 8px;
   border-top: 1px solid var(--sp-line);
 }
 #stream-pacer-hud .sp-hud-small {
   flex: 1 1 auto;
-  height: 28px;
-  font-size: 11.5px;
+  justify-content: center;
+  height: 24px;
+  gap: 5px;
+  padding: 0 6px;
+  font-size: 11px;
   --sp-tone: var(--sp-faint);
   clip-path: none;
 }
+#stream-pacer-hud .sp-hud-small i { width: auto; font-size: 10.5px; }
 #stream-pacer-hud .sp-hud-small.is-pressed { --sp-tone: var(--sp-paper); }
 
-/* the player's big buttons and lamps */
-#stream-pacer-hud .sp-hud-big .sp-hud-btn {
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 5px;
-  height: 58px;
-  padding: 0 12px;
-  font-size: 13px;
-}
-#stream-pacer-hud .sp-hud-big .sp-hud-btn i { font-size: 16px; }
-#stream-pacer-hud .sp-lamps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+/* the player's traffic light: three dots, the current answer beside them */
+#stream-pacer-hud .sp-hud-safety { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; }
+#stream-pacer-hud .sp-lamps { display: flex; gap: 2px; }
 #stream-pacer-hud .sp-lamp {
-  flex-direction: column;
-  gap: 6px;
-  height: 56px;
+  width: 26px;
+  height: 24px;
   background: var(--sp-ink-3);
-  color: var(--sp-dim);
   box-shadow: inset 0 0 0 1px var(--sp-line);
-  font-size: 11px;
-  font-weight: 650;
 }
+#stream-pacer-hud .sp-lamp-now {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--sp-dim);
+}
+#stream-pacer-hud .sp-lamp-lock { margin-right: 3px; font-size: 9.5px; color: var(--sp-faint); }
 #stream-pacer-hud .sp-lamp-dot {
-  width: 16px;
-  height: 16px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: color-mix(in oklab, var(--sp-lamp) 30%, var(--sp-ink-4));
   transition: background-color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
@@ -715,9 +737,11 @@
   background: color-mix(in oklab, var(--sp-lamp) 14%, var(--sp-ink-2));
   box-shadow: inset 0 0 0 1px var(--sp-lamp);
 }
-#stream-pacer-hud .sp-lamp.is-pressed .sp-lamp-dot { background: var(--sp-lamp); box-shadow: 0 0 14px var(--sp-lamp); }
+#stream-pacer-hud .sp-lamp.is-pressed .sp-lamp-dot { background: var(--sp-lamp); box-shadow: 0 0 8px var(--sp-lamp); }
+#stream-pacer-hud .sp-hud-safety:has(.sp-lamp-yellow.is-pressed) .sp-lamp-now { color: var(--sp-amber); }
+#stream-pacer-hud .sp-hud-safety:has(.sp-lamp-red.is-pressed) .sp-lamp-now { color: var(--sp-red); }
 @media (hover: hover) and (pointer: fine) {
-  #stream-pacer-hud .sp-lamp:not(.is-pressed):hover { color: var(--sp-text); background: var(--sp-ink-4); }
+  #stream-pacer-hud .sp-lamp:not(.is-pressed):hover { background: var(--sp-ink-4); }
 }
 
 /* ═══ Dire Peril ═══════════════════════════════════════════════════════════ */
