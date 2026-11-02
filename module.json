@@ -73,6 +73,8 @@
     "styles/roleplay-chat.css",
     "styles/diorama.css",
     "styles/diorama-editor.css",
+    "styles/diorama-env.css",
+    "styles/diorama-props.css",
     "styles/perf.css"
   ],
   "languages": [
@@ -255,6 +257,16 @@
       "lang": "en",
       "name": "English",
       "path": "lang/diorama-rules.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/diorama-env.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/diorama-props.en.json"
     },
     {
       "lang": "en",

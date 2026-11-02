@@ -202,9 +202,19 @@ vec3 finish(vec3 c, float vis) {
   }
   return c;
 }
+
+/**
+ * The last step of every lit surface, with its world position: the
+ * atmosphere (fog, haze, weather tint) over the grade. Surfaces call this,
+ * never finish() directly, so the environment reaches all of them.
+ */
+vec3 dioFinish(vec3 c, float vis, vec3 wp) {
+  return finish(c, vis);
+}
 `;
 
-const HEAD = NOISE + MAP + LIT;
+/** Noise, the map and the lit chunk: what a lit program outside this file includes. */
+export const HEAD = NOISE + MAP + LIT;
 
 /* ---------------------------------------------------------------- terrain */
 

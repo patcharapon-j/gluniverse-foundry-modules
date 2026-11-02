@@ -30,9 +30,15 @@ import { turnState, currentCombatantToken } from "../integrations/turns.mjs";
 import { templateCells } from "../integrations/templates.mjs";
 import { SequencerMirror } from "../integrations/sequencer.mjs";
 import { currentLines, linksOn, onLinesChanged } from "../integrations/target-lines.mjs";
+import { OPTIONS, resolveGraphics } from "../options.mjs";
+import { sceneEnvironment, environmentTouched, ENV_HOOKS } from "./environment-source.mjs";
+import { PropStore } from "../terrain/props-store.mjs";
 
 const ROOT_ID = "gldio-view";
-const PARTS = ["terrain", "background", "walls", "tokens", "links", "cells", "overlays", "effects", "options", "lighting"];
+const PARTS = ["terrain", "background", "walls", "tokens", "links", "cells", "overlays", "effects", "options", "lighting", "environment", "props"];
+/** Setting keys whose change redraws with new graphics / a new environment. */
+const GRAPHICS_KEYS = new Set(OPTIONS.filter((o) => o.scope === "client").map((o) => `${SUITE_ID}.${o.key}`));
+const ENV_KEYS = new Set(["dio.envSource", "dio.weatherSource"].map((k) => `${SUITE_ID}.${k}`));
 const emptyOverlays = () => ({ path: null, cells: [], marks: [], ruler: null, pings: [], hover: null });
 
 const fresh = () => ({
@@ -289,8 +295,12 @@ function wireHooks() {
   on("updateScene", (scene, changes) => {
     if (scene !== S.scene) return;
     if ("levels" in changes || "background" in changes || "initialLevel" in changes) mark("background");
-    if ("environment" in changes) S.baker?.request();
+    if ("environment" in changes) { S.baker?.request(); mark("environment"); }
+    if (environmentTouched(changes)) mark("environment");
+    if (PropStore.touched(changes)) mark("props");
   });
+  // Time and weather from elsewhere (the calendar, the Weather feature).
+  for (const h of ENV_HOOKS) on(h, () => mark("environment"));
   on("updateUser", (_u, changes) => { if ("color" in changes) mark("tokens"); });
   // The stream capture: its camera moves the 2D canvas; the 3D camera follows.
   on("canvasPan", (_c, pos) => followCanvas(pos));
@@ -298,6 +308,9 @@ function wireHooks() {
   // The GM changed the camera snap: put an open view back on it.
   on("updateSetting", (s) => {
     if (s?.key === `${SUITE_ID}.${SETTINGS.effects}`) { mark("tokens"); return; }
+    if (GRAPHICS_KEYS.has(s?.key)) { mark("options"); if (s.key.endsWith(".dayNight")) mark("environment"); return; }
+    if (ENV_KEYS.has(s?.key)) { mark("environment"); return; }
+    if (s?.key === `${SUITE_ID}.dio.propsBlock`) { mark("props"); return; }
     if (s?.key !== `${SUITE_ID}.${SETTINGS.yawSnap}` || !S.r) return;
     const cam = S.r.getCamera();
     const step = snapYawStep(cam.yawStep ?? 0, yawSnap());
@@ -398,8 +411,10 @@ function flush() {
       if (fx.length) mark("effects"); // follow attached effects every frame while any play
     }
     if (d.has("options")) {
-      r.setOptions({ tiltShift: !!setting(SETTINGS.tiltShift, false), cutaway: S.cutaway, ghosts: gm && !S.asPlayers, grid: gridLook() });
+      r.setOptions({ tiltShift: !!setting(SETTINGS.tiltShift, false), cutaway: S.cutaway, ghosts: gm && !S.asPlayers, grid: gridLook(), graphics: readGraphics() });
     }
+    if (d.has("environment")) r.setEnvironment?.(sceneEnvironment(S.scene, { dayNight: !!setting("dio.dayNight", true) }));
+    if (d.has("props")) r.setProps?.(PropStore.states(S.scene, { isGM: gm && !S.asPlayers }));
     if (d.has("lighting") && S.lighting) r.setLighting(S.lighting);
     r.requestRender();
     if (d.has("tokens") || d.has("terrain")) S.input?.relabel();
@@ -462,8 +477,15 @@ function gridLook() {
   const g = S.scene?.grid;
   const on = !!setting(SETTINGS.grid, true);
   const color = typeof g?.color === "string" ? g.color : (g?.color?.css ?? "#000000");
-  const alpha = Math.max(0.18, Math.min(0.45, Number(g?.alpha) || 0.3));
+  const alpha = Math.max(0.1, Math.min(0.8, Number(setting("dio.gridStrength", 0.3)) || 0.3));
   return { on, color: /^#[0-9a-f]{6}$/i.test(color) ? color : "#000000", alpha };
+}
+
+/** This client's graphics choices, resolved (options.mjs). */
+function readGraphics() {
+  const raw = {};
+  for (const o of OPTIONS) if (o.scope === "client") raw[o.name] = setting(o.key, o.default);
+  return resolveGraphics(raw);
 }
 
 /** Keep the toolbar beside Foundry's scene controls, whatever their width. */
@@ -632,6 +654,8 @@ function hudActions() {
       markAll();
       S.baker?.request();
     },
+    graphics: () => import("./graphics-app.mjs").then((m) => m.openGraphics()).catch((e) => err("diorama: graphics", e)),
+    environment: () => import("./environment-app.mjs").then((m) => m.openEnvironment(S.scene)).catch((e) => err("diorama: environment", e)),
     autoSetup: () => editTerrain(S.scene),
     close: () => closeView(),
   };

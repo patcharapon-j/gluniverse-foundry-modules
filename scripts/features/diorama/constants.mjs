@@ -25,6 +25,10 @@ export const FLAG_STANDEE = "dio.standee";
 export const FLAG_CREATURE_HEIGHT = "dio.height";
 /** Token flag: altitude above the ground (flying), distance units. */
 export const FLAG_ALTITUDE = "dio.altitude";
+/** Scene flag: the scene's environment (time of day, weather, atmosphere). environment.mjs owns its shape. */
+export const FLAG_ENV = "dio.env";
+/** Scene flag: placed props, keyed by Level id like the terrain. terrain/props.mjs owns its shape. */
+export const FLAG_PROPS = "dio.props";
 
 /** Settings (all keys start with PREFIX so the Control Center routes them). */
 export const SETTINGS = Object.freeze({
@@ -94,8 +98,11 @@ export const PF2E_WATER_FALL_REDUCTION = 20;
  */
 export const SHED_ORDER = Object.freeze([
   "tiltShift",
+  "atmosphere",       // fog, haze, light shafts, cloud shadows
+  "weatherParticles", // full → reduced particle counts first, then none
   "ambientOcclusion",
   "softShadows",
+  "propDetail",       // prop and cliff relief, foliage sway
   "shadows",
   "water",
   "standeeSway",

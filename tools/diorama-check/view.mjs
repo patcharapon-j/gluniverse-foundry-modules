@@ -164,7 +164,32 @@ export default async function check(ctx) {
     Object.values(C.SETTINGS).filter((k) => !k.startsWith(C.PREFIX)).join(", "));
   const index = read(`${DIO}/index.mjs`);
   const regs = [...index.matchAll(/game\.settings\.register\(\s*SUITE_ID\s*,\s*([^,]+),/g)].map((m) => m[1].trim());
-  ctx.ok("index.mjs registers settings only through SETTINGS", regs.length > 0 && regs.every((k) => /^SETTINGS\.\w+$/.test(k)), regs.join(", "));
+  ctx.ok("index.mjs registers settings only through SETTINGS or the OPTIONS schema",
+    regs.length > 0 && regs.every((k) => /^SETTINGS\.\w+$/.test(k) || k === "o.key") && /for \(const o of OPTIONS\)/.test(index), regs.join(", "));
+
+  /* ── the options schema (options.mjs) ── */
+  const O = await import(ctx.url("scripts/features/diorama/options.mjs"));
+  ctx.ok("every option key starts with dio. and is unique",
+    O.OPTIONS.every((o) => o.key.startsWith(C.PREFIX)) && new Set(O.OPTIONS.map((o) => o.key)).size === O.OPTIONS.length
+    && O.OPTIONS.every((o) => !Object.values(C.SETTINGS).includes(o.key)));
+  const optMissing = [];
+  for (const o of O.OPTIONS) {
+    for (const k of [`GLDIO.settings.${o.name}.name`, `GLDIO.settings.${o.name}.hint`]) if (!(k in lang)) optMissing.push(k);
+    for (const v of o.choices ?? []) if (!(`GLDIO.settings.${o.name}.${v}` in lang)) optMissing.push(`GLDIO.settings.${o.name}.${v}`);
+    if (o.choices && !o.choices.includes(o.default)) optMissing.push(`${o.key} default not a choice`);
+  }
+  ctx.ok("every option has a name, a hint and a label per choice", optMissing.length === 0, optMissing.join(", "));
+  const def = O.resolveGraphics({});
+  ctx.ok("default graphics are the high preset, adaptive", def.quality === "high" && def.adaptive && def.shadows === 2 && def.weather === 2 && def.fps === 60);
+  const low = O.resolveGraphics({ quality: "low", shadows: "soft", fps: 0, renderScale: 50 });
+  ctx.ok("an explicit option beats its preset", low.shadows === 2 && low.ao === false && low.fps === 0 && low.renderScale === 0.5);
+  ctx.ok("a bad stored value reads as the default", O.resolveGraphics({ quality: "insane", water: 7 }).quality === "high" && O.sanitizeOption("fps", 45) === -1);
+  ctx.ok("the presets rise monotonically", O.QUALITY.every((q, i, a) => i === 0 || (O.resolveGraphics({ quality: q }).shadows >= O.resolveGraphics({ quality: a[i - 1] }).shadows
+    && O.resolveGraphics({ quality: q }).weather >= O.resolveGraphics({ quality: a[i - 1] }).weather
+    && O.resolveGraphics({ quality: q }).renderScale >= O.resolveGraphics({ quality: a[i - 1] }).renderScale)));
+  const ov = read(`${DIO}/view/overlay.mjs`);
+  ctx.ok("the view redraws on every client option and hands the renderer resolved graphics",
+    /GRAPHICS_KEYS\.has\(s\?\.key\)/.test(ov) && /graphics: readGraphics\(\)/.test(ov));
   ctx.ok("index.mjs declares settingPrefix: PREFIX", /settingPrefix:\s*PREFIX/.test(index));
   const main = read(`${DIO}/main.mjs`);
   const binds = [...main.matchAll(/keybindings\.register\(\s*SUITE_ID\s*,\s*"([^"]+)"/g)].map((m) => m[1]);

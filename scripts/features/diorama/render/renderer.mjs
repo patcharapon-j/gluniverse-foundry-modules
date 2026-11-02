@@ -17,7 +17,10 @@
  *   r.setLinks([{ sourceId, targetId, color:[r,g,b] }]);   // target lines, chest → base
  *   r.setCamera({ yawStep, pitchIndex, zoom, target }, { animate });
  *   r.getCamera();
- *   r.setOptions({ tiltShift, cutaway, ghosts, grid });  // grid: {on, color, alpha}
+ *   r.setOptions({ tiltShift, cutaway, ghosts, grid, graphics });  // grid: {on, color, alpha}
+ *                                                // graphics: resolveGraphics() (options.mjs)
+ *   r.setEnvironment(env);                       // resolved environment (environment.mjs)
+ *   r.setProps(PropState[]);                     // render/props.mjs
  *   r.setShed(ladderLike);                       // { allows(name) }
  *   r.requestRender();
  *   r.pick(clientX, clientY);   // {type:"token",id} | {type:"door",id} | {type:"ground",x,y,zQ,i,j} | null
@@ -47,8 +50,13 @@ import { EffectsLayer } from "./effects.mjs";
 import { LinksLayer } from "./links.mjs";
 import { CameraRig, VIEW_CELLS } from "./camera.mjs";
 import { ShadowPass, TiltShift } from "./post.mjs";
+import { PropsLayer } from "./props.mjs";
+import { AtmosphereLayer } from "./atmosphere.mjs";
+import { DEFAULT_GRAPHICS } from "../options.mjs";
 
+/** Under load (the fpsCap rung shed) the cap drops to this. */
 const FPS_CAP_MS = 1000 / 30;
+/** Under load (the renderScale rung shed) the chosen scale is multiplied by this. */
 const RENDER_SCALE = 0.75;
 const MAX_DT = 0.1;
 
@@ -111,7 +119,9 @@ export class DioramaRenderer {
     this.overlays = new OverlaysLayer(this.shared);
     this.effects = new EffectsLayer(this.shared);
     this.links = new LinksLayer(this.shared);
-    for (const l of [this.terrain, this.walls, this.standees, this.overlays, this.effects, this.links]) this.scene.add(l.group);
+    this.props = new PropsLayer(this.shared);
+    this.atmosphere = new AtmosphereLayer(this.shared);
+    for (const l of this.layers()) this.scene.add(l.group);
     /** Reused every frame: what the standees need from the view. */
     this._standeeFrame = { pxWorld: 0.01, markers: true };
 
@@ -126,6 +136,16 @@ export class DioramaRenderer {
     this.lightTex = null;
     this.visionTex = null;
     this.options = { tiltShift: false, cutaway: true, ghosts: true, grid: { on: false, color: "#000000", alpha: 0.35 } };
+    /** What this machine's user chose (options.mjs resolveGraphics). */
+    this.graphics = { ...DEFAULT_GRAPHICS };
+    /** The resolved environment (environment.mjs); null = the neutral default. */
+    this.env = null;
+    /**
+     * What this frame actually draws: the user's graphics capped by the shed
+     * ladder (only while graphics.adaptive). Written at the top of frame();
+     * layers read it. See effectiveFx().
+     */
+    this.fx = null;
     this._camSet = false;
     this._drawn = false;
 
@@ -150,6 +170,11 @@ export class DioramaRenderer {
     this.resize(w, h);
   }
 
+  /** Every layer, in draw-group order. */
+  layers() {
+    return [this.terrain, this.props, this.walls, this.standees, this.overlays, this.effects, this.links, this.atmosphere];
+  }
+
   /* ------------------------------------------------------------ state in */
 
   setGrid({ size, distance, cols, rows, sceneRect } = {}) {
@@ -160,7 +185,7 @@ export class DioramaRenderer {
     if (Number(rows) > 0) g.rows = Math.round(Number(rows));
     if (sceneRect) g.sceneRect = { ...sceneRect };
     this.shared.uWorldSize.value.set(g.cols, g.rows);
-    for (const l of [this.walls, this.standees, this.overlays, this.effects, this.rig]) l.setGridSize(g.size);
+    for (const l of [this.walls, this.standees, this.overlays, this.effects, this.props, this.atmosphere, this.rig]) l.setGridSize(g.size);
     this.updateMapRect();
     this.updateShadowBounds();
     if (!this._camSet) {
@@ -174,6 +199,8 @@ export class DioramaRenderer {
   setTerrain(terrain) {
     this.terrainModel = terrain ?? null;
     this.terrain.set(this.terrainModel);
+    this.props.setTerrain(this.terrainModel);
+    this.atmosphere.setTerrain(this.terrainModel, this.terrain.mesh);
     this.updateShadowBounds();
     this.requestRender();
   }
@@ -300,8 +327,30 @@ export class DioramaRenderer {
     return this.rig.get();
   }
 
-  setOptions({ tiltShift, cutaway, ghosts, grid } = {}) {
+  /**
+   * The scene's environment, already resolved (environment.mjs): time of day,
+   * sun, sky, weather, atmosphere, wind. null = the neutral default.
+   * @param {object|null} env
+   */
+  setEnvironment(env) {
+    this.env = env ?? null;
+    this.atmosphere.setEnvironment(this.env);
+    this.props.setEnvironment?.(this.env);
+    this.shadow.dirty = true;
+    this.requestRender();
+  }
+
+  /** @param {object[]} props PropState[] (render/props.mjs) */
+  setProps(props) {
+    this.props.set(props ?? [], clock(), this._drawn);
+    this.shadow.dirty = true;
+    this.updateShadowBounds();
+    this.requestRender();
+  }
+
+  setOptions({ tiltShift, cutaway, ghosts, grid, graphics } = {}) {
     const now = clock();
+    if (graphics) { this.graphics = { ...DEFAULT_GRAPHICS, ...graphics }; this.shadow.dirty = true; }
     if (grid !== undefined) this.setGridLines(grid);
     if (tiltShift !== undefined) this.options.tiltShift = !!tiltShift;
     if (cutaway !== undefined) { this.options.cutaway = !!cutaway; this.walls.setCutaway(this.options.cutaway, now, this._drawn); }
@@ -354,14 +403,18 @@ export class DioramaRenderer {
     Budget.claimMotion(FEATURE_ID, on);
   }
 
-  /** Every SHED_ORDER name, asked of the ladder in force. */
+  /** Every SHED_ORDER name, asked of the ladder in force. Without adaptive graphics, all allowed. */
   shedFlags() {
     const s = this.shed;
-    const allows = (n) => { try { return s.allows(n) !== false; } catch { return true; } };
+    const adaptive = this.graphics.adaptive !== false;
+    const allows = (n) => { if (!adaptive) return true; try { return s.allows(n) !== false; } catch { return true; } };
     return {
       tiltShift: allows("tiltShift"),
+      atmosphere: allows("atmosphere"),
+      weatherParticles: allows("weatherParticles"),
       ambientOcclusion: allows("ambientOcclusion"),
       softShadows: allows("softShadows"),
+      propDetail: allows("propDetail"),
       shadows: allows("shadows"),
       water: allows("water"),
       standeeSway: allows("standeeSway"),
@@ -372,11 +425,40 @@ export class DioramaRenderer {
     };
   }
 
+  /**
+   * The user's graphics (this.graphics) capped by what the ladder still allows.
+   * Every layer draws from this, never from the raw choice: a rung the budget
+   * shed is gone however high the user set it.
+   * @param {ReturnType<DioramaRenderer["shedFlags"]>} shed
+   */
+  effectiveFx(shed) {
+    const g = this.graphics;
+    return {
+      shadows: shed.shadows ? Math.min(g.shadows, shed.softShadows ? 2 : 1) : 0,
+      ao: g.ao && shed.ambientOcclusion,
+      water: shed.water ? g.water : 0,
+      waterMotion: shed.water,
+      detail: shed.propDetail ? g.detail : 0,
+      weather: shed.weatherParticles ? g.weather : 0,
+      atmosphere: g.atmosphere && shed.atmosphere,
+      dayNight: g.dayNight,
+      grade: g.grade,
+      tiltShift: this.options.tiltShift && shed.tiltShift,
+      sway: shed.standeeSway,
+      markers: shed.markerMotion,
+      effectLights: shed.effectLights,
+      renderScale: Math.max(0.25, Math.min(1, g.renderScale)) * (shed.renderScale ? 1 : RENDER_SCALE),
+      frameMs: !shed.fpsCap ? FPS_CAP_MS : g.fps > 0 ? 1000 / g.fps : 0,
+    };
+  }
+
   frame(now) {
     this._raf = 0;
     if (this._disposed || this._paused) return;
     const shed = this.shedFlags();
-    if (!shed.fpsCap && this._lastFrame && now - this._lastFrame < FPS_CAP_MS - 2) {
+    const fx = this.effectiveFx(shed);
+    this.fx = fx;
+    if (fx.frameMs && this._lastFrame && now - this._lastFrame < fx.frameMs - 2) {
       this.requestRender();
       return;
     }
@@ -388,33 +470,38 @@ export class DioramaRenderer {
     let active = this.rig.update(t);
     const yaw = this.rig.view.yaw;
     if (this.walls.update(t)) { active = true; this.shadow.dirty = true; }
-    const sway = shed.standeeSway && this.standees.count > 0;
+    const sway = fx.sway && this.standees.count > 0;
     // world units per device px: outlines and margins are sized in screen px
-    const ratio0 = this.pixelRatio * (shed.renderScale ? 1 : RENDER_SCALE);
+    const ratio0 = this.pixelRatio * fx.renderScale;
     this.links.viewport.value.set((this._w * ratio0) / 2, (this._h * ratio0) / 2);
     const sf = this._standeeFrame;
     sf.pxWorld = VIEW_CELLS / Math.max(1e-3, this.rig.view.zoom) / Math.max(1, this._h * ratio0);
-    sf.markers = shed.markerMotion;
+    sf.markers = fx.markers;
     if (this.standees.frame(t, this.rig.camera, yaw, sway, sf)) active = true;
     if (this.standees.castersDirty) { this.standees.castersDirty = false; this.shadow.dirty = true; }
     if (sway) active = true;
-    if (this.standees.targeted && shed.markerMotion) active = true;
-    if (this.links.frame(t, this.standees, shed.markerMotion) && shed.markerMotion) active = true;
+    if (this.standees.targeted && fx.markers) active = true;
+    if (this.links.frame(t, this.standees, fx.markers) && fx.markers) active = true;
     if (this.overlays.frame(t)) active = true;
     this.effects.frame(this.rig.camera);
-    this.effects.writeLights(shed.effectLights);
+    this.effects.writeLights(fx.effectLights);
     if (this.effects.animated) active = true;
-    if (this.terrain.hasWater && shed.water) {
+    // The clock every animated surface reads (water, foliage, weather). It runs
+    // only while something on the board animates with it.
+    const clocked = (this.terrain.hasWater && fx.waterMotion) || this.props.animated(fx) || this.atmosphere.animated(fx);
+    if (clocked) {
       this._waterClock += dt;
       active = true;
     }
     this.shared.uTime.value = this._waterClock;
+    if (this.props.frame(t, dt, this.rig.camera, fx)) active = true;
+    if (this.atmosphere.frame(t, dt, this.rig.camera, fx, this.rig.view)) active = true;
     if (isVideo(this.bg.source) && !this.bg.source.paused) active = true;
 
-    const shadows = shed.shadows;
-    this.shared.uShadowMode.value = shadows ? (shed.softShadows ? 2 : 1) : 0;
-    this.shared.uAOOn.value = shed.ambientOcclusion ? 1 : 0;
-    const ratio = this.pixelRatio * (shed.renderScale ? 1 : RENDER_SCALE);
+    const shadows = fx.shadows > 0;
+    this.shared.uShadowMode.value = fx.shadows;
+    this.shared.uAOOn.value = fx.ao ? 1 : 0;
+    const ratio = this.pixelRatio * fx.renderScale;
     if (ratio !== this._appliedRatio) {
       this._appliedRatio = ratio;
       this.webgl.setPixelRatio(ratio);
@@ -422,8 +509,8 @@ export class DioramaRenderer {
     }
 
     try {
-      if (shadows) this.shadow.render(this.webgl, this.scene, this.standees.casters);
-      if (this.options.tiltShift && shed.tiltShift) this.tilt.render(this.webgl, this.scene, this.rig.camera);
+      if (shadows) this.shadow.render(this.webgl, this.scene, [...this.standees.casters, ...this.props.casters]);
+      if (fx.tiltShift) this.tilt.render(this.webgl, this.scene, this.rig.camera);
       else {
         this.webgl.setRenderTarget(null);
         this.webgl.render(this.scene, this.rig.camera);
@@ -500,7 +587,7 @@ export class DioramaRenderer {
     this.claim(false);
     this._unbudget?.();
     this._ownLadder?.dispose();
-    for (const l of [this.terrain, this.walls, this.standees, this.overlays, this.effects, this.links]) l.dispose();
+    for (const l of this.layers()) l.dispose();
     this.shadow.dispose();
     this.tilt.dispose();
     this.backdrop.geometry.dispose();

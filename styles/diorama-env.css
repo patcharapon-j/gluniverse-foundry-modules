@@ -1,0 +1,25 @@
+/* Diorama — the scene environment panel and the graphics panel. Tokens only (docs/DESIGN_SYSTEM.md). */
+
+.gldio-graphics .window-content {
+  padding: var(--gl-sp-3);
+  overflow-y: auto;
+}
+.gldio-graphics-hint {
+  margin: 0 0 var(--gl-sp-2);
+  font-size: 12px;
+  color: var(--gl-text-dim);
+}
+.gldio-graphics .form-group {
+  font-size: 13px;
+}
+.gldio-graphics .form-group .hint {
+  font-size: 11px;
+}
+.gldio-graphics-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--gl-sp-3);
+}
+.gldio-graphics-reset.gl-btn {
+  font-size: 12px;
+}
