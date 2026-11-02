@@ -159,8 +159,9 @@ export function onInit() {
     addGuardBreakTokenHudButton(hud, html, data);
     addBreakGaugeTokenHudButton(hud, html, data);
   });
-  Hooks.on("combatRound", (_combat, updateData) => {
-    if (typeof updateData?.round === "number") overlay?.showRoundSplash(updateData.round);
+  Hooks.on("combatRound", (combat, updateData, updateOptions) => {
+    if (updateOptions?.direction < 0) return;
+    if (typeof updateData?.round === "number") overlay?.showRoundSplash(updateData.round, combat?.id);
   });
   Hooks.on("canvasReady", () => {
     tokenOverlays?.refresh();
@@ -1278,6 +1279,7 @@ export class GLUniverseInitiativeOverlay {
     this.drag = null;
     this.renderTimer = null;
     this.lastRound = game.combat?.round ?? null;
+    this.lastRoundCombatId = game.combat?.id ?? null;
     this.lastRenderedRound = game.combat?.round ?? null;
     this.lastTurnKey = "";
     this.lastActiveId = null;
@@ -1407,6 +1409,12 @@ export class GLUniverseInitiativeOverlay {
 
     // A cinematic start already announced the fight: the cards it handed over
     // fly into the rail instead of the round splash playing over them.
+    // The round memory belongs to one encounter. Carried across combats, a fight
+    // that ended in round 1 swallowed the next fight's opening splash.
+    if (this.lastRoundCombatId !== combat?.id) {
+      this.lastRoundCombatId = combat?.id ?? null;
+      this.lastRound = null;
+    }
     const arrival = (changed?.started === true || typeof changed?.round === "number")
       ? this.takeArrival(combat?.id)
       : null;
@@ -1414,14 +1422,16 @@ export class GLUniverseInitiativeOverlay {
       const round = typeof changed?.round === "number" ? changed.round : (combat.round ?? 1);
       this._arrival = arrival;
       this.lastRound = round;
-      this.lastSplashRound = round;
+      this.lastSplashKey = `${combat?.id}:${round}`;
     } else {
       if (changed?.started === true) {
-        this.showRoundSplash(combat.round ?? 1);
+        this.showRoundSplash(combat.round ?? 1, combat.id);
       }
 
       if (typeof changed?.round === "number" && changed.round !== this.lastRound) {
-        this.showRoundSplash(changed.round);
+        // Only a round that moves forward is announced; stepping back to fix a
+        // mistake is not a new round for the table.
+        if (changed.round > (this.lastRound ?? 0)) this.showRoundSplash(changed.round, combat.id);
         this.lastRound = changed.round;
       }
     }
@@ -3996,10 +4006,13 @@ export class GLUniverseInitiativeOverlay {
     // transform, so there is nothing to push per-render here.
   }
 
-  showRoundSplash(round) {
+  showRoundSplash(round, combatId = this.combat?.id) {
     if (!this.enabled || !round) return;
-    if (this.lastSplashRound === round) return;
-    this.lastSplashRound = round;
+    // Keyed by encounter: the GM's combatRound hook and every client's
+    // updateCombat both ask for the same round, and must play it once.
+    const key = `${combatId ?? ""}:${round}`;
+    if (this.lastSplashKey === key) return;
+    this.lastSplashKey = key;
 
     const formatted = formatRound(round);
     const digitSpans = Array.from(formatted).map(digit => `<span class="d">${digit}</span>`).join("");
