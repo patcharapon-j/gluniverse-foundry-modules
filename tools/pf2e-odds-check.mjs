@@ -688,6 +688,14 @@ for (const f of readdirSync(join(ROOT, "styles")).filter((f) => /^pf2e-odds.*\.c
   const plated = P.placeLines([{ at: at(500, 300), w: 80, h: 21, plate: { w: 214, h: 120 } }], vp, { obstacles: [{ x: 400, y: 320, w: 300, h: 200 }] })[0];
   const pb = { x: plated.plate.x, y: plated.plate.y, w: 214, h: 120 };
   ok(!(pb.x < 700 && 400 < pb.x + pb.w && pb.y < 520 && 320 < pb.y + pb.h), "an open plate keeps off a token when there is room elsewhere");
+  // An open plate that takes its spot first must still leave room for a later line's tag.
+  const crowd = P.placeLines([
+    { at: at(500, 300), w: 80, h: 21, plate: { w: 214, h: 120 } },
+    { at: () => ({ x: 520, y: 380, nx: 0, ny: 1 }), w: 80, h: 21 },
+  ], vp);
+  const cp = { x: crowd[0].plate.x, y: crowd[0].plate.y, w: 214, h: 120 };
+  const ct = { x: crowd[1].tag.x, y: crowd[1].tag.y, w: 80, h: 21 };
+  ok(!(cp.x < ct.x + ct.w && ct.x < cp.x + cp.w && cp.y < ct.y + ct.h && ct.y < cp.y + cp.h), "an open plate buries another line's tag");
   const edge = P.placeLines([{ at: at(1190, 690), w: 80, h: 21, plate: { w: 214, h: 120 } }], vp)[0];
   ok(edge.tag.x + 80 <= vp.w - P.VIEW_MARGIN_PX && edge.plate.x + 214 <= vp.w - P.VIEW_MARGIN_PX && edge.plate.y + 120 <= vp.h - P.VIEW_MARGIN_PX, "tag and plate stay inside the viewport");
   ok(P.lineCss(0x4db8ff) === "#4db8ff" && P.lineCss(0) === "#000000" && P.lineCss("#ABCDEF") === "#abcdef" && P.lineCss(null) === null && P.lineCss("red") === null, "the line's announced colour becomes the tag's rule");

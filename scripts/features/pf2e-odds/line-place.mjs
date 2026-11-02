@@ -132,12 +132,15 @@ export function placeTags(items, shares = TAG_SHARES) {
 
 /**
  * Place every line's tag and, where it is open, its plate, in priority order
- * (the acting creature's lines and the hovered one first). A line tries each
- * share along its own length with the plate on the bow side, then again with
- * the plate on the other side; the first spot where neither box touches
- * anything already placed wins, and with none clear the first spot stands.
- * Plates also keep off the `obstacles` (the tokens' screen boxes), so an open
- * plate never sits on a creature; a tag is on its line and may cross one.
+ * (the hovered line and the acting creature's first).
+ *
+ * Tags go first, all of them: a tag is the one thing every line carries, so an
+ * open plate is never allowed to bury another line's. Each slides along its
+ * own line until it is clear of the tags already placed (placeTags). Then each
+ * open plate tries the bow side of its arc, the other side, and the four
+ * compass sides, and takes the first spot clear of every tag, every plate
+ * already placed and the `obstacles` (the tokens' screen boxes); with none
+ * clear, the spot that covers least.
  *
  * @param {Array<{at:(share:number)=>{x,y,nx,ny}|null, w:number, h:number, plate?:{w:number,h:number}|null}>} items
  * @param {{w:number, h:number}} viewport
@@ -145,30 +148,38 @@ export function placeTags(items, shares = TAG_SHARES) {
  * @returns {Array<{tag:{x,y}, plate:{x,y}|null, side:string|null, share:number}|null>}  same order as `items`
  */
 export function placeLines(items, viewport, { obstacles = [], shares = TAG_SHARES } = {}) {
-  const placed = [];
-  return items.map((item) => {
+  const spots = placeTags(items, shares);
+  const tags = spots.map((spot, i) => {
+    if (!spot) return null;
+    const r = placeBadge({ tag: spot, normal: { x: 0, y: 1 }, tagSize: { w: items[i].w, h: items[i].h }, viewport });
+    return { x: r.tag.x, y: r.tag.y, w: items[i].w, h: items[i].h };
+  });
+  const plates = [];
+  return items.map((item, i) => {
+    const spot = spots[i];
+    if (!spot) return null;
     const plateSize = item.plate ?? null;
-    let first = null;
-    for (const flip of plateSize ? [false, true] : [false]) {
-      for (const share of shares) {
-        const a = item.at(share);
-        if (!a) continue;
-        const normal = flip ? { x: -a.nx, y: -a.ny } : { x: a.nx, y: a.ny };
-        const r = placeBadge({ tag: a, normal, tagSize: { w: item.w, h: item.h }, plateSize, viewport });
-        const tagBox = { x: r.tag.x, y: r.tag.y, w: item.w, h: item.h };
-        const plateBox = r.plate ? { x: r.plate.x, y: r.plate.y, w: plateSize.w, h: plateSize.h } : null;
-        const spot = { tag: r.tag, plate: r.plate, side: r.side, share, boxes: plateBox ? [tagBox, plateBox] : [tagBox] };
-        first ??= spot;
-        const clear = !placed.some((p) => overlaps(p, tagBox)) && (!plateBox || (!placed.some((p) => overlaps(p, plateBox)) && !obstacles.some((o) => overlaps(o, plateBox, 0))));
-        if (clear) {
-          placed.push(...spot.boxes);
-          return { tag: spot.tag, plate: spot.plate, side: spot.side, share };
-        }
-      }
+    const a = item.at(spot.share) ?? { nx: 0, ny: 1 };
+    if (!plateSize) {
+      const r = placeBadge({ tag: spot, normal: { x: a.nx, y: a.ny }, tagSize: { w: item.w, h: item.h }, viewport });
+      return { tag: r.tag, plate: null, side: null, share: spot.share };
     }
-    if (!first) return null;
-    placed.push(...first.boxes);
-    return { tag: first.tag, plate: first.plate, side: first.side, share: first.share };
+    const normals = [{ x: a.nx, y: a.ny }, { x: -a.nx, y: -a.ny }, { x: 0, y: 1 }, { x: 0, y: -1 }, { x: 1, y: 0 }, { x: -1, y: 0 }];
+    // The first clear side wins. With none clear, the side that covers least,
+    // where covering a tag costs most (it is the only reading that line has),
+    // then another plate, then a token.
+    let best = null;
+    for (const normal of normals) {
+      const r = placeBadge({ tag: spot, normal, tagSize: { w: item.w, h: item.h }, plateSize, viewport });
+      const box = { x: r.plate.x, y: r.plate.y, w: plateSize.w, h: plateSize.h };
+      const cost = 100 * tags.filter((t, j) => j !== i && t && overlaps(t, box)).length
+        + 10 * plates.filter((p) => overlaps(p, box)).length
+        + obstacles.filter((o) => overlaps(o, box, 0)).length;
+      if (!best || cost < best.cost) best = { r, box, cost };
+      if (cost === 0) break;
+    }
+    plates.push(best.box);
+    return { tag: best.r.tag, plate: best.r.plate, side: best.r.side, share: spot.share };
   });
 }
 
