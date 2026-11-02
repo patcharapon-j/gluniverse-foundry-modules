@@ -17,6 +17,8 @@ import { NEUTRAL_LIGHT } from "../environment.mjs";
 
 const MAX_EFFECT_LIGHTS = 8;
 export { MAX_EFFECT_LIGHTS };
+/** Foundry lights that shade and flicker at once (LIT uTorch*[8]). */
+export const MAX_TORCHES = 8;
 
 /** The fallback ground colour where the map art does not reach. */
 const GROUND_FALLBACK = mix(PALETTE.ink3, PALETTE.textDim, 0.25);
@@ -80,6 +82,16 @@ export function createShared() {
     uEnvTime: { value: 0 },
     // the room around the table, tinted by the hour's sky (1 = untinted)
     uEnvBack: { value: new THREE.Vector3(1, 1, 1) },
+    // The few lights that shade and flicker (render/torches.mjs writes them;
+    // glsl.mjs LIT documents each). Count 0: the bake alone, today's look.
+    uTorchPos: { value: Array.from({ length: MAX_TORCHES }, () => new THREE.Vector4()) },
+    uTorchCol: { value: Array.from({ length: MAX_TORCHES }, () => new THREE.Vector4(0, 0, 0, 1)) },
+    uTorchInfo: { value: Array.from({ length: MAX_TORCHES }, () => new THREE.Vector2(0, 0)) },
+    uTorchCount: { value: 0 },
+    uTorchDir: { value: 0 },
+    // The fog of war's soft map and style (render/fog.mjs). Off: today's flat fog.
+    uFogMap: { value: blankTexture([255, 255, 0, 255]) },
+    uFogStyle: { value: new THREE.Vector2(0, 0) },
   };
 }
 
@@ -443,6 +455,97 @@ export const MATERIALS = {
     });
   },
 
+  /**
+   * The fog of war's bank of cloud (FOG_FRAG): drawn after the board, over it,
+   * depth tested so what stands in front of the bank stays in front.
+   */
+  /**
+   * The fog of war's bank (FOG_VERT). `height` and `heightInfo` are the
+   * atmosphere layer's ground lookup, shared by reference, so the bank drapes
+   * over the ground it hides; `cell` is the cells between two of its vertices.
+   */
+  fog(shared, { layers = 4, height, heightInfo, cell } = {}) {
+    return new THREE.ShaderMaterial({
+      name: "dio.fog",
+      vertexShader: PROGRAMS.fog.vertex,
+      fragmentShader: PROGRAMS.fog.fragment,
+      uniforms: uniformsFor(shared, {
+        uFogLevel: { value: new THREE.Vector2(0.06, 0.2) },
+        uFogLayers: { value: layers },
+        uFogCell: cell ?? { value: 1 },
+        uHeightTex: height ?? { value: null },
+        uHeightInfo: heightInfo ?? { value: new THREE.Vector3(1, 1, 1) },
+      }),
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+  },
+
+  /** Flames on fire-like lights (FLAME_VERT). `clock` is shared by reference with the embers. */
+  flame(shared, { clock } = {}) {
+    return new THREE.ShaderMaterial({
+      name: "dio.flame",
+      vertexShader: PROGRAMS.flame.vertex,
+      fragmentShader: PROGRAMS.flame.fragment,
+      uniforms: {
+        uVisionMap: shared?.uVisionMap ?? { value: blankTexture([255, 255, 0, 255]) },
+        uUseVision: shared?.uUseVision ?? { value: 0 },
+        uWorldSize: shared?.uWorldSize ?? { value: new THREE.Vector2(1, 1) },
+        uFlameT: clock ?? { value: 0 },
+      },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.CustomBlending,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneMinusSrcAlphaFactor,
+      blendSrcAlpha: THREE.OneFactor,
+      blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+    });
+  },
+
+  /** Sparks rising off fires (EMBER_VERT). Additive. */
+  ember(shared, { px } = {}) {
+    return new THREE.ShaderMaterial({
+      name: "dio.ember",
+      vertexShader: PROGRAMS.ember.vertex,
+      fragmentShader: PROGRAMS.ember.fragment,
+      uniforms: {
+        uVisionMap: shared?.uVisionMap ?? { value: blankTexture([255, 255, 0, 255]) },
+        uUseVision: shared?.uUseVision ?? { value: 0 },
+        uWorldSize: shared?.uWorldSize ?? { value: new THREE.Vector2(1, 1) },
+        uEnvClouds: shared?.uEnvClouds ?? { value: new THREE.Vector4(0, 0.2, 1, 0) },
+        uEmberT: { value: 0 },
+        uPPx: px ?? { value: 0.01 },
+        uEmberOpacity: { value: 1 },
+      },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.CustomBlending,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneMinusSrcAlphaFactor,
+      blendSrcAlpha: THREE.OneFactor,
+      blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+    });
+  },
+
+  /** Figures' shadows thrown by torches (TORCH_SHADOW_FRAG). */
+  torchShadow(shared) {
+    return new THREE.ShaderMaterial({
+      name: "dio.torchShadow",
+      vertexShader: PROGRAMS.torchShadow.vertex,
+      fragmentShader: PROGRAMS.torchShadow.fragment,
+      uniforms: uniformsFor(shared),
+      transparent: true,
+      depthWrite: false,
+      // the quad is laid out on the ground by a reflection of its own plane: either face may be up
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+  },
+
   depth() {
     return new THREE.ShaderMaterial({
       name: "dio.depth",
@@ -476,6 +579,7 @@ export const MATERIAL_PROGRAM = Object.freeze({
   top: "top", side: "side", water: "water", wall: "wall", card: "card", solid: "solid",
   unlit: "unlit", ring: "ring", glass: "glass", footprint: "footprint", reticle: "reticle", link: "link", ribbon: "ribbon", backdrop: "backdrop", table: "table", depth: "depth", blur: "blur",
   particles: "particles", splash: "splash",
+  fog: "fog", flame: "flame", ember: "ember", torchShadow: "torchShadow",
 });
 
 /** "#rrggbb" / any CSS colour → THREE.Color, total. */

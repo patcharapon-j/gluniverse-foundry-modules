@@ -85,6 +85,28 @@ uniform float uFieldOn;
 uniform vec2 uHeightRange;
 
 /*
+ * The few Foundry lights nearest the camera's target (render/torches.mjs picks
+ * and writes them): they do not add light (the light bake already holds every
+ * light, occluded), they shape it. Each one's flicker scales the bake where it
+ * is that light's, and its direction shades what faces it brighter and what
+ * faces away darker, normalised so flat ground keeps the bake exactly.
+ */
+uniform vec4 uTorchPos[8];    // xyz the light (cells), w its dim radius (cells)
+uniform vec4 uTorchCol[8];    // rgb its strength (the bake's tint, 0..1), a its flicker multiplier now
+uniform vec2 uTorchInfo[8];   // x bright radius / dim radius, y presence 0..1 (fading in or out of the set)
+uniform float uTorchCount;
+uniform float uTorchDir;      // 0..1 how much a light's direction shades (torchShadows shed: 0)
+
+/*
+ * The fog of war's soft map (render/fog.mjs): the vision bake blurred to about
+ * half a cell, r visible now, g ever seen. uFogStyle: x clouds on (fogStyle
+ * "clouds" and a vision bake), y the clouds' own clock (seconds; it stops when
+ * fogDrift is shed).
+ */
+uniform sampler2D uFogMap;
+uniform vec2 uFogStyle;
+
+/*
  * The environment (render/atmosphere.mjs writes all of these from the resolved
  * environment, environment.mjs). Neutral values reproduce the fixed light the
  * view had before it: the fill, key and bounce below at no overcast, no flash,
@@ -225,9 +247,56 @@ vec3 sunlight(vec3 n, float sh) {
   return c + uEnvFlash * vec3(0.72, 0.78, 0.95) * (0.55 + 0.45 * max(n.y, 0.0));
 }
 
+/** One tracked light's share of the bake at wp, by the bake's own falloff. */
+float torchShare(int i, vec3 wp, out vec3 l) {
+  vec3 d = uTorchPos[i].xyz - wp;
+  float dist = length(d);
+  l = d / max(dist, 1e-4);
+  float x = dist / max(uTorchPos[i].w, 0.05);
+  if (x >= 1.0) return 0.0;
+  return (1.0 - smoothstep(uTorchInfo[i].x, 1.0, x)) * dot(uTorchCol[i].rgb, DIO_LUMA);
+}
+
+/*
+ * The light bake at a surface with normal n, shaped by the tracked lights:
+ * each light's flicker, and a wrapped facing term against flat ground's, so a
+ * top keeps the bake exactly, a face turned to a torch takes up to 1.8× and a
+ * face turned away down to 0.3×. Light the tracked ones do not explain (an
+ * untracked light, a lit edge) passes through unchanged.
+ */
+vec3 torchLight(vec3 base, vec3 wp, vec3 n) {
+  if (uTorchCount < 0.5) return base;
+  float acc = 0.0, wsum = 0.0;
+  for (int i = 0; i < 8; i++) {
+    if (float(i) >= uTorchCount) break;
+    vec3 l;
+    float c = torchShare(i, wp, l);
+    if (c <= 0.0) continue;
+    float s = (0.42 + 0.58 * max(dot(n, l), 0.0)) / (0.42 + 0.58 * max(l.y, 0.0));
+    s = mix(1.0, clamp(s, 0.3, 1.8), uTorchDir * uTorchInfo[i].y);
+    acc += c * uTorchCol[i].a * s;
+    wsum += c;
+  }
+  float rest = max(dot(base, DIO_LUMA) - wsum, 0.0);
+  return base * ((acc + rest) / max(wsum + rest, 1e-4));
+}
+
+/** The strongest tracked light at wp: its light now (rgb, flicker in), its share (a); l toward it. */
+vec4 torchKey(vec3 wp, out vec3 l) {
+  vec4 best = vec4(0.0);
+  l = vec3(0.0, 1.0, 0.0);
+  for (int i = 0; i < 8; i++) {
+    if (float(i) >= uTorchCount) break;
+    vec3 li;
+    float c = torchShare(i, wp, li) * uTorchInfo[i].y;
+    if (c > best.a) { best = vec4(uTorchCol[i].rgb * uTorchCol[i].a * c / max(dot(uTorchCol[i].rgb, DIO_LUMA), 1e-3), c); l = li; }
+  }
+  return best;
+}
+
 /** shade() with the shadow term already taken. */
 vec3 shadeLit(vec3 albedo, vec3 wp, vec3 n, float ao, vec2 lightXZ, float sh) {
-  vec3 lit = sunlight(n, sh) + lightAt(lightXZ) + effectLight(wp, n);
+  vec3 lit = sunlight(n, sh) + torchLight(lightAt(lightXZ), wp, n) + effectLight(wp, n);
   lit *= mix(1.0, ao, uAOOn);
   return albedo * lit;
 }
@@ -338,13 +407,73 @@ vec3 dioAtmosphere(vec3 c, vec3 wp) {
   return c;
 }
 
+/** The fog of war's soft map at a point: x visible now, y ever seen (0 off the board). */
+vec2 fogSoftAt(vec2 xz) {
+  vec2 uv = xz / uWorldSize;
+  if (!dioInWorld(uv)) return vec2(0.0);
+  return texture2D(uFogMap, uv).rg;
+}
+
+/*
+ * The fog of war's clouds at layer k (0 the floor of the bank, 1 its top),
+ * 0..1. Each layer drifts down the wind at its own pace, so the bank shears a
+ * little as it moves and reads as depth rather than as one printed sheet. The
+ * drift is a straight translation of non-repeating noise: it never loops, so
+ * it never snaps.
+ */
+float dioCloudNoise(vec2 xz, float k) {
+  vec2 wind = dot(uEnvClouds.zw, uEnvClouds.zw) > 1e-4 ? normalize(uEnvClouds.zw) : vec2(0.8, 0.6);
+  vec2 p = xz * (0.42 - 0.1 * k) - wind * uFogStyle.y * (1.0 + 0.45 * k) + vec2(k * 5.3, -k * 2.9);
+  return dioFbm(p) * 0.72 + dioNoise(p * 2.9 + 1.3) * 0.28;
+}
+
+/**
+ * Cloud lit like the sky it sits under: the fill all round, the key on its
+ * top, a lightning flash on it. A night cloud is a deep slate, never a hole.
+ */
+vec3 dioCloudColor(float k, float n) {
+  vec3 base = mix(vec3(0.80, 0.82, 0.87), uEnvSky, 0.28);
+  float top = clamp(k * 0.55 + (n - 0.35) * 0.9, 0.0, 1.0);
+  vec3 light = uEnvFill * (0.82 + 0.25 * top) + uEnvKey * (0.16 + 0.5 * top) * (1.0 - 0.6 * uEnvOvercast);
+  vec3 c = base * light * uAmbient + uEnvFlash * vec3(0.5, 0.55, 0.66) * (0.4 + 0.6 * top);
+  return max(c, base * vec3(0.085, 0.095, 0.13) * (0.85 + 0.3 * top));
+}
+
+/*
+ * The fog of war over a lit surface (fogStyle clouds; nothing for the GM or a
+ * flat fog). Seen-before ground (vis < 0.75) gets a thin low mist over the
+ * desaturation finish() already did. Near what nobody has seen, the cloud
+ * creeps over the edge: a ragged shoulder about a third of a cell wide that
+ * reaches full cloud exactly where the bank's opaque floor (FOG_FRAG) begins,
+ * in the same colour, so the two meet without a seam.
+ */
+vec3 dioFogOfWar(vec3 c, float vis, vec3 wp) {
+  if (uUseVision < 0.5 || uFogStyle.x < 0.5) return c;
+  float n = dioCloudNoise(wp.xz, 0.0);
+  if (vis < 0.75) {
+    float m = 0.14 + 0.2 * smoothstep(0.3, 0.8, n);
+    c = mix(c, dioCloudColor(0.0, n) * 0.7, m);
+  }
+  float unseen = 1.0 - fogSoftAt(wp.xz).y;
+  float shoulder = smoothstep(0.06 + 0.3 * n, 0.5, unseen);
+  return mix(c, dioCloudColor(0.0, n), shoulder);
+}
+
 /**
  * The last step of every lit surface, with its world position: the
- * atmosphere (fog, haze) under the grade. Surfaces call this, never finish()
- * directly, so the environment reaches all of them.
+ * atmosphere (fog, haze) under the grade, then the fog of war. Surfaces call
+ * this, never finish() directly, so the environment reaches all of them.
  */
 vec3 dioFinish(vec3 c, float vis, vec3 wp) {
-  return finish(dioAtmosphere(c, wp), vis);
+  return dioFogOfWar(finish(dioAtmosphere(c, wp), vis), vis, wp);
+}
+
+/**
+ * dioFinish for a figure: no fog of war. A standee is drawn only when Foundry
+ * says this viewer sees it, and a figure at the edge of sight must still read.
+ */
+vec3 dioFinishFigure(vec3 c, vec3 wp) {
+  return finish(dioAtmosphere(c, wp), 1.0);
 }
 `;
 
@@ -586,8 +715,20 @@ vec3 fallSheet(vec3 lipC, float a, float d, float up, bool intoWater) {
 
 void main() {
   float vis = visionAt(vLip);
-  if (vis <= 0.0) discard;
+  // Under cloud (fogStyle clouds), the board keeps its plinth where nobody has
+  // seen: it is dark, unpainted and the same everywhere, so it tells nothing,
+  // and the bank sits on it instead of floating over the room.
+  bool plinthOnly = vis <= 0.0 && uFogStyle.x > 0.5 && mod(vFlag + 0.25, 2.0) < 1.0
+    && vWorld.y < uHeightRange.x - 0.05;
+  if (vis <= 0.0 && !plinthOnly) discard;
   vec3 n = normalize(vNormal);
+  if (plinthOnly) {
+    float yb0 = uHeightRange.x - 0.05;
+    float g0 = smoothstep(yb0 - 1.0, yb0, vWorld.y);
+    vec3 pl = uPlinth * (0.6 + 0.5 * g0) * (0.8 + 0.35 * max(dot(n, uKeyDir), 0.0)) * uAmbient;
+    gl_FragColor = vec4(dioFinishFigure(heightGrade(pl, vWorld.y), vWorld), 1.0);
+    return;
+  }
   // the paint just inside the lip, on the top the face hangs from, not the
   // ground beyond its edge
   vec3 lipSharp = mapAt(vLip - n.xz * 0.05);
@@ -658,7 +799,9 @@ void main() {
     lit = mix(lit, uTrim * (0.55 + 0.45 * uAmbient), trim * 0.85);
   }
   lit = heightGrade(lit, vWorld.y);
-  gl_FragColor = vec4(dioFinish(lit, vis, vWorld), 1.0);
+  // the plinth is the table's, not the map's: no cloud creeps onto it
+  bool plinth = cut && vWorld.y < uHeightRange.x - 0.05 && uFogStyle.x > 0.5 && uUseVision > 0.5;
+  gl_FragColor = vec4(plinth ? dioFinishFigure(lit, vWorld) : dioFinish(lit, vis, vWorld), 1.0);
 }
 `;
 
@@ -1043,9 +1186,26 @@ void main() {
   // Cards keep their art: lit as open ground in the sun, the cool fill in a shadow.
   vec3 sun = sunlight(vec3(0.0, 1.0, 0.0), shadowAt(p, vec3(0.0, 1.0, 0.0)));
   sun = mix(vec3(uAmbient), sun, 0.75);
-  vec3 lit = c.rgb / max(c.a, 0.05) * (sun + lightAt(vFoot.xz) + effectLight(p, uFacing));
+  vec3 paint = c.rgb / max(c.a, 0.05);
+  vec3 lit = paint * (sun + torchLight(lightAt(vFoot.xz), p, uFacing) + effectLight(p, uFacing));
+  // Torch rim: the edge of the figure on the side of its strongest torch catches
+  // a line of that light, about 2.5 device px (fwidth), brightest when the torch
+  // stands behind the figure. A paper cut-out lit from the side reads as standing
+  // in the room's light rather than pasted over it.
+  vec3 tl;
+  vec4 tk = torchKey(p, tl);
+  if (tk.a > 0.002 && uTorchDir > 0.0) {
+    vec3 right = vec3(uFacing.z, 0.0, -uFacing.x);
+    float behind = max(-dot(tl, uFacing), 0.0);
+    vec2 sd = vec2(dot(tl, right), 0.35 + 0.65 * max(tl.y, 0.0) * (0.5 + behind));
+    float sl = length(sd);
+    if (sl > 0.05) {
+      float rim = artCov * (1.0 - smoothstep(0.15, 0.55, cardA(vUv + sd / sl * px * 2.5)));
+      lit += (paint * 0.5 + 0.5) * tk.rgb * rim * (0.35 + 0.9 * behind) * 1.5 * uTorchDir;
+    }
+  }
   lit *= 1.0 + uLift;
-  vec3 col = mix(uOutline.rgb, dioFinish(lit, 1.0, vFoot + vec3(0.0, 0.6, 0.0)), artCov);
+  vec3 col = mix(uOutline.rgb, dioFinishFigure(lit, vFoot + vec3(0.0, 0.6, 0.0)), artCov);
   float a = lineCov;
   if (uGhost > 0.5) {
     float hatch = step(0.5, fract((gl_FragCoord.x + gl_FragCoord.y) / 9.0));
@@ -1683,6 +1843,279 @@ void main() {
 }
 `;
 
+/* ---------------------------------------------------------------- fog of war */
+
+/*
+ * The fog of war as a bank of cloud (render/fog.mjs): FOG_LAYERS sheets over the
+ * board, one geometry, drawn floor first. The sheets drape over the ground: each
+ * vertex sits above the highest top around it (the atmosphere layer's height
+ * texture), so a hill under cloud is a cloud-covered hill and a pit is a pit
+ * filled with cloud. The floor is OPAQUE on every point the vision bake says
+ * nobody has seen (seen ≤ 0.5, the same threshold visionAt() discards by): what
+ * is under it is never drawn and never shows through, and a curtain hangs from
+ * its edge down the board's side to the plinth, so the side cannot be seen
+ * through either. The sheets above it are cloud tops: thinner, lighter,
+ * pulled back from the edge of sight so the bank has a soft shoulder, each
+ * drifting at its own pace.
+ */
+export const FOG_LAYERS = 4;
+export const FOG_VERT = GROUND_AT + /* glsl */ `
+attribute float layer;
+attribute float skirt;    // 1 on the foot of the curtain down the board's side
+uniform vec2 uFogLevel;   // x the floor's height over the ground it covers (cells), y the step between sheets
+uniform vec2 uHeightRange;
+uniform float uFogCell;   // cells between two vertices of the bank
+varying vec3 vWorld;
+varying float vLayer;
+varying float vSkirt;
+/** The highest ground anywhere around a vertex, so the bank never dips into a top it covers. */
+float fogGround(vec2 xz) {
+  float h = uHeightRange.x;
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      vec2 o = (vec2(float(i), float(j)) - 1.5) * 0.5 * uFogCell;
+      h = max(h, groundAt(xz + o));
+    }
+  }
+  return h;
+}
+void main() {
+  float top = fogGround(position.xz) + uFogLevel.x + layer * uFogLevel.y;
+  vec3 p = vec3(position.x, mix(top, uHeightRange.x - 0.05, skirt), position.z);
+  vWorld = p;
+  vLayer = layer;
+  vSkirt = skirt;
+  gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+}
+`;
+
+export const FOG_FRAG = HEAD + /* glsl */ `
+uniform vec2 uFogLevel;
+uniform float uFogLayers;
+varying vec3 vWorld;
+varying float vLayer;
+varying float vSkirt;
+void main() {
+  if (uUseVision < 0.5 || uFogStyle.x < 0.5) discard;
+  vec2 uv = vWorld.xz / uWorldSize;
+  if (!dioInWorld(uv)) discard;
+  vec4 v = texture2D(uVisionMap, uv);
+  float seen = max(v.r, v.g);
+  float k = vLayer / max(uFogLayers - 1.0, 1.0);
+  float n = dioCloudNoise(vWorld.xz, k);
+  float a;
+  if (vLayer < 0.5) {
+    // the floor: exactly 1 wherever seen <= 0.5
+    a = 1.0 - smoothstep(0.5, 0.8, seen);
+  } else {
+    float unseen = 1.0 - fogSoftAt(vWorld.xz).y;
+    float body = unseen * (0.38 + 0.8 * n) - 0.16 * k;
+    // cloud tops thin out over the board's edge (the floor and its curtain close it)
+    float rim = min(min(vWorld.x, uWorldSize.x - vWorld.x), min(vWorld.z, uWorldSize.y - vWorld.z));
+    a = smoothstep(0.44, 0.66, body) * mix(0.9, 0.6, k) * smoothstep(0.0, 0.5 + 0.9 * n, rim);
+  }
+  if (a < 0.004) discard;
+  vec3 col = dioCloudColor(k, n) * (0.93 + 0.12 * k);
+  // the curtain down the board's side darkens towards the plinth
+  col *= 1.0 - 0.3 * vSkirt;
+  col += (dioHash(gl_FragCoord.xy + vLayer * 7.0) - 0.5) / 255.0;
+  gl_FragColor = vec4(col, a);
+}
+`;
+
+/* ---------------------------------------------------------------- fire */
+
+/*
+ * Flames (render/torches.mjs): one instanced draw, a quad per fire-like light,
+ * standing up in view space like a standee card, so a flame reads the same at
+ * every pitch. Stylized: three flat bands (ember red, orange, a pale core) with
+ * device-pixel edges, tongues licking up through it on the flames' own clock,
+ * the whole flame breathing with its light's flicker (aFire.a). A flame is drawn
+ * only where this viewer sees its foot right now (vision r), never in the fog.
+ *   aFlame  xyz its foot (cells), w its size (cells)
+ *   aFire   rgb its light's tint, a its flicker multiplier now
+ *   aSeed   x its own phase, y how much the light's colour recolours the fire
+ */
+const SEEN_AT = /* glsl */ `
+uniform sampler2D uVisionMap;
+uniform float uUseVision;
+uniform vec2 uWorldSize;
+/** 1 where this viewer sees the point right now (always without a vision bake). */
+float seenNow(vec2 xz) {
+  if (uUseVision < 0.5) return 1.0;
+  vec2 uv = xz / uWorldSize;
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
+  return step(0.5, texture2D(uVisionMap, uv).r);
+}
+`;
+
+export const FLAME_VERT = SEEN_AT + /* glsl */ `
+attribute vec4 aFlame;
+attribute vec4 aFire;
+attribute vec2 aSeed;
+varying vec2 vQ;
+varying vec3 vTint;
+varying float vSeed;
+varying float vRecolor;
+void main() {
+  float flick = aFire.a;
+  vRecolor = aSeed.y;
+  float w = aFlame.w * 0.62;
+  float h = aFlame.w * (1.05 + 0.6 * (flick - 1.0) * 2.0);
+  vec4 vb = viewMatrix * vec4(aFlame.xyz, 1.0);
+  // a hair toward the camera, so a flame in a bowl is not cut by its rim
+  vec3 pos = vb.xyz + vec3(position.x * w, position.y * h, 0.06);
+  vQ = position.xy;
+  vTint = aFire.rgb;
+  vSeed = aSeed.x;
+  gl_Position = seenNow(aFlame.xz) < 0.5 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix * vec4(pos, 1.0);
+}
+`;
+
+export const FLAME_FRAG = NOISE + /* glsl */ `
+uniform float uFlameT;     // the flames' clock, in licks (TIMING.flameLick)
+varying vec2 vQ;           // x -1..1 across, y -0.25 (under the foot) .. 1 (tip)
+varying vec3 vTint;
+varying float vSeed;
+varying float vRecolor;
+const vec3 F_OUTER = vec3(0.86, 0.24, 0.07);
+const vec3 F_MID = vec3(1.0, 0.56, 0.12);
+const vec3 F_CORE = vec3(1.0, 0.9, 0.62);
+void main() {
+  float t = uFlameT + vSeed * 31.0;
+  float y = vQ.y;
+  float yc = clamp(y, 0.0, 1.0);
+  // tongues: a sideways lick that grows with height, noise rising through it
+  float sway = (dioNoise(vec2(yc * 1.7 - t, vSeed * 11.0)) - 0.5) * 0.7 * yc;
+  float x = vQ.x * 1.25 - sway;
+  float lick = dioNoise(vec2(x * 1.9 + vSeed * 5.0, yc * 2.6 - t * 1.3));
+  // a teardrop: round under the foot, widest a little above it, a point at the tip
+  float prof = y < 0.0 ? sqrt(max(1.0 - (y / 0.25) * (y / 0.25), 0.0)) * 0.7
+                       : 0.7 * (0.82 + 0.5 * smoothstep(0.0, 0.18, y)) * pow(max(1.0 - y, 0.0), 1.15);
+  float f = 1.0 - abs(x) / max(prof, 1e-3) - (1.0 - lick) * 0.55 * smoothstep(0.15, 1.0, yc);
+  float fw = max(fwidth(f), 1e-4);
+  float outer = smoothstep(-fw, fw, f);
+  float mid = smoothstep(0.3 - fw, 0.3 + fw, f + 0.1 * (1.0 - yc));
+  float core = smoothstep(0.58 - fw, 0.58 + fw, f + 0.32 * (1.0 - yc) - 0.12);
+  // A light of another colour burns in it (a green witch-fire stays green):
+  // vRecolor is how much, decided per light by torches.mjs (flameRecolor).
+  vec3 col = mix(mix(F_OUTER, F_MID, mid), F_CORE, core);
+  vec3 tint = vTint / max(max(max(vTint.r, vTint.g), vTint.b), 1e-3);
+  vec3 alt = mix(mix(tint * 0.62, tint * 0.9, mid), mix(tint, vec3(1.0), 0.6), core);
+  col = mix(col, alt, vRecolor);
+  float hue = vRecolor;
+  float a = outer * (0.92 - 0.25 * smoothstep(0.6, 1.0, yc));
+  // a faint glow around the foot, fading well inside the quad
+  float r = length(vec2(vQ.x, (vQ.y - 0.05) * 1.6));
+  float glow = exp(-r * r * 4.0) * (1.0 - smoothstep(0.7, 1.0, r)) * 0.35;
+  vec3 glowC = mix(F_MID, tint, hue * 0.85);
+  if (a + glow < 0.004) discard;
+  gl_FragColor = vec4(col * a + glowC * glow * (1.0 - a), a * 0.9);
+}
+`;
+
+/*
+ * Embers: sparks rising off every fire, one instanced draw. Each instance
+ * carries its fire's foot and a seed; its life is fract(clock × rate + seed), so
+ * nothing is computed per spark on the CPU, and a spark is born and dies at
+ * zero alpha, so its loop never shows. Never under 1.5 device px (uPPx).
+ *   aBase  xyz the fire's foot (cells), w its size (cells)
+ *   aSeed  four randoms
+ */
+export const EMBER_VERT = SEEN_AT + NOISE + /* glsl */ `
+uniform float uEmberT;     // the embers' clock, in lives (TIMING.emberRise)
+uniform float uPPx;        // one device pixel, in cells
+uniform vec4 uEnvClouds;   // zw the wind on the map
+attribute vec4 aBase;
+attribute vec4 aSeed;
+varying vec2 vQ;
+varying float vLife;
+varying float vHeat;
+void main() {
+  vec4 s = aSeed;
+  float life = fract(uEmberT * (0.7 + 0.6 * s.w) + s.x);
+  float H = aBase.w * (2.2 + 2.2 * s.y);
+  vec2 wind = uEnvClouds.zw * 0.35;
+  float a = s.z * 6.2831853 + life * (2.0 + 2.5 * s.w);
+  vec3 p = aBase.xyz + vec3(
+    cos(a) * aBase.w * (0.12 + 0.35 * life) + wind.x * life * H,
+    aBase.w * 0.5 + life * H,
+    sin(a) * aBase.w * (0.12 + 0.35 * life) + wind.y * life * H);
+  float size = max(aBase.w * (0.035 + 0.03 * s.w) * (1.0 - 0.5 * life), uPPx * 1.5);
+  vec4 vh = viewMatrix * vec4(p, 1.0);
+  vQ = position.xy * 2.0 - 1.0;
+  vLife = life;
+  vHeat = s.y;
+  vec3 pos = vh.xyz + vec3(vQ * size, 0.0);
+  gl_Position = seenNow(aBase.xz) < 0.5 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix * vec4(pos, 1.0);
+}
+`;
+
+export const EMBER_FRAG = /* glsl */ `
+uniform float uEmberOpacity;
+varying vec2 vQ;
+varying float vLife;
+varying float vHeat;
+void main() {
+  float r = length(vQ);
+  if (r > 1.0) discard;
+  float fade = smoothstep(0.0, 0.1, vLife) * (1.0 - smoothstep(0.5, 1.0, vLife));
+  float a = (1.0 - smoothstep(0.35, 1.0, r)) * fade * uEmberOpacity;
+  if (a < 0.004) discard;
+  vec3 hot = mix(vec3(1.0, 0.86, 0.5), vec3(1.0, 0.5, 0.14), smoothstep(0.0, 0.55, vLife + vHeat * 0.2));
+  vec3 col = mix(hot, vec3(0.85, 0.2, 0.06), smoothstep(0.5, 1.0, vLife));
+  // additive: premultiplied colour, no coverage
+  gl_FragColor = vec4(col * a * 1.3, 0.0);
+}
+`;
+
+/*
+ * A figure's shadow thrown by a torch (render/torches.mjs): a soft tongue
+ * lying on the ground from the figure's foot, away from the light, as long as
+ * the light is low. Its strength is the torch's share of the light at the foot
+ * (written per frame), and it is drawn only where that light reaches the
+ * ground in the bake (a wall between them already darkened it) and only on
+ * ground this viewer sees now.
+ *   aFoot  xyz the foot (cells), w the shadow's length (cells)
+ *   aDir   xy away from the light (unit, on the map), z its width (cells), w its strength
+ */
+export const TORCH_SHADOW_VERT = /* glsl */ `
+attribute vec4 aFoot;
+attribute vec4 aDir;
+varying vec2 vQ;
+varying vec3 vWorld;
+varying float vAlpha;
+void main() {
+  vec2 d = aDir.xy;
+  vec2 perp = vec2(-d.y, d.x);
+  float along = position.y;                 // -0.3 (behind the foot) .. 1 (the tip)
+  float w = aDir.z * (1.0 + 0.3 * max(along, 0.0));
+  vec2 xz = aFoot.xz + d * along * aFoot.w + perp * position.x * w;
+  vWorld = vec3(xz.x, aFoot.y + 0.012, xz.y);
+  vQ = vec2(position.x, along);
+  vAlpha = aDir.w;
+  gl_Position = projectionMatrix * viewMatrix * vec4(vWorld, 1.0);
+}
+`;
+
+export const TORCH_SHADOW_FRAG = HEAD + /* glsl */ `
+varying vec2 vQ;
+varying vec3 vWorld;
+varying float vAlpha;
+void main() {
+  if (visionAt(vWorld.xz) < 0.75) discard;
+  float v = vQ.y;
+  float rr = v < 0.0 ? sqrt(max(1.0 - (v / 0.3) * (v / 0.3), 0.0)) : 1.0;
+  float edge = 1.0 - smoothstep(0.45 * rr, rr, abs(vQ.x));
+  // full strength out past the figure's base, then soft to the tip
+  float fade = 1.0 - smoothstep(0.3, 1.0, v);
+  float reach = smoothstep(0.02, 0.22, dot(lightAt(vWorld.xz), DIO_LUMA));
+  float a = edge * fade * reach * vAlpha;
+  if (a < 0.004) discard;
+  gl_FragColor = vec4(0.02, 0.018, 0.03, a);
+}
+`;
+
 /** Every program, for the check tool: name → { vertex, fragment }. */
 export const PROGRAMS = Object.freeze({
   top: { vertex: TOP_VERT, fragment: TOP_FRAG },
@@ -1704,6 +2137,10 @@ export const PROGRAMS = Object.freeze({
   blur: { vertex: POST_VERT, fragment: BLUR_FRAG },
   particles: { vertex: PARTICLE_VERT, fragment: PARTICLE_FRAG },
   splash: { vertex: SPLASH_VERT, fragment: SPLASH_FRAG },
+  fog: { vertex: FOG_VERT, fragment: FOG_FRAG },
+  flame: { vertex: FLAME_VERT, fragment: FLAME_FRAG },
+  ember: { vertex: EMBER_VERT, fragment: EMBER_FRAG },
+  torchShadow: { vertex: TORCH_SHADOW_VERT, fragment: TORCH_SHADOW_FRAG },
 });
 
 /** Names of the uniforms a GLSL source declares. */
