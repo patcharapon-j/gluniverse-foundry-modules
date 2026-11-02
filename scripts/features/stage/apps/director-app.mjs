@@ -33,22 +33,20 @@
  * the control being dragged.
  */
 
-import { featurePath, warn } from "../../../core/const.mjs";
+import { warn } from "../../../core/const.mjs";
 import { escapeHTML, matchesQuery } from "../../../core/util.mjs";
-import {
-  COMMS_ALIGN, COMMS_EDGES, COMMS_STYLES, DEFAULT_IMAGE, FEATURE_ID, MAX_CALLS, MAX_ON_STAGE, NAMEPLATES, REACTIONS,
-} from "../model.mjs";
-import { DEFAULT_LIGHT, LIGHT_DIALS, MOODS } from "../light/rig.mjs";
+import { DEFAULT_IMAGE } from "../model.mjs";
+import { DEFAULT_LIGHT } from "../light/rig.mjs";
 import { NEUTRAL_PICTURE } from "../light/picture.mjs";
 import { onStageSetting } from "../settings.mjs";
 import * as store from "../store.mjs";
 import { sendReaction } from "../channel.mjs";
-import { bringOn, callIn, castActor, castHaystack, memberFromActor, searchWorldActors } from "../search.mjs";
+import { bringOn, callIn, castActor, memberFromActor, searchWorldActors } from "../search.mjs";
+import {
+  DEFAULT_FACE_H, LINEUP_UNIT, SEARCH_PANES, STRIP, TABS, directorModel, figureBox, fillOf, fmt, r3, renderDirector, worldRowHTML,
+} from "./director-view.mjs";
 
 export const DIRECTOR_ID = "glstage-director";
-
-const TEMPLATE = featurePath(FEATURE_ID, "templates/director.hbs");
-const TABS = Object.freeze(["stage", "cast", "light", "comms"]);
 
 /** How long after the last slider movement a write lands (ms). */
 const DEBOUNCE_MS = 200;
@@ -56,40 +54,9 @@ const DEBOUNCE_MS = 200;
 const LIGHT_TIMING = Object.freeze({ delayMs: 0, durationMs: 600 });
 /** A pointer that moved less than this (px) was a click, not a drag. */
 const DRAG_SLOP = 4;
-/** A face point placed without a size gets this head height (image fraction). */
-const DEFAULT_FACE_H = 0.16;
-
-/* Stage strip geometry, in fractions of the strip: where the front row's feet
-   stand, how far up the upstage row is, how tall a height-1 figure draws at
-   figure 1, and how much smaller the back row is. */
-const STRIP = Object.freeze({ foot: 0.06, rise: 0.42, figure: 0.62, shrink: 0.38 });
-/** The lineup: a height-1 character's box, as a fraction of the lineup's height. */
-const LINEUP_UNIT = 0.44;
-
-const REACTION_ICONS = Object.freeze({
-  nod: "fa-solid fa-angles-down",
-  shake: "fa-solid fa-arrows-left-right",
-  hop: "fa-solid fa-arrow-up",
-  tremble: "fa-solid fa-wave-square",
-  lean: "fa-solid fa-person-walking-arrow-right",
-});
-const MOOD_ICONS = Object.freeze({
-  auto: "fa-solid fa-wand-magic-sparkles",
-  day: "fa-solid fa-sun",
-  golden: "fa-solid fa-cloud-sun",
-  dusk: "fa-solid fa-mountain-sun",
-  night: "fa-solid fa-moon",
-  fire: "fa-solid fa-fire",
-  neon: "fa-solid fa-bolt",
-  storm: "fa-solid fa-cloud-bolt",
-  off: "fa-solid fa-power-off",
-});
-const EDGE_ICONS = Object.freeze({ left: "fa-solid fa-arrow-left", right: "fa-solid fa-arrow-right" });
-const ALIGN_ICONS = Object.freeze({ top: "fa-solid fa-arrow-up", center: "fa-solid fa-grip-lines", bottom: "fa-solid fa-arrow-down" });
 
 /** Session-local view state, kept across close/reopen. */
 const view = { tab: "stage", sel: null, castSel: null, castView: "edit", q: { stage: "", cast: "", comms: "" } };
-const SEARCH_PANES = Object.freeze(["stage", "cast", "comms"]);
 
 /* ── helpers (Foundry reached only when called) ─────────────────────── */
 
@@ -100,34 +67,6 @@ function L(key, data) {
 }
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-const r3 = (v) => Math.round(v * 1000) / 1000;
-
-/** Format a dial's value for its readout. */
-function fmt(kind, v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "";
-  switch (kind) {
-    case "pct": return `${Math.round(n * 100)}%`;
-    case "spct": return `${n > 0 ? "+" : ""}${Math.round(n * 100)}%`;
-    case "x": return `×${n.toFixed(2)}`;
-    case "px": return `${Math.round(n)}px`;
-    case "vh": return `${n > 0 ? "+" : ""}${Math.round(n)}vh`;
-    case "deg": return `${Math.round(n)}°`;
-    default: return n.toFixed(2);
-  }
-}
-
-/** A dial row for the template. */
-function dial(ns, key, value, { min, max, step = 0.01, kind = "num", label, hint = "", member = null, disabled = false }) {
-  return { ns, key, value, min, max, step, kind, label, hint, member, disabled, out: fmt(kind, value) };
-}
-
-/** `object-position` for a manual face point; empty when the locator frames it. */
-const facePosition = (m) => (m.face ? `object-position: ${r3(m.face.x * 100)}% ${r3(m.face.y * 100)}%` : "");
-
-function thumb(m) {
-  return { src: m.image || DEFAULT_IMAGE, style: facePosition(m), auto: !m.face };
-}
 
 const FilePickerClass = () => globalThis.foundry?.applications?.apps?.FilePicker?.implementation ?? globalThis.FilePicker;
 
@@ -168,9 +107,9 @@ let _Director = null;
 
 function DirectorApp() {
   if (_Director) return _Director;
-  const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+  const { ApplicationV2 } = foundry.applications.api;
 
-  _Director = class StageDirector extends HandlebarsApplicationMixin(ApplicationV2) {
+  _Director = class StageDirector extends ApplicationV2 {
     static DEFAULT_OPTIONS = {
       id: DIRECTOR_ID,
       classes: ["glstage-dir-app"],
@@ -215,7 +154,7 @@ function DirectorApp() {
         castFromTokens: function () { return this._fromTokens(); },
         castSelect: function (_e, t) { this._castSelect(t.dataset.id); },
         castView: function (_e, t) {
-          view.castView = t.dataset.view === "lineup" ? "lineup" : "edit";
+          view.castView = t.dataset.value === "lineup" ? "lineup" : "edit";
           this._requestRender(true);
         },
         castDelete: function (_e, t) { return this._deleteMember(t.dataset.id); },
@@ -245,13 +184,6 @@ function DirectorApp() {
       },
     };
 
-    static PARTS = {
-      main: {
-        template: TEMPLATE,
-        scrollable: [".glstage-dir-pane--stage", ".glstage-dir-cast-list", ".glstage-dir-cast-detail", ".glstage-dir-pane--light", ".glstage-dir-pane--comms"],
-      },
-    };
-
     _unsubs = [];
     _hooks = [];
     _raf = 0;
@@ -262,170 +194,42 @@ function DirectorApp() {
     _chain = Promise.resolve();
     _onWindowUp = null;
 
-    /* ── context ── */
+    /* ── render: the pure view, no template ── */
 
     async _prepareContext(options) {
       const context = await super._prepareContext(options);
-      const cast = store.readCast();
-      const state = store.readState();
-      const layout = store.readLayout();
-      const comms = store.readComms();
-      const commsLayout = store.readCommsLayout();
-      const byId = new Map(cast.map((m) => [m.id, m]));
-      const onIds = new Set(state.on.map((m) => m.id));
-      const full = state.on.length >= MAX_ON_STAGE;
-
-      if (view.sel && !onIds.has(view.sel)) view.sel = null;
-      if (!view.castSel || !byId.has(view.castSel)) view.castSel = cast[0]?.id ?? null;
-      if (!TABS.includes(view.tab)) view.tab = "stage";
-
       const scene = globalThis.canvas?.scene ?? null;
       const light = scene ? store.readLight(scene) : null;
-      const backdrop = light?.src || store.sceneBackground(scene);
+      const model = directorModel({
+        cast: store.readCast(),
+        state: store.readState(),
+        layout: store.readLayout(),
+        comms: store.readComms(),
+        commsLayout: store.readCommsLayout(),
+        scene: scene ? { id: scene.id, name: scene.name } : null,
+        light,
+        backdrop: light?.src || store.sceneBackground(scene) || "",
+        view,
+      }, L);
+      view.tab = model.tab;
+      view.sel = model.sel;
+      view.castSel = model.castSel;
+      return { ...context, model };
+    }
 
-      /* stage */
-      const marks = state.on.map((mark) => {
-        const m = byId.get(mark.id);
-        const scale = 1 - STRIP.shrink * mark.depth;
-        return {
-          id: mark.id,
-          name: m?.name ?? mark.id,
-          title: m?.title ?? "",
-          thumb: thumb(m ?? {}),
-          src: m?.image || DEFAULT_IMAGE,
-          flip: mark.flip,
-          masked: mark.masked,
-          focus: state.focus === mark.id,
-          closePush: state.shot === "close" && state.close === mark.id && state.cut === "push",
-          closeCut: state.shot === "close" && state.close === mark.id && state.cut === "cut",
-          selected: view.sel === mark.id,
-          figStyle: [
-            `left: ${r3(mark.x * 100)}%`,
-            `bottom: ${r3((STRIP.foot + STRIP.rise * mark.depth) * 100)}%`,
-            `height: ${r3(clamp((m?.height ?? 1) * layout.figure * STRIP.figure * scale, 0.05, 1.2) * 100)}%`,
-            `z-index: ${Math.round((1 - mark.depth) * 100) + 1}`,
-          ].join("; "),
-          x: mark.x,
-          depth: mark.depth,
-          height: m?.height ?? 1,
-          tint: m?.tint ?? "",
-        };
+    async _renderHTML(context) {
+      return renderDirector(context.model, L);
+    }
+
+    /** Swap the markup in, keeping every scrolled column where the GM left it. */
+    _replaceHTML(result, content) {
+      const keep = new Map();
+      content.querySelectorAll("[data-keep-scroll]").forEach((n) => keep.set(n.dataset.keepScroll, n.scrollTop));
+      content.innerHTML = result;
+      content.querySelectorAll("[data-keep-scroll]").forEach((n) => {
+        const top = keep.get(n.dataset.keepScroll);
+        if (top) n.scrollTop = top;
       });
-      const closeName = state.shot === "close" ? byId.get(state.close)?.name ?? null : null;
-      const focusName = state.focus ? byId.get(state.focus)?.name ?? null : null;
-
-      const stage = {
-        visible: state.visible,
-        marks,
-        any: marks.length > 0,
-        full,
-        count: L("GLSTAGE.director.stage.count", { n: state.on.length, max: MAX_ON_STAGE }),
-        shotLabel: closeName ? L("GLSTAGE.director.stage.shotClose", { name: closeName }) : L("GLSTAGE.director.stage.shotWide"),
-        focusLabel: focusName ? L("GLSTAGE.director.stage.focusOn", { name: focusName }) : null,
-        isClose: !!closeName,
-        figure: layout.figure,
-        trackStyle: `left: ${r3(((1 - layout.width) / 2) * 100)}%; right: ${r3(((1 - layout.width) / 2) * 100)}%`,
-        backdrop,
-        roster: cast.map((m) => ({ id: m.id, name: m.name, title: m.title, haystack: castHaystack(m), thumb: thumb(m), on: onIds.has(m.id), canEnter: !onIds.has(m.id) && !full })),
-        layout: [
-          dial("layout", "figure", layout.figure, { min: 0.4, max: 1.4, kind: "pct", label: L("GLSTAGE.director.layout.figure"), hint: L("GLSTAGE.director.layout.figureHint") }),
-          dial("layout", "floor", layout.floor, { min: -0.5, max: 0.4, kind: "spct", label: L("GLSTAGE.director.layout.floor"), hint: L("GLSTAGE.director.layout.floorHint") }),
-          dial("layout", "width", layout.width, { min: 0.4, max: 1, kind: "pct", label: L("GLSTAGE.director.layout.width"), hint: L("GLSTAGE.director.layout.widthHint") }),
-        ],
-        nameplates: NAMEPLATES.map((v) => ({ value: v, label: L(`GLSTAGE.nameplates.${v}`), active: layout.nameplates === v })),
-      };
-      const reactions = REACTIONS.map((kind) => ({ kind, label: L(`GLSTAGE.reaction.${kind}`), icon: REACTION_ICONS[kind] ?? "fa-solid fa-circle" }));
-
-      /* cast */
-      const sel = view.castSel ? byId.get(view.castSel) : null;
-      const maxH = Math.max(1, ...cast.map((m) => m.height));
-      const unit = Math.min(LINEUP_UNIT, 0.94 / maxH);
-      const castCtx = {
-        any: cast.length > 0,
-        view: view.castView,
-        lineup: view.castView === "lineup",
-        unit,
-        list: cast.map((m) => ({ id: m.id, name: m.name, title: m.title, haystack: castHaystack(m), thumb: thumb(m), active: m.id === view.castSel, on: onIds.has(m.id), linked: !!m.actorUuid })),
-        sel: sel ? {
-          ...sel,
-          src: sel.image || DEFAULT_IMAGE,
-          faces: ["left", "right", "front"].map((f) => ({ value: f, label: L(`GLSTAGE.director.cast.faces.${f}`), selected: sel.faces === f })),
-          dials: [
-            dial("member", "height", sel.height, { min: 0.3, max: 2, kind: "x", label: L("GLSTAGE.director.cast.height"), hint: L("GLSTAGE.director.cast.heightHint"), member: sel.id }),
-            dial("member", "offsetX", sel.offsetX, { min: -1, max: 1, kind: "spct", label: L("GLSTAGE.director.cast.offsetX"), hint: L("GLSTAGE.director.cast.offsetXHint"), member: sel.id }),
-            dial("member", "offsetY", sel.offsetY, { min: -1, max: 1, kind: "spct", label: L("GLSTAGE.director.cast.offsetY"), hint: L("GLSTAGE.director.cast.offsetYHint"), member: sel.id }),
-          ],
-          hasFace: !!sel.face,
-          faceStyle: sel.face ? `left: ${r3(sel.face.x * 100)}%; top: ${r3(sel.face.y * 100)}%; height: ${r3(sel.face.h * 100)}%` : "",
-          faceH: dial("face", "h", sel.face?.h ?? DEFAULT_FACE_H, { min: 0.03, max: 0.8, kind: "pct", label: L("GLSTAGE.director.cast.faceSize"), member: sel.id, disabled: !sel.face }),
-          onStage: onIds.has(sel.id),
-        } : null,
-        lineupGuides: [0.5, 1, 1.5, 2].filter((h) => h * unit <= 0.97).map((h) => ({ label: `×${h}`, style: `bottom: ${r3(h * unit * 100)}%` })),
-        lineupItems: cast.map((m) => ({
-          id: m.id,
-          name: m.name,
-          src: m.image || DEFAULT_IMAGE,
-          active: m.id === view.castSel,
-          boxStyle: `height: ${r3(m.height * unit * 100)}%`,
-          imgStyle: `translate: ${r3(m.offsetX * 100)}% ${r3(-m.offsetY * 100)}%`,
-          height: dial("member", "height", m.height, { min: 0.3, max: 2, kind: "x", label: L("GLSTAGE.director.cast.height"), member: m.id }),
-        })),
-      };
-
-      /* light */
-      const lightCtx = scene ? {
-        scene: scene.name || scene.id,
-        moods: MOODS.map((mood) => ({ mood, label: L(`GLSTAGE.mood.${mood}`), icon: MOOD_ICONS[mood] ?? "fa-solid fa-lightbulb", active: light.mood === mood })),
-        dials: Object.entries(LIGHT_DIALS).map(([key, [min, max]]) => dial("light", key, light[key], {
-          min, max, kind: max > 1 ? "num" : "pct", label: L(`GLSTAGE.light.${key}.name`), hint: L(`GLSTAGE.light.${key}.hint`),
-        })),
-        angleAuto: light.angle === null,
-        angle: dial("light", "angle", light.angle ?? 0, { min: -180, max: 180, step: 1, kind: "deg", label: L("GLSTAGE.director.light.angle"), hint: L("GLSTAGE.director.light.angleHint"), disabled: light.angle === null }),
-        darkness: light.darkness,
-        flicker: light.flicker,
-        src: light.src ?? "",
-        hasSrc: !!light.src,
-        off: light.mood === "off",
-      } : null;
-
-      /* comms */
-      const callCast = new Set(comms.calls.map((c) => c.castId));
-      const commsCtx = {
-        visible: comms.visible,
-        any: comms.calls.length > 0,
-        count: L("GLSTAGE.director.comms.count", { n: comms.calls.length, max: MAX_CALLS }),
-        calls: comms.calls.map((c) => {
-          const m = byId.get(c.castId);
-          return { callId: c.callId, castId: c.castId, name: m?.name ?? c.castId, title: m?.title ?? "", thumb: thumb(m ?? {}), speaking: comms.speaking === c.callId };
-        }),
-        roster: cast.map((m) => ({ id: m.id, name: m.name, haystack: castHaystack(m), thumb: thumb(m), calling: callCast.has(m.id), canCall: !callCast.has(m.id) && comms.calls.length < MAX_CALLS })),
-        edges: COMMS_EDGES.map((v) => ({ key: "edge", value: v, label: L(`GLSTAGE.comms.edge.${v}`), icon: EDGE_ICONS[v], active: commsLayout.edge === v })),
-        aligns: COMMS_ALIGN.map((v) => ({ key: "align", value: v, label: L(`GLSTAGE.comms.align.${v}`), icon: ALIGN_ICONS[v], active: commsLayout.align === v })),
-        styles: COMMS_STYLES.map((v) => ({ key: "style", value: v, label: L(`GLSTAGE.comms.style.${v}`), active: commsLayout.style === v })),
-        dials: [
-          dial("commsLayout", "width", commsLayout.width, { min: 120, max: 320, step: 1, kind: "px", label: L("GLSTAGE.director.comms.width") }),
-          dial("commsLayout", "inset", commsLayout.inset, { min: 0, max: 240, step: 1, kind: "px", label: L("GLSTAGE.director.comms.inset"), hint: L("GLSTAGE.director.comms.insetHint") }),
-          dial("commsLayout", "shift", commsLayout.shift, { min: -40, max: 40, step: 1, kind: "vh", label: L("GLSTAGE.director.comms.shift"), hint: L("GLSTAGE.director.comms.shiftHint") }),
-        ],
-      };
-
-      return {
-        ...context,
-        tab: view.tab,
-        tabs: TABS.map((t) => ({ id: t, label: L(`GLSTAGE.director.tab.${t}`), active: view.tab === t, icon: { stage: "fa-solid fa-masks-theater", cast: "fa-solid fa-users", light: "fa-solid fa-lightbulb", comms: "fa-solid fa-tower-broadcast" }[t] })),
-        is: Object.fromEntries(TABS.map((t) => [t, view.tab === t])),
-        stage,
-        reactions,
-        cast: castCtx,
-        light: lightCtx,
-        comms: commsCtx,
-        search: {
-          ...Object.fromEntries(SEARCH_PANES.map((pane) => [pane, {
-            pane, value: view.q[pane], placeholder: L("GLSTAGE.search.placeholder"), hint: L(`GLSTAGE.search.hint.${pane}`),
-          }])),
-          ...Object.fromEntries(SEARCH_PANES.map((pane) => [`${pane}World`, { pane, label: L("GLSTAGE.search.world") }])),
-        },
-      };
     }
 
     /* ── lifecycle ── */
@@ -534,6 +338,7 @@ function DirectorApp() {
       if (!TABS.includes(tab)) return;
       view.tab = tab;
       const root = this.element;
+      root.querySelector(".glstage-dir")?.setAttribute("data-tab", tab);
       root.querySelectorAll(".glstage-dir-tab").forEach((b) => {
         const on = b.dataset.tab === tab;
         b.classList.toggle("is-active", on);
@@ -641,6 +446,7 @@ function DirectorApp() {
       const row = input.closest("[data-dial]");
       const out = row?.querySelector("output");
       if (out) out.textContent = fmt(input.dataset.fmt, input.value);
+      input.style.setProperty("--fill", `${fillOf(input.value, input.min, input.max)}%`);
       const [ns, key] = input.dataset.bind.split(":");
       if (ns === "face" && key === "h") {
         const ring = this.element.querySelector("[data-face-ring]");
@@ -654,6 +460,7 @@ function DirectorApp() {
           other.value = input.value;
           const o = other.closest("[data-dial]")?.querySelector("output");
           if (o) o.textContent = fmt(other.dataset.fmt, other.value);
+          other.style.setProperty("--fill", `${fillOf(other.value, other.min, other.max)}%`);
         });
         const box = this.element.querySelector(`[data-lineup-box="${CSS.escape(id)}"]`);
         const unit = Number(this.element.querySelector("[data-lineup]")?.dataset.unit) || LINEUP_UNIT;
@@ -736,11 +543,13 @@ function DirectorApp() {
       let depth = d0;
       fig.setPointerCapture?.(ev.pointerId);
       fig.classList.add("is-dragging");
+      // The same box the view draws, so a figure lands where it was dropped.
       const place = () => {
-        fig.style.left = `${r3(x * 100)}%`;
-        fig.style.bottom = `${r3((STRIP.foot + STRIP.rise * depth) * 100)}%`;
-        fig.style.height = `${r3(clamp(h * figure * STRIP.figure * (1 - STRIP.shrink * depth), 0.05, 1.2) * 100)}%`;
-        fig.style.zIndex = String(Math.round((1 - depth) * 100) + 1);
+        const b = figureBox(x, depth, h, figure);
+        fig.style.left = `${b.left}%`;
+        fig.style.bottom = `${b.bottom}%`;
+        fig.style.height = `${b.height}%`;
+        fig.style.zIndex = String(b.z);
       };
       const move = (e) => {
         const r = track.getBoundingClientRect();
@@ -893,7 +702,7 @@ function DirectorApp() {
 
     /** The roster a search box filters. */
     _searchRoot(pane) {
-      return this.element?.querySelector(`[data-dir-search="${pane}"]`)?.closest(".glstage-dir-roster, .glstage-dir-cast-side") ?? null;
+      return this.element?.querySelector(`[data-dir-search="${pane}"]`)?.closest(".glstage-dir-side") ?? null;
     }
 
     /** Show the rows the search allows, and the world's Actors that match. */
@@ -926,46 +735,13 @@ function DirectorApp() {
       return actors.length;
     }
 
-    /** One world Actor's row, built from text nodes: an actor's name is never markup. */
+    /** One world Actor's row. The view escapes the name; an actor's name is never markup. */
     _worldRow(actor, pane) {
-      const el = (tag, cls, text) => {
-        const n = document.createElement(tag);
-        if (cls) n.className = cls;
-        if (text) n.textContent = text;
-        return n;
-      };
       const m = memberFromActor(actor);
-      const li = el("li", "glstage-dir-roster-row glstage-dir-world-row");
-      li.dataset.worldRow = actor.uuid;
-      const box = el("span", "glstage-dir-thumb-box");
-      const img = el("img", "glstage-dir-thumb");
-      Object.assign(img, { src: m.image, alt: "", loading: "lazy", draggable: false });
-      box.append(img);
-      const who = el("span", "glstage-dir-who-text");
-      who.append(el("span", "glstage-dir-name", m.name));
       const typeLabel = globalThis.CONFIG?.Actor?.typeLabels?.[actor.type];
-      if (typeLabel || actor.type) who.append(el("span", "glstage-dir-sub", typeLabel ? L(typeLabel) : actor.type));
-      const btn = (action, icon, label, wide = false) => {
-        const b = el("button", wide ? "gl-btn glstage-dir-btn glstage-dir-btn--sm" : "glstage-dir-mini");
-        b.type = "button";
-        Object.assign(b.dataset, { action, uuid: actor.uuid, tooltip: label });
-        b.setAttribute("aria-label", label);
-        const i = el("i", icon);
-        i.setAttribute("aria-hidden", "true");
-        b.append(i);
-        if (wide) b.append(el("span", "", label));
-        return b;
-      };
-      const buttons = {
-        stage: () => [
-          btn("worldEnter", "fa-solid fa-right-to-bracket", L("GLSTAGE.search.worldEnter"), true),
-          btn("worldEnterMasked", "fa-solid fa-user-secret", L("GLSTAGE.director.stage.enterMasked")),
-        ],
-        cast: () => [btn("worldCast", "fa-solid fa-user-plus", L("GLSTAGE.search.worldCast"), true)],
-        comms: () => [btn("worldCall", "fa-solid fa-phone", L("GLSTAGE.search.worldCall"), true)],
-      }[pane]();
-      li.append(box, who, ...buttons);
-      return li;
+      const tpl = document.createElement("template");
+      tpl.innerHTML = worldRowHTML({ uuid: actor.uuid, name: m.name, image: m.image, type: typeLabel ? L(typeLabel) : actor.type ?? "" }, pane, L);
+      return tpl.content.firstElementChild;
     }
 
     /** Enter acts on the first match (Shift+Enter: masked); Esc clears, then lets go. */
@@ -1065,6 +841,3 @@ export function toggleDirector(tab = null) {
 }
 
 export const isDirectorOpen = () => !!instance();
-
-/** The template the Director renders, for optional preloading. */
-export const DIRECTOR_TEMPLATES = Object.freeze([TEMPLATE]);

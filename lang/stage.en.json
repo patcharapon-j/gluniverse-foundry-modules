@@ -39,7 +39,9 @@
         "stageUp": "Stage live",
         "stageDown": "Stage hidden",
         "commsUp": "Comms live",
-        "commsDown": "Comms hidden"
+        "commsDown": "Comms hidden",
+        "onAir": "On air",
+        "offAir": "Off air"
       },
       "stage": {
         "show": "Show stage",

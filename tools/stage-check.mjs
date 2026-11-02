@@ -544,12 +544,55 @@ section = "host";
   ok("main.mjs registers hooks only inside onInit/onReady", !/^Hooks\.on/m.test(main));
 }
 
+/* ── The Director panel: one view, every control wired ─────────────────── */
+section = "director panel";
+const V = await imp(`${FEAT}/apps/director-view.mjs`);
+{
+  const L = (k, d) => (d ? `${k}${JSON.stringify(d)}` : k);
+  const cast = M.normalizeCast([
+    { id: "a", name: "<b>Kael</b>", title: "Captain \"Red\"", image: "a.png", height: 1.2, face: { x: 0.5, y: 0.2, h: 0.2 } },
+    { id: "b", name: "Mira", image: "b.webp", actorUuid: "Actor.x" },
+    { id: "c", name: "Odo" },
+  ]);
+  const state = M.normalizeState({ visible: true, on: [{ id: "a", x: 0.3 }, { id: "b", x: 0.7, masked: true, flip: true }], focus: "a", shot: "close", close: "b", cut: "push" }, cast.map((m) => m.id));
+  const comms = M.normalizeComms({ visible: true, calls: [{ callId: "k1", castId: "c" }], speaking: "k1" }, cast.map((m) => m.id));
+  const light = R.normalizeLight({ mood: "dusk" });
+  const input = (tab, castView = "edit") => ({
+    cast, state, layout: M.normalizeLayout({}), comms, commsLayout: M.normalizeCommsLayout({}),
+    scene: { id: "s", name: "Hall" }, light, backdrop: "bg.png",
+    view: { tab, sel: "a", castSel: "a", castView, q: { stage: "", cast: "", comms: "" } },
+  });
+  const html = V.TABS.map((t) => V.renderDirector(V.directorModel(input(t), L), L)).join("")
+    + V.renderDirector(V.directorModel(input("cast", "lineup"), L), L)
+    + V.renderDirector(V.directorModel({ ...input("light"), scene: null, light: null }, L), L)
+    + V.SEARCH_PANES.map((p) => V.worldRowHTML({ uuid: "Actor.<y>", name: "<i>x</i>", image: "", type: "npc" }, p, L)).join("");
+  ok("a typed name never reaches the panel as markup", !/<b>Kael|<i>x/.test(html) && html.includes("&lt;b&gt;Kael"));
+  const app = stripComments(read(`${FEAT}/apps/director-app.mjs`));
+  const actions = new Set([...html.matchAll(/data-action="([A-Za-z]+)"/g)].map((m) => m[1]));
+  for (const a of actions) ok(`data-action="${a}" has a handler`, new RegExp(`\\b${a}: function`).test(app));
+  for (const b of new Set([...html.matchAll(/data-bind="([A-Za-z]+):/g)].map((m) => m[1]))) {
+    ok(`data-bind="${b}:…" is routed`, new RegExp(`case "${b}"`).test(app));
+  }
+  for (const hook of ["data-fig", "data-track", "data-face-pick", "data-face-ring", "data-dir-search", "data-search-row", "data-world-list", "data-no-match", "data-lineup", "data-lineup-box", "data-mark-row", "data-keep-scroll"]) {
+    ok(`the view draws ${hook}`, html.includes(`${hook}`));
+  }
+  ok("every figure is drawn where a drag would put it", (() => {
+    const a = state.on.find((m) => m.id === "a");
+    const b = V.figureBox(a.x, a.depth, 1.2, M.normalizeLayout({}).figure);
+    return html.includes(`left: ${b.left}%; bottom: ${b.bottom}%; height: ${b.height}%`);
+  })());
+  ok("every search pane has a roster the app can find", V.SEARCH_PANES.every((p) => new RegExp(`<aside class="glstage-dir-side[^"]*"[^>]*>(?:(?!</aside>).)*data-dir-search="${p}"`, "s").test(html)));
+  ok("the app finds a search's roster by the side column", /closest\("\.glstage-dir-side"\)/.test(app));
+  ok("every mood but auto and off has a swatch", R.MOODS.filter((m) => m !== "auto" && m !== "off").every((m) => typeof V.moodSwatch(m) === "string"));
+  ok("the Director renders no template", !/HandlebarsApplicationMixin|\.hbs/.test(app) && !existsSync(join(ROOT, "templates/stage/director.hbs")));
+}
+
 /* ── Purity: what the preview drives must not read the world ───────────── */
 section = "purity";
 {
   const pure = [
     ...walk(`${FEAT}/render`), ...walk(`${FEAT}/light`), ...walk(`${FEAT}/comms`),
-    `${FEAT}/director.mjs`, `${FEAT}/model.mjs`, `${FEAT}/stage-dom.mjs`, `${FEAT}/timing.mjs`,
+    `${FEAT}/director.mjs`, `${FEAT}/model.mjs`, `${FEAT}/stage-dom.mjs`, `${FEAT}/timing.mjs`, `${FEAT}/apps/director-view.mjs`,
   ].filter((f) => /\.m?js$/.test(f) && existsSync(join(ROOT, f)));
   for (const f of pure) {
     const src = stripComments(read(f)).replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, "''");
@@ -618,6 +661,7 @@ section = "i18n";
     dial: Object.keys(R.LIGHT_DIALS), dials: Object.keys(R.LIGHT_DIALS),
     shot: M.SHOTS, cut: M.CUTS, nameplates: M.NAMEPLATES, nameplate: M.NAMEPLATES,
     edge: M.COMMS_EDGES, align: M.COMMS_ALIGN, style: M.COMMS_STYLES,
+    tab: V.TABS, hint: V.SEARCH_PANES, faces: ["left", "right", "front"],
   };
   for (const prefix of dynamic) {
     const obj = resolve(prefix.replace(/\.$/, ""));
