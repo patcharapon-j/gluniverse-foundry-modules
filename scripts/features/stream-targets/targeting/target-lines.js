@@ -1,15 +1,16 @@
+import { Budget } from "../../../core/budget.mjs";
 import { getActiveCombatant, getActiveSceneCombat, getCombatantToken } from "../../stream/combat-utils.js";
 import { HOOKS, MODULE_ID, TARGET_LINE_VISIBILITY } from "../../stream/constants.js";
 import { createTimer, onCanvasFrame, prefersCalmMotion } from "../../stream/motion/engine.js";
 import { TARGETS_HOOKS, getShowLines, getTargetingSettings } from "../settings.js";
 import { isConfiguredStreamUser } from "../../stream/settings.js";
 import { getCanvasToken, isVisibleToken, playerControllingUsers, targetsOfToken, turnPlayers, visibleTokens } from "../../stream/token-utils.js";
-import { OriginRing, TargetLine } from "./target-line.js";
+import { OriginRing, TargetLine, createLineLayers } from "./target-line.js";
 
 /** Above rulers and cursors, below the scrolling combat text. */
 const LAYER_Z_INDEX = 1050;
-const HALO_BLUR_STRENGTH = 6;
-const HALO_BLUR_QUALITY = 2;
+/** The id this feature claims continuous canvas motion under while a line is drawing out or back. */
+const MOTION_ID = "stream-targets";
 
 /**
  * Draws a targeting line from the active combatant to every token it is targeting, on any client the
@@ -24,9 +25,12 @@ export class TargetLineController {
   /** Hand-off origin rings still playing: at most one sink per old token and one rise per new token. */
   rings = new Set();
   layer = null;
-  halo = null;
+  under = null;
   core = null;
-  glint = null;
+  /** The last announced set, so an unchanged sync announces nothing (see #announce). */
+  announced = null;
+  /** Whether a line redrew last frame: a line drawing out or back is canvas motion the perf governor must see. */
+  moving = false;
   stopListening = null;
   syncQueued = false;
   turnContext = undefined;
@@ -193,9 +197,8 @@ export class TargetLineController {
       const line = new TargetLine({
         sourceId: wanted.sourceId,
         targetId: wanted.targetId,
-        halo: this.halo,
+        under: this.under,
         core: this.core,
-        glint: this.glint,
         style: wanted.style,
         calm,
         onGone: gone => this.#forget(gone)
@@ -205,8 +208,22 @@ export class TargetLineController {
     }
     this.#riseFromLaunchingToken(desired);
     this.#updateListening();
-    // `color` is the line's own colour (a 0xRRGGBB number), so a second view of the same lines (the Diorama)
-    // draws them in the colour this one chose, relationship and all.
+    this.#announce(desired);
+  }
+
+  /**
+   * Tell the other views (pf2e-odds' badges, the Diorama) which lines this client draws, as
+   * `[{ sourceId, targetId, color }]`. `color` is the line's own colour (a 0xRRGGBB number), so a second view
+   * draws them in the colour this one chose, relationship and all.
+   *
+   * Only when the set changed. A sync runs on every `sightRefresh`, which fires continuously while a token
+   * moves; announcing each one re-priced every odds badge and re-laid every 3D line, many times a second, for a
+   * set that had not moved.
+   */
+  #announce(desired) {
+    const signature = [...desired].map(([key, { style }]) => `${key}:${style?.color}`).join("|");
+    if (signature === this.announced) return;
+    this.announced = signature;
     Hooks.callAll(TARGETS_HOOKS.linesChanged, [...desired.values()].map(({ sourceId, targetId, style }) => ({ sourceId, targetId, color: style?.color ?? null })));
   }
 
@@ -323,6 +340,7 @@ export class TargetLineController {
     args.gridSize = canvas.grid?.size ?? canvas.dimensions?.size ?? 100;
     // Hairlines are one device pixel, so they need the renderer's resolution as well as the zoom.
     args.resolution = canvas.app?.renderer?.resolution ?? globalThis.devicePixelRatio ?? 1;
+    let moving = this.rings.size > 0;
     for (const line of this.lines.values()) {
       const source = getCanvasToken(line.sourceId);
       const target = getCanvasToken(line.targetId);
@@ -332,7 +350,7 @@ export class TargetLineController {
       }
       args.source = source;
       args.target = target;
-      line.render(args);
+      if (line.render(args)) moving = true;
     }
     args.target = null;
     for (const ring of this.rings) {
@@ -345,6 +363,18 @@ export class TargetLineController {
       ring.render(args);
     }
     args.source = null;
+    this.#claimMotion(moving);
+  }
+
+  /**
+   * A line drawing out, back or across is canvas motion with no input behind it on this client (another
+   * player's target, a turn change), so the perf governor's idle-rate drop has to see it or the launch
+   * stutters at Balanced. A line that has landed redraws nothing and claims nothing.
+   */
+  #claimMotion(moving) {
+    if (moving === this.moving) return;
+    this.moving = moving;
+    Budget.claimMotion(MOTION_ID, moving);
   }
 
   #updateListening() {
@@ -353,32 +383,20 @@ export class TargetLineController {
     else if (!drawing && this.stopListening) {
       this.stopListening();
       this.stopListening = null;
+      this.#claimMotion(false);
     }
   }
 
   #createLayer() {
     const parent = canvas?.interface;
     if (!parent) return;
-    const layer = new PIXI.Container();
-    layer.eventMode = "none";
-    layer.interactiveChildren = false;
+    const { layer, under, core } = createLineLayers();
     layer.zIndex = LAYER_Z_INDEX;
-
-    // Halos share one blur so the glow costs a single filter pass however many lines there are.
-    const halo = layer.addChild(new PIXI.Container());
-    const blur = new PIXI.BlurFilter(HALO_BLUR_STRENGTH, HALO_BLUR_QUALITY);
-    blur.blendMode = PIXI.BLEND_MODES.ADD;
-    halo.filters = [blur];
-    const core = layer.addChild(new PIXI.Container());
-    // The light sweep adds onto the glass beneath it; each line's glint Graphics sets its own ADD blend.
-    const glint = layer.addChild(new PIXI.Container());
-
     parent.addChild(layer);
     parent.sortDirty = true;
     this.layer = layer;
-    this.halo = halo;
+    this.under = under;
     this.core = core;
-    this.glint = glint;
   }
 
   #teardown() {
@@ -388,15 +406,14 @@ export class TargetLineController {
     for (const line of [...this.lines.values()]) line.destroy();
     this.lines.clear();
     this.#updateListening();
-    Hooks.callAll(TARGETS_HOOKS.linesChanged, []);
+    this.#announce(new Map());
     if (this.layer && !this.layer.destroyed) {
       this.layer.parent?.removeChild(this.layer);
       this.layer.destroy({ children: true });
     }
     this.layer = null;
-    this.halo = null;
+    this.under = null;
     this.core = null;
-    this.glint = null;
   }
 }
 
