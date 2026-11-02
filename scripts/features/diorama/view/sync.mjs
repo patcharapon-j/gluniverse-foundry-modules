@@ -7,7 +7,11 @@
  *   SUMMON   "Bring everyone to my view": the GM's camera, which every client
  *            that has the view open on that scene tweens to.
  *
- * Both are honoured only from a GM, by the server-attested sender
+ *   HOLD     A miniature picked up in the lift move style: its pose, so the
+ *            table watches it travel. From the token's owner (or a GM), and
+ *            drawn only by a viewer whose board shows that token.
+ *
+ * Invite and summon are honoured only from a GM, by the server-attested sender
  * (`meta.attested`), never the claimed one. Recipients are filtered on the
  * server, so a client on another scene is never sent either.
  *
@@ -39,11 +43,29 @@ export function sendSummon(sceneId, camera) {
   if (recipients.length) emitSocket(FEATURE_ID, { type: MSG.summon, sceneId, camera }, { recipients });
 }
 
+/**
+ * A miniature in this player's hand, to everyone else watching the scene. A
+ * hidden token's pose goes to GMs only: players are never told where it is.
+ */
+export function sendHold(sceneId, doc, pose) {
+  const all = usersOnScene(sceneId);
+  const recipients = doc?.hidden ? all.filter((id) => globalThis.game?.users?.get(id)?.isGM) : all;
+  if (!recipients.length || !doc?.id) return;
+  emitSocket(FEATURE_ID, {
+    type: MSG.hold, sceneId, tokenId: doc.id, phase: pose.phase,
+    x: pose.x, y: pose.y, footQ: pose.footQ, groundQ: pose.groundQ,
+  }, { recipients });
+}
+
 /** Payload shape check (runs before the handler). */
 export function validPayload(p) {
   if (!p || typeof p !== "object" || typeof p.sceneId !== "string") return false;
   if (p.type === MSG.invite) return true;
   if (p.type === MSG.summon) return !!p.camera && typeof p.camera === "object";
+  if (p.type === MSG.hold) {
+    return typeof p.tokenId === "string" && (p.phase === "carry" || p.phase === "drop")
+      && [p.x, p.y, p.footQ].every((v) => typeof v === "number" && Number.isFinite(v));
+  }
   return false;
 }
 
@@ -79,6 +101,11 @@ function askToast(senderName, onJoin) {
 export function wireSocket(loadView, isOpen) {
   onSocket(FEATURE_ID, async (payload, _claimed, meta) => {
     const sender = meta?.attested ? game.users.get(meta.attested) : null;
+    // A hold comes from whoever owns the token (the view checks the ownership).
+    if (payload.type === MSG.hold) {
+      if (sender && isOpen()) (await loadView()).applyHold(payload, sender);
+      return;
+    }
     if (!sender?.isGM) return;
     if (payload.sceneId !== globalThis.canvas?.scene?.id) return;
     if (payload.type === MSG.invite) {

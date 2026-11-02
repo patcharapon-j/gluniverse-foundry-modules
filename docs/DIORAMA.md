@@ -39,6 +39,30 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   target (T), open / close doors, ping (long press), ruler, a compact token menu
   (right-click), the sheet (double-click), and hover distance + cover from the
   controlled token to the hovered one.
+- **Movement range.** Selecting a token you own shades the squares it can reach in
+  one, two and three Strides (PF2e; Close for Daggerheart), counting walls and
+  one-way walls (`canvas.edges`), difficult terrain (movement-cost Regions, at the
+  token's elevation) and cliffs. Solver: `rules/reach.mjs` (pure Dijkstra with the
+  scene's diagonal rule); world adapter: `view/reach.mjs`. Per player
+  (`dio.reach`): when selected, only while moving, or never.
+- **Two ways to move** (`dio.moveStyle`, Alt swaps for one drag). *Trace the
+  path*: the drag is the route. *Pick up and set down*: the miniature lifts off the
+  table, follows the hand leaning into its motion, and drops onto the square under
+  it; the route is the reach's cheapest one, and the landing square is coloured by
+  what the move costs. The carried pose reaches everyone watching the scene (socket
+  `hold`, throttled; a hidden token's goes to GMs only; drawn only by a viewer whose
+  board shows that token). Foundry still decides the move: a stopped move walks
+  the figure to where the token really is.
+- **Flyers** are grabbable by the figure, its glass stand or its foot and squares
+  on the ground. By the figure they move at their altitude (the pointer is read on
+  the level plane at their feet); by the foot, the pointer's square is the square.
+- **Options.** Every graphics and handling choice is a per-client setting in the
+  view's Graphics panel (`options.mjs`: quality preset and its overrides, adaptive
+  shedding, day/night, grade, grid strength, move style, range). The table's rules
+  (where time and weather come from, whether props block) are world settings.
+- **Environment and props.** Time of day, weather and air per scene
+  (`docs/DIORAMA_ENVIRONMENT.md`); primitive props placed in the editor or a layout
+  (`docs/DIORAMA_PROPS.md`).
 - **Walls.** Camera-facing walls drop to a stub so rooms read. Doors swing.
 - **Light and vision.** Lit from Foundry's own light polygons, hidden by Foundry's
   own vision polygons and explored fog. Unexplored ground is not drawn at all.
@@ -139,10 +163,12 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
 The view renders **on demand**: a frame only when the camera, a token, a light or
 an effect changes; `Budget.claimMotion` is held only while something animates.
 The WebGL context is registered with `Surfaces`. `SHED_ORDER` (cheapest loss
-first): tilt-shift, ambient occlusion, soft shadows, shadows, water animation,
-standee sway, marker motion (the reticle's breathe and the target lines' glint,
-`TIMING.reticleBreathe` / `linkGlint`), effect lights, render scale 0.75, 30 fps
-cap. Vision, lighting correctness and fog are never shed.
+first): tilt-shift, atmosphere, weather particles, ambient occlusion, soft
+shadows, prop detail, shadows, water animation, standee sway, marker motion (the
+reticle's breathe and the target lines' glint, `TIMING.reticleBreathe` /
+`linkGlint`), effect lights, render scale 0.75, 30 fps cap. Each rung only ever
+caps what the player's own Graphics settings asked for; with adaptive shedding off
+nothing is shed. Vision, lighting correctness and fog are never shed.
 
 ## Setting up a map (GM)
 
@@ -198,16 +224,20 @@ r.setTerrain(terrain);                       // Terrain from terrain/model.mjs
 r.setBackground(image|null, rect);           // map art, placed over rect (px)
 r.setWalls(WallState[]);
 r.setTokens(TokenState[]);
+r.setHold(id, { x, y, footQ, groundQ, phase:"carry"|"drop" } | null);  // a miniature in a hand
 r.setLighting({ darkness, light, vision });  // canvases, world-space, see below
-r.setOverlays({ path, cells, ruler, pings, hover });
+r.setOverlays({ path, cells, ruler, pings, hover, reach });
 r.setEffects(EffectState[]);
 r.setCamera({ yawStep, pitchIndex, zoom, target }, { animate });
 r.getCamera();
-r.setOptions({ tiltShift, cutaway, ghosts, grid: { on, color, alpha } });
+r.setOptions({ tiltShift, cutaway, ghosts, grid: { on, color, alpha }, graphics });
+r.setEnvironment(env);                       // environment.mjs resolveEnv()
+r.setProps(PropState[]);                     // terrain/props.mjs propStates()
 r.setLinks([{ sourceId, targetId, color:[r,g,b] }]);  // targeting lines, 0..1 rgb
 r.setShed(ladderLike);                       // { allows(name) } from Budget.ladder
 r.requestRender();
-r.pick(clientX, clientY);   // {type:"token",id} | {type:"door",id} | {type:"ground",x,y,zQ,i,j} | null
+r.pick(clientX, clientY, { exclude, doors });  // {type:"token",id,part:"air"|"ground"} | {type:"door",id} | {type:"ground",x,y,zQ,i,j} | null
+r.pickPlane(clientX, clientY, zQ);           // {x, y} px on the level plane at zQ
 r.project(x, y, zQ);        // → {x, y} client px, for DOM labels
 r.resize(width, height);
 r.dispose();
@@ -244,5 +274,7 @@ v14 session.
 
 ## Not in v1
 
-JB2A ground-effect placement, FXMaster weather, multi-Level scenes, hex grids, the
-pixel-art filter, the depth-model auto setup (spike pending real maps), translations.
+JB2A ground-effect placement, multi-Level scenes, hex grids, the pixel-art filter,
+the depth-model auto setup (spike pending real maps), translations. The movement
+range ignores other creatures' spaces (PF2e lets you pass allies and not end in an
+enemy's square; Foundry decides that on the move itself).

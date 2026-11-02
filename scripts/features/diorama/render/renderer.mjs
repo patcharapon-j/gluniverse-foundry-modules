@@ -11,8 +11,9 @@
  *   r.setBackground(image|null, rect);           // map art, placed over rect (px)
  *   r.setWalls(WallState[]);
  *   r.setTokens(TokenState[]);
+ *   r.setHold(id, {x, y, footQ, groundQ, phase} | null);   // a miniature in a hand
  *   r.setLighting({ darkness, light, vision });  // world-space canvases
- *   r.setOverlays({ path, cells, ruler, pings, hover });   // shapes: overlays.mjs
+ *   r.setOverlays({ path, cells, ruler, pings, hover, reach });   // shapes: overlays.mjs
  *   r.setEffects(EffectState[]);
  *   r.setLinks([{ sourceId, targetId, color:[r,g,b] }]);   // target lines, chest → base
  *   r.setCamera({ yawStep, pitchIndex, zoom, target }, { animate });
@@ -23,7 +24,8 @@
  *   r.setProps(PropState[]);                     // render/props.mjs
  *   r.setShed(ladderLike);                       // { allows(name) }
  *   r.requestRender();
- *   r.pick(clientX, clientY);   // {type:"token",id} | {type:"door",id} | {type:"ground",x,y,zQ,i,j} | null
+ *   r.pick(clientX, clientY);   // {type:"token",id,part:"air"|"ground"} | {type:"door",id} | {type:"ground",x,y,zQ,i,j} | null
+ *   r.pickPlane(clientX, clientY, zQ);   // {x, y} px on the level plane at zQ
  *   r.project(x, y, zQ);        // → {x, y} client px
  *   r.resize(width, height);
  *   r.dispose();
@@ -119,9 +121,11 @@ export class DioramaRenderer {
     this.overlays = new OverlaysLayer(this.shared);
     this.effects = new EffectsLayer(this.shared);
     this.links = new LinksLayer(this.shared);
-    this.props = new PropsLayer(this.shared);
+    this.props = new PropsLayer(this.shared, () => this.requestRender());
     this.atmosphere = new AtmosphereLayer(this.shared);
     for (const l of this.layers()) this.scene.add(l.group);
+    /** The shadow pass's own-material casters: standee cards, then props. */
+    this._casters = [this.standees.casters, this.props.casters];
     /** Reused every frame: what the standees need from the view. */
     this._standeeFrame = { pxWorld: 0.01, markers: true };
 
@@ -161,13 +165,20 @@ export class DioramaRenderer {
     this._disposed = false;
     this._waterClock = 0;
 
+    // Overlays and picks stand on the RULES ground: the terrain with solid
+    // props stamped in (props.rules), where a token actually stands.
     this.overlays.setGround({
-      ground: (x, z) => (this.terrainModel ? this.terrainModel.groundAt(x * this.grid.size, z * this.grid.size, this.grid.size) / 4 : 0),
-      cellTopQ: (i, j) => (this.terrainModel ? this.terrainModel.cellTop(i, j) : 0),
+      ground: (x, z) => { const m = this.rulesModel(); return m ? m.groundAt(x * this.grid.size, z * this.grid.size, this.grid.size) / 4 : 0; },
+      cellTopQ: (i, j) => { const m = this.rulesModel(); return m ? m.cellTop(i, j) : 0; },
     });
 
     const w = canvas?.clientWidth || canvas?.width || 1, h = canvas?.clientHeight || canvas?.height || 1;
     this.resize(w, h);
+  }
+
+  /** The terrain the rules see: the ground plus blocking props. */
+  rulesModel() {
+    return this.props.rules ?? this.terrainModel;
   }
 
   /** Every layer, in draw-group order. */
@@ -252,7 +263,7 @@ export class DioramaRenderer {
 
   updateShadowBounds() {
     const m = this.terrain.mesh;
-    this.shadow.setBounds({ x1: this.grid.cols, z1: this.grid.rows, y0: m ? m.baseY : -1, y1: (m ? m.maxY : 0) + 3 });
+    this.shadow.setBounds({ x1: this.grid.cols, z1: this.grid.rows, y0: m ? m.baseY : -1, y1: Math.max((m ? m.maxY : 0) + 3, (this.props?.maxY ?? 0) + 0.5) });
   }
 
   /** @param {object[]} walls WallState[] */
@@ -269,11 +280,22 @@ export class DioramaRenderer {
   }
 
   /**
+   * A miniature in a hand (render/standees.mjs setHold): { x, y (px, foot
+   * centre), footQ, groundQ, phase: "carry"|"drop" }, or null to let go.
+   */
+  setHold(id, hold) {
+    this.standees.setHold(id, hold, clock());
+    this.requestRender();
+  }
+
+  /**
    * @param {{darkness?:number, light?:HTMLCanvasElement|null, vision?:HTMLCanvasElement|null}} o
    */
   setLighting({ darkness = 0, light = null, vision = null } = {}) {
     const d = Math.max(0, Math.min(1, Number(darkness) || 0));
-    this.shared.uAmbient.value = 1 - d * 0.85;
+    this._darkness = d;
+    // the darker of Foundry's darkness and the hour's
+    this.shared.uAmbient.value = 1 - Math.max(d, this.env?.darkness ?? 0) * 0.85;
     this.lightTex = this.swapWorldTexture(this.lightTex, light);
     this.shared.uLightMap.value = this.lightTex ?? this._blank.light;
     this.visionTex = this.swapWorldTexture(this.visionTex, vision);
@@ -333,8 +355,11 @@ export class DioramaRenderer {
    * @param {object|null} env
    */
   setEnvironment(env) {
+    // the same environment again (a hook that changed nothing it reads) costs nothing
+    if (!this.atmosphere.setEnvironment(env ?? null) && this._envSet) return;
+    this._envSet = true;
     this.env = env ?? null;
-    this.atmosphere.setEnvironment(this.env);
+    this.shared.uAmbient.value = 1 - Math.max(this._darkness ?? 0, this.env?.darkness ?? 0) * 0.85;
     this.props.setEnvironment?.(this.env);
     this.shadow.dirty = true;
     this.requestRender();
@@ -476,6 +501,7 @@ export class DioramaRenderer {
     this.links.viewport.value.set((this._w * ratio0) / 2, (this._h * ratio0) / 2);
     const sf = this._standeeFrame;
     sf.pxWorld = VIEW_CELLS / Math.max(1e-3, this.rig.view.zoom) / Math.max(1, this._h * ratio0);
+    this.atmosphere.pxWorld = sf.pxWorld;
     sf.markers = fx.markers;
     if (this.standees.frame(t, this.rig.camera, yaw, sway, sf)) active = true;
     if (this.standees.castersDirty) { this.standees.castersDirty = false; this.shadow.dirty = true; }
@@ -495,6 +521,7 @@ export class DioramaRenderer {
     }
     this.shared.uTime.value = this._waterClock;
     if (this.props.frame(t, dt, this.rig.camera, fx)) active = true;
+    if (this.props.castersDirty) { this.props.castersDirty = false; this.shadow.dirty = true; }
     if (this.atmosphere.frame(t, dt, this.rig.camera, fx, this.rig.view)) active = true;
     if (isVideo(this.bg.source) && !this.bg.source.paused) active = true;
 
@@ -509,7 +536,7 @@ export class DioramaRenderer {
     }
 
     try {
-      if (shadows) this.shadow.render(this.webgl, this.scene, this.standees.casters);
+      if (shadows) this.shadow.render(this.webgl, this.scene, this._casters);
       if (fx.tiltShift) this.tilt.render(this.webgl, this.scene, this.rig.camera);
       else {
         this.webgl.setRenderTarget(null);
@@ -535,15 +562,17 @@ export class DioramaRenderer {
   /**
    * @returns {{type:"token",id:string}|{type:"door",id:string}|{type:"ground",x:number,y:number,zQ:number,i:number,j:number}|null}
    */
-  pick(clientX, clientY) {
+  pick(clientX, clientY, { exclude = null, doors = true } = {}) {
     if (this._disposed) return null;
     this.rig.camera.updateMatrixWorld(true);
     this.scene.updateMatrixWorld(true);
     this.raycaster.setFromCamera(this.ndc(clientX, clientY), this.rig.camera);
-    const token = this.standees.pick(this.raycaster);
-    if (token) return { type: "token", id: token };
-    const door = this.raycaster.intersectObjects(this.walls.pickables(), false)[0];
+    const token = this.standees.pickPart(this.raycaster, exclude);
+    if (token) return { type: "token", id: token.id, part: token.part };
+    const door = doors ? this.raycaster.intersectObjects(this.walls.pickables(), false)[0] : null;
     if (door) return { type: "door", id: door.object.userData.doorId };
+    const prop = this.props.pick(this.raycaster);
+    if (prop) return this.groundPick(prop.point, null);
     const hit = this.raycaster.intersectObjects(this.terrain.pickables(), false)[0];
     if (!hit) {
       // no terrain: the ground plane at 0
@@ -554,10 +583,24 @@ export class DioramaRenderer {
     return this.groundPick(hit.point.clone(), hit);
   }
 
+  /**
+   * Where the pointer meets the level plane at height zQ, in px: what a flyer
+   * carried at its altitude is over. null when the ray runs parallel or away.
+   */
+  pickPlane(clientX, clientY, zQ = 0) {
+    if (this._disposed) return null;
+    this.rig.camera.updateMatrixWorld(true);
+    this.raycaster.setFromCamera(this.ndc(clientX, clientY), this.rig.camera);
+    const p = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -(Number(zQ) || 0) / 4), p)) return null;
+    const S = this.grid.size;
+    return { x: p.x * S, y: p.z * S };
+  }
+
   groundPick(p, hit) {
     if (hit && hit.object.userData.pick === "side" && hit.face) p.addScaledVector(hit.face.normal, -0.02);
     const S = this.grid.size;
-    const t = this.terrainModel;
+    const t = this.rulesModel();
     const si = Math.floor(p.z * SUB), sj = Math.floor(p.x * SUB);
     const zQ = t ? t.topAt(si, sj) : Math.round(p.y * 4);
     return { type: "ground", x: p.x * S, y: p.z * S, zQ, i: Math.floor(p.z), j: Math.floor(p.x) };

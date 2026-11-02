@@ -23,7 +23,7 @@ import { TIMING } from "../constants.mjs";
 import { PALETTE, lighten, mix } from "../../../core/theme.mjs";
 import { MATERIALS, cssRgb } from "./materials.mjs";
 import { composeCard, drawChips, drawPlate, loadDrawable, maskHit, shadowCanvas, HALO_MAX, PLATE_PX } from "./art.mjs";
-import { clamp01, lerp } from "./tween.mjs";
+import { clamp01, ease, lerp } from "./tween.mjs";
 
 const BASE_H = 0.07;
 const HOP = 0.14;
@@ -45,6 +45,14 @@ const MAX_LEAN = (60 * Math.PI) / 180;
 export const FIGURE_SCALE = 1.35;
 /** In the air from 1 q (a quarter cell) above the ground: world units are cells. */
 const FLY_MIN = 0.25;
+/** A picked-up miniature: how high it rides above its square (cells). */
+export const HOLD_LIFT = 0.65;
+/** 1/s: how fast a held miniature follows the hand, and its swing the hand's speed. */
+const HOLD_FOLLOW = 20;
+const HOLD_SWING = 9;
+/** Radians of lean per cell/s of hand speed, and the most it leans. */
+const HOLD_LEAN = 0.05;
+const HOLD_LEAN_MAX = 0.32;
 /** Outline width by state, device px; the targeted line also glows. */
 export const OUTLINE_PX = Object.freeze({ rest: 2, hovered: 2.25, controlled: 2.5, targeted: 3.5 });
 /** The card quad is grown by this many device px each side for line and glow. */
@@ -302,7 +310,8 @@ export class StandeesLayer {
     // g: the ground under it. A missing groundQ means "standing on it".
     const gq = Number(t.groundQ);
     target.g = t.groundQ != null && Number.isFinite(gq) ? gq / 4 : target.y;
-    if (!e.pos) e.pos = { ...target };
+    if (e.hold) e.heldTarget = { ...target };
+    else if (!e.pos) e.pos = { ...target };
     else if (target.x !== e.move?.to.x || target.z !== e.move?.to.z || target.y !== e.move?.to.y) {
       const from = this.current(e, now);
       const d = Math.hypot(target.x - from.x, target.z - from.z);
@@ -313,7 +322,7 @@ export class StandeesLayer {
         e.move = { from, to: target, t0: now, ms: TIMING.standeeStep * steps, hops: d >= 0.5 ? steps : 0 };
       }
     }
-    if (!e.move) e.pos = { ...target };
+    if (!e.move && !e.hold) e.pos = { ...target };
     const width = Math.max(0.25, Number(t.widthCells) || 1);
     e.width = width;
     const r = width * 0.4;
@@ -441,20 +450,23 @@ export class StandeesLayer {
   }
 
   /** Place the flight stand (or hide it) for the standee's current position. */
-  placeStand(e, p) {
+  placeStand(e, p, held = false) {
     const g = Number.isFinite(p.g) ? p.g : p.y;
     const alt = p.y - g;
-    const flying = StandeesLayer.isFlying(p.y, g);
-    e.flying = flying;
+    const airborne = StandeesLayer.isFlying(p.y, g);
+    // A held miniature keeps what it was (a flyer stays grabbable by its foot);
+    // a walker lifted off the table shows only its shadow, never a stand.
+    const flying = held ? e.flying && airborne : airborne;
+    e.flying = held ? e.flying : flying;
     e.stand.visible = flying;
     const r = (e.width ?? 1) * 0.4;
-    const k = flying ? 1 / (1 + alt * 0.45) : 1;
+    const k = airborne ? 1 / (1 + alt * 0.45) : 1;
     // The contact shadow stays on the ground, smaller and fainter the higher up.
-    e.shadow.position.y = (flying ? g - p.y : 0) + 0.008;
+    e.shadow.position.y = (airborne ? g - p.y : 0) + 0.008;
     e.shadow.scale.set(r * 3.1 * (0.5 + 0.5 * k), 1, r * 3.1 * (0.5 + 0.5 * k));
     e.shadow.material.uniforms.uOpacity.value = (e.shadowOpacity ?? 0.9) * (0.35 + 0.65 * k);
     // the reticle marks the ground under the target, flying or not
-    e.reticle.position.y = (flying ? g - p.y : 0) + 0.022;
+    e.reticle.position.y = (airborne ? g - p.y : 0) + 0.022;
     if (!flying) return;
     const dy = g - p.y;
     const rc = 0.045 * Math.sqrt(e.width ?? 1);
@@ -634,7 +646,11 @@ export class StandeesLayer {
       }
       this.placeHalo(e, yaw, camera);
       let p = e.pos, hop = 0;
-      if (e.move) {
+      if (e.hold && this.stepHold(e, now, dt)) active = true;
+      const h = e.hold;
+      if (h) {
+        p = { x: h.x, z: h.z, y: h.y + h.lift, g: h.g };
+      } else if (e.move) {
         const k = clamp01((now - e.move.t0) / e.move.ms);
         p = this.current(e, now);
         if (e.move.hops) hop = HOP * Math.abs(Math.sin(Math.PI * e.move.hops * k));
@@ -642,12 +658,16 @@ export class StandeesLayer {
       }
       e.root.position.set(p.x, p.y, p.z);
       e.body.position.y = hop;
-      this.placeStand(e, p);
+      this.placeStand(e, p, !!h);
       // YXZ: turn to the camera's yaw, then lean back about the card's own x axis.
       e.card.rotation.order = "YXZ";
       e.card.rotation.set(-lean, yaw, 0);
       e.body.rotation.z = 0;
-      if (sway && e.root.visible) {
+      if (h) {
+        // Carried: the figure leans into the hand's motion, as a mini held by its top does.
+        const cl = (v) => Math.max(-HOLD_LEAN_MAX, Math.min(HOLD_LEAN_MAX, v * HOLD_LEAN));
+        e.body.rotation.set(cl(h.vz), 0, cl(-h.vx));
+      } else if (sway && e.root.visible) {
         e.body.rotation.set(0, 0, Math.sin(t * 1.25 + e.phase) * SWAY);
         e.card.rotation.y = yaw + Math.sin(t * 0.8 + e.phase * 1.7) * SWAY * 0.6;
       } else {
@@ -713,22 +733,118 @@ export class StandeesLayer {
    * Raycast cards then bases. @returns {string|null} token id
    */
   pick(raycaster) {
-    const cards = [], bases = [];
+    return this.pickPart(raycaster)?.id ?? null;
+  }
+
+  /**
+   * Raycast every part a hand could grab a miniature by: the card, the base,
+   * and for a flyer its glass stand and the foot and squares on the ground
+   * under it. `part` is "air" for a flyer's card, base or stand (it moves at
+   * its altitude) and "ground" for anything on the table. `exclude`: a token
+   * id to see through (the one in the hand).
+   * @returns {{id:string, part:"air"|"ground"}|null}
+   */
+  pickPart(raycaster, exclude = null) {
+    const objs = [], owner = new Map();
+    const add = (o, e, part) => { objs.push(o); owner.set(o, { e, part }); };
     for (const e of this.entries.values()) {
-      if (!e.root.visible) continue;
-      if (e.card.visible) cards.push(e.card);
-      bases.push(e.base);
-      if (e.stand.visible) bases.push(e.column);   // the glass stand picks its flyer
+      if (!e.root.visible || e.id === exclude) continue;
+      const air = e.flying ? "air" : "ground";
+      if (e.card.visible) add(e.card, e, air);
+      add(e.base, e, air);
+      if (e.stand.visible) {
+        add(e.column, e, "air");
+        add(e.foot, e, "ground");
+        add(e.footprint, e, "ground");
+      }
     }
-    const hits = raycaster.intersectObjects([...cards, ...bases], false);
+    const hits = raycaster.intersectObjects(objs, false);
     for (const h of hits) {
-      const id = h.object.userData.tokenId;
-      const e = this.entries.get(id);
-      if (!e) continue;
+      const o = owner.get(h.object);
+      if (!o) continue;
+      const { e, part } = o;
       if (h.object === e.card && h.uv && !maskHit(e.cardData?.mask, h.uv.x, h.uv.y)) continue;
-      return id;
+      return { id: e.id, part };
     }
     return null;
+  }
+
+  /**
+   * A miniature in a hand. `hold` = { x, y (px, foot centre), footQ, phase }:
+   * phase "carry" lifts it off the table and follows (x, y) with damping;
+   * "drop" lowers it onto (x, y, footQ) and lets go. null lets go at once.
+   * While held, a token update only records where Foundry put it; the hand
+   * hands the figure back to the ordinary move when it lands.
+   */
+  setHold(id, hold, now = performance.now()) {
+    const e = this.entries.get(String(id));
+    if (!e) return;
+    if (!hold) { this.endHold(e, now); return; }
+    const S = this.size;
+    const to = { x: Number(hold.x) / S, z: Number(hold.y) / S, y: Number(hold.footQ ?? 0) / 4 };
+    if (!Number.isFinite(to.x) || !Number.isFinite(to.z)) return;
+    if (!Number.isFinite(to.y)) to.y = 0;
+    const gq = Number(hold.groundQ);
+    to.g = hold.groundQ != null && Number.isFinite(gq) ? gq / 4 : to.y;
+    if (!e.hold) {
+      const from = this.current(e, now);
+      e.move = null;
+      e.heldTarget = null;
+      e.hold = { x: from.x, z: from.z, y: from.y, g: Number.isFinite(from.g) ? from.g : from.y,
+        lift: 0, vx: 0, vz: 0, to, phase: "carry", t0: now };
+    }
+    const h = e.hold;
+    h.to = to;
+    if (hold.phase === "drop" && h.phase !== "drop") { h.phase = "drop"; h.t0 = now; h.liftAt = h.lift; }
+    else if (hold.phase !== "drop" && h.phase === "drop") { h.phase = "carry"; h.t0 = now; }
+    this.onChange?.();
+  }
+
+  endHold(e, now) {
+    const h = e.hold;
+    if (!h) return;
+    e.hold = null;
+    const at = { x: h.x, z: h.z, y: h.y + h.lift, g: h.g };
+    const target = e.heldTarget;
+    e.heldTarget = null;
+    if (!target) { e.pos = { ...at, y: h.y }; return; }
+    const d = Math.hypot(target.x - at.x, target.z - at.z);
+    if (d < 0.02 && Math.abs(target.y - h.y) < 0.02 && h.lift < 0.02) { e.pos = { ...target }; return; }
+    // Foundry put it somewhere other than where the hand let go (a wall stopped it): walk there.
+    const steps = Math.max(1, Math.min(MAX_STEPS, Math.round(d)));
+    e.move = { from: at, to: target, t0: now, ms: TIMING.standeeStep * steps, hops: d >= 0.5 ? steps : 0 };
+  }
+
+  /** Step a held miniature one frame. @returns {boolean} still moving */
+  stepHold(e, now, dt) {
+    const h = e.hold;
+    const k = 1 - Math.exp(-HOLD_FOLLOW * dt);
+    const px = h.x, pz = h.z;
+    h.x += (h.to.x - h.x) * k;
+    h.z += (h.to.z - h.z) * k;
+    h.y += (h.to.y - h.y) * k;
+    h.g += (h.to.g - h.g) * k;
+    const vx = dt > 0 ? (h.x - px) / dt : 0, vz = dt > 0 ? (h.z - pz) / dt : 0;
+    const kv = 1 - Math.exp(-HOLD_SWING * dt);
+    h.vx += (vx - h.vx) * kv; h.vz += (vz - h.vz) * kv;
+    if (h.phase === "carry") {
+      const u = clamp01((now - h.t0) / TIMING.liftUp);
+      h.lift = Math.max(h.lift, HOLD_LIFT * ease.outCubic(u));
+    } else {
+      const u = clamp01((now - h.t0) / TIMING.liftDrop);
+      // falls under gravity (ease in), with one small settle at the end
+      const fall = (h.liftAt ?? HOLD_LIFT) * (1 - u * u);
+      const settle = u > 0.82 ? Math.sin(((u - 0.82) / 0.18) * Math.PI) * 0.025 : 0;
+      h.lift = Math.max(0, fall) + settle;
+      if (u >= 1) {
+        h.x = h.to.x; h.z = h.to.z; h.y = h.to.y; h.g = h.to.g; h.lift = 0;
+        this.endHold(e, now);
+        return true;
+      }
+    }
+    const still = Math.abs(h.to.x - h.x) < 1e-3 && Math.abs(h.to.z - h.z) < 1e-3 && Math.abs(h.to.y - h.y) < 1e-3
+      && h.phase === "carry" && h.lift >= HOLD_LIFT - 1e-3 && Math.hypot(h.vx, h.vz) < 1e-2;
+    return !still;
   }
 
   /**

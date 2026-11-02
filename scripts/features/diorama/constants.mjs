@@ -123,6 +123,11 @@ export const TIMING = Object.freeze({
   linkGlint: 2400,      // a glint's run along a target line, source to target
   inviteTimeout: 30000,
   bakeThrottle: 50,  // light / vision bake coalescing
+  liftUp: 180,       // a picked-up miniature rising off the table
+  liftDrop: 240,     // and falling back onto its square
+  holdSend: 50,      // a held miniature's pose, at most this often to the table
+  holdStale: 4000,   // a remote hold with no word for this long is dropped
+  reachDebounce: 60, // reach recompute coalescing
 });
 
 /**
@@ -155,6 +160,7 @@ export function snapYawStep(step, snapDeg) {
 export const MSG = Object.freeze({
   invite: "invite",
   summon: "summon",
+  hold: "hold",
 });
 
 /** Texture resolution of the light / vision bakes, px per cell. */

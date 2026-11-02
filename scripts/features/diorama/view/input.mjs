@@ -7,7 +7,10 @@
  *
  *   left click token          control (shift adds / removes)
  *   left click ground         release all
- *   left drag own token       path preview, drop = TokenDocument#move
+ *   left drag own token       path preview, drop = TokenDocument#move; or, in
+ *                             the lift style (dio.moveStyle, Alt swaps), pick the
+ *                             miniature up and set it down. A flyer is grabbed by
+ *                             its figure (moves at its altitude) or by its foot.
  *   double click token        sheet
  *   right click token         token menu
  *   left / right click door   Foundry's DoorControl rules
@@ -111,7 +114,14 @@ export class Input {
     }
     if (hit?.type === "token") {
       const tok = this.token(hit.id);
-      if (tok?.document?.isOwner) this.down.dragToken = tok;
+      if (tok?.document?.isOwner) {
+        this.down.dragToken = tok;
+        // "air": grabbed by a flyer's figure or stand, so it travels at its altitude;
+        // "ground": by the foot on the table, so the pointer's square is the square.
+        this.down.part = hit.part ?? "ground";
+        const style = this.ctx.moveStyle?.() === "lift" ? "lift" : "path";
+        this.down.style = ev.altKey ? (style === "lift" ? "path" : "lift") : style;
+      }
       return;
     }
     if (!hit || hit.type === "ground") {
@@ -134,7 +144,7 @@ export class Input {
     if (d.button === 1 || d.button === 2) { if (d.moved) this.panBy(dx, dy); return; }
     if (d.button !== 0 || !d.moved) return;
     if (this.ruler) { this.updateRuler(ev); return; }
-    if (d.dragToken) this.updateDrag(ev, d.dragToken);
+    if (d.dragToken) this.updateDrag(ev, d.dragToken, d);
   }
 
   async onUp(ev) {
@@ -359,27 +369,92 @@ export class Input {
 
   /* ──────────────────────────── drag / path ──────────────────────────── */
 
-  updateDrag(ev, tok) {
+  /**
+   * Two ways to move a miniature, both ending in one TokenDocument#move:
+   *   path  the pointer traces the route square by square (the trail is the path)
+   *   lift  the figure is picked up and follows the hand; the route to the
+   *         square under it is the cheapest one the reach found (walls,
+   *         difficult terrain, cliffs), and letting go sets it down there
+   * A flyer grabbed by its figure or stand moves at its altitude: the pointer
+   * is read on the level plane at its feet, not on the ground far behind it.
+   */
+  updateDrag(ev, tok, d = this.down) {
     const doc = tok.document;
     const g = this.ctx.grid();
     const size = g.size;
     if (!this.drag) {
       const start = { i: Math.round(doc._source.y / size), j: Math.round(doc._source.x / size) };
       const w = Math.max(1, Math.round(doc.width)), h = Math.max(1, Math.round(doc.height));
-      this.drag = { tok, cells: [start], anchor: { i: Math.floor((h - 1) / 2), j: Math.floor((w - 1) / 2) }, key: "" };
+      const elevQ = distToQ(Number(doc._source.elevation ?? doc.elevation) || 0, g.distance);
+      const air = d?.part === "air" && Seam.altitude(doc) > 0;
+      this.drag = {
+        tok, cells: [start], start, w, h, anchor: { i: Math.floor((h - 1) / 2), j: Math.floor((w - 1) / 2) }, key: "",
+        lift: d?.style === "lift", air, elevQ, sent: 0, dest: start,
+      };
+      this.ctx.dragging?.(tok);
+      if (this.drag.lift) this.hold("carry", (start.j + w / 2) * size, (start.i + h / 2) * size);
     }
-    const hit = this.pick(ev);
-    let x, y;
-    if (hit?.type === "ground") { x = hit.x; y = hit.y; }
-    else if (hit?.type === "token") { const o = this.token(hit.id); x = o?.center?.x; y = o?.center?.y; }
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    const cell = { i: Math.floor(y / size) - this.drag.anchor.i, j: Math.floor(x / size) - this.drag.anchor.j };
-    const cells = pathCellsTo(this.drag.cells, cell);
+    const drag = this.drag;
+    const at = this.pointerAt(ev, drag);
+    if (!at) return;
+    const cell = { i: Math.floor(at.y / size) - drag.anchor.i, j: Math.floor(at.x / size) - drag.anchor.j };
+    if (drag.lift) this.hold("carry", at.x, at.y, cell);
+    let cells;
+    if (drag.lift) {
+      const reach = this.ctx.reach?.();
+      const route = reach && reach.tokenId === doc.id ? reach.pathTo(cell.i, cell.j) : null;
+      cells = route ?? pathCellsTo([drag.start], cell);
+    } else {
+      cells = pathCellsTo(drag.cells, cell);
+    }
+    drag.dest = cell;
     const key = cells.map((c) => `${c.i},${c.j}`).join(";");
-    if (key === this.drag.key) return;
-    this.drag.cells = cells;
-    this.drag.key = key;
+    if (key === drag.key) return;
+    drag.cells = cells;
+    drag.key = key;
     this.showPath();
+  }
+
+  /** The px point the pointer is over for this drag (not the token in the hand). */
+  pointerAt(ev, drag) {
+    const r = this.r;
+    if (!r) return null;
+    if (drag.air) {
+      const p = r.pickPlane?.(ev.clientX, ev.clientY, drag.elevQ);
+      if (p && Number.isFinite(p.x)) return p;
+    }
+    let hit = null;
+    try { hit = r.pick(ev.clientX, ev.clientY, { exclude: drag.tok.id, doors: false }); } catch { hit = null; }
+    if (hit?.type === "ground") return { x: hit.x, y: hit.y };
+    if (hit?.type === "token") {
+      const o = this.token(hit.id);
+      if (Number.isFinite(o?.center?.x)) return { x: o.center.x, y: o.center.y };
+    }
+    return null;
+  }
+
+  /**
+   * Pose the miniature in the hand, here and (throttled) on every other screen
+   * watching this scene. x, y: px of the figure's centre; `cell` the top-left
+   * square it would land on, for the height it floats over.
+   */
+  hold(phase, x, y, cell = null) {
+    const drag = this.drag;
+    if (!drag) return;
+    const doc = drag.tok.document;
+    const g = this.ctx.grid();
+    const scene = this.ctx.scene();
+    const size = g.size;
+    const c = cell ?? { i: Math.floor(y / size) - drag.anchor.i, j: Math.floor(x / size) - drag.anchor.j };
+    const ground = Seam.groundDist(scene, c.j * size, c.i * size, doc.width, doc.height);
+    const groundQ = distToQ(ground, g.distance);
+    const footQ = distToQ(ground + Seam.altitude(doc), g.distance);
+    const pose = { x, y, footQ, groundQ, phase };
+    this.r?.setHold?.(doc.id, pose);
+    const now = performance.now();
+    if (phase === "carry" && now - drag.sent < TIMING.holdSend) return;
+    drag.sent = now;
+    this.ctx.sendHold?.(doc, pose);
   }
 
   /** Waypoints for the drag's cells (index 0 = the start). */
@@ -429,9 +504,17 @@ export class Input {
       ...an.climbs.map((c) => ({ i: c.i, j: c.j, color: PALETTE.warn, alpha: 0.45 })),
       ...an.falls.map((f) => ({ i: f.i, j: f.j, color: PALETTE.hazard, alpha: 0.45 })),
     ];
+    const total = result ? read(result.distance, result.cost) : null;
+    // Lifted: the squares it will land on, in the colour of what the move costs.
+    if (this.drag.lift && cells.length > 1) {
+      const end = cells[cells.length - 1];
+      const col = toneColor(total?.tone ?? "info");
+      for (let di = 0; di < this.drag.h; di++) for (let dj = 0; dj < this.drag.w; dj++) {
+        marks.push({ i: end.i + di, j: end.j + dj, color: col, alpha: 0.42 });
+      }
+    }
     this.ctx.setOverlays({ path: { points, color: toneColor(tones[0]) }, marks });
 
-    const total = result ? read(result.distance, result.cost) : null;
     const lines = total ? [total.text] : [];
     for (const c of an.climbs) lines.push(t("GLDIO.path.climb", { distance: Math.round(c.riseDist * 10) / 10, units: g.units }));
     for (const f of an.falls) {
@@ -445,21 +528,40 @@ export class Input {
 
   async commitDrag() {
     const drag = this.drag;
-    this.clearDrag();
+    const paused = game.paused && !isGM();
+    const moving = !!drag && drag.cells.length >= 2 && !paused;
+    // Set the miniature down: on the square it was let go over, or back where it stood.
+    if (drag?.lift) {
+      const size = this.ctx.grid().size;
+      const c = moving ? drag.cells[drag.cells.length - 1] : drag.start;
+      this.hold("drop", (c.j + drag.w / 2) * size, (c.i + drag.h / 2) * size, c);
+    }
+    this.clearDrag({ keepHold: true });
     if (!drag || drag.cells.length < 2) return;
     const doc = drag.tok.document;
-    if (game.paused && !isGM()) { ui.notifications.warn("GAME.PausedWarning", { localize: true }); return; }
+    if (paused) { ui.notifications.warn("GAME.PausedWarning", { localize: true }); return; }
     const wps = this.waypoints(drag).slice(1);
     wps.forEach((w, k) => { w.snapped = true; w.explicit = k === wps.length - 1; w.checkpoint = k === wps.length - 1; });
     const last = wps[wps.length - 1];
     let ok = false;
     try { ok = await doc.move(wps, { showRuler: false }); } catch (e) { console.error(e); ok = false; }
     if (!ok && (doc._source.x !== last.x || doc._source.y !== last.y)) ui.notifications.warn(t("GLDIO.move.stopped"));
+    // Whatever Foundry decided, the figure walks to where the token really is.
+    if (!ok) this.ctx.tokensChanged?.();
   }
 
-  clearDrag() {
-    if (!this.drag) return;
+  clearDrag({ keepHold = false } = {}) {
+    const drag = this.drag;
+    if (!drag) return;
     this.drag = null;
+    // Cancelled mid-air (Escape, a lost pointer): back onto its own square.
+    if (drag.lift && !keepHold) {
+      this.drag = drag;
+      const size = this.ctx.grid().size;
+      this.hold("drop", (drag.start.j + drag.w / 2) * size, (drag.start.i + drag.h / 2) * size, drag.start);
+      this.drag = null;
+    }
+    this.ctx.dragging?.(null);
     this.ctx.setOverlays({ path: null, marks: [] });
     this.unplace("path");
   }

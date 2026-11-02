@@ -11,6 +11,8 @@
  *   pings   [{id?, x, y, zQ?, color?}]. A ping plays once (TIMING.ping) from the
  *           moment its key first appears; keep it in the list or drop it.
  *   hover   { i, j, zQ?, color? } or null.
+ *   reach   { cells:[{i,j,band}], start?:{i,j,w,h}, colors? } or null: one
+ *           creature's squares by Strides (band 1..3), drawn under the rest.
  */
 
 import * as THREE from "./three.mjs";
@@ -74,6 +76,8 @@ export class OverlaysLayer {
         this.static.add(this.dot(p, col, i === pts.length - 1 ? 0.34 : 0.2, i === pts.length - 1));
       });
     }
+    // reach: under everything else
+    if (Array.isArray(o.reach?.cells) && o.reach.cells.length) this.static.add(this.reachMesh(o.reach));
     // cells
     const cellsIn = Array.isArray(o.cells) ? o.cells : o.cells?.cells;
     if (Array.isArray(cellsIn) && cellsIn.length) {
@@ -198,6 +202,52 @@ export class OverlaysLayer {
     g.setIndex(idx);
     const m = new THREE.Mesh(g, MATERIALS.ribbon(this.shared));
     m.renderOrder = 19;
+    m.frustumCulled = false;
+    return m;
+  }
+
+  /**
+   * A creature's reach: each square tinted by its band (one, two, three
+   * Strides), and a hairline traced only where a band ends, so the field
+   * reads as nested regions rather than a checkerboard.
+   * @param {{cells:{i:number,j:number,band:number}[], start?:{i:number,j:number,w?:number,h?:number}, colors?:string[]}} reach
+   */
+  reachMesh(reach) {
+    const colors = reach.colors ?? [PALETTE.info, PALETTE.warn, PALETTE.hazard];
+    const bandAt = new Map();
+    for (const c of reach.cells) bandAt.set(`${c.i},${c.j}`, c.band);
+    const s = reach.start;
+    if (s) for (let di = 0; di < (s.h ?? 1); di++) for (let dj = 0; dj < (s.w ?? 1); dj++) bandAt.set(`${s.i + di},${s.j + dj}`, 1);
+    const pos = [], rgba = [], idx = [];
+    const quad = (x0, z0, x1, z1, y, c, a) => {
+      const b = pos.length / 3;
+      pos.push(x0, y, z0, x0, y, z1, x1, y, z1, x1, y, z0);
+      for (let k = 0; k < 4; k++) rgba.push(c[0], c[1], c[2], a);
+      idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    };
+    // The first Stride reads strongest; the later ones recede, so three bands
+    // over terraced ground stay one picture instead of a web of lines.
+    const fill = [0.22, 0.13, 0.09];
+    const line = [0.95, 0.7, 0.5];
+    const w = 0.04;
+    const ends = (band, i, j) => { const n = bandAt.get(`${i},${j}`) ?? 0; return n === 0 || n > band; };
+    for (const cell of reach.cells) {
+      const { i, j, band } = cell;
+      const c = cssRgb(colors[band - 1] ?? colors.at(-1), PALETTE.info);
+      const y = this.cellTopQ(i, j) / 4 + LIFT * 0.45;
+      quad(j + 0.02, i + 0.02, j + 0.98, i + 0.98, y, c, fill[band - 1] ?? 0.1);
+      const e = y + 0.002, la = line[band - 1] ?? 0.5;
+      if (ends(band, i - 1, j)) quad(j, i, j + 1, i + w, e, c, la);
+      if (ends(band, i + 1, j)) quad(j, i + 1 - w, j + 1, i + 1, e, c, la);
+      if (ends(band, i, j - 1)) quad(j, i, j + w, i + 1, e, c, la);
+      if (ends(band, i, j + 1)) quad(j + 1 - w, i, j + 1, i + 1, e, c, la);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute("rgba", new THREE.Float32BufferAttribute(rgba, 4));
+    g.setIndex(idx);
+    const m = new THREE.Mesh(g, MATERIALS.ribbon(this.shared));
+    m.renderOrder = 18;
     m.frustumCulled = false;
     return m;
   }
