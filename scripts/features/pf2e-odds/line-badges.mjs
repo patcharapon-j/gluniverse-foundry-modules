@@ -36,7 +36,7 @@
  */
 
 import { Budget } from "../../core/budget.mjs";
-import { warn } from "../../core/const.mjs";
+import { SUITE_ID, warn } from "../../core/const.mjs";
 import { Suite } from "../../core/registry.mjs";
 import { motionScale } from "../../core/theme.mjs";
 import { TARGETS_HOOKS } from "../stream-targets/settings.js";
@@ -54,6 +54,14 @@ const L = (key) => {
 };
 
 const tokenById = (id) => canvas?.tokens?.get(id) ?? null;
+
+/**
+ * Diorama's 3D view covers the board, where the 2D stage transform names the
+ * wrong spot: ask it where the standee is (null while closed or off).
+ */
+function dioramaAnchor(tokenId) {
+  try { return game.modules.get(SUITE_ID)?.api?.features?.diorama?.tokenAnchor?.(tokenId) ?? null; } catch { return null; }
+}
 
 export class LineBadges {
   /** pairKey → { sourceId, targetId, el, model, full, seq } */
@@ -303,12 +311,20 @@ export class LineBadges {
       }
       // Anchor at the target's lower-right shoulder: off the art, clear of the
       // reticle the line lands on and of the resource bars under the token.
+      // With Diorama's 3D view over the board, beside its standee instead.
       const c = target.center ?? { x: target.x, y: target.y };
       const w = target.w ?? 0;
       const h = target.h ?? 0;
-      const p = wt.apply({ x: c.x + w * 0.5, y: c.y - h * 0.1 });
-      const x = Math.round(rect.left + p.x + 10);
-      const y = Math.round(rect.top + p.y);
+      const head = dioramaAnchor(v.targetId);
+      let x, y;
+      if (head) {
+        x = Math.round(head.x + 18);
+        y = Math.round(head.y);
+      } else {
+        const p = wt.apply({ x: c.x + w * 0.5, y: c.y - h * 0.1 });
+        x = Math.round(rect.left + p.x + 10);
+        y = Math.round(rect.top + p.y);
+      }
       const box = v.box;
       const cx = Math.min(Math.max(8, x), innerWidth - box.width - 8);
       const cy = Math.min(Math.max(8, y), innerHeight - box.height - 8);

@@ -1,0 +1,562 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Diorama — GM terrain editor and its 3D preview. Etched Glass.
+
+   Frames carry ONLY feature classes (`.gldio-app`): never `.gl-glass` on an
+   ApplicationV2 frame (DESIGN_SYSTEM.md: an unlayered `position` demotes the
+   window out of Foundry's absolute layout). Feature-local values are prefixed
+   `--gldio-`; no foundation token is redeclared here. `.gl-btn` declares no
+   font-size, so every button here is sized by this sheet.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.gldio-app {
+  --gldio-tool: 28px;
+  --gldio-ibtn: 24px;
+  --gldio-chip: 26px;
+  --gldio-swatch: 16px;
+}
+
+.gldio-app .window-content {
+  padding: 0;
+  background: var(--gl-ink-0);
+  overflow: hidden;
+}
+
+.gldio-app .window-header {
+  min-height: 0;
+  padding-block: var(--gl-sp-2);
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-sm);
+  letter-spacing: var(--gl-track-normal);
+}
+
+/* One focus mark, as the suite roots have (gl-tokens.css keyboard focus). */
+.gldio-app :is(button, [role="button"], a[href], input, select, textarea, [tabindex]):focus-visible {
+  outline: var(--gl-focus-outline);
+  outline-offset: 2px;
+}
+
+/* ── root ─────────────────────────────────────────────────────────────── */
+
+.gldio-ed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-4);
+  padding: var(--gl-sp-4);
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+  font-size: var(--gl-fs-sm);
+  line-height: var(--gl-lh-snug);
+  background:
+    radial-gradient(140% 60% at 100% 0%, color-mix(in srgb, var(--gl-accent) 9%, transparent), transparent 58%),
+    linear-gradient(180deg, var(--gl-ink-1), var(--gl-ink-0));
+}
+
+.gldio-ed button { margin: 0; line-height: 1; }
+.gldio-ed button:not(.gl-btn) { scale: 1; transition: scale var(--gl-d-tap) var(--gl-ease); }
+.gldio-ed button:not(.gl-btn):active:not(:disabled) { scale: var(--gl-press-scale); }
+
+.gldio-ed-sec { display: flex; flex-direction: column; gap: var(--gl-sp-3); }
+
+.gldio-ed-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-4);
+}
+.gldio-ed-head > .gl-rule { flex: 1 1 auto; }
+
+.gldio-ed-label {
+  flex: 0 0 auto;
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.gldio-ed-label--bright { color: var(--gl-text-bright); }
+
+.gldio-ed-hint {
+  margin: 0;
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+  line-height: var(--gl-lh-normal);
+}
+.gldio-ed-hint--faint { color: var(--gl-text-faint); font-size: var(--gl-fs-2xs); }
+.gldio-ed-hint i { margin-right: var(--gl-sp-2); }
+
+.gldio-ed-notice {
+  margin: 0;
+  padding: var(--gl-sp-2) var(--gl-sp-4);
+  border: 1px solid color-mix(in srgb, var(--gl-info) 40%, transparent);
+  border-radius: var(--gl-r-xs);
+  background: color-mix(in srgb, var(--gl-info) 10%, transparent);
+  color: var(--gl-info-hot);
+  font-size: var(--gl-fs-2xs);
+  line-height: var(--gl-lh-normal);
+}
+.gldio-ed-notice.is-warn {
+  border-color: color-mix(in srgb, var(--gl-warn) 45%, transparent);
+  background: color-mix(in srgb, var(--gl-warn) 10%, transparent);
+  color: var(--gl-warn-hot);
+}
+.gldio-ed-notice i { margin-right: var(--gl-sp-2); }
+
+/* ── top bar ──────────────────────────────────────────────────────────── */
+
+.gldio-ed-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gl-sp-3);
+}
+
+.gldio-ed-group {
+  display: flex;
+  gap: var(--gl-sp-1);
+  padding: var(--gl-sp-1);
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-sm);
+  background: var(--gl-surface-inset);
+  box-shadow: inset 0 2px 8px var(--gl-shadow);
+}
+
+.gldio-ed-ibtn {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: var(--gldio-ibtn);
+  height: var(--gldio-ibtn);
+  min-height: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--gl-r-xs);
+  background: none;
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+  cursor: pointer;
+  transition:
+    color var(--gl-d-quick) var(--gl-ease),
+    border-color var(--gl-d-quick) var(--gl-ease),
+    background var(--gl-d-quick) var(--gl-ease),
+    translate var(--gl-d-tap) var(--gl-ease),
+    scale var(--gl-d-tap) var(--gl-ease);
+}
+.gldio-ed-ibtn:hover:not(:disabled) {
+  color: var(--gl-text-bright);
+  border-color: color-mix(in srgb, var(--gl-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--gl-accent) 12%, transparent);
+  translate: 0 var(--gl-lift);
+}
+.gldio-ed-ibtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.gldio-ed-ibtn.is-on {
+  color: var(--gl-text-bright);
+  border-color: color-mix(in srgb, var(--gl-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--gl-accent) 20%, transparent);
+}
+.gldio-ed-ibtn.is-warn {
+  color: var(--gl-warn-hot);
+  border-color: color-mix(in srgb, var(--gl-warn) 55%, transparent);
+  background: color-mix(in srgb, var(--gl-warn) 16%, transparent);
+}
+.gldio-ed-ibtn--danger:hover:not(:disabled) {
+  color: var(--gl-hazard-hot);
+  border-color: color-mix(in srgb, var(--gl-hazard) 50%, transparent);
+  background: color-mix(in srgb, var(--gl-hazard) 14%, transparent);
+}
+
+/* ── tools ────────────────────────────────────────────────────────────── */
+
+.gldio-ed-tools {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: var(--gl-sp-1);
+  padding: var(--gl-sp-2);
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-sm);
+  background: var(--gl-surface-inset);
+  box-shadow: inset 0 2px 8px var(--gl-shadow);
+}
+
+.gldio-ed-tool {
+  display: grid;
+  place-items: center;
+  height: var(--gldio-tool);
+  min-height: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--gl-r-xs);
+  background: none;
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-sm);
+  cursor: pointer;
+  transition:
+    color var(--gl-d-quick) var(--gl-ease),
+    background var(--gl-d-quick) var(--gl-ease),
+    border-color var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease),
+    translate var(--gl-d-tap) var(--gl-ease),
+    scale var(--gl-d-tap) var(--gl-ease);
+}
+.gldio-ed-tool:hover { color: var(--gl-text-bright); background: rgb(var(--gl-tint-light) / 0.05); translate: 0 var(--gl-lift); }
+.gldio-ed-tool.is-active {
+  color: var(--gl-text-bright);
+  border-color: color-mix(in srgb, var(--gl-accent) 60%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 26%, transparent), color-mix(in srgb, var(--gl-accent) 8%, transparent));
+  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14), 0 0 10px color-mix(in srgb, var(--gl-accent) 30%, transparent);
+}
+
+/* ── rows and fields ──────────────────────────────────────────────────── */
+
+.gldio-ed-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-3);
+  min-height: var(--gldio-ibtn);
+}
+.gldio-ed-row--split { justify-content: space-between; }
+.gldio-ed-inline { display: inline-flex; gap: var(--gl-sp-2); }
+
+.gldio-ed-range {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--gl-sp-6);
+  margin: 0;
+  accent-color: var(--gl-accent);
+  cursor: pointer;
+}
+
+.gldio-ed-readout {
+  flex: 0 0 auto;
+  min-width: 7.5ch;
+  color: var(--gl-text-bright);
+  font-size: var(--gl-fs-2xs);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.gldio-ed :is(.gldio-ed-text, .gldio-ed-num, .gldio-ed-select) {
+  min-width: 0;
+  height: var(--gldio-ibtn);
+  margin: 0;
+  padding: 0 var(--gl-sp-3);
+  border: 1px solid var(--gl-edge);
+  border-radius: var(--gl-r-xs);
+  background: var(--gl-surface-inset);
+  color: var(--gl-text-bright);
+  font-size: var(--gl-fs-xs);
+  transition: border-color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.gldio-ed :is(.gldio-ed-text, .gldio-ed-num, .gldio-ed-select):focus { outline: 0; border-color: var(--gl-accent); box-shadow: var(--gl-ring); }
+.gldio-ed .gldio-ed-text { flex: 1 1 auto; }
+.gldio-ed .gldio-ed-num { flex: 1 1 auto; font-family: var(--gl-tech); }
+.gldio-ed .gldio-ed-select { flex: 1 1 auto; padding-right: var(--gl-sp-2); }
+.gldio-ed .gldio-ed-select option { background: var(--gl-ink-2); color: var(--gl-text); }
+
+.gldio-ed-colour {
+  flex: 0 0 auto;
+  width: var(--gldio-ibtn);
+  height: var(--gldio-ibtn);
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--gl-edge);
+  border-radius: var(--gl-r-xs);
+  background: none;
+  cursor: pointer;
+}
+.gldio-ed-colour::-webkit-color-swatch-wrapper { padding: 2px; }
+.gldio-ed-colour::-webkit-color-swatch { border: 0; border-radius: var(--gl-r-xs); }
+
+.gldio-ed-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  color: var(--gl-text);
+  font-size: var(--gl-fs-xs);
+  cursor: pointer;
+}
+.gldio-ed-check input { margin: 0; accent-color: var(--gl-accent); }
+
+.gldio-ed-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gl-sp-3); }
+.gldio-ed-field { display: flex; flex-direction: column; gap: var(--gl-sp-1); min-width: 0; }
+
+/* ── segmented choices ────────────────────────────────────────────────── */
+
+.gldio-ed-seg {
+  display: flex;
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-xs);
+  background: var(--gl-surface-inset);
+  overflow: hidden;
+}
+
+.gldio-ed-segbtn {
+  --gldio-seg: var(--gl-accent);
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gl-sp-2);
+  height: var(--gldio-ibtn);
+  min-height: 0;
+  padding: 0 var(--gl-sp-3);
+  border: 0;
+  border-right: 1px solid var(--gl-hair);
+  border-radius: 0;
+  background: none;
+  color: var(--gl-text-dim);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
+}
+.gldio-ed-segbtn:last-child { border-right: 0; }
+.gldio-ed-segbtn:hover { color: var(--gl-text-bright); background: rgb(var(--gl-tint-light) / 0.05); }
+.gldio-ed-segbtn.is-active {
+  color: var(--gl-text-bright);
+  background: color-mix(in srgb, var(--gldio-seg) 24%, transparent);
+  box-shadow: inset 0 -2px 0 var(--gldio-seg);
+}
+.gldio-ed-segbtn--warn { --gldio-seg: var(--gl-warn); }
+.gldio-ed-segbtn--hazard { --gldio-seg: var(--gl-hazard); }
+
+/* ── wand selection ───────────────────────────────────────────────────── */
+
+.gldio-ed-sel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-2);
+  padding: var(--gl-sp-3);
+  border: 1px dashed var(--gl-hair);
+  border-radius: var(--gl-r-xs);
+}
+.gldio-ed-sel.has-selection { border-color: color-mix(in srgb, var(--gl-cyan) 55%, transparent); background: color-mix(in srgb, var(--gl-cyan) 6%, transparent); }
+.gldio-ed-sel-actions { display: flex; align-items: center; gap: var(--gl-sp-1); }
+.gldio-ed-sel-actions .gldio-ed-btn { flex: 1 1 auto; }
+
+/* ── wall materials ───────────────────────────────────────────────────── */
+
+.gldio-ed-mats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gl-sp-2); }
+
+.gldio-ed-mat {
+  --gldio-mat: var(--gl-text-dim);
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  height: var(--gldio-ibtn);
+  min-height: 0;
+  padding: 0 var(--gl-sp-3);
+  border: 1px solid var(--gl-hair);
+  border-left: 3px solid var(--gldio-mat);
+  border-radius: var(--gl-r-xs);
+  background: var(--gl-surface-inset);
+  color: var(--gl-text);
+  font-size: var(--gl-fs-2xs);
+  cursor: pointer;
+  transition: border-color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
+}
+.gldio-ed-mat:hover { background: color-mix(in srgb, var(--gldio-mat) 10%, var(--gl-surface-inset)); }
+.gldio-ed-mat.is-active {
+  border-color: var(--gldio-mat);
+  background: color-mix(in srgb, var(--gldio-mat) 20%, var(--gl-surface-inset));
+  color: var(--gl-text-bright);
+}
+/* Same hues the canvas layer strokes each material with (editor/layer.mjs MATERIAL_HUE). */
+.gldio-ed-mat[data-material="stone"] { --gldio-mat: var(--gl-text-dim); }
+.gldio-ed-mat[data-material="plaster"] { --gldio-mat: var(--gl-signal-pale); }
+.gldio-ed-mat[data-material="palisade"] { --gldio-mat: var(--gl-warn); }
+.gldio-ed-mat[data-material="hedge"] { --gldio-mat: var(--gl-good); }
+.gldio-ed-mat[data-material="cave"] { --gldio-mat: var(--gl-violet); }
+.gldio-ed-mat[data-material="map"] { --gldio-mat: var(--gl-cyan); }
+
+/* ── the height palette ───────────────────────────────────────────────── */
+
+.gldio-ed-chips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gl-sp-2);
+  max-height: calc(var(--gldio-chip) * 5 + var(--gl-sp-2) * 4);
+  overflow-y: auto;
+  padding-right: var(--gl-sp-1);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--gl-accent) 35%, transparent) transparent;
+}
+
+.gldio-ed-chip {
+  --gldio-sw: var(--gl-text-dim);
+  display: grid;
+  grid-template-columns: var(--gldio-swatch) 1fr auto;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  height: var(--gldio-chip);
+  min-height: 0;
+  padding: 0 var(--gl-sp-3) 0 var(--gl-sp-2);
+  border: 1px solid var(--gl-hair);
+  border-radius: 0;
+  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%, 0 var(--gl-cut-xs));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--gldio-sw) 16%, transparent), transparent 70%),
+    var(--gl-surface-inset);
+  color: var(--gl-text);
+  font-size: var(--gl-fs-2xs);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--gl-d-quick) var(--gl-ease),
+    border-color var(--gl-d-quick) var(--gl-ease),
+    box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.gldio-ed-chip:hover {
+  border-color: color-mix(in srgb, var(--gldio-sw) 50%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--gldio-sw) 26%, transparent), transparent 80%),
+    var(--gl-surface-inset);
+}
+.gldio-ed-chip.is-active {
+  border-color: var(--gldio-sw);
+  color: var(--gl-text-bright);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--gldio-sw) 36%, transparent), transparent 90%),
+    var(--gl-surface-inset);
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-dark) / 0.5), inset 0 0 10px color-mix(in srgb, var(--gldio-sw) 30%, transparent);
+}
+
+.gldio-ed-chip-sw {
+  display: grid;
+  place-items: center;
+  width: var(--gldio-swatch);
+  height: var(--gldio-swatch);
+  border: 1px solid rgb(var(--gl-tint-dark) / 0.6);
+  border-radius: var(--gl-r-xs);
+  background: var(--gldio-sw);
+  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.25);
+  color: rgb(var(--gl-tint-dark) / 0.8);
+  font-size: var(--gl-fs-3xs);
+}
+.gldio-ed-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gldio-ed-chip-h { color: var(--gl-text-dim); font-size: var(--gl-fs-3xs); white-space: nowrap; }
+.gldio-ed-chip.is-active .gldio-ed-chip-h { color: var(--gl-text); }
+
+.gldio-ed-chip--add {
+  border-style: dashed;
+  background: none;
+  color: var(--gl-text-dim);
+}
+.gldio-ed-chip--add .gldio-ed-chip-sw { background: var(--gl-surface-inset); border-color: var(--gl-hair); color: var(--gl-text-dim); box-shadow: none; }
+
+.gldio-ed-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-3);
+  padding: var(--gl-sp-3);
+  border: 1px solid var(--gl-hair);
+  border-radius: var(--gl-r-sm);
+  background: var(--gl-surface-inset);
+  box-shadow: inset 0 2px 8px var(--gl-shadow);
+}
+
+/* ── buttons (sized here: .gl-btn has no font-size) ───────────────────── */
+
+.gldio-ed .gldio-ed-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gl-sp-2);
+  min-height: var(--gldio-chip);
+  padding: 0 var(--gl-sp-5);
+  font-size: var(--gl-fs-2xs);
+  line-height: 1;
+  white-space: nowrap;
+}
+.gldio-ed .gldio-ed-btn--sm { min-height: var(--gldio-ibtn); padding: 0 var(--gl-sp-4); font-size: var(--gl-fs-3xs); }
+.gldio-ed .gldio-ed-btn--danger { --gl-accent: var(--gl-hazard); }
+.gldio-ed .gldio-ed-btn--danger:hover:not(:disabled) { color: var(--gl-hazard-hot); }
+
+.gldio-ed-actions { display: flex; gap: var(--gl-sp-2); }
+.gldio-ed-actions > .gldio-ed-btn { flex: 1 1 0; }
+
+/* ── footer ───────────────────────────────────────────────────────────── */
+
+.gldio-ed-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  padding-top: var(--gl-sp-3);
+  border-top: 1px solid var(--gl-hair);
+}
+.gldio-ed-status {
+  flex: 1 1 auto;
+  color: var(--gl-text-faint);
+  font-family: var(--gl-tech);
+  font-size: var(--gl-fs-3xs);
+  letter-spacing: var(--gl-track-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.gldio-ed-status i { margin-right: var(--gl-sp-1); font-size: var(--gl-fs-3xs); }
+.gldio-ed-status.is-dirty { color: var(--gl-warn-hot); }
+.gldio-ed-status.is-dirty i { color: var(--gl-warn); animation: gl-pulse var(--gl-breathe) var(--gl-ease-inout) infinite; }
+
+/* ── dialogs ──────────────────────────────────────────────────────────── */
+
+.gldio-dialog-text {
+  margin: 0;
+  color: var(--gl-text);
+  font-size: var(--gl-fs-sm);
+  line-height: var(--gl-lh-normal);
+}
+
+/* ── 3D preview window ────────────────────────────────────────────────── */
+
+.gldio-preview-app .window-content { padding: 0; }
+
+.gldio-pv {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--gl-text);
+  font-family: var(--gl-display);
+  background: var(--gl-ink-0);
+}
+
+.gldio-pv-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 30%, var(--gl-ink-2), var(--gl-ink-0));
+}
+
+.gldio-pv-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.gldio-pv-msg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: var(--gl-sp-8);
+  color: var(--gl-text-faint);
+  font-size: var(--gl-fs-sm);
+  text-align: center;
+}
+.gldio-pv-msg[hidden] { display: none; }
+
+.gldio-pv-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-1);
+  padding: var(--gl-sp-2) var(--gl-sp-3);
+  border-top: 1px solid var(--gl-hair);
+  background: var(--gl-ink-1);
+}
+.gldio-pv-bar > .gl-rule { flex: 1 1 auto; }

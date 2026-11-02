@@ -1,0 +1,222 @@
+{{!-- Diorama — GM terrain editor. Every string localized; tool labels and kind / material names arrive pre-localized. --}}
+<div class="gldio-ed gl-type" data-tool="{{tool}}">
+
+  {{!-- Top bar: history, map view, preview, scene switch. --}}
+  <header class="gldio-ed-bar">
+    <div class="gldio-ed-group">
+      <button type="button" class="gldio-ed-ibtn" data-action="undo" {{#unless canUndo}}disabled{{/unless}}
+        data-tooltip="{{localize "GLDIO.editor.bar.undo"}}" aria-label="{{localize "GLDIO.editor.bar.undo"}}"><i class="fa-solid fa-rotate-left"></i></button>
+      <button type="button" class="gldio-ed-ibtn" data-action="redo" {{#unless canRedo}}disabled{{/unless}}
+        data-tooltip="{{localize "GLDIO.editor.bar.redo"}}" aria-label="{{localize "GLDIO.editor.bar.redo"}}"><i class="fa-solid fa-rotate-right"></i></button>
+    </div>
+    <div class="gldio-ed-group">
+      <button type="button" class="gldio-ed-ibtn {{#if view.overlay}}is-on{{/if}}" data-action="view" data-key="overlay" aria-pressed="{{#if view.overlay}}true{{else}}false{{/if}}"
+        data-tooltip="{{localize "GLDIO.editor.bar.overlay"}}" aria-label="{{localize "GLDIO.editor.bar.overlay"}}"><i class="fa-solid fa-layer-group"></i></button>
+      <button type="button" class="gldio-ed-ibtn {{#if view.outlines}}is-on{{/if}}" data-action="view" data-key="outlines" aria-pressed="{{#if view.outlines}}true{{else}}false{{/if}}"
+        data-tooltip="{{localize "GLDIO.editor.bar.outlines"}}" aria-label="{{localize "GLDIO.editor.bar.outlines"}}"><i class="fa-solid fa-border-all"></i></button>
+      <button type="button" class="gldio-ed-ibtn {{#if view.dim}}is-on{{/if}}" data-action="view" data-key="dim" aria-pressed="{{#if view.dim}}true{{else}}false{{/if}}"
+        data-tooltip="{{localize "GLDIO.editor.bar.dim"}}" aria-label="{{localize "GLDIO.editor.bar.dim"}}"><i class="fa-solid fa-moon"></i></button>
+      <button type="button" class="gldio-ed-ibtn {{#if view.paused}}is-on is-warn{{/if}}" data-action="view" data-key="paused" aria-pressed="{{#if view.paused}}true{{else}}false{{/if}}"
+        data-tooltip="{{localize "GLDIO.editor.bar.paused"}}" aria-label="{{localize "GLDIO.editor.bar.paused"}}"><i class="fa-solid fa-hand"></i></button>
+    </div>
+    <div class="gldio-ed-group">
+      <button type="button" class="gldio-ed-ibtn {{#if previewOpen}}is-on{{/if}}" data-action="preview" aria-pressed="{{#if previewOpen}}true{{else}}false{{/if}}"
+        data-tooltip="{{localize "GLDIO.editor.bar.preview"}}" aria-label="{{localize "GLDIO.editor.bar.preview"}}"><i class="fa-solid fa-cube"></i></button>
+      <button type="button" class="gldio-ed-ibtn {{#if off}}is-on is-warn{{/if}}" data-action="toggleOff" aria-pressed="{{#if off}}true{{else}}false{{/if}}"
+        data-tooltip="{{#if off}}{{localize "GLDIO.editor.bar.offOn"}}{{else}}{{localize "GLDIO.editor.bar.off"}}{{/if}}" aria-label="{{localize "GLDIO.editor.bar.off"}}"><i class="fa-solid fa-power-off"></i></button>
+    </div>
+  </header>
+
+  {{#unless viewing}}
+    <p class="gldio-ed-notice"><i class="fa-solid fa-circle-info"></i> {{localize "GLDIO.editor.notViewing"}}</p>
+  {{/unless}}
+  {{#if off}}
+    <p class="gldio-ed-notice is-warn"><i class="fa-solid fa-power-off"></i> {{localize "GLDIO.editor.offNotice"}}</p>
+  {{/if}}
+
+  {{!-- Tools. --}}
+  <nav class="gldio-ed-tools" aria-label="{{localize "GLDIO.editor.tools"}}">
+    {{#each tools}}
+      <button type="button" class="gldio-ed-tool {{#if active}}is-active{{/if}}" data-action="tool" data-tool="{{id}}"
+        data-tooltip="{{label}}" aria-label="{{label}}" aria-pressed="{{#if active}}true{{else}}false{{/if}}"><i class="{{icon}}"></i></button>
+    {{/each}}
+  </nav>
+
+  <section class="gldio-ed-sec gldio-ed-options">
+    <div class="gldio-ed-head"><span class="gldio-ed-label gldio-ed-label--bright">{{toolLabel}}</span><span class="gl-rule"></span></div>
+    <p class="gldio-ed-hint">{{hint}}</p>
+
+    {{#if showBrush}}
+      <div class="gldio-ed-row">
+        <span class="gldio-ed-label">{{localize "GLDIO.editor.brush.size"}}</span>
+        <input class="gldio-ed-range" type="range" min="0" max="{{brush.max}}" step="1" value="{{brush.radius}}" data-field="brush.radius"
+          aria-label="{{localize "GLDIO.editor.brush.size"}}">
+        <span class="gldio-ed-readout gl-numeric" data-readout="brush.radius">{{brush.label}}</span>
+      </div>
+      <div class="gldio-ed-seg" role="group" aria-label="{{localize "GLDIO.editor.brush.shape"}}">
+        <button type="button" class="gldio-ed-segbtn {{#if brush.circle}}is-active{{/if}}" data-action="shape" data-shape="circle"><i class="fa-regular fa-circle"></i> {{localize "GLDIO.editor.brush.circle"}}</button>
+        <button type="button" class="gldio-ed-segbtn {{#if brush.square}}is-active{{/if}}" data-action="shape" data-shape="square"><i class="fa-regular fa-square"></i> {{localize "GLDIO.editor.brush.square"}}</button>
+      </div>
+    {{/if}}
+
+    {{#if stepTool}}
+      <div class="gldio-ed-row">
+        <span class="gldio-ed-label">{{localize "GLDIO.editor.step"}}</span>
+        <select class="gldio-ed-select" data-field="step">{{#each steps}}<option value="{{q}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+      </div>
+    {{/if}}
+
+    {{#if is.wand}}
+      {{#if wand.failed}}
+        <p class="gldio-ed-notice is-warn"><i class="fa-solid fa-image"></i> {{localize "GLDIO.editor.colours.failedShort"}}</p>
+        <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--sm" data-action="sampleMap"><i class="fa-solid fa-rotate"></i> {{localize "GLDIO.editor.colours.retry"}}</button>
+      {{/if}}
+      {{#if wand.loading}}<p class="gldio-ed-hint"><i class="fa-solid fa-spinner fa-spin"></i> {{localize "GLDIO.editor.colours.loading"}}</p>{{/if}}
+      <div class="gldio-ed-row">
+        <span class="gldio-ed-label">{{localize "GLDIO.editor.wand.tolerance"}}</span>
+        <input class="gldio-ed-range" type="range" min="0" max="128" step="1" value="{{wand.tolerance}}" data-field="wand.tolerance"
+          aria-label="{{localize "GLDIO.editor.wand.tolerance"}}">
+        <span class="gldio-ed-readout gl-numeric" data-readout="wand.tolerance">{{wand.tolerance}}</span>
+      </div>
+      <label class="gldio-ed-check"><input type="checkbox" data-field="wand.contiguous" {{#if wand.contiguous}}checked{{/if}}> {{localize "GLDIO.editor.wand.contiguous"}}</label>
+      <div class="gldio-ed-seg" role="group" aria-label="{{localize "GLDIO.editor.wand.mode"}}">
+        <button type="button" class="gldio-ed-segbtn {{#if wand.replace}}is-active{{/if}}" data-action="wandMode" data-mode="replace">{{localize "GLDIO.editor.wand.replace"}}</button>
+        <button type="button" class="gldio-ed-segbtn {{#if wand.add}}is-active{{/if}}" data-action="wandMode" data-mode="add"><i class="fa-solid fa-plus"></i> {{localize "GLDIO.editor.wand.add"}}</button>
+        <button type="button" class="gldio-ed-segbtn {{#if wand.subtract}}is-active{{/if}}" data-action="wandMode" data-mode="subtract"><i class="fa-solid fa-minus"></i> {{localize "GLDIO.editor.wand.subtract"}}</button>
+      </div>
+      <div class="gldio-ed-sel {{#if wand.has}}has-selection{{/if}}">
+        <span class="gldio-ed-label">{{localize "GLDIO.editor.wand.selected" n=wand.count}}</span>
+        <div class="gldio-ed-sel-actions">
+          <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--sm gl-btn-accent" data-action="selection" data-what="layer" {{#unless wand.has}}disabled{{/unless}}>{{localize "GLDIO.editor.wand.apply"}}</button>
+          <button type="button" class="gldio-ed-ibtn" data-action="selection" data-what="raise" {{#unless wand.has}}disabled{{/unless}} data-tooltip="{{localize "GLDIO.editor.tool.raise"}}" aria-label="{{localize "GLDIO.editor.tool.raise"}}"><i class="fa-solid fa-angles-up"></i></button>
+          <button type="button" class="gldio-ed-ibtn" data-action="selection" data-what="lower" {{#unless wand.has}}disabled{{/unless}} data-tooltip="{{localize "GLDIO.editor.tool.lower"}}" aria-label="{{localize "GLDIO.editor.tool.lower"}}"><i class="fa-solid fa-angles-down"></i></button>
+          <button type="button" class="gldio-ed-ibtn" data-action="selection" data-what="void" {{#unless wand.has}}disabled{{/unless}} data-tooltip="{{localize "GLDIO.editor.wand.toVoid"}}" aria-label="{{localize "GLDIO.editor.wand.toVoid"}}"><i class="fa-solid fa-ban"></i></button>
+          <button type="button" class="gldio-ed-ibtn" data-action="selection" data-what="invert" data-tooltip="{{localize "GLDIO.editor.wand.invert"}}" aria-label="{{localize "GLDIO.editor.wand.invert"}}"><i class="fa-solid fa-circle-half-stroke"></i></button>
+          <button type="button" class="gldio-ed-ibtn" data-action="selection" data-what="clear" {{#unless wand.has}}disabled{{/unless}} data-tooltip="{{localize "GLDIO.editor.wand.clear"}}" aria-label="{{localize "GLDIO.editor.wand.clear"}}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+    {{/if}}
+
+    {{#if is.stairs}}
+      <div class="gldio-ed-seg" role="group" aria-label="{{localize "GLDIO.editor.tool.stairs"}}">
+        {{#each stairKinds}}
+          <button type="button" class="gldio-ed-segbtn {{#if active}}is-active{{/if}}" data-action="stairKind" data-kind="{{kind}}">{{label}}</button>
+        {{/each}}
+      </div>
+    {{/if}}
+
+    {{#if is.wall}}
+      <div class="gldio-ed-mats">
+        {{#each materials}}
+          <button type="button" class="gldio-ed-mat {{#if active}}is-active{{/if}}" data-action="material" data-key="{{key}}" data-material="{{key}}">{{label}}</button>
+        {{/each}}
+      </div>
+      <div class="gldio-ed-row gldio-ed-row--split">
+        <span class="gldio-ed-label">{{localize "GLDIO.editor.walls.assigned" n=assigned total=wallCount}}</span>
+        <span class="gldio-ed-inline">
+          <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--sm" data-action="allWalls" {{#unless wallCount}}disabled{{/unless}}>{{localize "GLDIO.editor.walls.all"}}</button>
+          <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--sm" data-action="allWalls" data-clear="1" {{#unless assigned}}disabled{{/unless}}>{{localize "GLDIO.editor.walls.reset"}}</button>
+        </span>
+      </div>
+    {{/if}}
+
+    {{#if is.difficult}}
+      <div class="gldio-ed-seg" role="group" aria-label="{{localize "GLDIO.editor.tool.difficult"}}">
+        <button type="button" class="gldio-ed-segbtn gldio-ed-segbtn--warn {{#if difficulty.two}}is-active{{/if}}" data-action="difficulty" data-value="2">{{localize "GLDIO.editor.difficult.x2"}}</button>
+        <button type="button" class="gldio-ed-segbtn gldio-ed-segbtn--hazard {{#if difficulty.three}}is-active{{/if}}" data-action="difficulty" data-value="3">{{localize "GLDIO.editor.difficult.x3"}}</button>
+        <button type="button" class="gldio-ed-segbtn {{#if difficulty.erase}}is-active{{/if}}" data-action="difficulty" data-value="0"><i class="fa-solid fa-eraser"></i> {{localize "GLDIO.editor.difficult.erase"}}</button>
+      </div>
+      {{#if difficulty.pending}}<p class="gldio-ed-hint">{{localize "GLDIO.editor.difficult.pending" n=difficulty.pending}}</p>{{/if}}
+    {{/if}}
+  </section>
+
+  {{!-- The scene's named heights. --}}
+  <section class="gldio-ed-sec gldio-ed-palette">
+    <div class="gldio-ed-head">
+      <span class="gldio-ed-label">{{localize "GLDIO.editor.palette.title"}}</span><span class="gl-rule"></span>
+    </div>
+    <div class="gldio-ed-chips">
+      {{#each palette}}
+        <button type="button" class="gldio-ed-chip {{#if active}}is-active{{/if}}" style="--gldio-sw: {{color}}" data-action="layer" data-index="{{index}}"
+          data-tooltip="{{name}} · {{height}} · {{kind}}" aria-label="{{name}}" aria-pressed="{{#if active}}true{{else}}false{{/if}}">
+          <span class="gldio-ed-chip-sw">{{#if icon}}<i class="fa-solid {{icon}}"></i>{{/if}}</span>
+          <span class="gldio-ed-chip-name">{{name}}</span>
+          <span class="gldio-ed-chip-h gl-numeric">{{height}}</span>
+        </button>
+      {{/each}}
+      {{#if canAdd}}
+        <button type="button" class="gldio-ed-chip gldio-ed-chip--add" data-action="addLayer" data-tooltip="{{localize "GLDIO.editor.palette.add"}}" aria-label="{{localize "GLDIO.editor.palette.add"}}">
+          <span class="gldio-ed-chip-sw"><i class="fa-solid fa-plus"></i></span><span class="gldio-ed-chip-name">{{localize "GLDIO.editor.palette.custom"}}</span>
+        </button>
+      {{/if}}
+    </div>
+
+    {{#if entry}}
+      <div class="gldio-ed-entry">
+        <div class="gldio-ed-row">
+          <input class="gldio-ed-text" type="text" value="{{entry.name}}" maxlength="40" data-field="entry.name" aria-label="{{localize "GLDIO.editor.palette.name"}}"
+            placeholder="{{localize "GLDIO.editor.palette.name"}}">
+          <input class="gldio-ed-colour" type="color" value="{{entry.color}}" data-field="entry.color" aria-label="{{localize "GLDIO.editor.palette.colour"}}"
+            data-tooltip="{{localize "GLDIO.editor.palette.colour"}}">
+          <button type="button" class="gldio-ed-ibtn gldio-ed-ibtn--danger" data-action="removeLayer" {{#unless entry.canRemove}}disabled{{/unless}}
+            data-tooltip="{{localize "GLDIO.editor.palette.remove"}}" aria-label="{{localize "GLDIO.editor.palette.remove"}}"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        <div class="gldio-ed-row">
+          <span class="gldio-ed-label">{{localize "GLDIO.editor.palette.height"}}</span>
+          <input class="gldio-ed-range" type="range" min="{{entry.sliderMin}}" max="{{entry.sliderMax}}" step="1" value="{{entry.h}}" data-field="entry.h"
+            aria-label="{{localize "GLDIO.editor.palette.height"}}">
+          <span class="gldio-ed-readout gl-numeric" data-readout="entry.h">{{entry.heightLabel}}</span>
+        </div>
+        <div class="gldio-ed-row">
+          <label class="gldio-ed-label" for="gldio-ed-dist">{{localize "GLDIO.editor.palette.exact" units=entry.units}}</label>
+          <input id="gldio-ed-dist" class="gldio-ed-num gl-numeric" type="number" value="{{entry.dist}}" step="{{entry.distStep}}" min="{{entry.distMin}}" max="{{entry.distMax}}" data-field="entry.dist">
+        </div>
+        <div class="gldio-ed-grid2">
+          <label class="gldio-ed-field">
+            <span class="gldio-ed-label">{{localize "GLDIO.editor.palette.kind"}}</span>
+            <select class="gldio-ed-select" data-field="entry.kind">{{#each entry.kinds}}<option value="{{v}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+          </label>
+          <label class="gldio-ed-field">
+            <span class="gldio-ed-label">{{localize "GLDIO.editor.palette.cliff"}}</span>
+            <select class="gldio-ed-select" data-field="entry.material">{{#each entry.cliffs}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+          </label>
+        </div>
+      </div>
+    {{/if}}
+  </section>
+
+  {{!-- Map-wide. --}}
+  <section class="gldio-ed-sec gldio-ed-map">
+    <div class="gldio-ed-head"><span class="gldio-ed-label">{{localize "GLDIO.editor.map.title"}}</span><span class="gl-rule"></span></div>
+    <div class="gldio-ed-row">
+      <span class="gldio-ed-label">{{localize "GLDIO.editor.map.opacity"}}</span>
+      <input class="gldio-ed-range" type="range" min="0" max="100" step="5" value="{{opacityPct}}" data-field="view.opacity" aria-label="{{localize "GLDIO.editor.map.opacity"}}">
+      <span class="gldio-ed-readout gl-numeric" data-readout="view.opacity">{{opacityPct}}%</span>
+    </div>
+    <div class="gldio-ed-actions">
+      <button type="button" class="gl-btn gldio-ed-btn" data-action="autoSetup" {{#if busy}}disabled{{/if}} data-tooltip="{{localize "GLDIO.editor.auto.hint"}}">
+        <i class="fa-solid {{#if (eq busy "auto")}}fa-spinner fa-spin{{else}}fa-wand-sparkles{{/if}}"></i> {{localize "GLDIO.editor.auto.label"}}</button>
+      <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--danger" data-action="clearAll" {{#if busy}}disabled{{/if}}>
+        <i class="fa-solid fa-eraser"></i> {{localize "GLDIO.editor.clear.label"}}</button>
+    </div>
+    <div class="gldio-ed-row">
+      {{#if canCopy}}
+        <select class="gldio-ed-select" data-field="copyFrom" aria-label="{{localize "GLDIO.editor.copy.label"}}">
+          {{#each copyScenes}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}
+        </select>
+        <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--sm" data-action="copyFrom"><i class="fa-solid fa-copy"></i> {{localize "GLDIO.editor.copy.label"}}</button>
+      {{else}}
+        <span class="gldio-ed-hint gldio-ed-hint--faint"><i class="fa-solid fa-copy"></i> {{localize "GLDIO.editor.copy.none"}}</span>
+      {{/if}}
+    </div>
+  </section>
+
+  <footer class="gldio-ed-foot">
+    <span class="gldio-ed-status {{#if dirty}}is-dirty{{/if}}">
+      {{#if dirty}}<i class="fa-solid fa-circle"></i> {{localize "GLDIO.editor.status.unsaved"}}{{else}}<i class="fa-solid fa-check"></i> {{#if saved}}{{localize "GLDIO.editor.status.saved"}}{{else}}{{localize "GLDIO.editor.status.flat"}}{{/if}}{{/if}}
+    </span>
+    <button type="button" class="gl-btn gldio-ed-btn" data-action="discard">{{localize "GLDIO.editor.discard.label"}}</button>
+    <button type="button" class="gl-btn gl-btn-accent gldio-ed-btn gldio-ed-btn--save" data-action="save" {{#if busy}}disabled{{/if}}>
+      <i class="fa-solid {{#if (eq busy "save")}}fa-spinner fa-spin{{else}}fa-floppy-disk{{/if}}"></i> {{localize "GLDIO.editor.save"}}</button>
+  </footer>
+</div>
