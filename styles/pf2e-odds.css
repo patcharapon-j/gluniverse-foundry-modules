@@ -1,47 +1,58 @@
-/* ============================================================
-   PF2E ODDS — the d20 strip
-   ------------------------------------------------------------
-   Etched Glass as the material, Endfield as the drafting layer,
-   with the sci-fi pulled back: no glyph noise, no scanlines on
-   the plate — a slab of dark glass, a hairline rule, small tech
-   labels, and twenty pips that ARE the die.
+/* ═══════════════════════════════════════════════════════════════════════════
+   PF2e Odds — the tag on the line, the plate beside it, the inline readout.
 
-   One pip per d20 face, coloured by the degree that face lands
-   on. A face whose degree is still uncertain is hatched in the
-   two colours it could be; with nothing known the whole strip
-   is the violet "unseen" hatch (the hexcrawl language for
-   "not yet known"). Narrowing is the satisfying beat: hatched
-   pips resolve one at a time, outward from the boundary that
-   moved.
+   A scoped skin (docs/adr/0004-odds-and-line-skin.md), the same black-leaning
+   language as Stream Pacer: ink slabs, paper type, a cut corner, and colour
+   kept for meaning. Amber is the one accent and it means a critical; red means
+   a critical failure; paper is a success and steel a failure. Nothing here
+   carries a setting of its own, because the odds sit over every campaign's map.
 
-   Degree colours are this feature's own aliases of semantic
-   tokens, prefixed, scoped to the badge roots — never :root:
-     --glod-c   critical success  → --gl-signal (amber)
-     --glod-s   success           → --gl-cyan
-     --glod-f   failure           → steel (a failed Strike is
-                                    not danger; red is reserved)
-     --glod-cf  critical failure  → --gl-hazard
-     --glod-x   unseen            → --gl-violet
-   Every accent-derived value is struck inline with color-mix()
-   against these, never read from the :root-resolved
-   --gl-glow/--gl-bloom (they would not follow a scoped remap).
-   ============================================================ */
+   Every token is `--glod-*` and lives on the feature's own roots, never :root.
+   Motion and timing come from the suite (`--gl-d-*`, `--gl-ease*`); keyframes
+   are prefixed `glod-`; blur is written against `--gl-glass-k`.
 
-.glod-badge,
-.glod-tag,
-.glod-inline,
-.glod-lines {
-  --gl-accent: var(--gl-cyan);
-  --glod-c: var(--gl-signal);
-  --glod-s: var(--gl-cyan);
-  --glod-f: color-mix(in srgb, var(--gl-text-dim) 34%, var(--gl-ink-3));
-  --glod-cf: var(--gl-hazard);
-  --glod-x: var(--gl-violet);
-  --glod-rim: rgb(var(--gl-tint-light) / 0.55);
-  --glod-cut: var(--gl-cut);
+   The die is a skyline: one bar per face, its height the degree it lands on
+   (--glod-h-*), so the strip reads on height alone.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:is(.glod-lines, .glod-badge, .glod-tag, .glod-inline, .glod-dialog, .glod-save-odds, .glod-dice-layer, .glod-obs-root, .glod-dexhint) {
+  /* the neutral ramp (design system: color.neutral, as Stream Pacer's skin) */
+  --glod-ink-0: #05060a;
+  --glod-ink-1: #0a0b11;
+  --glod-ink-3: #15171f;
+  --glod-ink-5: #272a36;
+  --glod-paper: #ecedf2;
+  --glod-dim: #b3b5c2;
+  --glod-faint: #6a6d7c;
+  --glod-rule: rgb(var(--gl-tint-light) / 0.1);
+  --glod-rule-strong: rgb(var(--gl-tint-light) / 0.18);
+
+  /* the four degrees */
+  --glod-c: #ffb020;
+  --glod-s: var(--glod-paper);
+  --glod-f: #5b5e6c;
+  --glod-cf: #ff4d5a;
+  /* nothing known yet: a faint hatch, not a hue */
+  --glod-x: color-mix(in oklab, var(--glod-paper) 38%, transparent);
+
+  /* the skyline: each degree's bar height */
+  --glod-h-c: 16px;
+  --glod-h-s: 11px;
+  --glod-h-f: 6px;
+  --glod-h-cf: 3px;
+
+  /* chip tones */
+  --glod-good: #2fb672;
+  --glod-warn: #ff8a3d;
+  --glod-bad: var(--glod-cf);
+
+  --glod-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
+  --glod-cut: 9px;
+  /* the line this odds belongs to; the badge layer sets it from the line's own colour */
+  --glod-line: var(--glod-paper);
 }
 
-/* ---- the canvas layer ------------------------------------- */
+/* ---- the layer ---------------------------------------------- */
 
 .glod-lines {
   position: fixed;
@@ -49,364 +60,422 @@
   z-index: var(--gl-z-hud);
   pointer-events: none;
   overflow: hidden;
+  font-family: var(--glod-font);
 }
 
+/* A line's tag and plate. Each is placed by JS through `translate`. */
 .glod-line {
   position: absolute;
   left: 0;
   top: 0;
-  pointer-events: auto;
-  /* Placed by JS through `translate`; `transform` belongs to the pop-in below. */
-  will-change: translate, transform;
-  animation: gl-pop-in var(--gl-d-swift) var(--gl-snap) both;
 }
 
-.glod-line.is-leaving {
-  animation: gl-fade-out var(--gl-d-brisk) var(--gl-exit) both;
+.glod-line > .glod-tag,
+.glod-line > .glod-badge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  will-change: translate;
+}
+
+.glod-line > .glod-tag { animation: glod-tag-in var(--gl-d-brisk) var(--gl-ease) both; }
+
+.glod-line > .glod-badge { display: none; }
+.glod-line.is-full > .glod-badge {
+  display: grid;
+  animation: glod-plate-in var(--gl-d-swift) var(--gl-ease) both;
+}
+
+.glod-line.is-leaving { animation: glod-fade var(--gl-d-brisk) var(--gl-exit) both; }
+.glod-line.is-leaving > * { pointer-events: none; }
+
+@keyframes glod-tag-in {
+  from { opacity: 0; transform: scale(0.86); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes glod-plate-in {
+  from { opacity: 0; transform: translateY(var(--glod-from-y, 4px)); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes glod-fade {
+  to { opacity: 0; }
+}
+
+.glod-line[data-side="above"] { --glod-from-y: -4px; }
+.glod-line[data-side="left"],
+.glod-line[data-side="right"] { --glod-from-y: 0px; }
+
+/* ---- the tag: the chance, on the line itself ---------------- */
+
+.glod-tag {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  box-sizing: border-box;
+  height: 21px;
+  padding: 0 8px 0 9px;
+  font-family: var(--glod-font);
+  line-height: 21px;
+  white-space: nowrap;
+  color: var(--glod-paper);
+  background: color-mix(in oklab, var(--glod-ink-1) 92%, transparent);
+  box-shadow: inset 2px 0 0 var(--glod-line), 0 0 0 1px rgb(var(--gl-tint-dark) / 0.55), 0 2px 8px rgb(var(--gl-tint-dark) / 0.45);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%);
+}
+
+.glod-tag-n {
+  font-size: 13.5px;
+  font-weight: 760;
+  font-stretch: 112%;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.glod-tag-w {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--glod-dim);
+}
+
+.glod-tag[data-state="unknown"] .glod-tag-n,
+.glod-tag[data-state="oor"] .glod-tag-n { color: var(--glod-faint); }
+.glod-tag[data-state="unknown"] {
+  box-shadow:
+    inset 2px 0 0 color-mix(in oklab, var(--glod-line) 45%, transparent),
+    0 0 0 1px rgb(var(--gl-tint-dark) / 0.55), 0 2px 8px rgb(var(--gl-tint-dark) / 0.45);
+}
+
+/* A roll landed on this line: the tag says what came up, in the degree's colour. */
+.glod-tag::after {
+  content: attr(data-word);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 6px;
+  opacity: 0;
+  font-size: 11.5px;
+  font-weight: 760;
+  font-stretch: 112%;
+  color: var(--glod-ink-0);
+  background: var(--glod-tone, var(--glod-paper));
   pointer-events: none;
 }
+.glod-tag[data-d="c"] { --glod-tone: var(--glod-c); }
+.glod-tag[data-d="s"] { --glod-tone: var(--glod-s); }
+.glod-tag[data-d="f"] { --glod-tone: var(--glod-f); }
+.glod-tag[data-d="cf"] { --glod-tone: var(--glod-cf); }
+.glod-tag[data-d="f"]::after { color: var(--glod-paper); }
+.glod-tag.is-stamped::after { animation: glod-stamp-tag var(--gl-d-cinematic) var(--gl-ease) both; }
 
-.glod-line.is-full > .glod-tag,
-.glod-line.is-compact > .glod-badge,
-.glod-line:not(.is-full):not(.is-compact) > .glod-tag {
-  display: none;
+@keyframes glod-stamp-tag {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
-/* ---- the plate --------------------------------------------- */
+/* ---- the plate ---------------------------------------------- */
 
 .glod-badge {
   position: relative;
   box-sizing: border-box;
-  width: 248px;
-  padding: var(--gl-sp-3) var(--gl-sp-5) var(--gl-sp-4);
-  /* The ribbon: the headline is the hero of its own row, flanked by the degree
-     words and the defence; the strip runs the full width under it. */
+  width: 214px;
+  padding: 9px 12px 11px;
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  grid-template-areas:
-    "head  head  head"
-    "pct   deg   dc"
-    "strip strip strip"
-    "chips chips chips"
-    "gm    gm    gm";
-  column-gap: var(--gl-sp-4);
-  row-gap: var(--gl-sp-2);
-  align-items: center;
-  color: var(--gl-text);
-  font-family: var(--gl-display);
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 7px;
+  color: var(--glod-paper);
+  font-family: var(--glod-font);
   background:
-    linear-gradient(180deg, var(--gl-glass-highlight), transparent 38%),
-    color-mix(in srgb, var(--gl-accent) 9%, rgb(var(--gl-tint-dark) / 0.78));
-  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
-  box-shadow: var(--gl-etch-soft), var(--gl-elev-3);
-  clip-path: polygon(0 0, calc(100% - var(--glod-cut)) 0, 100% var(--glod-cut), 100% 100%, var(--glod-cut) 100%, 0 calc(100% - var(--glod-cut)));
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.045), transparent 48%),
+    color-mix(in oklab, var(--glod-ink-1) 95%, transparent);
+  border-top: 1px solid var(--glod-rule-strong);
+  box-shadow: 0 0 0 1px rgb(var(--gl-tint-dark) / 0.5), 0 10px 26px rgb(var(--gl-tint-dark) / 0.5);
+  backdrop-filter: blur(calc(12px * var(--gl-glass-k)));
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glod-cut)), calc(100% - var(--glod-cut)) 100%, 0 100%);
   isolation: isolate;
 }
 
-/* Hairline top rule running off the accent, Endfield's drafting stroke. */
-.glod-badge::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 62%;
-  height: 1px;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--gl-accent) 85%, transparent), transparent);
-  pointer-events: none;
-}
-
-/* Registration ticks at the two closed corners. */
+/* The collapse beat draws this rule across in amber once. */
 .glod-badge::after {
   content: "";
   position: absolute;
-  inset: 4px;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 2px;
+  background: var(--glod-c);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  opacity: 0;
   pointer-events: none;
-  background:
-    linear-gradient(var(--glod-rim), var(--glod-rim)) right 0 bottom 0 / 6px 1px no-repeat,
-    linear-gradient(var(--glod-rim), var(--glod-rim)) right 0 bottom 0 / 1px 6px no-repeat,
-    linear-gradient(var(--glod-rim), var(--glod-rim)) left 0 top 0 / 6px 1px no-repeat,
-    linear-gradient(var(--glod-rim), var(--glod-rim)) left 0 top 0 / 1px 6px no-repeat;
-  opacity: 0.7;
 }
 
 .glod-line.is-flat .glod-badge {
   backdrop-filter: none;
-  background: color-mix(in srgb, var(--gl-accent) 9%, var(--gl-ink-1));
+  background: var(--glod-ink-1);
 }
 
 .glod-head {
-  grid-area: head;
   display: flex;
   align-items: baseline;
-  gap: var(--gl-sp-3);
+  gap: 6px;
   min-width: 0;
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: var(--gl-track-xwide);
-  line-height: 1;
-  text-transform: uppercase;
-  color: var(--gl-text-dim);
+  font-size: 11.5px;
+  line-height: 1.1;
   white-space: nowrap;
 }
 
+/* The action keeps its name; the target's name gives way first. */
 .glod-title {
+  flex: 0 1 auto;
+  min-width: 4em;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-weight: 680;
+  color: var(--glod-paper);
 }
 
-.glod-arrow {
-  color: color-mix(in srgb, var(--gl-accent) 75%, transparent);
-  letter-spacing: -0.1em;
+.glod-ord {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--glod-faint);
 }
 
 .glod-target {
+  flex: 0 100 auto;
+  min-width: 2.5em;
+  margin-left: auto;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--gl-text);
+  font-weight: 600;
+  color: var(--glod-dim);
 }
 
-/* A wrapper for in-place updates only; its children sit on the badge's grid. */
+.glod-target i {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--glod-faint);
+}
+
 .glod-row {
-  display: contents;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  column-gap: 10px;
 }
 
 .glod-pct {
-  grid-area: pct;
-  font-family: var(--gl-display);
-  font-size: var(--gl-fs-3xl);
-  font-weight: var(--gl-weight-heavy);
-  line-height: 0.86;
-  text-shadow: 0 0 14px color-mix(in srgb, var(--gl-accent) 35%, transparent);
-  letter-spacing: -0.01em;
+  font-size: 31px;
+  font-weight: 780;
+  font-stretch: 118%;
+  line-height: 0.82;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-  color: var(--gl-text-bright);
   white-space: nowrap;
+  color: var(--glod-paper);
 }
 
 .glod-pct small {
   margin-left: 1px;
-  font-size: 0.44em;
-  font-weight: var(--gl-weight-medium);
-  color: var(--gl-text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  font-stretch: 100%;
+  letter-spacing: 0;
+  color: var(--glod-dim);
 }
 
-.glod-pct--unknown {
-  color: var(--glod-x);
-  letter-spacing: var(--gl-track-wide);
-}
+.glod-pct .glod-pct-to { margin: 0 1px; }
+
+.glod-pct--unknown { color: var(--glod-faint); }
 
 .glod-deg {
-  grid-area: deg;
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-2xs);
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: var(--gl-track-wide);
-  line-height: 1.15;
-  text-transform: uppercase;
+  gap: 3px;
+  min-width: 0;
+  padding-bottom: 1px;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
   white-space: nowrap;
 }
 
-.glod-deg b {
-  font-weight: inherit;
-  color: var(--glod-s);
-}
-
-.glod-deg em {
-  font-style: normal;
-  color: var(--glod-c);
-}
+.glod-deg b { font-weight: inherit; color: var(--glod-dim); }
+.glod-deg em { font-style: normal; color: var(--glod-c); }
+.glod-deg--unknown { color: var(--glod-faint); white-space: normal; line-height: 1.2; }
 
 .glod-dc {
-  grid-area: dc;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  font-family: var(--gl-display);
-  font-size: var(--gl-fs-lg);
-  font-weight: var(--gl-weight-heavy);
-  line-height: 1;
+  gap: 2px;
+  font-size: 17px;
+  font-weight: 740;
+  font-stretch: 112%;
+  line-height: 0.9;
   font-variant-numeric: tabular-nums;
-  color: var(--gl-text);
   white-space: nowrap;
+  color: var(--glod-paper);
 }
 
 .glod-dc small {
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
-  color: var(--gl-text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  font-stretch: 100%;
+  color: var(--glod-faint);
 }
 
-.glod-deg--unknown {
-  color: var(--glod-x);
-}
-
-/* ---- the strip --------------------------------------------- */
+/* ---- the skyline -------------------------------------------- */
 
 .glod-strip {
-  grid-area: strip;
   display: grid;
   grid-template-columns: repeat(20, 1fr);
+  align-items: end;
   gap: 2px;
+  height: var(--glod-h-c);
+  padding-bottom: 1px;
+  /* the baseline the bars stand on */
+  background: linear-gradient(var(--glod-rule-strong), var(--glod-rule-strong)) left bottom / 100% 1px no-repeat;
 }
 
 .glod-pip {
   display: block;
-  height: 10px;
+  height: var(--glod-h-f);
   background: var(--glod-f);
   transform-origin: 50% 100%;
 }
 
-.glod-pip[data-d="cf"] { background: var(--glod-cf); }
-.glod-pip[data-d="f"] { background: var(--glod-f); }
-.glod-pip[data-d="s"] { background: var(--glod-s); }
-.glod-pip[data-d="c"] {
-  background: var(--glod-c);
-  box-shadow: 0 0 7px color-mix(in srgb, var(--glod-c) 65%, transparent);
-}
+.glod-pip[data-d="cf"] { height: var(--glod-h-cf); background: var(--glod-cf); }
+.glod-pip[data-d="f"] { height: var(--glod-h-f); background: var(--glod-f); }
+.glod-pip[data-d="s"] { height: var(--glod-h-s); background: var(--glod-s); }
+.glod-pip[data-d="c"] { height: var(--glod-h-c); background: var(--glod-c); }
 
-/* Uncertain: hatched in the two degrees the face could still land on. */
+/* Uncertain: solid up to the lower degree, hatched up to the higher one. */
 .glod-pip[data-u] {
-  background: repeating-linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--glod-hi, var(--glod-x)) 88%, transparent) 0 2px,
-    color-mix(in srgb, var(--glod-lo, var(--glod-x)) 30%, transparent) 2px 5px
-  );
+  height: var(--glod-hi-h, var(--glod-h-c));
+  background:
+    linear-gradient(to top, var(--glod-lo, transparent) 0 var(--glod-lo-h, 0px), transparent var(--glod-lo-h, 0px)),
+    repeating-linear-gradient(135deg, color-mix(in oklab, var(--glod-hi, var(--glod-x)) 80%, transparent) 0 1.5px, transparent 1.5px 4px);
 }
 
 .glod-pip[data-u="x"] {
   --glod-hi: var(--glod-x);
-  --glod-lo: var(--glod-x);
+  --glod-lo: transparent;
+  --glod-lo-h: 0px;
+  height: var(--glod-h-c);
 }
 
-/* The narrowing beat: a pip resolving rises, flashes its new colour, settles. */
+/* The narrowing beat: a bar resolving grows into its new height. */
 .glod-pip.is-resolving {
   animation: glod-resolve var(--gl-d-reveal) var(--gl-snap) both;
   animation-delay: var(--glod-delay, 0ms);
 }
 
 @keyframes glod-resolve {
-  0% { transform: scaleY(0.25); filter: brightness(2.2); }
-  45% { transform: scaleY(1.5); filter: brightness(1.6); }
-  100% { transform: scaleY(1); filter: none; }
+  0% { transform: scaleY(0.2); filter: brightness(1.8); }
+  100% { transform: none; filter: none; }
 }
 
-/* The landing beat: the face that came up. */
+/* The landing beat: the face that came up rises out of the skyline. */
 .glod-pip.is-landed {
   position: relative;
   z-index: var(--gl-z-raised);
-  animation: glod-land var(--gl-d-slow) var(--gl-pop) both;
+  animation: glod-land var(--gl-d-slow) var(--gl-ease) both;
 }
 
 @keyframes glod-land {
-  0% { transform: scaleY(1); }
-  25% { transform: scaleY(1.9); filter: brightness(2); box-shadow: 0 0 0 1px var(--gl-text-bright), 0 0 12px var(--gl-text-bright); }
-  100% { transform: scaleY(1.25); filter: brightness(1.2); box-shadow: 0 0 0 1px rgb(var(--gl-tint-light) / 0.7); }
+  0% { transform: none; }
+  30% { transform: translateY(-5px); box-shadow: 0 0 0 1px var(--glod-paper); }
+  100% { transform: translateY(-3px); box-shadow: 0 0 0 1px color-mix(in oklab, var(--glod-paper) 70%, transparent); }
 }
 
 .glod-faces {
   display: grid;
   grid-template-columns: repeat(20, 1fr);
   gap: 2px;
-  margin-top: -2px;
-  font-family: var(--gl-tech);
-  font-size: 7px;
-  font-weight: var(--gl-weight-medium);
+  margin-top: -3px;
+  font-size: 9px;
+  font-weight: 600;
   line-height: 1;
   text-align: center;
-  color: var(--gl-text-faint);
+  color: var(--glod-faint);
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- chips ------------------------------------------------- */
+/* ---- chips: what moved the number this turn ------------------ */
 
 .glod-chips {
-  grid-area: chips;
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 3px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .glod-chip {
-  --glod-tone: var(--gl-text-dim);
-  padding: 3px 6px 3px 7px;
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  font-weight: var(--gl-weight-bold);
-  line-height: 1;
-  letter-spacing: var(--gl-track-normal);
-  text-transform: uppercase;
+  --glod-tone: var(--glod-dim);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
   white-space: nowrap;
-  color: var(--glod-tone);
-  background: color-mix(in srgb, var(--glod-tone) 14%, transparent);
-  box-shadow: inset 2px 0 0 var(--glod-tone);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
+  color: var(--glod-dim);
 }
 
-.glod-chip[data-tone="neg"] { --glod-tone: var(--gl-hazard); }
-.glod-chip[data-tone="pos"] { --glod-tone: var(--gl-good); }
-.glod-chip[data-tone="warn"] { --glod-tone: var(--gl-warn); }
-.glod-chip[data-tone="info"] { --glod-tone: var(--gl-info); }
+.glod-chip b {
+  font-weight: 740;
+  font-variant-numeric: tabular-nums;
+  color: var(--glod-tone);
+}
 
-/* ---- GM-only line ------------------------------------------ */
+.glod-chip[data-tone="neg"] { --glod-tone: var(--glod-bad); }
+.glod-chip[data-tone="pos"] { --glod-tone: var(--glod-good); }
+.glod-chip[data-tone="warn"] { --glod-tone: var(--glod-warn); }
+.glod-chip[data-tone="info"] { --glod-tone: var(--glod-paper); color: var(--glod-paper); }
+
+/* ---- the GM's line ----------------------------------------- */
 
 .glod-gm {
-  grid-area: gm;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--gl-sp-3);
-  align-self: flex-start;
-  padding: 3px 6px;
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: var(--gl-track-wide);
-  line-height: 1;
-  text-transform: uppercase;
-  color: var(--glod-x);
-  border: 1px dashed color-mix(in srgb, var(--glod-x) 55%, transparent);
+  gap: 2px 10px;
+  padding-top: 7px;
+  border-top: 1px dashed var(--glod-rule-strong);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--glod-faint);
 }
 
-.glod-gm-flag {
-  color: var(--gl-warn);
-}
+.glod-gm b { font-weight: 740; color: var(--glod-dim); }
+.glod-gm-flag { color: var(--glod-warn); }
 
-/* ---- states ------------------------------------------------ */
+/* ---- states -------------------------------------------------- */
 
-.glod-badge[data-state="unknown"]::before {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--glod-x) 85%, transparent), transparent);
-}
-
-/* The collapse beat: the range closed to exact. A short amber etched rim. */
-.glod-badge.is-collapsing {
+.glod-badge.is-collapsing::after {
   animation: glod-collapse var(--gl-d-slow) var(--gl-ease) both;
 }
 
 @keyframes glod-collapse {
-  0% { box-shadow: var(--gl-etch-soft), var(--gl-elev-3), inset 0 0 0 1px transparent; }
-  20% { box-shadow: var(--gl-etch-soft), var(--gl-elev-3), inset 0 0 0 1px var(--glod-c), 0 0 18px color-mix(in srgb, var(--glod-c) 45%, transparent); }
-  100% { box-shadow: var(--gl-etch-soft), var(--gl-elev-3), inset 0 0 0 1px transparent; }
+  0% { opacity: 1; transform: scaleX(0); }
+  45% { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(1); }
 }
 
 .glod-oor {
-  grid-column: 1 / -1;
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-xs);
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
-  color: var(--gl-text-dim);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--glod-faint);
 }
 
-/* ---- the degree stamp -------------------------------------- */
+/* ---- the degree stamp on the plate ------------------------- */
 
 .glod-stamp {
   position: absolute;
@@ -415,48 +484,27 @@
   place-items: center;
   pointer-events: none;
   opacity: 0;
-  font-family: var(--gl-display);
-  font-size: var(--gl-fs-3xl);
-  font-weight: var(--gl-weight-heavy);
-  letter-spacing: var(--gl-track-xwide);
-  text-transform: uppercase;
-  color: var(--glod-stamp, var(--gl-text-bright));
-  background: color-mix(in srgb, var(--glod-stamp, var(--gl-ink-1)) 16%, rgb(var(--gl-tint-dark) / 0.72));
+  font-size: 26px;
+  font-weight: 800;
+  font-stretch: 122%;
+  letter-spacing: 0.01em;
+  color: var(--glod-tone, var(--glod-paper));
+  background: color-mix(in oklab, var(--glod-ink-0) 88%, transparent);
 }
 
-.glod-stamp[data-d="c"] { --glod-stamp: var(--glod-c); }
-.glod-stamp[data-d="s"] { --glod-stamp: var(--glod-s); }
-.glod-stamp[data-d="f"] { --glod-stamp: var(--gl-text-dim); }
-.glod-stamp[data-d="cf"] { --glod-stamp: var(--glod-cf); }
+.glod-stamp[data-d="c"] { --glod-tone: var(--glod-c); }
+.glod-stamp[data-d="s"] { --glod-tone: var(--glod-s); }
+.glod-stamp[data-d="f"] { --glod-tone: var(--glod-dim); }
+.glod-stamp[data-d="cf"] { --glod-tone: var(--glod-cf); }
 
 .glod-badge.is-stamped .glod-stamp {
-  animation: gl-stamp var(--gl-d-splash) var(--gl-pop) both;
+  animation: glod-stamp var(--gl-d-swift) var(--gl-ease) both;
   opacity: 1;
 }
 
-/* ---- the compact tag --------------------------------------- */
-
-.glod-tag {
-  display: inline-block;
-  padding: 3px 8px 3px 9px;
-  font-family: var(--gl-display);
-  font-size: var(--gl-fs-lg);
-  font-weight: var(--gl-weight-heavy);
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  color: var(--gl-text-bright);
-  background: color-mix(in srgb, var(--gl-accent) 10%, rgb(var(--gl-tint-dark) / 0.74));
-  box-shadow: inset 2px 0 0 var(--glod-s), var(--gl-elev-2);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
-}
-
-.glod-tag[data-state="unknown"] {
-  color: var(--glod-x);
-  box-shadow: inset 2px 0 0 var(--glod-x), var(--gl-elev-2);
-}
-
-.glod-tag[data-state="range"] {
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--glod-s) 60%, var(--glod-x)), var(--gl-elev-2);
+@keyframes glod-stamp {
+  from { opacity: 0; transform: scale(1.12); }
+  to { opacity: 1; transform: none; }
 }
 
 /* ---- the inline readout (sheet buttons, save buttons) ------ */
@@ -465,25 +513,24 @@
   display: inline-flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 1px;
+  gap: 2px;
   min-width: 26px;
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  font-weight: var(--gl-weight-bold);
+  font-family: var(--glod-font);
+  font-size: 10.5px;
+  font-weight: 720;
   line-height: 1;
-  letter-spacing: var(--gl-track-tight);
   font-variant-numeric: tabular-nums;
-  color: var(--glod-s);
+  color: var(--glod-paper);
   vertical-align: middle;
 }
 
-.glod-inline[data-state="unknown"] { color: var(--glod-x); }
+.glod-inline[data-state="unknown"] { color: var(--glod-faint); }
 
 .glod-inline-bar {
   position: relative;
   display: block;
   height: 2px;
-  background: rgb(var(--gl-tint-light) / 0.1);
+  background: rgb(var(--gl-tint-light) / 0.12);
 }
 
 /* Certain part solid, the range's uncertain stretch hatched. */
