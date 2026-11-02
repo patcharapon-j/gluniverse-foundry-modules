@@ -245,18 +245,30 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const content = this.#windowContentElement();
     const next = {
       body: this.element?.querySelector(".gluniverse-stream-director-body")?.scrollTop ?? 0,
-      content: content?.scrollTop ?? 0
+      content: content?.scrollTop ?? 0,
+      // Each tab scrolls on its own; the render reopens the same tab, so its offset is the one to keep.
+      panel: this.#activePanel()?.scrollTop ?? 0
     };
     this.restoreScroll = this.restoreScroll
-      ? { body: Math.max(this.restoreScroll.body, next.body), content: Math.max(this.restoreScroll.content, next.content) }
+      ? {
+        body: Math.max(this.restoreScroll.body, next.body),
+        content: Math.max(this.restoreScroll.content, next.content),
+        panel: Math.max(this.restoreScroll.panel, next.panel)
+      }
       : next;
   }
 
   #restoreScroll(scroll) {
     const body = this.element?.querySelector(".gluniverse-stream-director-body");
     const content = this.#windowContentElement();
+    const panel = this.#activePanel();
     if (body) body.scrollTop = scroll.body;
     if (content) content.scrollTop = scroll.content;
+    if (panel) panel.scrollTop = scroll.panel;
+  }
+
+  #activePanel() {
+    return this.element?.querySelector(".gluniverse-stream-tabpanel:not([hidden])");
   }
 
   #windowContentElement() {
