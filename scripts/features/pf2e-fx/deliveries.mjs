@@ -137,6 +137,25 @@ function shot(s, D, a, b, from, dur, arc, { r = 3, big = false, scale = 1, trail
 }
 
 /**
+ * Keep the marks on top: particles draw in the order they were added, and a
+ * release keeps adding smoke after the marks landed, which buried them. Until
+ * `to`, every step moves the `front` particles to the end of the list.
+ */
+function front(s, to) {
+  const from = s.dvFrontTo ?? -1;
+  if (to <= from) return;
+  s.dvFrontTo = to;
+  s.emit(Math.max(s.t, from), to, (s2) => {
+    let n = 0;
+    for (const p of s2.parts) if (p.front) n++;
+    if (!n) return;
+    const head = [], tail = [];
+    for (const p of s2.parts) (p.front ? tail : head).push(p);
+    s2.parts = head.concat(tail);
+  });
+}
+
+/**
  * The props' marks on a creature the effect reached. Cheap, one or two shapes
  * each, and never on an attack that missed.
  */
@@ -144,19 +163,21 @@ function marks(s, D, T, o) {
   const P = D.props, M = D.M;
   if (!P.size || (o === "miss" && D.attack)) return;
   const sz = Math.sqrt(T.size ?? 1);
-  if (P.has("auditory")) for (let k = 0; k < 2; k++) s.add({ k: "halo", x: T.x, y: T.y, z: 0.62 * T.h, r: (0.38 + k * 0.24) * sz, life: 0.45, R: M.R, wait: k * 0.09, update: still });
+  front(s, s.t + 2.2);
+  const put = (p) => s.add(Object.assign(p, { front: true }));
+  if (P.has("auditory")) for (let k = 0; k < 2; k++) put({ k: "halo", x: T.x, y: T.y, z: 0.62 * T.h, r: (0.38 + k * 0.24) * sz, life: 0.45, R: M.R, wait: k * 0.09, update: still });
   if (P.has("visual")) {
     s.add({ k: "flash", x: T.x, y: T.y, z: 0.9 * T.h, life: 2 / 12, r: 6 * sz, R: M.R, update: still });
-    s.add({ k: "glint", x: T.x + 0.12, y: T.y - 0.05, z: 0.95 * T.h, life: 5 / 12, R: M.R, big: true, wait: 1 / 12, update: still });
+    put({ k: "glint", x: T.x + 0.12, y: T.y - 0.05, z: 0.95 * T.h, life: 5 / 12, R: M.R, big: true, wait: 1 / 12, update: still });
   }
   if (P.has("linguistic")) for (let k = 0; k < 3; k++) {
     const q = (k / 3) * TAU + s.rand(-0.3, 0.3);
-    s.add({ k: "dvWord", glyph: GLYPHS[(k + sd(s)) % GLYPHS.length], x: T.x + Math.cos(q) * 0.32 * sz, y: T.y + Math.sin(q) * 0.2 * sz, z: s.rand(0.55, 0.9) * T.h, vx: Math.cos(q) * 0.25, vy: Math.sin(q) * 0.15, vz: 0.55, drag: 1.5, life: 0.85, R: M.R, wait: k * 0.05 });
+    put({ k: "dvWord", glyph: GLYPHS[(k + sd(s)) % GLYPHS.length], x: T.x + Math.cos(q) * 0.32 * sz, y: T.y + Math.sin(q) * 0.2 * sz, z: s.rand(0.55, 0.9) * T.h, vx: Math.cos(q) * 0.25, vy: Math.sin(q) * 0.15, vz: 0.55, drag: 1.5, life: 0.85, R: M.R, wait: k * 0.05 });
   }
-  if (P.has("fear") || P.has("emotion")) s.add({ k: "dvWaver", x: T.x, y: T.y, z: 0.92 * T.h, sz, life: 1.3, R: M.R, seed: sd(s), wait: 0.08, update: still });
-  if (P.has("death") && o === "crit") s.add({ k: "dvSkull", x: T.x, y: T.y, z: 1.2 * T.h, life: 1.1, R: RAMP.kinetic, wait: 0.12, update: still });
-  if (P.has("incapacitation") && o !== "miss") s.add({ k: "dvDaze", x: T.x, y: T.y, z: 1.08 * T.h, sz, life: 1.6, R: M.R, wait: 0.1, update: still });
-  if (P.has("healing")) for (let k = 0; k < 3; k++) s.add({ k: "mote", plus: true, x: T.x + s.rand(-0.25, 0.25) * sz, y: T.y + s.rand(-0.1, 0.1), z: s.rand(0.4, 0.8) * T.h, vz: s.rand(0.5, 0.8), g: -0.2, drag: 1.2, life: 0.9, R: M.R, wait: k * 0.08 });
+  if (P.has("fear") || P.has("emotion")) put({ k: "dvWaver", x: T.x, y: T.y, z: 0.92 * T.h, sz, life: 1.3, R: M.R, seed: sd(s), wait: 0.08, update: still });
+  if (P.has("death") && o === "crit") put({ k: "dvSkull", x: T.x, y: T.y, z: 1.2 * T.h, life: 1.1, R: RAMP.kinetic, wait: 0.12, update: still });
+  if (P.has("incapacitation") && o !== "miss") put({ k: "dvDaze", x: T.x, y: T.y, z: 1.08 * T.h, sz, life: 1.6, R: M.R, wait: 0.1, update: still });
+  if (P.has("healing")) for (let k = 0; k < 3; k++) put({ k: "mote", plus: true, x: T.x + s.rand(-0.25, 0.25) * sz, y: T.y + s.rand(-0.1, 0.1), z: s.rand(0.4, 0.8) * T.h, vz: s.rand(0.5, 0.8), g: -0.2, drag: 1.2, life: 0.9, R: M.R, wait: k * 0.08 });
   if (P.has("persistent") && o !== "miss") D.ctx.linger(s, M, T.x, T.y, 0.3 * sz, s.t + 0.25, s.t + 2.8);
 }
 
