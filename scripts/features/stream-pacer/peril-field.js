@@ -400,6 +400,11 @@ export class PerilField {
 
   _loop() {
     if (!this._running || !this.gl) return;
+    // shed mid-burst: fade the field out and leave the CSS splash playing
+    if (!this.allowed) {
+      this.stop();
+      return;
+    }
     this._surface?.touch();
     const gl = this.gl;
     const ms = performance.now() - this._start;

@@ -431,6 +431,8 @@ for (const c of playable) expect(c in C.SOUNDS, `cue "${c}" can be played but SO
   const field = stripComments(SRC["peril-field.js"]);
   expect(/Surfaces\.register\(/.test(field) && /\.use\(\)/.test(field) && /\.touch\(\)/.test(field), "peril-field.js must register its context with Surfaces and mark it used while it draws.");
   expect(/Budget\.ladder\([^)]*SHED_ORDER\)/.test(field) && /allows\('perilField'\)/.test(field) && C.SHED_ORDER.includes("perilField"), "the field must be bound to Budget.ladder(SHED_ORDER) and ask it before it plays.");
+  const loop = field.slice(field.indexOf("_loop() {"), field.indexOf("stop() {"));
+  expect(/if \(!this\.allowed\)\s*\{\s*this\.stop\(\)/.test(loop), "the field's loop must ask the ladder every frame and stop when shed; asked only in play(), the load the splash itself causes can never shed it.");
   for (const u of field.matchAll(/uniform\s+\w+\s+(u_\w+)/g)) expect(new RegExp(`'${u[1]}'`).test(field), `the field's shader declares ${u[1]} and the renderer never looks it up; it holds the driver's initial value.`);
   // a client that may never see the splash never builds the field
   const fieldBody = bodyOf(MODULE, "_field") ?? "";
