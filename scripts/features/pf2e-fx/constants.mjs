@@ -51,6 +51,68 @@ export const FLOURISHES = Object.freeze(["sparkles", "petals", "runes", "none"])
 export const WEAPON_STYLES = Object.freeze(["slash", "pierce", "bludgeon", "ranged", "thrown", "claw", "bite", "unarmed"]);
 export const TRADITIONS = Object.freeze(["arcane", "divine", "occult", "primal"]);
 
+/*
+ * The look model's closed vocabularies (docs/SPELLSPRITE_LOOK.md). depict.mjs
+ * emits only these; growing a set means a lexicon entry and a renderer too.
+ */
+
+/** How it gets there: the timeline. */
+export const DELIVERY_VOCAB = Object.freeze([
+  // melee weapons, by group
+  "swing", "chop", "smash", "thrust", "sweep", "stab", "peck", "flail", "lash", "fist", "bash",
+  // natural attacks, by name
+  "rake", "jaws", "gore", "sting", "stomp", "buffet", "slam", "pincer", "grasp", "squeeze",
+  // ranged weapons, by group then name
+  "arrow", "bolt", "bullet", "pellets", "slug", "stone", "dart", "thrown", "rock", "bomb", "grenade",
+  "laser", "plasma", "zap", "sonicwave", "jet", "mindbeam", "spit", "net", "missile",
+  // spells and abilities with harm or hazard
+  "ray", "orb", "darts", "lob", "fall", "burst", "cone", "line", "emanation", "wall", "touch", "gaze", "voice", "breath", "aura", "bloom",
+  // everything else
+  "form", "condition", "tick",
+]);
+
+/**
+ * Which renderer table owns each delivery (compile.mjs routes by it, fx-check
+ * requires an entry for every one): `strikes.mjs` STRIKES for melee and
+ * natural, `ranged.mjs` RANGED, `deliveries.mjs` HARM.
+ */
+export const DELIVERY_GROUPS = Object.freeze({
+  melee: Object.freeze(["swing", "chop", "smash", "thrust", "sweep", "stab", "peck", "flail", "lash", "fist", "bash"]),
+  natural: Object.freeze(["rake", "jaws", "gore", "sting", "stomp", "buffet", "slam", "pincer", "grasp", "squeeze"]),
+  ranged: Object.freeze(["arrow", "bolt", "bullet", "pellets", "slug", "stone", "dart", "thrown", "rock", "bomb", "grenade", "laser", "plasma", "zap", "sonicwave", "jet", "mindbeam", "spit", "net", "missile"]),
+  harm: Object.freeze(["ray", "orb", "darts", "lob", "fall", "burst", "cone", "line", "emanation", "wall", "touch", "gaze", "voice", "breath", "aura", "bloom"]),
+  other: Object.freeze(["form", "condition", "tick"]),
+});
+
+/** What object it depicts. */
+export const MOTIF_VOCAB = Object.freeze([
+  "blade", "weapon", "spear", "arrow", "hammer", "chain", "whip", "needle",
+  "hand", "fist", "claw", "jaws", "eye", "heart", "skull", "bones", "blood", "wing", "feather",
+  "storm", "cloud", "rain", "wind", "tornado", "lightning", "sun", "moon", "star", "comet",
+  "stone", "crystal", "spike", "wave", "bubble", "mist", "smoke",
+  "vine", "thorn", "root", "flower", "leaf", "tree", "spore",
+  "ghost", "rune", "glyph", "word", "note", "bell", "mirror", "door", "mask", "crown", "coin", "card",
+  "serpent", "dragon", "beast", "swarm", "web",
+  "flame", "orb", "ray", "shield", "wall",
+]);
+
+/** How hard and how big. */
+export const PROP_VOCAB = Object.freeze([
+  "deadly", "fatal", "scatter", "automatic", "concussive", "kickback", "splash", "heavy", "power", "reach", "sweep",
+  "agile", "forceful", "backstabber", "volley", "unwieldy", "tech", "boost", "area",
+  "precious", "magical", "persistent",
+  "incapacitation", "fortune", "misfortune", "auditory", "visual", "linguistic", "emotion", "fear", "curse", "polymorph",
+  "teleportation", "summon", "healing", "nonlethal", "holy", "unholy", "death", "light", "darkness", "poison", "disease",
+  "minor", "major",
+]);
+
+/** Who is doing it: the caster's wind-up. */
+export const FLAVOR_VOCAB = Object.freeze([
+  "arcane", "divine", "occult", "primal",
+  "rage", "flurry", "impulse", "gun", "finisher", "spellstrike", "overdrive", "composition", "stance", "hunt", "sneak",
+  "judgment", "esoterica", "psyche", "apparition", "necromancy", "rune", "command", "guard", "exemplar", "eidolon",
+]);
+
 /** The 26 Spellglass materials, in its order (pf2e-aoe/schema.mjs). */
 export const MATERIALS = Object.freeze([
   "fire", "cold", "electricity", "acid", "poison", "sonic", "force",

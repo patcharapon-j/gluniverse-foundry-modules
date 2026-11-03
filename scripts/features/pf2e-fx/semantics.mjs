@@ -31,6 +31,7 @@
 import { classify } from "../pf2e-aoe/classifier.mjs";
 import { CONDITIONS } from "./conditions.mjs";
 import { FUNCTIONS, MATERIALS, TRADITIONS } from "./constants.mjs";
+import { BASE_GROUP, STYLE_OF, actionDelivery, baseItemOf, flavorOf, inVocab, motifOf, nameElement, propsOf, strikeDelivery } from "./depict.mjs";
 
 const MATERIAL_SET = new Set(MATERIALS);
 const FUNCTION_SET = new Set(FUNCTIONS);
@@ -196,8 +197,8 @@ export function outcomeFrom(degree, mode) {
 /** Spells and actions whose traits mislead or say nothing. Wins over every rule. */
 export const FX_CURATED = Object.freeze({
   // force darts: no attack, no save, always land
-  "magic-missile": { func: "harm", material: "force", kind: "auto" },
-  "force-barrage": { func: "harm", material: "force", kind: "auto" },
+  "magic-missile": { func: "harm", material: "force", kind: "auto", delivery: "darts" },
+  "force-barrage": { func: "harm", material: "force", kind: "auto", delivery: "darts" },
   "telekinetic-projectile": { func: "harm", material: "force" },
   "chromatic-ray": { func: "harm", material: "light", accent: "fire" },
   "prismatic-spray": { material: "light", accent: "fire" },
@@ -423,9 +424,16 @@ function pickMaterial(item, ctx) {
     if (fallback) return { material: fallback, accent: null, src: ctx.spell && TRADITION_MATERIAL[ctx.tradition] ? "tradition" : "function" };
     return { material: "neutral", accent: null, src: "none" };
   }
-  const [m, w] = ranked[0];
+  let [m, w] = ranked[0];
+  let src = why.get(m);
+  // The damage colours it, the name shapes it: an element the name states is
+  // the accent; and plain physical damage yields to it ("Stone Fist" is earth).
+  const element = curated?.material ? null : nameElement(item?.name);
+  const named = element && MATERIAL_SET.has(element) && element !== "neutral" ? element : null;
+  if (named && m === "kinetic" && src !== "rune") { m = named; w = scores.get(named) ?? w; src = "name"; }
   const second = ranked.find(([k, s]) => k !== m && k !== "kinetic" && s >= Math.max(40, w * 0.55));
-  return { material: m, accent: curated?.accent ?? second?.[0] ?? null, src: why.get(m) };
+  const accent = curated?.accent ?? (named && named !== m ? named : second?.[0] ?? null);
+  return { material: m, accent, src };
 }
 
 /* ── function ──────────────────────────────────────────────────────────── */
@@ -507,49 +515,38 @@ export function traditionOf(item, opts = {}) {
 
 /* ── weapon style ──────────────────────────────────────────────────────── */
 
-const NAME_STYLE = [
-  [/\b(claws?|talons?|rakes?|scratch\w*)\b/, "claw"],
-  [/\b(jaws?|bites?|fangs?|beaks?|mandibles?|maws?|teeth|tooth|mouth)\b/, "bite"],
-  [/\b(horns?|gores?|stingers?|stings?|spines?|quills?|tusks?|antlers?|spikes?|barbs?|proboscis|tongue)\b/, "pierce"],
-  [/\b(tails?|fists?|slams?|tentacles?|wings?|hooves|hoof|feet|foot|stomps?|body|pseudopods?|tendrils?|branch(es)?|limbs?|arms?|knuckles?|headbutt|kick|vines?)\b/, "bludgeon"],
-];
-const RANGED_GROUPS = new Set(["bow", "crossbow", "firearm", "sling"]);
-const THROWN_GROUPS = new Set(["bomb", "dart"]);
+const RANGED_GROUPS = new Set(["bow", "crossbow", "firearm", "sling", "projectile", "sniper", "laser", "plasma", "shock", "sonic", "flame", "cryo", "corrosive", "poison", "mental", "grenade"]);
 
 /**
- * A Strike's style. `opts.ranged` is the attack's own answer when the message
- * knows it (a thrown dagger is a melee weapon thrown).
+ * A Strike's delivery and the weapon style it reads as (depict.mjs STYLE_OF).
+ * `opts.ranged` is the attack's own answer when the message knows it (a thrown
+ * dagger is a melee weapon thrown).
  */
-export function weaponStyleOf(item, opts = {}) {
+function strikeOf(item, opts = {}) {
   const sys = sysOf(item);
   const traits = traitsOf(item);
-  const name = String(item?.name ?? "").toLowerCase();
-  const thrownTrait = [...traits].some((t) => t === "thrown" || /^thrown-\d+$/.test(t));
-  const rangeTrait = [...traits].some((t) => /^range(-increment)?-\d+$/.test(t));
-  const group = slugify(sys.group);
+  // PF2e reads an NPC strike's range from its data or its range/thrown trait
+  const rangeTrait = [...traits].some((t) => /^(range(-increment)?|thrown)-\d+$/.test(t));
+  const linked = opts.weapon && typeof opts.weapon === "object" ? opts.weapon : null;
   const isNpc = item?.type === "melee";
+  const ownGroup = slugify(sys.group) || slugify(sysOf(linked).group) || BASE_GROUP[baseItemOf(item)?.base] || "";
+  const group = ownGroup;
+  const rangedOnly = (RANGED_GROUPS.has(group) || group === "bomb") && !traits.has("combination");
   const itemRanged = isNpc
-    ? !!(num(sys.range?.increment) || num(sys.range?.max) || rangeTrait)
-    : (num(sys.range) ?? 0) > 0 || RANGED_GROUPS.has(group) || group === "bomb";
+    ? !!(num(sys.range?.increment) || num(sys.range?.max) || rangeTrait || rangedOnly)
+    : (num(sys.range) ?? 0) > 0 || rangedOnly;
   const ranged = typeof opts.ranged === "boolean" ? opts.ranged : itemRanged;
-  const heavy = slugify(sys.usage?.value) === "held-in-two-hands" || [...traits].some((t) => /^two-hand-d\d+$/.test(t));
+  const heavy = !ranged && (slugify(sys.usage?.value) === "held-in-two-hands" || [...traits].some((t) => /^two-hand-d\d+$/.test(t)));
   const splash = group === "bomb" || traits.has("bomb") || traits.has("splash") || (num(sys.splashDamage?.value) ?? 0) > 0;
-  if (ranged) {
-    const thrown = THROWN_GROUPS.has(group) || traits.has("bomb") || (thrownTrait && !RANGED_GROUPS.has(group)) || /\b(rocks?|boulders?|javelins?|bombs?|stones?)\b/.test(name);
-    return { style: thrown ? "thrown" : "ranged", ranged: true, splash, heavy: false };
-  }
-  // NPC attacks are named for the body part; a character's unarmed attacks
-  // (an ancestry's claws or jaws) too, but a character's fist stays "unarmed"
-  if (isNpc || traits.has("unarmed")) {
-    for (const [re, style] of NAME_STYLE) if ((isNpc || style !== "bludgeon") && re.test(name)) return { style, ranged: false, splash, heavy };
-  }
-  const damage = damageOf(item);
-  const physical = damage.find((e) => PHYSICAL.has(e.type))?.type ?? null;
-  if (traits.has("unarmed") && (physical === "bludgeoning" || !physical)) return { style: "unarmed", ranged: false, splash, heavy };
-  if (physical === "slashing") return { style: "slash", ranged: false, splash, heavy };
-  if (physical === "piercing") return { style: "pierce", ranged: false, splash, heavy };
-  if (physical === "bludgeoning") return { style: "bludgeon", ranged: false, splash, heavy };
-  return { style: "unarmed", ranged: false, splash, heavy };
+  const d = strikeDelivery(item, { ranged, damage: damageOf(item), traits, linked });
+  const style = STYLE_OF[d.delivery] ?? (ranged ? "ranged" : "unarmed");
+  // the group rides along so a renderer can tell black powder (firearm) from an SF2e gun (projectile)
+  return { weapon: { style, ranged, splash, heavy, group: group || null }, delivery: d.delivery, src: d.src, base: d.base, group: d.group };
+}
+
+/** A Strike's style: `{ style, ranged, splash, heavy }` (constants.mjs WEAPON_STYLES). */
+export function weaponStyleOf(item, opts = {}) {
+  return strikeOf(item, opts).weapon;
 }
 
 /* ── the entry points ──────────────────────────────────────────────────── */
@@ -560,7 +557,29 @@ const CONSUMABLE_TRAITS = ["magical", "alchemical", "potion", "elixir", "talisma
 const GEAR_TYPES = new Set(["armor", "shield", "backpack", "treasure", "kit", "equipment", "book", "ammo", "lore", "ancestry", "heritage", "background", "class", "deity", "effect", "campaignFeature", "spellcastingEntry"]);
 
 function blank(extra = {}) {
-  return { kind: "auto", func: "neutral", material: "neutral", accent: null, rank: 1, tradition: null, weapon: null, area: null, mode: null, condition: null, slug: null, silent: null, craft: null, why: {}, ...extra };
+  return { kind: "auto", func: "neutral", material: "neutral", accent: null, rank: 1, tradition: null, weapon: null, area: null, mode: null, condition: null, slug: null, silent: null, craft: null, delivery: null, motif: null, props: [], flavor: null, why: {}, ...extra };
+}
+
+/**
+ * The look axes (docs/SPELLSPRITE_LOOK.md) on top of a finished spec. A silent
+ * spec keeps its motif, props and flavor (what it would show) but no delivery.
+ */
+function depictSpec(item, spec, ctx) {
+  const curated = ctx.curated ?? {};
+  const traits = ctx.traits ?? new Set();
+  let delivery = null, dsrc = "none";
+  if (curated.delivery) { delivery = curated.delivery; dsrc = "curated"; }
+  else if (spec.silent) { delivery = null; }
+  else if (ctx.strikeInfo) { delivery = ctx.strikeInfo.delivery; dsrc = ctx.strikeInfo.src; }
+  else {
+    const d = actionDelivery(item, { kind: spec.kind, func: spec.func, area: spec.area, traits, damage: ctx.damage ?? [], isSpell: !!ctx.spell, hazard: !!ctx.hazard, sys: ctx.sys });
+    delivery = d.delivery; dsrc = d.src;
+  }
+  const m = curated.motif !== undefined ? { motif: curated.motif, src: "curated" } : motifOf(item, { delivery, base: ctx.strikeInfo?.base, group: ctx.strikeInfo?.group, strike: !!ctx.strikeInfo, traits });
+  const p = propsOf(item, { traits, damage: ctx.damage ?? [], rank: spec.rank, cantrip: traits.has("cantrip"), scale: !spec.silent && ctx.scale !== false });
+  const f = curated.flavor !== undefined ? { flavor: curated.flavor, src: "curated" } : flavorOf(item, { traits, tradition: spec.tradition, spell: !!ctx.spell });
+  const v = inVocab({ delivery, motif: m.motif, props: p.props, flavor: f.flavor });
+  return { ...spec, ...v, why: { ...spec.why, delivery: v.delivery ? dsrc : "none", motif: v.motif ? m.src : "none", props: p.src, flavor: v.flavor ? f.src : "none" } };
 }
 
 /**
@@ -576,6 +595,7 @@ function blank(extra = {}) {
  *   actorLevel   the acting creature's level
  *   targetUndead the (first) target is undead — flips heal/harm
  *   hazard       the actor is a hazard
+ *   weapon       an NPC strike's linked weapon item (MeleePF2e#linkedWeapon): its group and base item
  *   description  override the description text
  */
 export function describeItem(item, opts = {}) {
@@ -605,7 +625,7 @@ function describeItemUnsafe(item, opts) {
   const tradition = traditionOf(item, opts);
   const base = { slug, rank, tradition };
 
-  if (curated?.silent) return blank({ ...base, silent: curated.silent, why: { silent: "curated" } });
+  if (curated?.silent) return depictSpec(item, blank({ ...base, silent: curated.silent, why: { silent: "curated" } }), { traits, curated, sys });
 
   if (GEAR_TYPES.has(type) && !isStrike) return blank({ ...base, silent: "gear", why: { silent: "type" } });
 
@@ -623,14 +643,18 @@ function describeItemUnsafe(item, opts) {
     area: null,
   };
 
+  const done = (spec) => depictSpec(item, spec, ctx);
+
   if (isStrike) {
-    const weapon = weaponStyleOf(item, { ranged: opts.ranged });
+    const strike = strikeOf(item, { ranged: opts.ranged, weapon: opts.weapon });
+    const weapon = strike.weapon;
+    ctx.strikeInfo = strike;
     const { material, accent, src } = pickMaterial(item, ctx);
-    return blank({
+    return done(blank({
       ...base, kind: "strike", func: "harm", material: material === "neutral" ? "kinetic" : material, accent, weapon, mode: "attack",
       area: weapon.splash && weapon.ranged ? { shape: "burst", r: 1, len: null, width: null } : null,
       why: { kind: "strike", func: "strike", material: material === "neutral" ? "default" : src },
-    });
+    }));
   }
 
   const area = curated?.area ?? areaOf(item, { description });
@@ -639,7 +663,7 @@ function describeItemUnsafe(item, opts) {
   ctx.consumable = type === "consumable";
   if (ctx.consumable) {
     // mundane supplies (rations, chalk, candles) post a card and show nothing
-    if (!damage.length && !area && !CONSUMABLE_TRAITS.some((t) => traits.has(t))) return blank({ ...base, silent: "gear", why: { silent: "mundane" } });
+    if (!damage.length && !area && !CONSUMABLE_TRAITS.some((t) => traits.has(t))) return done(blank({ ...base, silent: "gear", why: { silent: "mundane" } }));
     if (func === "neutral") { func = traits.has("healing") ? "restore" : "support"; funcSrc = "consumable"; }
   }
   ctx.func = func;
@@ -649,23 +673,23 @@ function describeItemUnsafe(item, opts) {
   if (!isSpell && type !== "consumable") {
     const passive = sys.actionType?.value === "passive" || (type === "feat" && !sys.actionType?.value) || (type === "feat" && sys.actionType?.value === "passive");
     if ((passive && !area && !damage.length && !curated) || (func === "neutral" && !area && !damage.length)) {
-      return blank({ ...base, func, material, accent, silent: passive ? "passive" : "no-function", why: { func: funcSrc, material: matSrc } });
+      return done(blank({ ...base, func, material, accent, silent: passive ? "passive" : "no-function", why: { func: funcSrc, material: matSrc } }));
     }
   }
 
   // consumables: potions and elixirs act on the drinker; bombs are Strikes (weapons) above
   if (type === "consumable") {
     const category = slugify(sys.category);
-    if (["ammo", "ammunition"].includes(category)) return blank({ ...base, silent: "gear", why: { silent: "ammo" } });
+    if (["ammo", "ammunition"].includes(category)) return done(blank({ ...base, silent: "gear", why: { silent: "ammo" } }));
     const drunk = ["potion", "elixir", "drug", "food", "oil", "mutagen", "tea", "medicine"].includes(category) || traits.has("potion") || traits.has("elixir") || traits.has("mutagen");
     if (drunk || (!damage.some((e) => e.kinds.has("damage")) && !area)) {
-      return blank({ ...base, kind: "self", func, material, accent, area: null, why: { kind: "consumable", func: funcSrc, material: matSrc } });
+      return done(blank({ ...base, kind: "self", func, material, accent, area: null, why: { kind: "consumable", func: funcSrc, material: matSrc } }));
     }
   }
 
   const kind = curated?.kind ?? kindFor(item, { sys, traits, area, func, damage, isSpell, description });
   const mode = kind === "attack" ? "attack" : kind === "save" || kind === "area" ? "save" : null;
-  return blank({ ...base, kind, func, material, accent, area, mode, craft: curated?.craft ?? null, why: { kind: curated?.kind ? "curated" : "structure", func: funcSrc, material: matSrc } });
+  return done(blank({ ...base, kind, func, material, accent, area, mode, craft: curated?.craft ?? null, why: { kind: curated?.kind ? "curated" : "structure", func: funcSrc, material: matSrc } }));
 }
 
 function kindFor(item, { sys, traits, area, func, damage, isSpell, description }) {
@@ -687,15 +711,20 @@ function kindFor(item, { sys, traits, area, func, damage, isSpell, description }
 /** A skill action rolled as a check (`action:<slug>` on the message), e.g. Trip, Demoralize. */
 export function describeSkillAction(actionSlug, traits = []) {
   const slug = slugify(actionSlug);
-  const curated = FX_CURATED[slug];
-  if (curated?.silent) return blank({ slug, silent: curated.silent, why: { silent: "curated" } });
-  if (curated) return blank({ slug, kind: curated.kind ?? "attack", func: curated.func ?? "neutral", material: curated.material ?? "neutral", accent: curated.accent ?? null, mode: (curated.kind ?? "attack") === "attack" ? "attack" : null, craft: curated.craft ?? null, why: { kind: "curated", func: "curated", material: "curated" } });
-  if (SILENT_ACTIONS.has(slug)) return blank({ slug, silent: "no-visual", why: { silent: "list" } });
   const t = new Set(asArray(traits).map(slugify));
-  if (t.has("attack")) return blank({ slug, kind: "attack", func: "control", material: "kinetic", mode: "attack", why: { func: "trait", material: "default" } });
+  const item = { name: slug.replace(/-/g, " "), type: "action", system: { slug } };
+  const curated = FX_CURATED[slug];
+  // a skill action is a check against a creature: auditory and linguistic ones are said
+  const said = t.has("auditory") || t.has("linguistic");
+  const done = (spec) => depictSpec(item, spec, { traits: t, scale: false, curated: { ...(curated ?? {}), ...(spec.silent || curated?.delivery ? {} : { delivery: said ? "voice" : "form" }) } });
+  const fix = (spec) => { const r = done(spec); if (r.delivery && !curated?.delivery) r.why = { ...r.why, delivery: said ? "trait" : "default" }; return r; };
+  if (curated?.silent) return fix(blank({ slug, silent: curated.silent, why: { silent: "curated" } }));
+  if (curated) return fix(blank({ slug, kind: curated.kind ?? "attack", func: curated.func ?? "neutral", material: curated.material ?? "neutral", accent: curated.accent ?? null, mode: (curated.kind ?? "attack") === "attack" ? "attack" : null, craft: curated.craft ?? null, why: { kind: "curated", func: "curated", material: "curated" } }));
+  if (SILENT_ACTIONS.has(slug)) return fix(blank({ slug, silent: "no-visual", why: { silent: "list" } }));
+  if (t.has("attack")) return fix(blank({ slug, kind: "attack", func: "control", material: "kinetic", mode: "attack", why: { func: "trait", material: "default" } }));
   const m = [...t].map((x) => TRAIT_MATERIAL[x]).find(Boolean) ?? materialFromName(slug.replace(/-/g, " "));
-  if (t.has("mental") || t.has("emotion") || t.has("fear")) return blank({ slug, kind: "attack", func: "hinder", material: m ?? "mental", mode: "attack", why: { func: "trait", material: "trait" } });
-  return blank({ slug, silent: "no-function", why: { silent: "unknown" } });
+  if (t.has("mental") || t.has("emotion") || t.has("fear")) return fix(blank({ slug, kind: "attack", func: "hinder", material: m ?? "mental", mode: "attack", why: { func: "trait", material: "trait" } }));
+  return fix(blank({ slug, silent: "no-function", why: { silent: "unknown" } }));
 }
 
 /** PF2e conditions that are states of knowledge or attitude, not something to draw. */
@@ -723,7 +752,7 @@ const CONDITION_LOOK = Object.freeze({
 export function describeCondition(slug, opts = {}) {
   const s = slugify(slug);
   const value = num(opts.value);
-  if (SILENT_CONDITIONS.has(s)) return blank({ kind: "condition", slug: s, condition: { slug: s, value }, silent: "state", why: { silent: "list" } });
+  if (SILENT_CONDITIONS.has(s)) return blank({ kind: "condition", slug: s, condition: { slug: s, value }, silent: "state", why: { silent: "list", delivery: "none", motif: "none", props: "none", flavor: "none" } });
   const [func, mat] = CONDITION_LOOK[s] ?? ["hinder", "neutral"];
   let material = CONDITIONS[s]?.material ?? mat;
   let damageType = null;
@@ -735,7 +764,11 @@ export function describeCondition(slug, opts = {}) {
     kind: "condition", func, material, slug: s,
     condition: { slug: s, value, ...(damageType ? { damageType } : {}) },
     rank: clampInt(Math.max(1, value ?? 1), 1, 10),
-    why: { kind: "condition", func: CONDITION_LOOK[s] ? "table" : "default", material: CONDITIONS[s]?.material ? "overlay" : CONDITION_LOOK[s] ? "table" : "default" },
+    delivery: "condition", props: s === "persistent-damage" ? ["persistent"] : [],
+    why: {
+      kind: "condition", func: CONDITION_LOOK[s] ? "table" : "default", material: CONDITIONS[s]?.material ? "overlay" : CONDITION_LOOK[s] ? "table" : "default",
+      delivery: "structure", motif: "none", props: s === "persistent-damage" ? "structure" : "none", flavor: "none",
+    },
   });
 }
 
@@ -743,7 +776,7 @@ export function describeCondition(slug, opts = {}) {
 export function describeTick(damageType, opts = {}) {
   const t = slugify(damageType);
   const c = describeCondition("persistent-damage", { damageType: t, value: opts.value });
-  return { ...c, kind: "tick", func: "harm", why: { ...c.why, kind: "tick" } };
+  return { ...c, kind: "tick", func: "harm", delivery: "tick", why: { ...c.why, kind: "tick" } };
 }
 
 /** For the check and coverage tools. */
