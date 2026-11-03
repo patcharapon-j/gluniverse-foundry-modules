@@ -19,14 +19,15 @@ const L = (k, d) => (d ? game.i18n.format(k, d) : game.i18n.localize(k));
 
 /** The panel module reads `foundry.applications` at module scope, so it loads on first use. */
 const panel = () => import("./app.mjs").then((m) => m.MythicPanel);
-const session = async () => import("./session.mjs");
+const session = () => import("./session.mjs");
 
 /** Redraw an open panel, if there is one. */
 const redraw = () => import("./app.mjs").then((m) => m.MythicPanel.current?.render()).catch(() => {});
 
+/** Open the panel. Resolves to the window, or null for a player. */
 export function openPanel() {
-  if (!game.user.isGM) return;
-  panel().then((P) => P.open());
+  if (!game.user.isGM) return Promise.resolve(null);
+  return panel().then((P) => P.open());
 }
 
 export function registerSettings() {
@@ -82,7 +83,7 @@ export function registerSettings() {
 /** Ctrl+K rows: every odds, the event, the scene check, and every elements table by name. */
 function quickProvider() {
   const run = (fn) => async () => {
-    openPanel();
+    await openPanel();
     const s = await session();
     await fn(s);
   };

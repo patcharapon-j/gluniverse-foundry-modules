@@ -75,12 +75,16 @@ export class MythicPanel extends ApplicationV2 {
   #query = "";
   #fresh = null;
   #unsubscribe = null;
+  /** The page on screen. Held here, because the stored copy is written behind a queue. */
+  #tab = null;
 
   async _prepareContext() {
     const actions1 = await resolveActions1();
+    const ui = readUi();
+    this.#tab ??= ui.tab;
     return panelModel({
       chaos: getChaos(),
-      ui: readUi(),
+      ui: { ...ui, tab: this.#tab },
       log: readLog(),
       lists: readLists(),
       question: this.#question,
@@ -208,6 +212,7 @@ export class MythicPanel extends ApplicationV2 {
     const tab = target.dataset.tab;
     const root = this.element.querySelector(".gmyth-root");
     if (!root || !tab) return;
+    this.#tab = tab;
     root.dataset.tab = tab;
     for (const b of root.querySelectorAll(".gmyth-tab")) {
       const on = b.dataset.tab === tab;
