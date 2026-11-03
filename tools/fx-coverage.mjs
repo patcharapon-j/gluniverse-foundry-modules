@@ -13,12 +13,13 @@
  * Exports `loadPack`, `walkPacks` and `SPOT_CHECKS` for tools/fx-semantics-check.mjs.
  */
 
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describeItem, describeCondition, describeSkillAction } from "../scripts/features/pf2e-fx/semantics.mjs";
 import { FAMILY_OF } from "../scripts/features/pf2e-fx/constants.mjs";
+import { BASE_GROUP } from "../scripts/features/pf2e-fx/depict.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_PACKS = "C:/Users/frostnoxia/AppData/Local/FoundryVTT/Data/systems/pf2e/packs";
@@ -51,12 +52,22 @@ export async function loadPack(dir) {
   }
 }
 
-const ITEM_PACKS = ["spells", "feats", "actions", "class-features", "equipment", "bestiary-ability-glossary-srd", "bestiary-family-ability-glossary"];
-const isActorPack = (name) => /bestiary|npc-gallery|iconics|paizo-pregens|^hazards$/.test(name);
+/**
+ * Every pack is walked: any pack holding actors yields their embedded items,
+ * any pack holding items yields those. Packs of effects, journals, macros and
+ * tables hold nothing that plays and evaluate to nothing.
+ */
+const SKIP_PACKS = new Set(["bestiary-effects", "equipment-effects", "feat-effects", "spell-effects", "other-effects", "campaign-effects"]);
 
 /** Embedded items of an actor in pack data. */
 function embedded(all, actor) {
   return (actor.items ?? []).map((id) => all.get(`!actors.items!${actor._id}.${id}`)).filter(Boolean);
+}
+
+/** An NPC strike's linked weapon (flags.pf2e.linkedWeapon, or sf2e's scope). */
+function linkedOf(items, it) {
+  const id = it.flags?.pf2e?.linkedWeapon ?? it.flags?.sf2e?.linkedWeapon;
+  return id ? items.find((x) => x._id === id) ?? null : null;
 }
 
 /**
@@ -89,35 +100,67 @@ function* actorItemsOf(name, all) {
     if (!k.startsWith("!actors!")) continue;
     const items = embedded(all, actor);
     const entries = new Map(items.filter((i) => i.type === "spellcastingEntry").map((i) => [i._id, i.system?.tradition?.value ?? null]));
-    const level = actor.system?.details?.level?.value ?? 0;
+    const level = actor.system?.details?.level?.value ?? actor.system?.level?.value ?? 0;
     const undead = false;
-    const category = actor.type === "hazard" ? "hazards" : actor.type === "character" ? "pcs" : "bestiary";
+    const category = actor.type === "hazard" ? "hazards" : actor.type === "character" || actor.type === "familiar" ? "pcs" : actor.type === "vehicle" ? "vehicles" : "bestiary";
     for (const it of items) {
       const tradition = it.type === "spell" ? entries.get(it.system?.location?.value) ?? null : null;
       yield {
         doc: it, actor, pack: name,
         category: it.type === "melee" ? `${category}-strike` : `${category}-${it.type}`,
-        opts: { actorLevel: level, tradition, hazard: actor.type === "hazard", targetUndead: undead },
+        opts: { actorLevel: level, tradition, hazard: actor.type === "hazard", targetUndead: undead, weapon: it.type === "melee" ? linkedOf(items, it) : null },
       };
     }
   }
 }
 
-/** Walk every relevant pack, yielding { pack, category, doc, actor?, result }. */
+function* packEntries(name, all) {
+  let actors = false, items = false;
+  for (const k of all.keys()) { if (k.startsWith("!actors!")) actors = true; else if (k.startsWith("!items!")) items = true; if (actors && items) break; }
+  if (actors) yield* actorItemsOf(name, all);
+  if (items) yield* itemsOf(name, all);
+}
+
+/** Walk every pack, yielding { pack, category, doc, actor?, result }. */
 export async function* walkPacks(root = DEFAULT_PACKS, { only = null } = {}) {
   const names = readdirSync(root).filter((n) => existsSync(join(root, n, "CURRENT")));
   for (const name of names) {
     if (only && !only(name)) continue;
-    const item = ITEM_PACKS.includes(name) || name === "conditions";
-    const actor = isActorPack(name);
-    if (!item && !actor) continue;
+    if (SKIP_PACKS.has(name)) continue;
     const all = await loadPack(join(root, name));
-    const iter = actor ? actorItemsOf(name, all) : itemsOf(name, all);
-    for (const entry of iter) {
+    for (const entry of packEntries(name, all)) {
       if (entry.skip) continue;
       const result = evaluate(entry.doc, { ...entry, category: entry.category });
       if (!result) continue;
       yield { pack: name, ...entry, result };
+    }
+  }
+}
+
+/**
+ * Walk a tree of source JSON (e.g. foundryvtt/pf2e's packs/sf2e): one document
+ * per file, actors with their items inline. `--sf2e=<dir>` adds it to the report.
+ */
+export function* walkJson(root) {
+  const files = [];
+  const visit = (d) => { for (const f of readdirSync(d, { withFileTypes: true })) { const p = join(d, f.name); if (f.isDirectory()) visit(p); else if (f.name.endsWith(".json")) files.push(p); } };
+  visit(root);
+  for (const p of files) {
+    let doc;
+    try { doc = JSON.parse(readFileSync(p, "utf8")); } catch { continue; }
+    const pack = `sf2e/${p.slice(root.length + 1).split(/[\\/]/)[0]}`;
+    if (Array.isArray(doc.items) && doc.items.length && doc.items[0] && typeof doc.items[0] === "object") {
+      const all = new Map([[`!actors!${doc._id}`, { ...doc, items: doc.items.map((i) => i._id) }], ...doc.items.map((i) => [`!actors.items!${doc._id}.${i._id}`, i])]);
+      for (const entry of actorItemsOf(pack, all)) {
+        const e = { ...entry, category: `sf2e-${entry.category}` };
+        const result = evaluate(e.doc, e);
+        if (result) yield { ...e, result };
+      }
+    } else if (doc.type && doc.system) {
+      const e = { doc, pack, category: `sf2e-${doc.type}` };
+      if (!["weapon", "consumable", "spell", "feat", "action"].includes(doc.type)) continue;
+      const result = evaluate(doc, e);
+      if (result) yield { ...e, result };
     }
   }
 }
@@ -174,7 +217,7 @@ export function findSpot(spot, packs) {
       if (!k.startsWith("!actors!") || actor.name !== spot.actor) continue;
       const items = embedded(all, actor);
       const it = items.find((i) => nameOk(i.name) && (!spot.type || i.type === spot.type) && i.type !== "weapon");
-      if (it) return { doc: it, actor, opts: { actorLevel: actor.system?.details?.level?.value ?? 0, ...(spot.opts ?? {}) } };
+      if (it) return { doc: it, actor, opts: { actorLevel: actor.system?.details?.level?.value ?? 0, weapon: it.type === "melee" ? linkedOf(items, it) : null, ...(spot.opts ?? {}) } };
     }
     return null;
   }
@@ -209,6 +252,87 @@ function suspect(entry) {
   return null;
 }
 
+/* ── the look axes (docs/SPELLSPRITE_LOOK.md) ────────────────────────── */
+
+const isNpcStrike = (e) => e.doc.type === "melee";
+const normName = (n) => String(n ?? "").toLowerCase().replace(/\s*\([^)]*\)\s*/g, " ").trim();
+const lookClass = (r) => (r.kind === "strike" ? "strike" : r.kind === "condition" || r.kind === "tick" ? "condition" : r.func === "harm" || r.func === "hazard" ? "harm" : "other");
+
+function newLook() {
+  const m = () => new Map();
+  return {
+    delivery: m(), deliverySrc: m(), motif: m(), motifSrc: m(), props: m(), flavor: m(), flavorSrc: m(), byClass: new Map(),
+    npcStrikes: 0, npcSpecific: 0, npcDefault: m(), harmSpells: 0, harmSpellDefault: m(), harmSpellNoMotif: new Map(),
+    harmSpellMotif: 0, spellsPackHarm: 0, abilities: 0, abilityDefault: m(), unknownBase: m(), playing: 0, withMotif: 0, withFlavor: 0,
+  };
+}
+
+function tallyLook(L, e) {
+  const r = e.result;
+  if (r.silent) return;
+  L.playing++;
+  const cls = lookClass(r);
+  let c = L.byClass.get(cls);
+  if (!c) L.byClass.set(cls, (c = { n: 0, delivery: new Map(), src: new Map(), motif: 0 }));
+  c.n++; bump(c.delivery, r.delivery); bump(c.src, r.why?.delivery);
+  if (r.motif) { c.motif++; L.withMotif++; }
+  if (r.flavor) L.withFlavor++;
+  bump(L.delivery, r.delivery); bump(L.deliverySrc, r.why?.delivery);
+  bump(L.motif, r.motif ?? "(none)"); bump(L.motifSrc, r.why?.motif);
+  bump(L.flavor, r.flavor ?? "(none)"); bump(L.flavorSrc, r.why?.flavor);
+  for (const p of r.props ?? []) bump(L.props, p);
+  const name = normName(e.doc.name);
+  if (isNpcStrike(e)) {
+    L.npcStrikes++;
+    if (r.why?.delivery !== "default") L.npcSpecific++;
+    else bump(L.npcDefault, `${name} → ${r.delivery}`);
+  }
+  if (["weapon", "melee"].includes(e.doc.type)) {
+    const b = String(e.doc.system?.baseItem ?? "");
+    if (b && !BASE_GROUP[b]) bump(L.unknownBase, `${b} (${e.doc.system?.group ?? "?"})`);
+  }
+  if (e.doc.type === "spell" && cls === "harm") {
+    L.harmSpells++;
+    if (r.why?.delivery === "default") bump(L.harmSpellDefault, `${e.doc.name} → ${r.delivery}`);
+    if (e.pack === "spells") {
+      L.spellsPackHarm++;
+      if (r.motif) L.harmSpellMotif++;
+      else L.harmSpellNoMotif.set(e.doc.name, r.delivery);
+    }
+  }
+  if (["action", "feat"].includes(e.doc.type) && cls === "harm" && e.doc.system?.actionType?.value !== "passive") {
+    L.abilities++;
+    if (r.why?.delivery === "default") bump(L.abilityDefault, `${name} → ${r.delivery}`);
+  }
+}
+
+const pct = (a, b) => (b ? ((100 * a) / b).toFixed(1) : "0.0");
+const list = (m, n = 60) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => `${k} (${v})`).join("; ") || "None.";
+
+function lookReport(L) {
+  const lines = ["## Look axes", "", "The five-axis look model (docs/SPELLSPRITE_LOOK.md), over every playing document. A source of `default` means no structure, name or trait said anything and the kind's fallback was used.", ""];
+  lines.push(`- NPC strike instances with a specific delivery: **${L.npcSpecific} / ${L.npcStrikes} (${pct(L.npcSpecific, L.npcStrikes)}%)**`);
+  lines.push(`- Harm spells (every pack) with a delivery: **${L.harmSpells} / ${L.harmSpells}**, ${L.harmSpells - [...L.harmSpellDefault.values()].reduce((a, b) => a + b, 0)} from structure or name`);
+  lines.push(`- Harm spells in the Spells pack with a motif: **${L.harmSpellMotif} / ${L.spellsPackHarm}**`);
+  lines.push(`- Playing documents with a motif: ${L.withMotif} (${pct(L.withMotif, L.playing)}%), with a flavor: ${L.withFlavor} (${pct(L.withFlavor, L.playing)}%)`, "");
+  lines.push("| class | n | with motif | deliveries (top 12) | delivery source |", "|---|---:|---:|---|---|");
+  for (const [k, c] of [...L.byClass.entries()].sort((a, b) => b[1].n - a[1].n)) {
+    lines.push(`| ${k} | ${c.n} | ${pct(c.motif, c.n)}% | ${[...c.delivery.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([d, n]) => `${d} ${n}`).join(", ")} | ${[...c.src.entries()].sort((a, b) => b[1] - a[1]).map(([d, n]) => `${d} ${pct(n, c.n)}%`).join(", ")} |`);
+  }
+  lines.push("");
+  lines.push(table("delivery", L.delivery, L.playing), "", table("delivery source", L.deliverySrc, L.playing), "");
+  lines.push(table("motif", L.motif, L.playing), "", table("motif source", L.motifSrc, L.playing), "");
+  lines.push(table("prop (a document may carry several)", L.props, L.playing), "");
+  lines.push(table("flavor", L.flavor, L.playing), "", table("flavor source", L.flavorSrc, L.playing), "");
+  lines.push("### Look residue", "");
+  lines.push(`**NPC strikes on a fallback delivery** (${L.npcStrikes - L.npcSpecific} instances; name, what the fallback chose, count): ${list(L.npcDefault, 80)}`, "");
+  lines.push(`**Harm spells on a fallback delivery**: ${list(L.harmSpellDefault, 40)}`, "");
+  lines.push(`**Spells-pack harm spells with no motif** (${L.harmSpellNoMotif.size}; nothing in the name names an object): ${[...L.harmSpellNoMotif.keys()].sort().join(", ") || "None."}`, "");
+  lines.push(`**Active abilities with harm on a fallback delivery**: ${list(L.abilityDefault, 80)}`, "");
+  lines.push(`**Base items missing from depict.mjs BASE_GROUP**: ${list(L.unknownBase, 40)}`, "");
+  return lines;
+}
+
 async function main() {
   const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, "").split("=")).map(([k, v]) => [k, v ?? true]));
   const root = args.packs ?? DEFAULT_PACKS;
@@ -218,7 +342,14 @@ async function main() {
   const full = [];
   const residue = new Map();
   const silentReview = new Map();
-  for await (const e of walkPacks(root)) {
+  const look = newLook();
+  const sf2e = typeof args.sf2e === "string" && existsSync(args.sf2e) ? args.sf2e : null;
+  async function* sources() {
+    yield* walkPacks(root);
+    if (sf2e) yield* walkJson(sf2e);
+  }
+  for await (const e of sources()) {
+    tallyLook(look, e);
     const r = e.result;
     const group = e.category.replace(/^(bestiary|hazards|pcs)-.*/, (m) => m) ;
     let c = cats.get(group);
@@ -268,14 +399,15 @@ async function main() {
   lines.push(table("weapon style", styles, [...styles.values()].reduce((a, b) => a + b, 0) || 1), "");
   lines.push(table("area shape", shapes, [...shapes.values()].reduce((a, b) => a + b, 0) || 1), "");
   lines.push(table("silent because", silent, (total - playing) || 1), "");
+  lines.push(...lookReport(look));
 
   lines.push("## Spot checks", "");
-  lines.push("| what | kind | func | material | style / area | ok |", "|---|---|---|---|---|---|");
+  lines.push("| what | kind | func | material | style / area | delivery | motif | flavor | ok |", "|---|---|---|---|---|---|---|---|---|");
   for (const s of spots) {
-    if (s.missing) { lines.push(`| ${s.spot.label} | — | — | — | not in packs | ${s.spot.optional ? "n/a" : "MISSING"} |`); continue; }
+    if (s.missing) { lines.push(`| ${s.spot.label} | — | — | — | not in packs | — | — | — | ${s.spot.optional ? "n/a" : "MISSING"} |`); continue; }
     const r = s.result;
     const extra = r.weapon ? `${r.weapon.style}${r.weapon.splash ? " +splash" : ""}` : r.area ? `${r.area.shape} ${r.area.len ?? r.area.r}` : "";
-    lines.push(`| ${s.spot.label} | ${r.kind} | ${r.func} | ${r.material}${r.accent ? ` (+${r.accent})` : ""} | ${extra} | ${s.fails.length ? `FAIL: ${s.fails.join("; ")}` : "yes"} |`);
+    lines.push(`| ${s.spot.label} | ${r.kind} | ${r.func} | ${r.material}${r.accent ? ` (+${r.accent})` : ""} | ${extra} | ${r.delivery ?? "—"} | ${r.motif ?? "—"} | ${r.flavor ?? "—"} | ${s.fails.length ? `FAIL: ${s.fails.join("; ")}` : "yes"} |`);
   }
   lines.push("");
 
