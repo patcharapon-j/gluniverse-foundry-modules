@@ -17,7 +17,7 @@
  * and heights are q. Pure: no Foundry, no DOM.
  */
 
-import { SUB, KIND } from "../constants.mjs";
+import { SUB, KIND, DIR } from "../constants.mjs";
 
 const EPS = 0.01;
 
@@ -25,6 +25,12 @@ const EPS = 0.01;
  * Outline of the ground standing above `eyeQ`, as merged axis-aligned
  * segments in px. The mask only changes at whole q, so callers cache on
  * `Math.floor(eyeQ)`.
+ *
+ * A flight of stairs or a ramp is open at its foot. Seen from below along its
+ * descent, nothing on it rises above the line from the eye to someone standing
+ * higher up it, so the whole flight is in view however high it climbs. Its
+ * flanks are still cliffs, and where it meets high ground that is not a slope
+ * (the terrace it leads up to) the outline still runs, so the top stays hidden.
  * @param {import("./model.mjs").Terrain} t
  * @param {number} eyeQ
  * @param {number} gridSize   px per cell
@@ -33,23 +39,36 @@ const EPS = 0.01;
 export function cliffEdges(t, eyeQ, gridSize) {
   const sw = t.sw, sh = t.sh;
   const above = new Uint8Array(sw * sh);
+  // per sub-cell: 0 not a slope, else 1 + the direction it descends (DIR)
+  const slope = new Uint8Array(sw * sh);
   let any = false;
   for (let si = 0; si < sh; si++) {
     for (let sj = 0; sj < sw; sj++) {
       const k = si * sw + sj;
-      if ((t.kind[k] & 0x0f) === KIND.VOID) continue;
+      const kind = t.kind[k] & 0x0f;
+      if (kind === KIND.VOID) continue;
+      if (kind === KIND.STAIRS || kind === KIND.RAMP) slope[k] = 1 + ((t.kind[k] >> 4) & 0x03);
       if (t.h[k] > eyeQ) { above[k] = 1; any = true; }
     }
   }
   if (!any) return [];
-  const A = (si, sj) => (si >= 0 && sj >= 0 && si < sh && sj < sw ? above[si * sw + sj] : 0);
+  const at = (si, sj) => (si >= 0 && sj >= 0 && si < sh && sj < sw ? si * sw + sj : -1);
+  /** Is there an outline between sub-cells a and b? aToB / bToA: the DIR from one to the other. */
+  const cut = (a, b, aToB, bToA) => {
+    const ua = a >= 0 ? above[a] : 0, ub = b >= 0 ? above[b] : 0;
+    const sa = a >= 0 ? slope[a] : 0, sb = b >= 0 ? slope[b] : 0;
+    if (ua && ub) return !sa !== !sb;    // a flight against the high ground it climbs to
+    if (ua) return sa !== 1 + aToB;      // open where a flight comes down
+    if (ub) return sb !== 1 + bToA;
+    return false;
+  };
   const s = gridSize / SUB;
   const out = [];
   // Horizontal boundaries: between row si-1 and si, along sub-columns.
   for (let si = 0; si <= sh; si++) {
     let start = -1;
     for (let sj = 0; sj <= sw; sj++) {
-      const edge = sj < sw && A(si - 1, sj) !== A(si, sj);
+      const edge = sj < sw && cut(at(si - 1, sj), at(si, sj), DIR.S, DIR.N);
       if (edge && start < 0) start = sj;
       if (!edge && start >= 0) { out.push([start * s, si * s, sj * s, si * s]); start = -1; }
     }
@@ -58,7 +77,7 @@ export function cliffEdges(t, eyeQ, gridSize) {
   for (let sj = 0; sj <= sw; sj++) {
     let start = -1;
     for (let si = 0; si <= sh; si++) {
-      const edge = si < sh && A(si, sj - 1) !== A(si, sj);
+      const edge = si < sh && cut(at(si, sj - 1), at(si, sj), DIR.E, DIR.W);
       if (edge && start < 0) start = si;
       if (!edge && start >= 0) { out.push([sj * s, start * s, sj * s, si * s]); start = -1; }
     }

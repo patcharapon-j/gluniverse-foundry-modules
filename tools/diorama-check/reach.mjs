@@ -55,6 +55,21 @@ export default async function check(ctx) {
   ctx.ok("reach: touching a wall's end counts (no corner cutting)", segmentsCross(0, 0, 100, 100, 50, 50, 50, 200));
   const cliff = solveReach({ start: { i: 0, j: 0 }, budget: 20, gridDistance: 5, bounds: { rows: 1, cols: 6 }, blocked: (fi, fj, ti, tj) => tj === 2 && fj === 1 });
   ctx.ok("reach: a cliff stops the climb", near(cliff.at(0, 1), 5) && cliff.at(0, 2) === Infinity);
+  // A ledge (0,0) → (0,1) is a drop; the way round through row 1 is the stairs.
+  // The walker takes the stairs; a square below only the drop reaches still shows.
+  const ledge = { start: { i: 0, j: 0 }, budget: 30, gridDistance: 5, bounds: { rows: 2, cols: 3 } };
+  const drop = (fi, fj, ti, tj) => fi === 0 && fj === 0 && ti === 0 && tj === 1;
+  const jumps = solveReach({ ...ledge });
+  const stairs = R.preferReach(solveReach({ ...ledge, blocked: drop }), jumps);
+  const viaStairs = stairs.pathTo(0, 1) ?? [];
+  // (0,2) is down a drop from every side: the drop-free solve never reaches it
+  const lone = R.preferReach(solveReach({ ...ledge, blocked: (fi, fj, ti, tj) => drop(fi, fj, ti, tj) || (ti === 0 && tj === 2) }), jumps);
+  ctx.ok("reach: a walker takes the stairs rather than drop off the ledge",
+    near(jumps.at(0, 1), 5) && near(stairs.at(0, 1), 10) && viaStairs.length === 3 && viaStairs[1].i === 1
+    && stairs.cells.some((c) => c.i === 0 && c.j === 1 && near(c.cost, 10)),
+    JSON.stringify(viaStairs));
+  ctx.ok("reach: a square only a drop reaches still shows, by the drop",
+    Number.isFinite(lone.at(0, 2)) && (lone.pathTo(0, 2) ?? []).length > 0, String(lone.at(0, 2)));
   const edge = solveReach({ start: { i: 0, j: 0 }, budget: 25, gridDistance: 5, bounds: { rows: 4, cols: 4 } });
   ctx.ok("reach: never off the scene", edge.cells.every((c) => c.i >= 0 && c.j >= 0 && c.i < 4 && c.j < 4));
 

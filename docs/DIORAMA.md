@@ -127,7 +127,11 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   one, two and three Strides (PF2e; Close for Daggerheart), counting walls and
   one-way walls (`canvas.edges`), difficult terrain (movement-cost Regions, at the
   token's elevation) and cliffs. Solver: `rules/reach.mjs` (pure Dijkstra with the
-  scene's diagonal rule); world adapter: `view/reach.mjs`. Per player
+  scene's diagonal rule); world adapter: `view/reach.mjs`. A drop off a ledge
+  is a legal step, but the route never takes one to save a few feet: it is
+  solved twice, without drops and with them, and a square the first reaches
+  keeps that route (`preferReach`), so a walker goes down the stairs and jumps
+  only where that is the only way down. Per player
   (`dio.reach`): when selected, only while moving, or never.
   Other creatures count too. A mover may pass through an ally's squares but not
   end there, and may not pass through an enemy's, so those squares show as out
@@ -313,7 +317,12 @@ below the edited one.
   the same polygons. A light is cut by all ground above it (its elevation +
   ground). Sight is cut only by ground more than 6 ft (a medium creature) above
   the eye (token elevation + 0.9 × creature height), so the fog lifts wherever a
-  creature standing there would be seen, not only where the floor itself is. Point tests (`testCollision`, used by token
+  creature standing there would be seen, not only where the floor itself is.
+  Stairs and ramps are open at their foot: seen from below along its descent,
+  someone standing anywhere on a flight is in view, so the outline leaves out
+  the edge a flight comes down over. Its flanks stay cliffs, and the outline
+  still runs where it meets high ground that is not a slope, so the terrace it
+  leads to stays hidden (`cliffEdges`). Point tests (`testCollision`, used by token
   detection) instead march the real 3D segment over the height field, because they
   have real target heights; feet, centre and head are tested.
   Ground below the eye is never outlined, so high ground sees down; a creature
@@ -390,7 +399,14 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   camera and fades out across the blurred bake as a ragged veil over the edge
   of sight, and translucent wisps streak above it down the wind. **Unseen
   ground is never drawn at all**: tops, cliff faces, water, props and walls
-  there discard, so they write no colour and no outline. The gap is filled by
+  there discard, so they write no colour and no outline. A cliff face counts
+  as seen when the top it hangs from is, or the ground just past its foot
+  (`FACE_FOOT`, half a bake pixel, so seen ground has to reach the face itself:
+  any further would look over a Foundry wall standing just in front of it,
+  which the bake knows and the shader does not). So the near face of a terrace
+  too tall for sight to reveal its top still stands on the seen ground and
+  rises into the mist. Such a face takes its fog look from half a square out
+  (`FACE_FOG`), since the edge of sight is full mist at its foot. The gap is filled by
   a mist backdrop: a box over the board's footprint, from the plinth to above
   the highest ground anyone has seen or explored, drawn from inside at the far
   plane. Its top reads only seen ground (`fogSeenTop`), so the mist never

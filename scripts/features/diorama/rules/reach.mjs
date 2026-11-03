@@ -256,6 +256,27 @@ export function solveReach({ start, budget, gridDistance = 5, diagonals = DIAGON
   };
 }
 
+/**
+ * Two solves of one reach, the first preferred: each square takes its cost and
+ * route from `first` where `first` reaches it, else from `then`. A walker goes
+ * down the stairs (first: no ledge dropped off) and jumps only where that is the
+ * only way down (then: drops allowed), however much shorter the jump is.
+ * @param {ReturnType<typeof solveReach>} first
+ * @param {ReturnType<typeof solveReach>} then
+ * @returns {ReturnType<typeof solveReach>}
+ */
+export function preferReach(first, then) {
+  const cells = new Map();
+  for (const c of then.cells) cells.set(`${c.i},${c.j}`, c);
+  for (const c of first.cells) cells.set(`${c.i},${c.j}`, c);
+  return {
+    cells: [...cells.values()],
+    at(i, j) { const a = first.at(i, j); return a === Infinity ? then.at(i, j) : a; },
+    pathTo(i, j) { return first.pathTo(i, j) ?? then.pathTo(i, j); },
+    occupied(i, j) { return then.occupied(i, j); },
+  };
+}
+
 /** 1-based band a cost falls in (budgets ascending), 0 when beyond the last. */
 export function reachBand(budgets, cost) {
   for (let k = 0; k < budgets.length; k++) if (cost <= budgets[k] + 1e-9) return k + 1;

@@ -62,6 +62,22 @@ export default async function check(ctx) {
   ctx.ok("one raised square has four merged edges", e.length === 4, JSON.stringify(e));
   ctx.ok("edges are in px", e.every((s) => s.every((n) => n % 50 === 0)) && e.some((s) => s[0] === 200 && s[2] === 400));
   ctx.ok("no edges above the eye", cliffEdges(flat, 8, 100).length === 0);
+  // A flight above the eye, descending west onto the floor, up to a terrace east
+  // of it: open at its foot, a cliff on its flanks, and the terrace stays sealed.
+  const flight = Terrain.blank(6, 6);
+  for (let si = 2; si < 10; si++) for (let sj = 6; sj < 8; sj++) flight.set(si, sj, { h: 8 });
+  for (let si = 4; si < 8; si++) for (let sj = 4; sj < 6; sj++) flight.set(si, sj, { h: 8, kind: KIND.STAIRS, dir: 3 });
+  let fe = cliffEdges(flight, 4, 100);
+  const onX = (x, y0, y1) => fe.some(([ax, ay, bx, by]) => ax === x && bx === x && Math.min(ay, by) <= y0 && Math.max(ay, by) >= y1);
+  const onY = (y, x0, x1) => fe.some(([ax, ay, bx, by]) => ay === y && by === y && Math.min(ax, bx) <= x0 && Math.max(ax, bx) >= x1);
+  const crossX = (x, y0, y1) => fe.some(([ax, ay, bx, by]) => ax === x && bx === x && Math.max(ay, by) > y0 && Math.min(ay, by) < y1);
+  ctx.ok("a flight is open at its foot", !crossX(200, 200, 400), JSON.stringify(fe));
+  ctx.ok("a flight's flanks are cliffs", onY(200, 200, 300) && onY(400, 200, 300), JSON.stringify(fe));
+  ctx.ok("the terrace a flight climbs to stays sealed", onX(300, 100, 500), JSON.stringify(fe));
+  const sideways = Terrain.blank(6, 6);
+  for (let si = 4; si < 8; si++) for (let sj = 4; sj < 6; sj++) sideways.set(si, sj, { h: 8, kind: KIND.STAIRS, dir: 2 });
+  fe = cliffEdges(sideways, 4, 100);
+  ctx.ok("a flight is closed where it does not come down", onX(200, 200, 400) && !onY(400, 200, 300), JSON.stringify(fe));
 
   // Ray.
   const g = 100;

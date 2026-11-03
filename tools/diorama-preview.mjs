@@ -39,7 +39,8 @@
  *   torches=1   the two lights as bake sources: a torch that flickers and burns, a
  *               brazier prop whose warm light becomes a fire; lightFx=off|on
  *   fow=clouds|flat  the fog of war's style; unseen=wide  sight in the middle only;
- *               unseen=pillar  a wedge of unseen ground behind a pillar
+ *               unseen=pillar  a wedge of unseen ground behind a pillar;
+ *               unseen=cliff  the plateau's top hidden, its faces and stairs seen
  *   tower=1     a 50 ft tower in the far corner (hidden under unseen=wide)
  *   reach=1     the rogue's movement range, stepping round the other creatures
  *   props=1     the props gallery (every shape, every material, a stack, cards,
@@ -331,6 +332,14 @@ function visionCanvas() {
     g.fillStyle = "rgb(0,0,0)"; g.beginPath();
     g.moveTo(...pt(base - half, tan)); g.lineTo(...pt(base - half, far)); g.lineTo(...pt(base + half, far)); g.lineTo(...pt(base + half, tan));
     g.closePath(); g.fill();
+  }
+  // unseen=cliff: a party on the grass at the plateau's west foot, whose top is
+  // past what sight reveals (the outline cuts it out, behind it too). Its faces
+  // stand on seen ground and draw; the stairs are open at their foot and draw whole.
+  if (Q.get("unseen") === "cliff") {
+    g.fillStyle = "rgb(0,0,0)"; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = "rgb(255,255,0)"; g.beginPath(); g.arc(5 * k, 6 * k, 9 * k, 0, 7); g.fill();
+    g.fillStyle = "rgb(0,0,0)"; g.fillRect(9 * k, 1 * k, 7 * k, 6 * k);
   }
   return c;
 }
