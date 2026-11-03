@@ -438,7 +438,8 @@ export default async function check(ctx) {
     const lm0 = (1 - night) * 0.5 * l + night * Math.max(0.5 * l, Math.min(memF + 0.3 * l, under * l * g));
     // the mist's tint at its heaviest (n high), then the cap held after it at night
     const w = 0.32 * (1 - 0.7 * night), tinted = lm0 * (1 - w) + mistNight * w;
-    const lm = night ? tinted * Math.min(1, (under * l * g) / Math.max(tinted, 1e-4)) : lm0;
+    const cap = Math.min(1, (under * l * g) / Math.max(tinted, 1e-4));
+    const lm = tinted * ((1 - night) + night * cap);
     return { lm, seen: l * g };
   };
   const formulaPinned = /float gain = mix\(1\.0, clamp\(FOG_SEEN_FLOOR \/ max\(l, 0\.02\), 1\.0, FOG_SEEN_GAIN\), night\);/.test(LITSRC)
@@ -459,7 +460,8 @@ export default async function check(ctx) {
     && /dioFinish\(c, vis, vWorld\) \+ dioSightRim\(vWorld\)/.test(G.TOP_FRAG);
   ctx.ok("seen, remembered and mist read apart at night; by day the remembered look is unchanged",
     formulaPinned && darkFloor.every((b) => b.lm >= 2.5 * mistNight) && anyNight.every((b) => b.seen >= 1.5 * b.lm - 1e-9)
-      && day.every((b) => Math.abs(b.lm - 0.5 * b.l) < 1e-9 && Math.abs(b.seen - b.l) < 1e-9) && readOk && rimOk,
+      // by day: the old look, half its light under the full-weight tint, no cap
+      && day.every((b) => Math.abs(b.lm - (0.5 * b.l * 0.68 + mistNight * 0.32)) < 1e-9 && Math.abs(b.seen - b.l) < 1e-9) && readOk && rimOk,
     JSON.stringify({ memF, seenF, gain, mistNight, darkFloor, readOk, rimOk }));
   // Nothing unseen throws a sun shadow: the receiver finds the caster along the
   // key from the map's depth and drops it if nobody has seen it. Driven through
