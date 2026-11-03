@@ -379,7 +379,10 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
 
 - Visible: full colour. Explored, not visible: desaturated and dim, no tokens.
   Unexplored: not drawn. GM: everything, hidden tokens ghosted (40%, hatched);
-  a "view as players" toggle applies a player's view. Under it a hidden token
+  a "view as players" toggle applies a player's view. It builds each player
+  token's sight from that token's own eye, selected or not (Foundry gives a GM
+  no vision source for a token it has not selected, so the backend is handed
+  the token as `dioToken`). Under it a hidden token
   leaves no trace: no standee, no movement range or footprint even while the GM
   has it selected, no Sequencer effect attached to it or aimed from or at it,
   and no pool from a light it carries.
@@ -411,7 +414,15 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   such hidden ground is asked about the way a token there is, in 3D at its
   foot, middle and top past the ground and the walls (`columnSeen`,
   `view/props-seen.mjs`), so a tree whose crown clears the lip draws while the
-  ground under it stays hidden. The gap is filled by
+  ground under it stays hidden. **Dead ground** goes the other way: the sight
+  polygon cuts only ground that rises above the eye, so the floor at the foot of
+  a block, or below the ledge a viewer stands on, is inside it while a creature
+  standing there is hidden by the 3D test. The bake asks each patch (half a
+  square) the way it asks about a token: a medium creature standing on it, its
+  feet, middle and head marched from every token viewer's eye past the terrain
+  (`view/dead-ground.mjs`). A patch no viewer sees that way loses "visible now"
+  and keeps "explored", so it takes the remembered look. 3D only: the 2D map is
+  unchanged. The gap is filled by
   a mist backdrop: a box over the board's footprint, from the plinth to above
   the highest ground anyone has seen or explored, drawn from inside at the far
   plane. Its top reads only seen ground (`fogSeenTop`), so the mist never
@@ -438,7 +449,12 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   grown by a quarter square and softened over a fifth (`FOG_EDGE_GROW`,
   `FOG_EDGE_SOFT`), and every reader takes the larger of the two
   (`fogUnseenAt` in `glsl.mjs`): the mist reaches its full colour at that line
-  and the edge of sight is soft over a fraction of a square. Figures are never fogged. The drift is
+  and the edge of sight is soft over a fraction of a square. At a wall that
+  stops sight the view ends on the wall's own line and the wall stands there,
+  so within `FOG_WALL_HOLD` squares of one the soft map is pulled back toward
+  the bake as drawn down (`fogWallHold`): the blur and the edge no longer lay
+  mist on the floor at its foot. It never goes past the bake, so nothing unseen
+  shows. Figures are never fogged. The drift is
   a straight translation of the noise (`FOG_DRIFT_CELLS` per `TIMING.fogDrift`),
   so it never repeats and never wraps. With no vision bake (the GM) there is no
   fog at all.

@@ -194,6 +194,72 @@ export function fogEdge(rgba, w, h, grow, soften) {
   return a;
 }
 
+/** Cells either side of a sight-blocking wall where the soft map keeps to the bake (fogWallHold). */
+export const FOG_WALL_HOLD = 1.5;
+
+/** Does this WallState stop sight (and so end the view on its own line)? */
+export function blocksSightWall(w) {
+  if (!w?.a || !w?.b) return false;
+  if (w.type === "wall" || w.type === "secret") return true;
+  return w.type === "door" && w.door !== "open";
+}
+
+/**
+ * How near each soft-map texel is to a sight-blocking wall, 0..1: 1 on the
+ * line, falling to 0 at `reach` texels.
+ * @param {Array<[number, number, number, number]>} segs  in texels
+ * @returns {Float32Array|null} null when no wall is near any texel
+ */
+export function fogWallWeight(segs, w, h, reach) {
+  if (!segs?.length || !(reach > 0)) return null;
+  const out = new Float32Array(w * h);
+  let any = false;
+  for (const [ax, ay, bx, by] of segs) {
+    const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+    const i0 = Math.max(0, Math.floor(Math.min(ax, bx) - reach)), i1 = Math.min(w - 1, Math.ceil(Math.max(ax, bx) + reach));
+    const j0 = Math.max(0, Math.floor(Math.min(ay, by) - reach)), j1 = Math.min(h - 1, Math.ceil(Math.max(ay, by) + reach));
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const px = i + 0.5, py = j + 0.5;
+        const t = len2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+        const d = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+        const v = 1 - d / reach;
+        const k = j * w + i;
+        if (v > out[k]) { out[k] = v; any = true; }
+      }
+    }
+  }
+  return any ? out : null;
+}
+
+/**
+ * At a wall the view ends on the wall's own line, and the wall stands there,
+ * so the mist needs no soft edge to arrive: the wide blur and the edge's grow
+ * would only carry the unseen far side onto the floor at its foot. Near one,
+ * the blurred map (R, G) is lifted toward the bake as drawn down and the edge
+ * (B) lowered toward it, by the wall's weight. Never past the bake: nothing it
+ * hides shows.
+ * @param {Uint8ClampedArray} soft  RGBA, the blurred map (R, G written)
+ * @param {Uint8ClampedArray} hard  RGBA, the bake drawn down unblurred
+ * @param {Uint8ClampedArray|null} edge  B, one byte a texel (written)
+ * @param {Float32Array} weight  fogWallWeight
+ */
+export function fogWallHold(soft, hard, edge, weight) {
+  for (let k = 0; k < weight.length; k++) {
+    const wt = weight[k];
+    if (!(wt > 0)) continue;
+    const o = k * 4;
+    for (const c of [0, 1]) {
+      const s = soft[o + c], hv = hard[o + c];
+      if (hv > s) soft[o + c] = s + (hv - s) * wt;
+    }
+    if (edge) {
+      const e = edge[k], lo = 255 - hard[o + 1];
+      if (lo < e) edge[k] = e + (lo - e) * wt;
+    }
+  }
+}
+
 /**
  * The cells the party has seen any of (one byte a cell, 1 seen): the cells that
  * hold an explored bake pixel. Never widened, so no unseen cell is counted.
@@ -286,6 +352,7 @@ export class FogLayer {
     this.group = new THREE.Group();
     this.group.name = "dio.fog";
     this.gridSize = 100;
+    this.wallSegs = [];
     this._size = [0, 0];
     this.cell = { value: 1 };
     this.material = MATERIALS.fog(shared, { layers: FOG_LAYERS, height, heightInfo, cell: this.cell });
@@ -326,6 +393,14 @@ export class FogLayer {
 
   setGridSize(px) { this.gridSize = px || 100; }
 
+  /** The walls that stop sight, px segments (fogWallHold); the next setVision uses them. */
+  setWalls(walls) {
+    this.wallSegs = (Array.isArray(walls) ? walls : []).filter(blocksSightWall)
+      .map((w) => [w.a[0], w.a[1], w.b[0], w.b[1]].map(Number))
+      .filter((s) => s.every(Number.isFinite));
+    if (this._vision) this.setVision(this._vision);
+  }
+
   /**
    * Where the ground is, for the backdrop's height: (i, j) → a cell's top in
    * cells. Called again when the terrain changes.
@@ -361,6 +436,7 @@ export class FogLayer {
    */
   setVision(vision) {
     this.hasVision = !!vision;
+    this._vision = vision ?? null;
     if (!vision || typeof document === "undefined") {
       this.shared.uFogMap.value = this._blank;
       this.cover.value = this._noCover;
@@ -384,20 +460,31 @@ export class FogLayer {
     g.filter = "none";
     g.drawImage(vision, 0, 0, w, h);
     // B: the edge of sight, from the bake as drawn down (before the wide blur)
-    let edge = null;
+    let edge = null, hard = null;
     try {
-      edge = fogEdge(g.getImageData(0, 0, w, h).data, w, h,
+      hard = g.getImageData(0, 0, w, h).data;
+      edge = fogEdge(hard, w, h,
         Math.max(1, Math.round(FOG_EDGE_GROW * ppc)), Math.max(1, Math.round(FOG_EDGE_SOFT * ppc)));
-    } catch (e) { edge = null; }
+    } catch (e) { edge = null; hard = null; }
     if ("filter" in g) {
       g.filter = `blur(${(FOG_BLUR * ppc).toFixed(2)}px)`;
       g.drawImage(vision, 0, 0, w, h);
       g.filter = "none";
     }
-    if (edge) {
+    // at a wall the view ends on the wall's own line: no mist creeping onto its foot
+    const k = ppc / (this.gridSize || 100);
+    const wk = `${w}x${h}x${k}`;
+    if (this._weightKey !== wk || this._weightSegs !== this.wallSegs) {
+      this._weightKey = wk;
+      this._weightSegs = this.wallSegs;
+      this._weight = fogWallWeight(this.wallSegs.map((s) => s.map((v) => v * k)), w, h, FOG_WALL_HOLD * ppc);
+    }
+    const weight = hard ? this._weight : null;
+    if (edge || weight) {
       const img = g.getImageData(0, 0, w, h);
       const d = img.data;
-      for (let k = 0; k < edge.length; k++) d[k * 4 + 2] = edge[k];
+      if (weight) fogWallHold(d, hard, edge, weight);
+      if (edge) for (let i = 0; i < edge.length; i++) d[i * 4 + 2] = edge[i];
       g.putImageData(img, 0, 0);
     }
     if (!this.texture) {

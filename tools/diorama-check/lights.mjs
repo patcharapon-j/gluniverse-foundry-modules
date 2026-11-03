@@ -395,6 +395,31 @@ export default async function check(ctx) {
     return { ok: at(24) >= 200 && at(25) >= 128 && at(24 + grow + soft + 2) === 0 && at(4) === 0 && mono,
       line: at(24), next: at(25), far: at(24 + grow + soft + 2) };
   })();
+  // At a wall the view ends on its own line and the wall stands there: the blur
+  // and the edge must not lay mist on the seen floor at its foot. Driven: seen
+  // left of a wall at x = 24, unseen right of it.
+  const wallHold = (() => {
+    const W = 48, Hh = 12, PPC = 6;
+    const hard = new Uint8ClampedArray(W * Hh * 4);
+    for (let k = 0; k < W * Hh; k++) { const seen = (k % W) < 24; hard[k * 4] = hard[k * 4 + 1] = seen ? 255 : 0; hard[k * 4 + 3] = 255; }
+    const soft = new Uint8ClampedArray(hard.length);
+    for (let k = 0; k < W * Hh; k++) { const v = Math.max(0, Math.min(255, 255 * (1 - ((k % W) - 18) / 12))); soft[k * 4] = soft[k * 4 + 1] = v; soft[k * 4 + 3] = 255; }
+    const edgeB = new Uint8ClampedArray(W * Hh);
+    for (let k = 0; k < W * Hh; k++) edgeB[k] = Math.max(0, Math.min(255, 255 * (((k % W) - 20) / 6)));
+    const before = { r: soft[(6 * W + 22) * 4], b: edgeB[6 * W + 22], far: soft[(6 * W + 26) * 4] };
+    const weight = Fg.fogWallWeight([[24, 0, 24, Hh]], W, Hh, Fg.FOG_WALL_HOLD * PPC);
+    Fg.fogWallHold(soft, hard, edgeB, weight);
+    const r = soft[(6 * W + 22) * 4], g = soft[(6 * W + 22) * 4 + 1], b = edgeB[6 * W + 22];
+    const far = soft[(6 * W + 26) * 4], open = soft[(6 * W + 2) * 4];
+    return { ok: before.r < 200 && before.b > 0 && r >= 230 && g >= 230 && b <= 20 && far === before.far && open === 255,
+      before, r, g, b, far };
+  })();
+  const blocks = Fg.blocksSightWall;
+  ctx.ok("the mist ends on a sight-blocking wall's line, never past the bake (render/fog.mjs fogWallHold)",
+    wallHold.ok && blocks({ a: [0, 0], b: [1, 0], type: "wall" }) && blocks({ a: [0, 0], b: [1, 0], type: "door", door: "closed" })
+      && !blocks({ a: [0, 0], b: [1, 0], type: "door", door: "open" }) && !blocks({ a: [0, 0], b: [1, 0], type: "window" })
+      && /this\.fog\.setWalls\(walls\)/.test(read(`${DIO}/render/renderer.mjs`)) && /fogWallHold\(d, hard, edge, weight\)/.test(fogLayerSrc),
+    JSON.stringify(wallHold));
   const allGlsl = Object.values(G).filter((v) => typeof v === "string").join("\n");
   const vRead = /float fogUnseenAt\(vec2 xz\) \{[\s\S]{0,400}?return max\(1\.0 - f\.g, f\.b\);/.test(allGlsl)
     && /fogUnseenAt\(wp\.xz\)/.test(allGlsl) && /fogUnseenAt\(vWorld\.xz\)/.test(G.FOG_FRAG);
