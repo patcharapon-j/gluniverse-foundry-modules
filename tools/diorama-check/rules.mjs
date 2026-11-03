@@ -465,6 +465,8 @@ export default async function check(ctx) {
   ctx.ok("walls: a flat saved terrain still gives walls their tops (wallContext, not activeContext)",
     /function defaultContext[\s\S]*?return wallContext\(/.test(src) && /function testLOSWrapper[\s\S]*?wallContext\(/.test(src));
   ctx.ok("move: the reach overlay reads the same wall top and rule", /wallSpanQ\(/.test(reachSrc) && /movesOverWall\(/.test(reachSrc));
+  ctx.ok("move: the reach overlay gives walls tops only where the move backend does (wallContext)",
+    /wallContext\(scene, tokenLevelId\(doc\)\)/.test(reachSrc) && /blockingWalls\(wallLive \? terrain : null/.test(reachSrc));
   ctx.ok("walls: detection tests each clear height against the walls, not only the feet",
     /function testLOSWrapper[\s\S]*clearSampleHeights\([\s\S]*for \(const d of clear\)/.test(src));
   ctx.ok("walls: the view and sight read one wall top",

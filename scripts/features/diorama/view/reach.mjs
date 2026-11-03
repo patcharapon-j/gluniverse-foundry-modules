@@ -25,6 +25,8 @@ import { DAGGERHEART, PF2E } from "../rules/systems.mjs";
 import { altitude, heightDist, seams, speed as speedOf } from "./seams.mjs";
 import { movesOverWall, wallDocOf, wallSpanQ } from "../terrain/wall-top.mjs";
 import { distToQ } from "../terrain/model.mjs";
+import { tokenLevelId } from "../terrain/levels.mjs";
+import { wallContext } from "../foundry/context.mjs";
 
 const MOVEMENT_COST = "modifyMovementCost";
 
@@ -58,10 +60,11 @@ export function occupantsOf(tok, size, systemId, seen = null) {
   return out;
 }
 
-function blockingWalls(terrain = null, grid = null) {
+function blockingWalls(terrain = null, grid = null, levelBaseQ = 0) {
   const out = [];
-  // A wall's top (terrain/wall-top.mjs), so a move over it is not counted as blocked.
-  const topOf = (doc) => (terrain && doc && grid ? wallSpanQ(doc, terrain, grid.size, grid.distance)?.topQ ?? null : null);
+  // A wall's top (terrain/wall-top.mjs), so a move over it is not counted as
+  // blocked. No terrain: no tops, every wall blocks, as the move backend does.
+  const topOf = (doc) => (terrain && doc && grid ? wallSpanQ(doc, terrain, grid.size, grid.distance, levelBaseQ)?.topQ ?? null : null);
   const NONE = globalThis.CONST?.EDGE_SENSE_TYPES?.NONE ?? 0;
   const edges = globalThis.canvas?.edges;
   const list = edges?.values ? [...edges.values()] : null;
@@ -144,7 +147,11 @@ export function reachOf({ tok, scene, grid, terrain, action, seen = null }) {
   const src = doc._source ?? doc;
   const start = { i: Math.round(src.y / size), j: Math.round(src.x / size) };
   const w = Math.max(1, Math.round(Number(src.width) || 1)), h = Math.max(1, Math.round(Number(src.height) || 1));
-  const walls = wallIndex(blockingWalls(terrain, grid), size);
+  // Walls get tops only where the move backend gives them tops (wallContext):
+  // rules on and saved terrain on the mover's Level. Anywhere else the drop
+  // would refuse a move over a wall, so the picture must too.
+  const wallLive = wallContext(scene, tokenLevelId(doc));
+  const walls = wallIndex(blockingWalls(wallLive ? terrain : null, grid, wallLive?.baseQ ?? 0), size);
   // The mover's feet: the ground it steps off plus its altitude (flying keeps it).
   const altQ = distToQ(Number(altitude(doc)) || 0, grid.distance);
   const stepQ = Number(terrain?.stepHeight) || 0;
