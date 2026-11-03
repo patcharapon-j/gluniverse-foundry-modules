@@ -435,11 +435,15 @@ export default async function check(ctx) {
   // glsl.mjs dioFogOfWar, restated: the gain on what is seen, then the remembered luma
   const bands = (l, night) => {
     const g = (1 - night) + night * Math.min(gain, Math.max(1, seenF / Math.max(l, 0.02)));
-    const lm = (1 - night) * 0.5 * l + night * Math.max(0.5 * l, Math.min(memF + 0.3 * l, under * l * g));
+    const lm0 = (1 - night) * 0.5 * l + night * Math.max(0.5 * l, Math.min(memF + 0.3 * l, under * l * g));
+    // the mist's tint at its heaviest (n high), then the cap held after it at night
+    const w = 0.32 * (1 - 0.7 * night), tinted = lm0 * (1 - w) + mistNight * w;
+    const lm = night ? tinted * Math.min(1, (under * l * g) / Math.max(tinted, 1e-4)) : lm0;
     return { lm, seen: l * g };
   };
   const formulaPinned = /float gain = mix\(1\.0, clamp\(FOG_SEEN_FLOOR \/ max\(l, 0\.02\), 1\.0, FOG_SEEN_GAIN\), night\);/.test(LITSRC)
-    && /float lm = mix\(0\.5 \* l, max\(0\.5 \* l, min\(FOG_MEMORY_FLOOR \+ 0\.3 \* l, FOG_MEMORY_UNDER \* l \* gain\)\), night\);/.test(LITSRC);
+    && /float lm = mix\(0\.5 \* l, max\(0\.5 \* l, min\(FOG_MEMORY_FLOOR \+ 0\.3 \* l, FOG_MEMORY_UNDER \* l \* gain\)\), night\);/.test(LITSRC)
+    && /float capped = min\(1\.0, FOG_MEMORY_UNDER \* l \* gain \/ max\(dot\(memory, DIO_LUMA\), 1e-4\)\);\s*memory \*= mix\(1\.0, capped, night\);\s*c = mix\(seen, memory, away\);/.test(LITSRC);
   const mistNight = 0.028 * 0.299 + 0.034 * 0.587 + 0.055 * 0.114; // dioFogColor's floor
   const darkFloor = [0.08, 0.12, 0.2, 0.3].map((l) => bands(l, 1));
   const anyNight = [0, 0.01, 0.03, 0.06, 0.12, 0.3, 0.6, 0.9].map((l) => bands(l, 1));

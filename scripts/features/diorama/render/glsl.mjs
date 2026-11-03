@@ -537,6 +537,9 @@ vec3 dioFogOfWar(vec3 c, float vis, vec3 wp) {
   float lm = mix(0.5 * l, max(0.5 * l, min(FOG_MEMORY_FLOOR + 0.3 * l, FOG_MEMORY_UNDER * l * gain)), night);
   vec3 memory = mix(vec3(l), c, 0.25) * (lm / max(l, 1e-3));
   memory = mix(memory, dioFogColor(0.0, n), (0.12 + 0.2 * smoothstep(0.3, 0.8, n)) * (1.0 - 0.7 * night));
+  // the mist's tint can lift a near-black pixel: hold the cap after it too (night only)
+  float capped = min(1.0, FOG_MEMORY_UNDER * l * gain / max(dot(memory, DIO_LUMA), 1e-4));
+  memory *= mix(1.0, capped, night);
   c = mix(seen, memory, away);
   float unseen = fogUnseenAt(wp.xz);
   float shadow = smoothstep(0.16 * n, 0.5, unseen);
