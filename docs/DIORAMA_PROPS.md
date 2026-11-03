@@ -209,7 +209,11 @@ every scene.
   bucket at a uniform scale, so it is never stretched. A model that fails to
   load warns once in the console and draws, for the GM only, as a hatched box
   of its size with no shadow under it; a player sees nothing. A test or the
-  preview replaces the loader with `setModelLoader(fn)`.
+  preview replaces the loader with `setModelLoader(fn)`. A texture whose
+  sampler magnifies with NEAREST stays crisp (nearest both ways, no mipmaps),
+  and the glTF emission (`emissiveFactor` × `emissiveTexture`) is added after
+  the light, unshadowed. Map Maker's Diorama Bundles rely on both
+  (docs/DIORAMA_BUNDLE.md).
 - **Roof fades.** `setRoofFade(Map<propId, 0..1>)` is pure: the caller decides
   which roofs fade, the layer writes a per-instance fade that the program
   dithers away (no blending and no second program, so nothing is compiled
@@ -282,7 +286,9 @@ parts, models through a stub loader (ready, failed, GM-only placeholder, one
 warning), slab geometry (tops up, sides out, the lip band), roof fades and the
 caster matrix, and the level of detail settling. `tools/diorama-check/layout.mjs`
 covers layout props, outlines, paths, kits and their mirroring, models, every
-refusal, and the worked example.
+refusal, and the worked example. `tools/diorama-check/bundle.mjs` reads a
+hand-made bundle's models through the real GLTFLoader: crisp textures and
+emission.
 
 ```bash
 node tools/diorama-preview.mjs && node tools/preview-server.mjs

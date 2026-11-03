@@ -165,7 +165,8 @@ function PreviewApp() {
       if (!this._Renderer) { this.#message("GLDIO.editor.preview.unavailable"); return; }
       if (!this.rendered) return;
       this.#message("GLDIO.editor.preview.loading");
-      this._img = await loadBackground(backgroundSrc(this.editor.scene, this.editor.levelId)).catch(() => null);
+      this._imgSrc = this.#groundSrc();
+      this._img = await loadBackground(this._imgSrc).catch(() => null);
       // A multi-Level scene: the floors below the edited one, as the view stacks them.
       this._plan = isMultiLevel(this.editor.scene) ? stackPlan(levelsOf(this.editor.scene), this.editor.levelId, { gm: true }) : null;
       this._floors = this._plan?.below.length
@@ -194,7 +195,25 @@ function PreviewApp() {
       this._off = this.session.on((kind) => {
         if (kind === "terrain" || kind === "palette" || kind === "history" || kind === "props") this.#schedule();
         else if (kind === "walls") this.#syncWalls();
+        else if (kind === "ground") this.#syncGround();
       });
+    }
+
+    /** The draft's 3D ground (a bundle's), else the edited Level's background. */
+    #groundSrc() {
+      return this.session.ground ?? backgroundSrc(this.editor.scene, this.editor.levelId);
+    }
+
+    async #syncGround() {
+      const src = this.#groundSrc();
+      if (src === this._imgSrc) return;
+      this._imgSrc = src;
+      const img = await loadBackground(src).catch(() => null);
+      if (src !== this._imgSrc) return;   // another change landed while this one loaded
+      this._img = img;
+      if (!this.r) return;
+      this.r.setBackground(img, this.editor.grid.sceneRect);
+      this.#schedule();
     }
 
     #build() {

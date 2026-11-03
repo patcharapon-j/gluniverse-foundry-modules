@@ -16,6 +16,7 @@
 
 import { liveTerrain } from "../terrain/live.mjs";
 import { PropStore } from "../terrain/props-store.mjs";
+import { groundArtSrc } from "../terrain/ground.mjs";
 import { levelsOf, resolveLevelId, levelBackgroundSrc, shiftPropStates, tokenLevelId } from "../terrain/levels.mjs";
 import { Q_PER_CELL } from "../constants.mjs";
 import { stackPlan, levelInputs, planKey } from "./levels.mjs";
@@ -65,13 +66,14 @@ function art(src) {
 export function releaseFloorArt() { _art.clear(); }
 
 /**
- * Every floor below, with its absolute ground and its own art loaded.
+ * Every floor below, with its absolute ground and its own art loaded (its 3D
+ * ground image when it has one, terrain/ground.mjs).
  * @returns {Promise<ReturnType<typeof levelInputs>>}
  */
 export async function loadFloors(plan, scene, rect) {
   const below = plan?.below ?? [];
   const images = new Map();
-  await Promise.all(below.map(async (l) => { images.set(l.id, await art(levelBackgroundSrc(scene, l.id))); }));
+  await Promise.all(below.map(async (l) => { images.set(l.id, await art(groundArtSrc(scene, l.id, levelBackgroundSrc(scene, l.id)))); }));
   return levelInputs(plan, (id) => liveTerrain(scene, id)?.absolute().ground ?? null, (id) => images.get(id) ?? null, rect);
 }
 

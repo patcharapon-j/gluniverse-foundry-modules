@@ -99,6 +99,22 @@
  * wall's top sees over it, cliffs above the light cut it). Limited, proximity
  * and distance light walls are treated as open, one-way walls as two-way.
  *
+ * ── A Map Maker Diorama Bundle (--bundle) ─────────────────────────────────
+ * A bundle folder (docs/DIORAMA_BUNDLE.md) rendered the way Import bundle
+ * writes it: its ground as the 3D ground, its layout compiled with every model
+ * read from the folder through the real GLTFLoader:
+ *
+ *   node tools/diorama-preview.mjs --bundle=<folder> [--scene=<foundry-scene.json>]
+ *     [--map=<image>] [--tokens=<tokens.json>]
+ *   → http://localhost:8931/.preview/diorama-map.html?pitch=1&yaw=0&still=1&shed=0
+ *
+ * Without --scene the scene is the manifest's (its grid, its image size, no
+ * walls or lights); with it, the scene's walls and lights stand on the
+ * bundle's ground. --map draws another image instead of the ground (the full
+ * Player Export, to compare). The bundle is copied beside the page; the
+ * status line counts the models that loaded, and one that fails is reported
+ * in the error panel. `window.__ready` turns true once every model settled.
+ *
  * Query parameters: yaw, pitch, still, idle, shed, dark, grid, cutaway, tilt,
  * the environment and graphics ones above, and the framing:
  *   view=full             the whole map (default; may zoom out past the
@@ -117,7 +133,8 @@ const arg = (name) => {
   return a ? a.slice(name.length + 3) : null;
 };
 const SCENE_FILE = arg("scene");
-const OUT = resolve(ROOT, arg("out") ?? (SCENE_FILE ? ".preview/diorama-map.html" : ".preview/diorama.html"));
+const BUNDLE_DIR = arg("bundle");
+const OUT = resolve(ROOT, arg("out") ?? (SCENE_FILE || BUNDLE_DIR ? ".preview/diorama-map.html" : ".preview/diorama.html"));
 if (relative(ROOT, OUT).startsWith("..")) {
   console.warn("warning: --out is outside the repository; the page's imports only resolve when served from the repo root.");
 }
@@ -1276,6 +1293,7 @@ import { VIEW_CELLS, yawOf, pitchOf } from "/scripts/features/diorama/render/cam
 import { Terrain, distToQ } from "/scripts/features/diorama/terrain/model.mjs";
 import { compileLayout } from "/scripts/features/diorama/terrain/layout.mjs";
 import { normalizeProps, propToJSON, resolveProps, propStates } from "/scripts/features/diorama/terrain/props.mjs";
+import { loadModel } from "/scripts/features/diorama/render/props-models.mjs";
 import { cliffEdges } from "/scripts/features/diorama/terrain/occlusion.mjs";
 import { wallState, loadArt } from "/scripts/features/diorama/view/snapshot.mjs";
 import { Baker, lightData } from "/scripts/features/diorama/view/bake.mjs";
@@ -1479,6 +1497,17 @@ window.addEventListener("keydown", (e) => {
 });
 canvas.addEventListener("wheel", (e) => { e.preventDefault(); r.setCamera({ zoom: r.getCamera().zoom * (e.deltaY > 0 ? 0.8 : 1.25) }); }, { passive: false });
 
+// models: wait for every file to settle (loaded or failed), as the props layer does
+const modelSrcs = [...new Set(props.filter((p) => p.shape === "model").map((p) => p.src))];
+const settled = await Promise.all(modelSrcs.map((src) => new Promise((done) => {
+  const e = loadModel(src, () => done({ src, state: loadModel(src).state }));
+  if (e.state !== "loading") done({ src, state: e.state });
+})));
+const failedModels = settled.filter((m) => m.state !== "ready");
+for (const m of failedModels) report("model: " + m.src + " did not load");
+if (modelSrcs.length) notes.push("models " + (modelSrcs.length - failedModels.length) + "/" + modelSrcs.length + " loaded" + (DATA.bundle ? ", bundle " + DATA.bundle : ""));
+r.requestRender();
+
 const doors = walls.filter((w) => w.type === "door" || w.type === "secret").length;
 document.getElementById("status").textContent = [
   (S.name ?? "scene") + "  " + mapCells.cols + "×" + mapCells.rows + " squares, " + SIZE + " px, " + DIST + " " + (S.grid?.units ?? "ft"),
@@ -1486,7 +1515,8 @@ document.getElementById("status").textContent = [
   "darkness " + darkness.toFixed(2) + (Q.has("dark") ? " (dark=)" : globalLit ? " (global light on at " + sceneDark + ")" : " (scene)"),
   ...notes,
 ].join("\n");
-window.__map = { cols: COLS, rows: ROWS, rect, walls: walls.length, doors, lights: lights.length, darkness, globalLit, props: props.length, tokens: tokens.length };
+window.__map = { cols: COLS, rows: ROWS, rect, walls: walls.length, doors, lights: lights.length, darkness, globalLit, props: props.length, tokens: tokens.length,
+  models: { total: modelSrcs.length, failed: failedModels.map((m) => m.src) } };
 window.__ready = true;
 </script>
 </body>
@@ -1504,19 +1534,61 @@ const readJson = (file, what) => {
   try { return JSON.parse(readFileSync(file, "utf8")); } catch (e) { console.error(`${what}: ${e.message}`); process.exit(1); }
 };
 
+/**
+ * A bundle folder (--bundle) read as Import bundle reads it: the manifest
+ * checked, the ground and every model the layout names copied beside the page,
+ * and the layout's model srcs joined to that copy (terrain/bundle.mjs).
+ */
+async function readBundle(dir, assets) {
+  const B = await import(pathToFileURL(join(ROOT, "scripts/features/diorama/terrain/bundle.mjs")).href);
+  const m = B.readManifest(readJson(join(dir, B.MANIFEST), "--bundle manifest.json"));
+  for (const w of m.warnings) console.log("bundle warning: " + w);
+  if (!m.ok) { for (const e of m.errors) console.error("bundle error: " + e); process.exit(1); }
+  const copyTo = join(assets, "bundle");
+  const url = "/" + relative(ROOT, copyTo).replaceAll("\\", "/");
+  const copy = (rel) => {
+    const from = join(dir, rel), to = join(copyTo, rel);
+    if (!existsSync(from)) { console.warn("bundle: " + rel + " is missing"); return; }
+    mkdirSync(dirname(to), { recursive: true });
+    copyFileSync(from, to);
+  };
+  const raw = readJson(join(dir, m.manifest.layout), "--bundle layout");
+  copy(m.manifest.ground);
+  for (const p of Array.isArray(raw.props) ? raw.props : []) {
+    if (p?.shape === "model" && typeof p.src === "string" && B.joinBundlePath("", p.src) && !/^([a-z][a-z0-9+.-]*:|\/)/i.test(p.src)) copy(B.joinBundlePath("", p.src));
+  }
+  const resolved = B.resolveBundleLayout(raw, url);
+  for (const e of resolved.errors) console.error("bundle error: " + e);
+  if (resolved.errors.length) process.exit(1);
+  console.log(`bundle: "${m.manifest.name}", ${m.manifest.squares?.join("×") ?? "?"} squares at ${m.manifest.gridPx ?? "?"} px, ${(raw.props ?? []).filter((p) => p?.shape === "model").length} models`);
+  return { manifest: m.manifest, layout: resolved.layout, ground: B.joinBundlePath(url, m.manifest.ground), groundFile: join(dir, m.manifest.ground) };
+}
+
 let html = page;
-if (SCENE_FILE) {
-  const sceneFile = resolve(SCENE_FILE);
-  const scene = readJson(sceneFile, "--scene");
+if (SCENE_FILE || BUNDLE_DIR) {
+  const assets = OUT.replace(/\.html?$/i, "");
+  const bundle = BUNDLE_DIR ? await readBundle(resolve(BUNDLE_DIR), assets) : null;
+  const sceneFile = SCENE_FILE ? resolve(SCENE_FILE) : null;
+  // no --scene: the manifest's map, bare (no walls, no lights, daylight)
+  const scene = sceneFile ? readJson(sceneFile, "--scene") : {
+    name: bundle.manifest.name || basename(resolve(BUNDLE_DIR)),
+    width: bundle.manifest.image?.[0] ?? (bundle.manifest.squares?.[0] ?? 0) * (bundle.manifest.gridPx ?? 100),
+    height: bundle.manifest.image?.[1] ?? (bundle.manifest.squares?.[1] ?? 0) * (bundle.manifest.gridPx ?? 100),
+    padding: 0, grid: { size: bundle.manifest.gridPx ?? 100, distance: 5, units: "ft" },
+    walls: [], lights: [], environment: { darknessLevel: 0 },
+  };
   // the initial Level's art (view/snapshot.mjs backgroundSrc), else the first Level's, else the scene's
   const levels = Array.isArray(scene.levels) ? scene.levels : [];
   const level = levels.find((l) => l?._id === scene.initialLevel) ?? levels[0];
   const bgSrc = level?.background?.src ?? scene.background?.src ?? scene.img ?? null;
-  const mapFile = arg("map") ? resolve(arg("map")) : bgSrc ? join(dirname(sceneFile), basename(bgSrc)) : null;
-  if (!mapFile || !existsSync(mapFile)) { console.error("--map: no map image" + (mapFile ? " at " + mapFile : "") + "; pass --map=<image>"); process.exit(1); }
-  const assets = OUT.replace(/\.html?$/i, "");
+  // a bundle's ground is the 3D ground, as the scene flag makes it; --map still overrides
+  const mapFile = arg("map") ? resolve(arg("map")) : bundle ? null : bgSrc ? join(dirname(sceneFile), basename(bgSrc)) : null;
+  if (!bundle && (!mapFile || !existsSync(mapFile))) { console.error("--map: no map image" + (mapFile ? " at " + mapFile : "") + "; pass --map=<image>"); process.exit(1); }
+  if (bundle && mapFile && !existsSync(mapFile)) { console.error("--map: no image at " + mapFile); process.exit(1); }
+  if (bundle && !mapFile && !existsSync(bundle.groundFile)) { console.error("--bundle: no ground image at " + bundle.groundFile); process.exit(1); }
   const layoutFile = arg("layout"), tokensFile = arg("tokens");
-  const layout = layoutFile ? readJson(resolve(layoutFile), "--layout") : null;
+  if (bundle && layoutFile) console.warn("--layout is ignored with --bundle: the bundle's own layout is drawn.");
+  const layout = bundle ? bundle.layout : layoutFile ? readJson(resolve(layoutFile), "--layout") : null;
   const tokens = tokensFile ? readJson(resolve(tokensFile), "--tokens") : [];
   if (!Array.isArray(tokens)) { console.error("--tokens: expected an array"); process.exit(1); }
   tokens.forEach((t, k) => {
@@ -1534,7 +1606,7 @@ if (SCENE_FILE) {
     for (const w of res.warnings) console.log("layout warning: " + w);
     console.log(`layout: ${res.terrain ? "compiles" : "REFUSED"}, ${res.props?.length ?? 0} props`);
   }
-  html = mapPage({ scene, layout, tokens, map: stage(mapFile, assets, "map") });
+  html = mapPage({ scene, layout, tokens, map: mapFile ? stage(mapFile, assets, "map") : bundle.ground, bundle: bundle?.manifest.name ?? null });
 }
 
 mkdirSync(dirname(OUT), { recursive: true });

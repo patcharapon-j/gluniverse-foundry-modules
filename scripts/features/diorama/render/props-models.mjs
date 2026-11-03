@@ -12,11 +12,19 @@
  *     parts: [{ geometry,                 position, normal, uv (own units)
  *               color: [r, g, b],         base colour factor, display values
  *               map: THREE.Texture|null,  base colour map (NoColorSpace)
+ *               emissive: [r, g, b],      emissive factor × strength, display values
+ *               emissiveMap: THREE.Texture|null,  emissive map (NoColorSpace)
  *               alphaTest: number }] }    0, or the cutout threshold
  *
  * Every model is lit by the suite's own prop program (render/props-glsl.mjs
  * PROP_MODEL_*), never by its glTF material: one sun, the board's shadows,
- * fog and vision, the same as every other prop.
+ * fog and vision, the same as every other prop. Its emission (glTF
+ * `emissiveFactor` × `emissiveTexture`) is added after the light, unshadowed,
+ * so a glowing rune or screen reads in the dark.
+ *
+ * Pixel art stays crisp: a texture whose sampler magnifies with NEAREST (a Map
+ * Maker Diorama Bundle's always do) also minifies with NEAREST and gets no
+ * mipmaps, so its texels never blur into each other at any zoom.
  *
  * The loader is swappable (setModelLoader) so the check tool can drive this
  * under Node with a stub. The default imports the vendored GLTFLoader lazily,
@@ -27,7 +35,7 @@
 
 import * as THREE from "./three.mjs";
 
-/** @typedef {{ size: number[], parts: { geometry: THREE.BufferGeometry, color: number[], map: THREE.Texture|null, alphaTest: number }[] }} Model */
+/** @typedef {{ size: number[], parts: { geometry: THREE.BufferGeometry, color: number[], map: THREE.Texture|null, emissive: number[], emissiveMap: THREE.Texture|null, alphaTest: number }[] }} Model */
 
 /** src → { state: "loading"|"ready"|"failed", model, promise, waiters:Set } */
 const cache = new Map();
@@ -85,7 +93,27 @@ function disposeModel(m) {
   for (const p of m?.parts ?? []) {
     p.geometry?.dispose();
     p.map?.dispose();
+    p.emissiveMap?.dispose();
   }
+}
+
+/**
+ * A texture as the props program samples it: display values (like the map
+ * art and a card's image), and pixel art kept crisp. A sampler that magnifies
+ * with NEAREST asks for hard texels, so it minifies with NEAREST too and gets
+ * no mipmaps (a NEAREST_MIPMAP_* filter still blends whole levels together).
+ * Exported for the check tool.
+ */
+export function prepareModelTexture(tex) {
+  if (!tex) return tex;
+  tex.colorSpace = THREE.NoColorSpace;
+  if (tex.magFilter === THREE.NearestFilter) {
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    tex.anisotropy = 1;
+  }
+  tex.needsUpdate = true;
+  return tex;
 }
 
 /* ================================================================ glTF */
@@ -110,6 +138,7 @@ export function bakeScene(root) {
   root.updateMatrixWorld(true);
   const groups = new Map();
   const col = new THREE.Color();
+  const emi = new THREE.Color();
   root.traverse((o) => {
     if (!o.isMesh || !o.geometry?.attributes?.position || o.visible === false) return;
     const mats = Array.isArray(o.material) ? o.material : [o.material];
@@ -122,9 +151,16 @@ export function bakeScene(root) {
       col.copy(m?.color ?? col.set(1, 1, 1)).convertLinearToSRGB();
       const map = m?.map ?? null;
       const alphaTest = m?.alphaTest > 0 ? m.alphaTest : m?.transparent && map ? 0.5 : 0;
-      const key = `${map?.uuid ?? "-"}|${col.getHexString()}|${alphaTest}`;
+      // emission: factor × strength (KHR_materials_emissive_strength), display values like the colour
+      const k = Number.isFinite(m?.emissiveIntensity) ? Math.max(0, m.emissiveIntensity) : 1;
+      if (m?.emissive?.isColor) emi.copy(m.emissive).multiplyScalar(k).convertLinearToSRGB();
+      else emi.setRGB(0, 0, 0);
+      const glows = emi.r > 0 || emi.g > 0 || emi.b > 0;
+      const emissive = glows ? [emi.r, emi.g, emi.b] : [0, 0, 0];
+      const emissiveMap = glows ? (m?.emissiveMap ?? null) : null;
+      const key = `${map?.uuid ?? "-"}|${col.getHexString()}|${alphaTest}|${emissiveMap?.uuid ?? "-"}|${emissive.map((v) => v.toFixed(4)).join(",")}`;
       let grp = groups.get(key);
-      if (!grp) { grp = { color: [col.r, col.g, col.b], map, alphaTest, list: [] }; groups.set(key, grp); }
+      if (!grp) { grp = { color: [col.r, col.g, col.b], map, emissive, emissiveMap, alphaTest, list: [] }; groups.set(key, grp); }
       grp.list.push(baked);
     });
   });
@@ -134,12 +170,9 @@ export function bakeScene(root) {
     const geometry = joinBaked(g.list);
     geometry.computeBoundingBox();
     box.union(geometry.boundingBox);
-    if (g.map) {
-      // sampled as display values, like the map art and a card's image
-      g.map.colorSpace = THREE.NoColorSpace;
-      g.map.needsUpdate = true;
-    }
-    parts.push({ geometry, color: g.color, map: g.map, alphaTest: g.alphaTest });
+    prepareModelTexture(g.map);
+    prepareModelTexture(g.emissiveMap);
+    parts.push({ geometry, color: g.color, map: g.map, emissive: g.emissive, emissiveMap: g.emissiveMap, alphaTest: g.alphaTest });
   }
   if (box.isEmpty()) return { size: [1, 1, 1], parts: [] };
   const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;

@@ -21,6 +21,10 @@ exactly what Foundry runs.
 Every problem is reported as a sentence naming the op, and nothing is written
 while there is one. A shape that misses the map is a warning, not an error.
 
+A Map Maker Diorama Bundle carries a layout too, with its models beside it;
+**Import bundle** and `importBundle(folder)` read it from the folder
+(docs/DIORAMA_BUNDLE.md).
+
 ## Coordinates
 
 `[row, column]` in squares from the top-left corner of the **map** (the scene

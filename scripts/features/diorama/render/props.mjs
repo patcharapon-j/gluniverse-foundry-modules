@@ -196,8 +196,8 @@ export const PROP_MATERIAL_FACTORIES = {
     });
   },
 
-  /** A model's part: its own base colour (map × factor), the suite's light. */
-  model(shared, { color = [1, 1, 1], map = null, alphaTest = 0, common = null } = {}) {
+  /** A model's part: its own base colour (map × factor), the suite's light, its own emission on top. */
+  model(shared, { color = [1, 1, 1], map = null, emissive = [0, 0, 0], emissiveMap = null, alphaTest = 0, common = null } = {}) {
     const c = common ?? propCommon();
     return new THREE.ShaderMaterial({
       name: "dio.prop.model",
@@ -209,6 +209,9 @@ export const PROP_MATERIAL_FACTORIES = {
         uModelHasMap: { value: map ? 1 : 0 },
         uModelColor: { value: new THREE.Vector3(color[0], color[1], color[2]) },
         uModelAlphaTest: { value: alphaTest },
+        uModelEmissive: { value: new THREE.Vector3(emissive[0], emissive[1], emissive[2]) },
+        uModelEmissiveMap: { value: emissiveMap },
+        uModelHasEmissiveMap: { value: emissiveMap ? 1 : 0 },
         uGhostColor: c.uGhostColor,
       },
       side: THREE.DoubleSide,
@@ -483,7 +486,7 @@ export class PropsLayer {
     if (e.state === "ready") {
       const k = modelScale(e.model.size, s);
       e.model.parts.forEach((p, i) => {
-        add(`model|${s.src}|${i}`, { src: p.geometry, factory: "model", opts: { color: p.color, map: p.map, alphaTest: p.alphaTest }, model: s.src }, s, k, k, k);
+        add(`model|${s.src}|${i}`, { src: p.geometry, factory: "model", opts: { color: p.color, map: p.map, emissive: p.emissive, emissiveMap: p.emissiveMap, alphaTest: p.alphaTest }, model: s.src }, s, k, k, k);
       });
       return;
     }

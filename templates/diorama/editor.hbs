@@ -322,6 +322,8 @@
         <i class="fa-solid {{#if (eq busy "auto")}}fa-spinner fa-spin{{else}}fa-wand-sparkles{{/if}}"></i> {{localize "GLDIO.editor.auto.label"}}</button>
       <button type="button" class="gl-btn gldio-ed-btn" data-action="importLayout" {{#if busy}}disabled{{/if}} data-tooltip="{{localize "GLDIO.editor.layout.hint"}}">
         <i class="fa-solid fa-file-import"></i> {{localize "GLDIO.editor.layout.label"}}</button>
+      <button type="button" class="gl-btn gldio-ed-btn" data-action="importBundle" {{#if busy}}disabled{{/if}} data-tooltip="{{localize "GLDIO.editor.bundle.hint"}}">
+        <i class="fa-solid {{#if (eq busy "bundle")}}fa-spinner fa-spin{{else}}fa-box-open{{/if}}"></i> {{localize "GLDIO.editor.bundle.label"}}</button>
       <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--danger" data-action="clearAll" {{#if busy}}disabled{{/if}}>
         <i class="fa-solid fa-eraser"></i> {{localize "GLDIO.editor.clear.label"}}</button>
     </div>
@@ -335,6 +337,13 @@
         <span class="gldio-ed-hint gldio-ed-hint--faint"><i class="fa-solid fa-copy"></i> {{localize "GLDIO.editor.copy.none"}}</span>
       {{/if}}
     </div>
+    {{#if ground}}
+      <div class="gldio-ed-row" data-tooltip="{{localize "GLDIO.editor.ground.hint"}}">
+        <span class="gldio-ed-label">{{localize "GLDIO.editor.ground.label"}}</span>
+        <span class="gldio-ed-hint" title="{{ground.src}}">{{ground.name}}</span>
+        <button type="button" class="gl-btn gldio-ed-btn gldio-ed-btn--sm" data-action="clearGround" aria-label="{{localize "GLDIO.editor.ground.clear"}}" data-tooltip="{{localize "GLDIO.editor.ground.clear"}}" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    {{/if}}
   </section>
 
   <footer class="gldio-ed-foot">

@@ -49,6 +49,12 @@ export const FLAG_KNOWN = "dio.known";
  * "off"; unset = "all"). integrations/tiles.mjs owns it.
  */
 export const FLAG_TILES = "dio.tiles";
+/**
+ * Scene flag: a separate ground image for the 3D view, keyed by Level id like
+ * the terrain (a Map Maker Diorama Bundle's ground, with the standing props
+ * painted out). terrain/ground.mjs owns it; the 2D canvas never reads it.
+ */
+export const FLAG_GROUND = "dio.ground";
 
 /** Settings (all keys start with PREFIX so the Control Center routes them). */
 export const SETTINGS = Object.freeze({

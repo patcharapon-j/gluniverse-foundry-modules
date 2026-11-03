@@ -402,6 +402,9 @@ uniform sampler2D uModelMap;
 uniform float uModelHasMap;
 uniform vec3 uModelColor;
 uniform float uModelAlphaTest;
+uniform vec3 uModelEmissive;
+uniform sampler2D uModelEmissiveMap;
+uniform float uModelHasEmissiveMap;
 uniform vec3 uGhostColor;
 varying vec3 vWorld;
 varying vec3 vNormal;
@@ -431,6 +434,8 @@ void main() {
   vec3 lit = shade(c, vWorld, n, ao, vWorld.xz + n.xz * 0.14);
   vec3 V = normalize(cameraPosition - vWorld);
   lit += lit * 0.12 * pow(1.0 - clamp(dot(n, V), 0.0, 1.0), 3.0);
+  // its own emission (glTF emissiveFactor x emissiveTexture), after the light and never shadowed
+  lit += uModelEmissive * (uModelHasEmissiveMap > 0.5 ? texture2D(uModelEmissiveMap, vUv).rgb : vec3(1.0));
   vec3 outc = dioFinish(lit, vis, vWorld);
   if (ghost) outc = mix(outc, uGhostColor, 0.45);
   gl_FragColor = vec4(outc, 1.0);

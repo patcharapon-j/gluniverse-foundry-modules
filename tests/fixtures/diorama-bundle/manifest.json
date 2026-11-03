@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "name": "Fixture yard",
+  "gridPx": 32,
+  "squares": [
+    8,
+    6
+  ],
+  "image": [
+    256,
+    192
+  ],
+  "ground": "ground.png",
+  "layout": "layout.json"
+}
