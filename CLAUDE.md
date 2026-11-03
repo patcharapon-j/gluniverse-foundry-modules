@@ -97,8 +97,9 @@ etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
   docs/adr/0006-odds-and-line-skin.md, the stream view's skin,
   docs/adr/0007-stream-view-skin.md, the Stage and Theatre GM console,
   docs/adr/0008-stage-theatre-console.md, the Mythic GME panel,
-  docs/adr/0009-mythic-gme-skin.md, and Flatfinder's ink skin,
-  docs/adr/0010-flatfinder-skin.md — each lives only under its features' own
+  docs/adr/0009-mythic-gme-skin.md, Flatfinder's ink skin,
+  docs/adr/0010-flatfinder-skin.md, and Destiny Dice's skin,
+  docs/adr/0011-destiny-dice-skin.md — each lives only under its features' own
   roots and never on `:root`); `styles/gl-tokens.css` is the single source of truth and
   `styles/gl-motion.css` the single keyframe pool. Use the `--gl-*` tokens and
   the `.gl-*` utilities. The non-negotiables:
@@ -1966,6 +1967,26 @@ and keys**, and pre-remake string entries are kept as `legacy`. The model and
 markup are pure: `node tools/mythic-gme-preview.mjs && node
 tools/preview-server.mjs 8983`, then `/.preview/mythic.html`. See
 `docs/MYTHIC_GME.md`.
+
+**When touching Destiny Dice** (`features/destiny-dice/`, `styles/destiny-dice.css`),
+re-run its checks. Everything they cover fails silently:
+
+```bash
+node tools/destiny-dice-check.mjs
+node tools/insight-destiny-motion-check.mjs
+```
+
+Zero problems required. Three things are worth knowing before you change it.
+**There is one road to a fate**, `applyFate()` in `apply.mjs`: the dialog
+switch only adds a roll option, and nothing patches `Check.roll`,
+`rerollFromMessage` or hooks `pf2e.reroll` (each was a second die on one
+check). **The die is baked from the face table**: `glyphs.mjs` is one geometry
+for the chat SVG and the DSN raster, the bump map is DSN glass's transmission
+mask, and Die Glow 0 sends no emissive, since DSN ignores an intensity of 0.
+**The Animation Style scales the reveal only**; it never writes
+`--gl-motion-scale`. To see it: `node tools/destiny-dice-preview.mjs && node
+tools/preview-server.mjs 8981`, then `/.preview/destiny.html` (`view`,
+`preset`, `tier`, `glow`, `checks=1`). See `docs/DESTINY_DICE.md`.
 
 **When touching the Performance feature, the shared frame budget or any
 feature's shedding** (`features/perf/`, `core/budget.mjs`, `core/gl-surfaces.mjs`,
