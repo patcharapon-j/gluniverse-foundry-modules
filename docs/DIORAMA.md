@@ -718,6 +718,24 @@ fabricated map; serve it (a `file://` page does not run module scripts). Nothing
 there proves the sight backend, movement or Foundry's own vision; those need a live
 v14 session.
 
+To see a real map in 3D before it goes into a world, give the preview a Foundry
+scene export:
+
+```bash
+node tools/diorama-preview.mjs --scene=<foundry-scene.json> [--map=<image>] [--layout=<layout.json>] [--tokens=<tokens.json>]
+node tools/preview-server.mjs   # /.preview/diorama-map.html?pitch=1&yaw=0&still=1&shed=0
+```
+
+It draws the map art, the scene's walls and doors through `wallState`, its
+lights through the view's own bake at the darkness the view would use (0 while
+the scene's global light is on; `dark=` overrides), and a layout compiled and
+resolved exactly as Import layout writes it, props and kits included. `view=full`
+(the default) frames the whole map; `focus=<row>,<col>&zoom=<n>` centres a
+square. `--tokens` stands named figures on map squares, a coloured disc where
+there is no art. The light polygons are swept in the page, a stand-in for
+Foundry's, with the backend's height rules once a layout is given. The tool's
+header lists every parameter.
+
 ## Not in v1
 
 JB2A ground-effect placement, hex grids, the pixel-art filter,

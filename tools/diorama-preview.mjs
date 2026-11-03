@@ -70,20 +70,61 @@
  * Graphics (options.mjs): q=low|medium|high|ultra, water=simple|full,
  *   detail=low|high, weatherFx=off|reduced|full, atmosphere=off|on,
  *   shadows=off|hard|soft, dayNight=0, grade=0
+ *
+ * ── A real map (--scene) ──────────────────────────────────────────────────
+ * The same renderer on a real battle map, before it is imported into a world:
+ *
+ *   node tools/diorama-preview.mjs --scene=<foundry-scene.json> [--map=<image>]
+ *     [--layout=<layout.json>] [--tokens=<tokens.json>] [--out=.preview/diorama-map.html]
+ *   node tools/preview-server.mjs
+ *   → http://localhost:8931/.preview/diorama-map.html?pitch=1&yaw=0&still=1&shed=0
+ *
+ *   --scene   a Foundry Scene export: grid, width/height, padding, walls (door,
+ *             ds, light sense, wall-height flags), lights (AmbientLight data),
+ *             environment (darkness, global light)
+ *   --map     the background (webp/png); default: the scene's background file
+ *             name, looked for beside the scene file
+ *   --layout  a Diorama layout (docs/DIORAMA_LAYOUT.md), compiled by
+ *             terrain/layout.mjs and its props resolved as importLayout does
+ *   --tokens  standees: [{ name, cell: [row, col], size?, img?, altitude?,
+ *             disposition?, color? }], map squares like a layout; no img draws
+ *             a coloured disc
+ *
+ * The map, token art and data are copied beside the page, so it serves from
+ * the repo root. Walls go through view/snapshot.mjs wallState, lights through
+ * view/bake.mjs (Baker#drawLight, lightData) at the darkness the view would
+ * use (0 while the scene's global light is on; dark=<0..1> overrides). Light
+ * polygons are swept here against the walls that block light, with the height
+ * rules the sight backend applies once a layout is saved (an eye above a
+ * wall's top sees over it, cliffs above the light cut it). Limited, proximity
+ * and distance light walls are treated as open, one-way walls as two-way.
+ *
+ * Query parameters: yaw, pitch, still, idle, shed, dark, grid, cutaway, tilt,
+ * the environment and graphics ones above, and the framing:
+ *   view=full             the whole map (default; may zoom out past the
+ *                         view's own minimum so a big map fits)
+ *   focus=<row>,<col>     centre that map square; zoom=<n> (default 2)
+ *   zoom=<n>              with view=full, a fixed zoom on the map's centre
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const outArg = process.argv.find((a) => a.startsWith("--out="));
-const OUT = resolve(ROOT, outArg ? outArg.slice("--out=".length) : ".preview/diorama.html");
+const arg = (name) => {
+  const a = process.argv.find((x) => x.startsWith(`--${name}=`));
+  return a ? a.slice(name.length + 3) : null;
+};
+const SCENE_FILE = arg("scene");
+const OUT = resolve(ROOT, arg("out") ?? (SCENE_FILE ? ".preview/diorama-map.html" : ".preview/diorama.html"));
 if (relative(ROOT, OUT).startsWith("..")) {
   console.warn("warning: --out is outside the repository; the page's imports only resolve when served from the repo root.");
 }
 
-const page = String.raw`<!doctype html>
+// Shared by both pages: the head, the error capture, the environment and
+// graphics from the URL, and the shed ladder for stills.
+const HEAD = String.raw`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -102,7 +143,64 @@ const page = String.raw`<!doctype html>
 </style>
 </head>
 <body>
-<canvas id="view"></canvas>
+<canvas id="view"></canvas>`;
+
+const ERR_JS = String.raw`<script>
+  window.__errors = [];
+  const errEl = () => document.getElementById("err");
+  const report = (m) => { window.__errors.push(m); const el = errEl(); if (el) el.textContent += m + "\n"; };
+  window.addEventListener("error", (e) => report("error: " + (e.error?.stack || e.message)));
+  window.addEventListener("unhandledrejection", (e) => report("rejection: " + (e.reason?.stack || e.reason)));
+  const ce = console.error.bind(console);
+  console.error = (...a) => { report("console.error: " + a.map((x) => x?.stack || String(x)).join(" ")); ce(...a); };
+  const cw = console.warn.bind(console);
+  console.warn = (...a) => { const s = a.map(String).join(" "); if (/THREE|WebGL|shader|GLSL/i.test(s)) report("console.warn: " + s); cw(...a); };
+</script>`;
+
+const ENV_JS = String.raw`// The environment (environment.mjs), from the URL: a preset, then any field over it.
+const envFlag = (() => {
+  const e = Q.has("preset") ? applyPreset(Q.get("preset")) : normalizeEnv(null);
+  const n = (k) => Number(Q.get(k));
+  if (Q.has("time")) e.hour = Q.get("time") === "table" ? null : n("time");
+  if (Q.has("weather")) e.weather = { kind: Q.get("weather"), intensity: Q.has("intensity") ? n("intensity") : 0.7 };
+  else if (Q.has("intensity")) e.weather.intensity = n("intensity");
+  if (Q.has("fog")) e.fog.density = n("fog");
+  if (Q.has("fogh")) e.fog.height = n("fogh");
+  if (Q.has("wind")) e.wind.strength = n("wind");
+  if (Q.has("winddir")) e.wind.dir = n("winddir");
+  if (Q.has("clouds")) e.clouds = n("clouds");
+  if (Q.has("wet")) e.wetness = n("wet");
+  if (Q.has("snow")) e.snow = n("snow");
+  if (Q.has("flow")) e.water.speed = n("flow");
+  if (Q.has("flowdir")) e.water.dir = n("flowdir");
+  return normalizeEnv(e);
+})();
+// graphics: q=low|medium|high|ultra, and any option by name (water=simple, weatherFx=reduced, grade=0, …)
+// adaptive=0 keeps the budget from shedding weather and air (a software GL sheds everything)
+const gRaw = { quality: Q.get("q") || "high", adaptive: Q.get("adaptive") !== "0" };
+for (const k of ["shadows", "ao", "water", "detail", "weatherFx", "atmosphere", "lightFx"]) if (Q.has(k)) gRaw[k] = Q.get(k);
+// fow=clouds|flat: the fog of war's style (dio.fogStyle; "fog" is the environment's)
+if (Q.has("fow")) gRaw.fogStyle = Q.get("fow");
+for (const k of ["dayNight", "grade", "tokenLife", "areaVolumes"]) if (Q.has(k)) gRaw[k] = Q.get(k) !== "0";
+r.setOptions({ graphics: resolveGraphics(gRaw) });
+r.setEnvironment(resolveEnv(envFlag, { dayNight: Q.get("dayNight") !== "0" }));
+window.__env = envFlag;`;
+
+const SHED_JS = String.raw`// idle=1: every ambient loop held too (the reticle's breathe, the fog's drift, an
+// area's glow), so only living light can keep frames coming (probe=perf)
+if (Q.get("still") === "1" || Q.get("idle") === "1" || Q.has("shed")) {
+  const n = Q.has("shed") ? Number(Q.get("shed")) : 0;
+  const still = Q.get("still") === "1" || Q.get("idle") === "1";
+  const idle = Q.get("idle") === "1";
+  r.setShed({ allows: (name) => {
+    if (still && (name === "water" || name === "standeeSway")) return false;
+    if (idle && (name === "markerMotion" || name === "fogDrift" || name === "areaMotion")) return false;
+    const i = SHED_ORDER.indexOf(name);
+    return i < 0 || i >= n;
+  } });
+}`;
+
+const page = String.raw`${HEAD}
 <div class="bar">
   <button data-act="yaw-">Q yaw −</button><button data-act="yaw+">E yaw +</button>
   <button data-act="pitch">R pitch</button>
@@ -114,17 +212,7 @@ const page = String.raw`<!doctype html>
 <div class="status" id="status"></div>
 <div class="label" id="label">25 ft</div>
 <pre class="err" id="err"></pre>
-<script>
-  window.__errors = [];
-  const errEl = () => document.getElementById("err");
-  const report = (m) => { window.__errors.push(m); const el = errEl(); if (el) el.textContent += m + "\n"; };
-  window.addEventListener("error", (e) => report("error: " + (e.error?.stack || e.message)));
-  window.addEventListener("unhandledrejection", (e) => report("rejection: " + (e.reason?.stack || e.reason)));
-  const ce = console.error.bind(console);
-  console.error = (...a) => { report("console.error: " + a.map((x) => x?.stack || String(x)).join(" ")); ce(...a); };
-  const cw = console.warn.bind(console);
-  console.warn = (...a) => { const s = a.map(String).join(" "); if (/THREE|WebGL|shader|GLSL/i.test(s)) report("console.warn: " + s); cw(...a); };
-</script>
+${ERR_JS}
 <script type="module">
 import { DioramaRenderer } from "/scripts/features/diorama/render/renderer.mjs";
 import { Terrain } from "/scripts/features/diorama/terrain/model.mjs";
@@ -475,34 +563,7 @@ const lightSources = TORCHES_ON ? [
 ] : null;
 r.setLighting({ darkness: Q.has("dark") ? Number(Q.get("dark")) : 0.4, light: lightCanvas(), vision: Q.get("novision") === "1" ? null : visionCanvas(), sources: lightSources });
 
-// The environment (environment.mjs), from the URL: a preset, then any field over it.
-const envFlag = (() => {
-  const e = Q.has("preset") ? applyPreset(Q.get("preset")) : normalizeEnv(null);
-  const n = (k) => Number(Q.get(k));
-  if (Q.has("time")) e.hour = Q.get("time") === "table" ? null : n("time");
-  if (Q.has("weather")) e.weather = { kind: Q.get("weather"), intensity: Q.has("intensity") ? n("intensity") : 0.7 };
-  else if (Q.has("intensity")) e.weather.intensity = n("intensity");
-  if (Q.has("fog")) e.fog.density = n("fog");
-  if (Q.has("fogh")) e.fog.height = n("fogh");
-  if (Q.has("wind")) e.wind.strength = n("wind");
-  if (Q.has("winddir")) e.wind.dir = n("winddir");
-  if (Q.has("clouds")) e.clouds = n("clouds");
-  if (Q.has("wet")) e.wetness = n("wet");
-  if (Q.has("snow")) e.snow = n("snow");
-  if (Q.has("flow")) e.water.speed = n("flow");
-  if (Q.has("flowdir")) e.water.dir = n("flowdir");
-  return normalizeEnv(e);
-})();
-// graphics: q=low|medium|high|ultra, and any option by name (water=simple, weatherFx=reduced, grade=0, …)
-// adaptive=0 keeps the budget from shedding weather and air (a software GL sheds everything)
-const gRaw = { quality: Q.get("q") || "high", adaptive: Q.get("adaptive") !== "0" };
-for (const k of ["shadows", "ao", "water", "detail", "weatherFx", "atmosphere", "lightFx"]) if (Q.has(k)) gRaw[k] = Q.get(k);
-// fow=clouds|flat: the fog of war's style (dio.fogStyle; "fog" is the environment's)
-if (Q.has("fow")) gRaw.fogStyle = Q.get("fow");
-for (const k of ["dayNight", "grade", "tokenLife", "areaVolumes"]) if (Q.has(k)) gRaw[k] = Q.get(k) !== "0";
-r.setOptions({ graphics: resolveGraphics(gRaw) });
-r.setEnvironment(resolveEnv(envFlag, { dayNight: Q.get("dayNight") !== "0" }));
-window.__env = envFlag;
+${ENV_JS}
 // ppx=<cells>: pin the weather's device-pixel floor (debugging the particle pass)
 if (Q.has("ppx")) Object.defineProperty(r.atmosphere, "pxWorld", { get: () => Number(Q.get("ppx")), set() {} });
 // probe=1: the weather layer's state after a few seconds, in #probe (headless --dump-dom)
@@ -748,19 +809,7 @@ let links = Q.get("links") === "1" ? [
 ] : [];
 r.setLinks(links);
 
-// idle=1: every ambient loop held too (the reticle's breathe, the fog's drift, an
-// area's glow), so only living light can keep frames coming (probe=perf)
-if (Q.get("still") === "1" || Q.get("idle") === "1" || Q.has("shed")) {
-  const n = Q.has("shed") ? Number(Q.get("shed")) : 0;
-  const still = Q.get("still") === "1" || Q.get("idle") === "1";
-  const idle = Q.get("idle") === "1";
-  r.setShed({ allows: (name) => {
-    if (still && (name === "water" || name === "standeeSway")) return false;
-    if (idle && (name === "markerMotion" || name === "fogDrift" || name === "areaMotion")) return false;
-    const i = SHED_ORDER.indexOf(name);
-    return i < 0 || i >= n;
-  } });
-}
+${SHED_JS}
 
 let cam = { yawStep: Number(Q.get("yaw") ?? 0), pitchIndex: Number(Q.get("pitch") ?? 0), zoom: 1, target: { x: 800, y: 600, zQ: 2 } };
 const view = Q.get("view") || "full";
@@ -1215,6 +1264,279 @@ if (Q.get("selftest") === "1") {
 </html>
 `;
 
+/* ═══════════════════════════ a real map (--scene) ═══════════════════════════ */
+
+const mapPage = (data) => String.raw`${HEAD}
+<div class="status" id="status"></div>
+<pre class="err" id="err"></pre>
+${ERR_JS}
+<script type="module">
+import { DioramaRenderer } from "/scripts/features/diorama/render/renderer.mjs";
+import { VIEW_CELLS, yawOf, pitchOf } from "/scripts/features/diorama/render/camera.mjs";
+import { Terrain, distToQ } from "/scripts/features/diorama/terrain/model.mjs";
+import { compileLayout } from "/scripts/features/diorama/terrain/layout.mjs";
+import { normalizeProps, propToJSON, resolveProps, propStates } from "/scripts/features/diorama/terrain/props.mjs";
+import { cliffEdges } from "/scripts/features/diorama/terrain/occlusion.mjs";
+import { wallState, loadArt } from "/scripts/features/diorama/view/snapshot.mjs";
+import { Baker, lightData } from "/scripts/features/diorama/view/bake.mjs";
+import { polygonEyeQ, outlineFloorQ, dropWallsSeenOver } from "/scripts/features/diorama/foundry/sight-backend.mjs";
+import { SHED_ORDER, SIZE_HEIGHT } from "/scripts/features/diorama/constants.mjs";
+import { PALETTE } from "/scripts/core/theme.mjs";
+import { resolveEnv, applyPreset, normalizeEnv } from "/scripts/features/diorama/environment.mjs";
+import { resolveGraphics } from "/scripts/features/diorama/options.mjs";
+
+const Q = new URLSearchParams(location.search);
+const DATA = ${JSON.stringify(data).replace(/</g, "\\u003c")};
+const S = DATA.scene;
+const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+
+/* ------------------------------------------------------------ the grid (Foundry's SceneDimensions) */
+const SIZE = Number(S.grid?.size) || 100, DIST = Number(S.grid?.distance) || 5;
+const W = Number(S.width) || 0, H = Number(S.height) || 0, pad = Number(S.padding) || 0;
+const padX = Math.ceil((pad * W) / SIZE) * SIZE, padY = Math.ceil((pad * H) / SIZE) * SIZE;
+const COLS = Math.ceil((W + 2 * padX) / SIZE), ROWS = Math.ceil((H + 2 * padY) / SIZE);
+const rect = { x: padX, y: padY, width: W, height: H };
+const off = { i: Math.round(rect.y / SIZE), j: Math.round(rect.x / SIZE) };
+const mapCells = { cols: Math.round(W / SIZE), rows: Math.round(H / SIZE) };
+
+/* ------------------------------------------------------------ terrain and props, as importLayout writes them */
+// store.mjs blankFor with the world settings' defaults (wall 10, step 2.5)
+const wallHeight = Math.round(distToQ(10, DIST)), stepHeight = Math.round(distToQ(2.5, DIST));
+const inside = (i, j) => { const cx = (j + 0.5) * SIZE, cy = (i + 0.5) * SIZE; return cx >= rect.x && cx < rect.x + rect.width && cy >= rect.y && cy < rect.y + rect.height; };
+let ground = Terrain.blank(COLS, ROWS, inside, { wallHeight, stepHeight });
+let props = [];
+const notes = [];
+if (DATA.layout) {
+  const res = compileLayout(DATA.layout, { cols: COLS, rows: ROWS, offset: off, map: mapCells, distance: DIST, wallHeight, stepHeight });
+  for (const e of res.errors) report("layout: " + e);
+  for (const w of res.warnings) console.warn("layout: " + w);
+  if (res.terrain) ground = res.terrain;
+  // written by PropStore (propToJSON), read back normalised
+  if (Array.isArray(res.props)) props = normalizeProps(normalizeProps(res.props).map(propToJSON));
+  notes.push("layout " + (res.terrain ? "ok" : "REFUSED") + ", " + res.errors.length + " errors, " + res.warnings.length + " warnings, " + props.length + " props");
+}
+// saved terrain puts the sight backend's height rules on (foundry/context.mjs wallContext)
+const saved = !!DATA.layout;
+const resolved = resolveProps(ground, props, { stamp: true });
+const rules = resolved.terrain;
+const live = { terrain: rules, grid: { size: SIZE, distance: DIST }, baseQ: 0 };
+
+/* ------------------------------------------------------------ renderer */
+const canvas = document.getElementById("view");
+const r = new DioramaRenderer({ canvas, pixelRatio: Math.min(2, window.devicePixelRatio || 1) });
+window.__renderer = r;
+r.setGrid({ size: SIZE, distance: DIST, cols: COLS, rows: ROWS, sceneRect: rect });
+r.setTerrain(ground);
+// the view's own loader, so the art lands as the view hands it over
+const bg = await loadArt(DATA.map);
+if (!bg) report("map image: " + DATA.map + " did not load");
+r.setBackground(bg, rect);
+
+// walls: the view's own WallState (GM view: a secret door shows as one)
+const wallDocs = (S.walls ?? []).map((w, k) => ({ ...w, id: w._id ?? "wall" + k }));
+const walls = wallDocs.map((doc) => wallState(doc, { isGM: true, terrain: ground, size: SIZE, distance: DIST, defaultMaterial: "stone" })).filter(Boolean);
+r.setWalls(walls);
+r.setProps(propStates(resolved.props, { isGM: true }));
+r.setOptions({ ghosts: true, cutaway: Q.get("cutaway") !== "0", tiltShift: Q.get("tilt") === "1",
+  grid: { on: Q.get("grid") === "1", color: S.grid?.color ?? "#000000", alpha: S.grid?.alpha ?? 0.35 } });
+
+/* ------------------------------------------------------------ light */
+// Foundry: the global light is on while the darkness is inside its range, and
+// the view then bakes at darkness 0 (view/bake.mjs); a light shines only inside its own range.
+const env = S.environment ?? {};
+const sceneDark = clamp01(env.darknessLevel ?? S.darkness ?? 0);
+const gl = env.globalLight ?? {};
+const globalLit = !!gl.enabled && sceneDark >= (gl.darkness?.min ?? 0) && sceneDark <= (gl.darkness?.max ?? 1);
+const darkness = Q.has("dark") ? clamp01(Q.get("dark")) : globalLit ? 0 : sceneDark;
+const pxPerDist = SIZE / DIST;
+
+// Walls that stop light here: sense NORMAL, not an open door. (Limited,
+// proximity and distance light walls are treated as open, one-way walls as two-way.)
+const blockers = wallDocs.filter((w) => Number(w.light ?? 20) === 20 && !(Number(w.door) > 0 && Number(w.ds) === 1))
+  .map((doc) => ({ a: { x: doc.c[0], y: doc.c[1] }, b: { x: doc.c[2], y: doc.c[3] }, object: { documentName: "Wall", ...doc } }));
+const cliffCache = new Map();
+const cliffsAbove = (floorQ) => {
+  if (!cliffCache.has(floorQ)) cliffCache.set(floorQ, cliffEdges(rules, floorQ, SIZE));
+  return cliffCache.get(floorQ);
+};
+
+/** A stand-in for Foundry's light polygon: rays to every segment end and round the rim, clipped at the nearest segment. */
+function sweep(ox, oy, radius, segs) {
+  const near = segs.filter(([x0, y0, x1, y1]) => Math.max(x0, x1) >= ox - radius && Math.min(x0, x1) <= ox + radius && Math.max(y0, y1) >= oy - radius && Math.min(y0, y1) <= oy + radius);
+  const angles = [];
+  for (let k = 0; k < 96; k++) angles.push(-Math.PI + (k / 96) * 2 * Math.PI);
+  for (const [x0, y0, x1, y1] of near) for (const [px, py] of [[x0, y0], [x1, y1]]) {
+    const a = Math.atan2(py - oy, px - ox);
+    angles.push(a - 1e-4, a, a + 1e-4);
+  }
+  angles.sort((a, b) => a - b);
+  const points = [];
+  for (const a of angles) {
+    const dx = Math.cos(a), dy = Math.sin(a);
+    let best = radius;
+    for (const [x0, y0, x1, y1] of near) {
+      const sx = x1 - x0, sy = y1 - y0, den = dx * sy - dy * sx;
+      if (Math.abs(den) < 1e-12) continue;
+      const qx = x0 - ox, qy = y0 - oy;
+      const t = (qx * sy - qy * sx) / den, u = (qx * dy - qy * dx) / den;
+      if (t > 1e-6 && u >= 0 && u <= 1 && t < best) best = t;
+    }
+    points.push(ox + dx * best, oy + dy * best);
+  }
+  return { points };
+}
+
+const rgbOf = (hex) => { const n = parseInt(String(hex).replace("#", ""), 16); return Number.isFinite(n) ? [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255] : null; };
+const lightDocs = (S.lights ?? []).filter((l) => !l.hidden && sceneDark >= (l.config?.darkness?.min ?? 0) && sceneDark <= (l.config?.darkness?.max ?? 1));
+const lights = [];
+lightDocs.forEach((l, k) => {
+  const c = l.config ?? {};
+  const x = Number(l.x), y = Number(l.y);
+  const dim = Math.max(Number(c.dim) || 0, Number(c.bright) || 0) * pxPerDist;
+  if (!Number.isFinite(x) || !Number.isFinite(y) || dim <= 0) return;
+  const origin = { x, y, elevation: Number(l.elevation) || 0 };
+  let edges = blockers;
+  let segs = [];
+  if (saved) {
+    // the sight backend's _identifyEdges: walls the light sees over drop, ground above it cuts it
+    const poly = { origin, config: { type: "light" } };
+    const set = new Set(blockers);
+    dropWallsSeenOver(set, live, polygonEyeQ(poly, live));
+    edges = [...set];
+    segs = cliffsAbove(outlineFloorQ(poly, live));
+  }
+  segs = [...edges.map((e) => [e.a.x, e.a.y, e.b.x, e.b.y]), ...segs];
+  const rgb = c.color ? rgbOf(c.color) : null;
+  lights.push({
+    sourceId: "AmbientLight." + (l._id ?? k),
+    colorRGB: rgb,
+    data: { x, y, elevation: origin.elevation, dim, bright: (Number(c.bright) || 0) * pxPerDist, color: rgb ? parseInt(String(c.color).replace("#", ""), 16) : null,
+      alpha: c.alpha, luminosity: c.luminosity, animation: c.animation },
+    shape: sweep(x, y, dim, segs),
+  });
+});
+const baker = new Baker({ grid: { cols: COLS, rows: ROWS, size: SIZE }, mode: () => null, onBaked: () => {} });
+baker.drawLight(lights);
+r.setLighting({ darkness, light: baker.light, vision: null, sources: lights.map(lightData).filter(Boolean) });
+
+${ENV_JS}
+
+/* ------------------------------------------------------------ tokens (optional) */
+const heightFt = (size) => (size >= 4 ? SIZE_HEIGHT.grg : size >= 3 ? SIZE_HEIGHT.huge : size >= 2 ? SIZE_HEIGHT.lg : size < 1 ? SIZE_HEIGHT.sm : SIZE_HEIGHT.med);
+const DISC = [PALETTE.info, PALETTE.hazard, PALETTE.good, PALETTE.warn, PALETTE.violet, PALETTE.cyan];
+function disc(color, name) {
+  const c = document.createElement("canvas");
+  c.width = 256; c.height = 256;
+  const g = c.getContext("2d");
+  g.fillStyle = color; g.beginPath(); g.arc(128, 128, 120, 0, Math.PI * 2); g.fill();
+  g.lineWidth = 10; g.strokeStyle = "rgba(0,0,0,0.45)"; g.stroke();
+  g.fillStyle = "#ffffff"; g.font = "bold 120px Oxanium, system-ui, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(String(name || "?").slice(0, 1).toUpperCase(), 128, 136);
+  return c.toDataURL();
+}
+const tokens = (DATA.tokens ?? []).map((t, k) => {
+  const size = Math.max(0.5, Number(t.size) || 1), w = Math.max(1, Math.round(size));
+  const i = Number(t.cell?.[0]) + off.i, j = Number(t.cell?.[1]) + off.j;
+  const groundQ = rules.footprintTop(i, j, w, w);
+  return { id: "t" + k, name: t.name ?? "Token " + (k + 1), x: (j + size / 2) * SIZE, y: (i + size / 2) * SIZE,
+    footQ: groundQ + Math.round(distToQ(Number(t.altitude) || 0, DIST)), groundQ, heightQ: Math.round(distToQ(heightFt(size), DIST)), widthCells: size,
+    art: t.img || disc(t.color || DISC[k % DISC.length], t.name), disposition: Number.isFinite(t.disposition) ? t.disposition : 0,
+    visible: true, ghost: false, controlled: false, hovered: false, targets: [], turn: null, conditions: [], bars: [] };
+});
+r.setTokens(tokens);
+
+${SHED_JS}
+
+/* ------------------------------------------------------------ camera */
+const fitZoom = (yawStep, pitchIndex) => {
+  const yaw = yawOf(yawStep), pitch = pitchOf(pitchIndex);
+  const w = rect.width / SIZE, h = rect.height / SIZE;
+  const across = Math.abs(w * Math.cos(yaw)) + Math.abs(h * Math.sin(yaw));
+  const deep = (Math.abs(w * Math.sin(yaw)) + Math.abs(h * Math.cos(yaw))) * Math.sin(pitch);
+  const aspect = window.innerWidth / Math.max(1, window.innerHeight);
+  return VIEW_CELLS / (Math.max(deep, across / aspect) * 1.06);
+};
+function frame() {
+  const yawStep = Number(Q.get("yaw") ?? 0), pitchIndex = Number(Q.get("pitch") ?? 0);
+  if (Q.has("focus")) {
+    const [fr, fc] = Q.get("focus").split(",").map(Number);
+    const x = rect.x + (fc + 0.5) * SIZE, y = rect.y + (fr + 0.5) * SIZE;
+    r.setCamera({ yawStep, pitchIndex, zoom: Q.has("zoom") ? Number(Q.get("zoom")) : 2, target: { x, y, zQ: rules.groundAt(x, y, SIZE) } }, { animate: false });
+    return;
+  }
+  const zoom = Q.has("zoom") ? Number(Q.get("zoom")) : fitZoom(yawStep, pitchIndex);
+  r.setCamera({ yawStep, pitchIndex, zoom, target: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, zQ: 0 } }, { animate: false });
+  // a whole big map is further out than the view's own minimum zoom: the rig, not the clamp
+  if (r.getCamera().zoom > zoom) { r.rig.state.zoom = zoom; r.rig.view.zoom = zoom; r.rig.apply(); r.requestRender(); }
+}
+function resize() { r.resize(window.innerWidth, window.innerHeight); frame(); }
+window.addEventListener("resize", resize);
+resize();
+window.addEventListener("keydown", (e) => {
+  const c = r.getCamera(), k = e.key.toLowerCase();
+  if (k === "q" || k === "e") r.setCamera({ yawStep: c.yawStep + (k === "e" ? 1 : -1) });
+  else if (k === "r") r.setCamera({ pitchIndex: (c.pitchIndex + 1) % 3 });
+});
+canvas.addEventListener("wheel", (e) => { e.preventDefault(); r.setCamera({ zoom: r.getCamera().zoom * (e.deltaY > 0 ? 0.8 : 1.25) }); }, { passive: false });
+
+const doors = walls.filter((w) => w.type === "door" || w.type === "secret").length;
+document.getElementById("status").textContent = [
+  (S.name ?? "scene") + "  " + mapCells.cols + "×" + mapCells.rows + " squares, " + SIZE + " px, " + DIST + " " + (S.grid?.units ?? "ft"),
+  walls.length + " walls (" + doors + " doors), " + lights.length + "/" + (S.lights?.length ?? 0) + " lights, " + tokens.length + " tokens",
+  "darkness " + darkness.toFixed(2) + (Q.has("dark") ? " (dark=)" : globalLit ? " (global light on at " + sceneDark + ")" : " (scene)"),
+  ...notes,
+].join("\n");
+window.__map = { cols: COLS, rows: ROWS, rect, walls: walls.length, doors, lights: lights.length, darkness, globalLit, props: props.length, tokens: tokens.length };
+window.__ready = true;
+</script>
+</body>
+</html>
+`;
+
+/** Copy a file beside the page; returns its URL from the repo root. */
+function stage(src, dir, name) {
+  mkdirSync(dir, { recursive: true });
+  const to = join(dir, name + extname(src).toLowerCase());
+  copyFileSync(src, to);
+  return "/" + relative(ROOT, to).replaceAll("\\", "/");
+}
+const readJson = (file, what) => {
+  try { return JSON.parse(readFileSync(file, "utf8")); } catch (e) { console.error(`${what}: ${e.message}`); process.exit(1); }
+};
+
+let html = page;
+if (SCENE_FILE) {
+  const sceneFile = resolve(SCENE_FILE);
+  const scene = readJson(sceneFile, "--scene");
+  // the initial Level's art (view/snapshot.mjs backgroundSrc), else the first Level's, else the scene's
+  const levels = Array.isArray(scene.levels) ? scene.levels : [];
+  const level = levels.find((l) => l?._id === scene.initialLevel) ?? levels[0];
+  const bgSrc = level?.background?.src ?? scene.background?.src ?? scene.img ?? null;
+  const mapFile = arg("map") ? resolve(arg("map")) : bgSrc ? join(dirname(sceneFile), basename(bgSrc)) : null;
+  if (!mapFile || !existsSync(mapFile)) { console.error("--map: no map image" + (mapFile ? " at " + mapFile : "") + "; pass --map=<image>"); process.exit(1); }
+  const assets = OUT.replace(/\.html?$/i, "");
+  const layoutFile = arg("layout"), tokensFile = arg("tokens");
+  const layout = layoutFile ? readJson(resolve(layoutFile), "--layout") : null;
+  const tokens = tokensFile ? readJson(resolve(tokensFile), "--tokens") : [];
+  if (!Array.isArray(tokens)) { console.error("--tokens: expected an array"); process.exit(1); }
+  tokens.forEach((t, k) => {
+    if (!t.img || /^(https?:|data:|\/)/.test(t.img)) return;
+    const file = isAbsolute(t.img) ? t.img : resolve(dirname(resolve(tokensFile)), t.img);
+    if (existsSync(file)) t.img = stage(file, assets, "token-" + k);
+    else { console.warn(`--tokens: ${t.name ?? k}: no image at ${file}; drawing a disc`); delete t.img; }
+  });
+  // The page compiles the layout itself; this says up front whether the import would take it.
+  if (layout) {
+    const { compileLayout } = await import(pathToFileURL(join(ROOT, "scripts/features/diorama/terrain/layout.mjs")).href);
+    const size = Number(scene.grid?.size) || 100;
+    const res = compileLayout(layout, { cols: Math.ceil(scene.width / size), rows: Math.ceil(scene.height / size), distance: scene.grid?.distance });
+    for (const e of res.errors) console.log("layout error: " + e);
+    for (const w of res.warnings) console.log("layout warning: " + w);
+    console.log(`layout: ${res.terrain ? "compiles" : "REFUSED"}, ${res.props?.length ?? 0} props`);
+  }
+  html = mapPage({ scene, layout, tokens, map: stage(mapFile, assets, "map") });
+}
+
 mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, page);
+writeFileSync(OUT, html);
 console.log("wrote " + relative(ROOT, OUT) + " — serve with: node tools/preview-server.mjs, then /" + relative(ROOT, OUT).replaceAll("\\", "/"));
