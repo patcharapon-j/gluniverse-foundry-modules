@@ -33,7 +33,9 @@
  * (view/props-seen.mjs).
  */
 
-import { BAKE_PX_PER_CELL, TIMING } from "../constants.mjs";
+import { BAKE_PX_PER_CELL, SUB, TIMING } from "../constants.mjs";
+import { eyeQ } from "../rules/creature.mjs";
+import { deadGround } from "./dead-ground.mjs";
 
 /** No bake side longer than this (px); big maps drop resolution instead. */
 const MAX_SIDE = 4096;
@@ -116,11 +118,13 @@ export class Baker {
    * @param {{cols:number, rows:number, size:number}} o.grid
    * @param {() => ("own"|"players"|null)} o.mode   vision mode
    * @param {() => boolean} [o.known]   the players know the layout: the whole board counts as explored
+   * @param {() => ({terrain:object, grid:object}|null)} [o.ground]  the view's absolute terrain, for dead ground
    * @param {(result:{darkness:number, light:HTMLCanvasElement, vision:HTMLCanvasElement|null, sources:object[]}) => void} o.onBaked
    */
-  constructor({ grid, mode, known = () => false, onBaked }) {
+  constructor({ grid, mode, known = () => false, ground = () => null, onBaked }) {
     this.mode = mode;
     this.known = known;
+    this.ground = ground;
     this.onBaked = onBaked;
     this.timer = 0;
     this.again = false;
@@ -171,9 +175,13 @@ export class Baker {
     let vision = null;
     this.seen = null;
     this.viewers = [];
+    this.sight = [];
     this.lit = (x, y) => globalLit || lights.some((l) => l.shape?.contains?.(x, y));
     if (mode === "own") { this.drawOwnVision(lights, globalLit); vision = this.vision; }
     else if (mode === "players") { this.drawPlayersVision(lights, globalLit); vision = this.vision; }
+    if (vision) {
+      try { this.dimDeadGround(); } catch (e) { console.warn("GLUniverse Suite | diorama: dead ground failed", e); }
+    }
     const sources = [];
     for (const src of lights) { const s = lightData(src); if (s) sources.push(s); }
     this.onBaked({ darkness, light: this.light, vision, sources });
@@ -234,8 +242,9 @@ export class Baker {
   }
 
   /** fov ∪ (los ∩ lit) for one viewer, in yellow, additive. */
-  drawSight(ctx, { fov, los, lights, globalLit, blinded }) {
+  drawSight(ctx, { fov, los, lights, globalLit, blinded, doc = null }) {
     const s = this.scale;
+    this.sight.push({ doc, origin: los?.origin ?? null, fov, los, blinded: !!blinded });
     ctx.setTransform(s, 0, 0, s, 0, 0);
     ctx.globalCompositeOperation = "lighter";
     ctx.fillStyle = YELLOW;
@@ -266,8 +275,8 @@ export class Baker {
     }
     for (const src of sourceList(globalThis.canvas?.effects?.visionSources)) {
       if (!src?.active) continue;
-      this.drawSight(ctx, { fov: src.shape ?? src.fov, los: src.los, lights, globalLit, blinded: !!src.isBlinded });
       const doc = src.object?.document;
+      this.drawSight(ctx, { fov: src.shape ?? src.fov, los: src.los, lights, globalLit, blinded: !!src.isBlinded, doc });
       if (doc && src.los && !src.isBlinded) {
         this.viewers.push({ doc, origin: src.origin ?? src.los.origin, los: src.los, range: Number(src.radius) || 0, lightRange: Number(src.lightRadius ?? Infinity) });
       }
@@ -285,6 +294,29 @@ export class Baker {
     ctx.globalCompositeOperation = "source-over";
     this.seen = (x, y) => viewers.some((v) => v.fov?.contains?.(x, y)
       || (v.los?.contains?.(x, y) && (globalLit || lights.some((l) => l.shape?.contains?.(x, y)))));
+  }
+
+  /**
+   * Dead ground (view/dead-ground.mjs) loses "visible now" and keeps
+   * "explored": the polygon shows it, a creature standing there would be hidden.
+   */
+  dimDeadGround() {
+    const g = this.ground?.();
+    if (!g?.terrain || !g?.grid || !this.sight.length) return;
+    const viewers = this.sight.map((v) => {
+      let eye = null;
+      if (v.doc?.documentName === "Token") { try { eye = eyeQ(v.doc, g.grid); } catch { eye = null; } }
+      return { ...v, eye: Number.isFinite(eye) && v.origin ? eye : null };
+    });
+    const dead = deadGround({ terrain: g.terrain, grid: g.grid, viewers, lit: this.lit });
+    if (!dead.length) return;
+    const ctx = this.vision.getContext("2d");
+    const b = this.ppc / SUB;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = "multiply";
+    ctx.fillStyle = "rgb(0, 255, 255)"; // R to 0, G kept
+    for (const [si, sj] of dead) ctx.fillRect(sj * b, si * b, b, b);
+    ctx.globalCompositeOperation = "source-over";
   }
 
   /**
