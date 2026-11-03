@@ -329,6 +329,23 @@ const dist = (a, b) => Math.hypot(...oklab(a).map((v, i) => v - oklab(b)[i]));
   ok(updates[0]?.rolls?.[0]?.options?.glddfFateBonusApplied === true && updates[0]?.["flags.pf2e.context.outcome"] === "success", "roads: the bonus or the new outcome is not written with the fate");
   ok(check.options.glddfFateBonusApplied === undefined, "roads: the document's own roll was mutated before the write");
   ok(await applyFate(message, { source: "context" }) === null && updates.length === 1, "roads: a fated message takes a second fate");
+  // A hero point reroll clones the fated roll: it arrives with the old fate's
+  // +2 term and marker, and no fate flag. The new +4 must replace the old +2.
+  delete flags[C.FLAGS.fate];
+  const label = "GLDDF.Roll.FateBonusLabel";
+  const rerolled = {
+    total: 20, options: { glddfFateBonusApplied: true, glddfFateBonus: 2 }, dice: [{ faces: 20 }],
+    toJSON() {
+      return { formula: "1d20+8+2", total: 20, options: { ...this.options },
+        terms: [{ class: "Die", faces: 20, results: [{ result: 10, active: true }] }, { operator: "+" }, { number: 8 }, { operator: "+" }, { number: 2, options: { flavor: label } }] };
+    },
+  };
+  const before = updates.length;
+  await applyFate({ ...message, id: "m2", rolls: [rerolled], flags: { pf2e: { context: { ...message.flags.pf2e.context, isReroll: true } } } }, { source: "dialog" });
+  const re = updates[before];
+  const fateTerms = re?.rolls?.[0]?.terms?.filter((term) => term.options?.flavor === label) ?? [];
+  ok(re?.rolls?.[0]?.total === 22 && fateTerms.length === 1 && fateTerms[0].number === 4, `roads: a hero point reroll keeps the old fate's bonus (total ${re?.rolls?.[0]?.total}, ${fateTerms.length} fate terms)`);
+  ok(flags[C.FLAGS.fate]?.bonusApplied === true && flags[C.FLAGS.fate]?.before === "failure", "roads: a reroll's fate is not recorded against the check without the old bonus");
   delete flags[C.FLAGS.fate];
   ok(!canAddFate({ ...message, isAuthor: false }, { isGM: false }), "roads: a non-author player is offered a write Foundry will refuse");
   ok(!canAddFate({ ...message, isAuthor: false, timestamp: Date.now() }, { isGM: true }), "roads: a GM is offered the menu while the author's client is throwing the auto fate");

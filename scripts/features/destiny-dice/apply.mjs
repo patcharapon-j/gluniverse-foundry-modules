@@ -103,11 +103,24 @@ function faceOfRoll(roll) {
  */
 async function withBonus(message, bonus, label) {
   const source = message.rolls?.[0];
-  if (!source || source.options?.glddfFateBonusApplied) return null;
+  if (!source) return null;
   const data = source.toJSON();
   const roll = Roll.fromData(foundry.utils.deepClone(data));
-  const before = Number(roll.total ?? roll._total);
+  let before = Number(roll.total ?? roll._total);
   if (!Number.isFinite(before)) return null;
+
+  // A hero point reroll clones the fated roll, so it arrives carrying the old
+  // fate's term and marker. Take the old bonus out before adding the new one.
+  const inherited = source.options?.glddfFateBonusApplied ? Number(source.options.glddfFateBonus) || 0 : 0;
+  if (inherited !== 0) {
+    const at = roll.terms.findLastIndex((term, i) => i > 0 && term?.number === Math.abs(inherited)
+      && term.options?.flavor === label && roll.terms[i - 1]?.operator === (inherited > 0 ? "+" : "-"));
+    if (at < 0) return null;
+    roll.terms.splice(at - 1, 2);
+    before -= inherited;
+    roll._total = before;
+    roll.resetFormula?.();
+  }
 
   if (bonus !== 0) {
     const { OperatorTerm, NumericTerm } = foundry.dice.terms;
@@ -132,7 +145,7 @@ async function withBonus(message, bonus, label) {
     dosAdjustments: context?.dosAdjustments ?? null,
   });
   if (shift) roll.options.degreeOfSuccess = ["criticalFailure", "failure", "success", "criticalSuccess"].indexOf(shift.after);
-  return { roll, shift };
+  return { roll, shift, total: before + bonus, changed: bonus !== 0 || inherited !== 0 };
 }
 
 /**
@@ -181,7 +194,7 @@ export async function applyFate(message, { source = "manual", wait = false } = {
     };
 
     const updates = { [`flags.${MODULE_ID}.${FLAGS.fate}`]: fate };
-    if (bonusRoll && face.bonus !== 0) {
+    if (bonusRoll?.changed) {
       updates.rolls = [bonusRoll.roll.toJSON(), ...message.rolls.slice(1).map((r) => r.toJSON())];
       if (bonusRoll.shift) {
         updates["flags.pf2e.context.outcome"] = bonusRoll.shift.after;
