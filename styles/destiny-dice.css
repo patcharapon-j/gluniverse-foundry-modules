@@ -1,796 +1,430 @@
-/* ===========================================================================
-   GLUniverse Destiny Dice — "Etched Glass" design language
-   ---------------------------------------------------------------------------
-   Liquid glass as the material, Endfield precision as the drafting layer.
-   Every surface is a slab of dark frosted glass that a laser has etched:
-   a chamfered corner, a hairline registration bracket, a micro-type data
-   label, a rule of light that sweeps across when state changes.
+/* ═══════════════════════════════════════════════════════════════════════════
+   Destiny Dice — the fate strip, the Fated Roll switch, the face config window.
 
-   See: GL Universe — Design Language Reference ("Etched Glass") v1.0
-   =========================================================================== */
+   A scoped skin (docs/adr/0009-destiny-dice-skin.md) in the same black-leaning
+   language as Stream Pacer and PF2e Odds: ink slabs, paper type, a cut corner,
+   one tone per result. The tone is the preset's, read from the suite's semantic
+   hues through `[data-tone]`, and it is the same hue the 3D die's glyph is baked
+   in (constants.mjs PRESETS → core/theme.mjs PALETTE), so the card and the die
+   agree about what an Opportunity looks like.
 
-/* ---------------------------------------------------------------------------
-   1. Shared GL tokens (§2, §6.1)
-   --------------------------------------------------------------------------- */
-:root {
-  /* Type voices — derive from the canonical Etched Glass tokens. */
-  --gl-font-display: var(--gl-display);
-  --gl-font-tech: var(--gl-tech);
+   Every token is `--glddf-*` on the feature's own roots, never :root. Motion is
+   the suite's (`--gl-d-*`, `--gl-ease*`); the arrival is one anime.js timeline in
+   fate-result.mjs, so nothing here animates on its own.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-  /* Cinematic-tier multipliers (overridden by body.glddf-motion-* below) */
-  --glddf-motion-scale: 1;
-  --glddf-flare: 0px;
+:is(.glddf-fate-strip, .glddf-fated-roll-row, .glddf-cfg) {
+  --glddf-ink-0: #05060a;
+  --glddf-ink-1: #0a0b11;
+  --glddf-ink-2: #101219;
+  --glddf-ink-3: #15171f;
+  --glddf-ink-5: #272a36;
+  --glddf-paper: #ecedf2;
+  --glddf-dim: #b3b5c2;
+  --glddf-faint: #6a6d7c;
+  --glddf-rule: rgb(var(--gl-tint-light) / 0.1);
+  --glddf-rule-strong: rgb(var(--gl-tint-light) / 0.18);
+  --glddf-tone: var(--glddf-dim);
+  --glddf-commit: var(--gl-signal);
+  --glddf-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
+  --glddf-num: var(--gl-display);
+  --glddf-cut: 8px;
+  --glddf-cut-sm: 5px;
 }
 
-/* ===========================================================================
-   2. The Fated Roll toggle — glass-chip, signal-amber commit accent (§3.2)
-   =========================================================================== */
-.glddf-fated-roll-row {
+/* The preset's tones. Every tone a preset names in constants.mjs has a rule
+   here; the check tool holds the two lists together. */
+:is(.glddf-fate-strip, .glddf-cfg-row, .glddf-cfg-kind, .glddf-cfg-count)[data-tone="info"] { --glddf-tone: var(--gl-info); }
+:is(.glddf-fate-strip, .glddf-cfg-row, .glddf-cfg-kind, .glddf-cfg-count)[data-tone="hazard"] { --glddf-tone: var(--gl-hazard); }
+:is(.glddf-fate-strip, .glddf-cfg-row, .glddf-cfg-kind, .glddf-cfg-count)[data-tone="signal"] { --glddf-tone: var(--gl-signal); }
+:is(.glddf-fate-strip, .glddf-cfg-row, .glddf-cfg-kind, .glddf-cfg-count)[data-tone="cyan"] { --glddf-tone: var(--gl-cyan); }
+:is(.glddf-fate-strip, .glddf-cfg-row, .glddf-cfg-kind, .glddf-cfg-count)[data-tone="violet"] { --glddf-tone: var(--gl-violet); }
+:is(.glddf-fate-strip, .glddf-cfg-row, .glddf-cfg-kind, .glddf-cfg-count)[data-tone="textDim"] { --glddf-tone: var(--gl-text-dim); }
+
+/* ---- the die face tile, shared by the strip and the config rows ---- */
+
+.glddf-fate-face {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  box-sizing: border-box;
+  color: var(--glddf-tone);
+  background:
+    radial-gradient(circle at 50% 42%, color-mix(in oklab, var(--glddf-tone) 16%, transparent), transparent 70%),
+    var(--glddf-ink-0);
+  border: 1px solid color-mix(in oklab, var(--glddf-tone) 42%, var(--glddf-ink-5));
+  clip-path: polygon(var(--glddf-cut-sm) 0, 100% 0, 100% calc(100% - var(--glddf-cut-sm)), calc(100% - var(--glddf-cut-sm)) 100%, 0 100%, 0 var(--glddf-cut-sm));
+}
+
+/* A blank face is plain glass: a dim glow there reads as a smudge. */
+:is(.glddf-fate-strip, .glddf-cfg-row)[data-tone="textDim"] .glddf-fate-face { background: var(--glddf-ink-0); }
+
+.glddf-fate-face .glddf-glyph {
+  display: block;
+  width: 80%;
+  height: 80%;
+  overflow: visible;
+}
+
+/* ═══ The fate strip, under a PF2e check card ═══ */
+
+.glddf-fate-strip {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 0;
+  padding: 7px 10px 7px 12px;
+  box-sizing: border-box;
+  font-family: var(--glddf-font);
+  color: var(--glddf-paper);
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--glddf-tone) 10%, transparent), transparent 55%),
+    var(--glddf-ink-1);
+  border: 1px solid var(--glddf-rule);
+  clip-path: polygon(0 0, calc(100% - var(--glddf-cut)) 0, 100% var(--glddf-cut), 100% 100%, 0 100%);
+  line-height: 1.2;
+}
+
+/* The tone rule down the leading edge. Drawn top-down on arrival. */
+.glddf-fate-rule {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--glddf-tone);
+  transform-origin: 50% 0;
+}
+
+.glddf-fate-body {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.glddf-fate-kicker {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--glddf-faint);
+  white-space: nowrap;
+}
+
+.glddf-fate-name {
   display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--glddf-paper);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glddf-fate-shift {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--glddf-dim);
+  white-space: nowrap;
+}
+
+.glddf-fate-from { color: var(--glddf-faint); text-decoration: line-through; text-decoration-color: var(--glddf-rule-strong); }
+.glddf-fate-to { color: var(--glddf-paper); font-weight: 600; }
+
+/* A chevron drawn from two borders, pointing in the direction of the shift. */
+.glddf-fate-arrow {
+  width: 5px;
+  height: 5px;
+  border-top: 1.5px solid var(--glddf-tone);
+  border-right: 1.5px solid var(--glddf-tone);
+  transform: rotate(45deg);
+}
+.glddf-fate-shift[data-dir="down"] .glddf-fate-to { color: var(--glddf-dim); }
+
+.glddf-fate-bonus {
+  display: grid;
+  place-items: center;
+  min-width: 40px;
+  padding: 0 2px 0 8px;
+  border-left: 1px solid var(--glddf-rule);
+  align-self: stretch;
+}
+
+.glddf-fate-bonus-num {
+  font-family: var(--glddf-num);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--glddf-tone);
+}
+
+/* A blank face is the die saying nothing: the quietest slab. */
+.glddf-fate-strip.glddf-blank { background: var(--glddf-ink-1); }
+.glddf-fate-strip.glddf-blank .glddf-fate-name { color: var(--glddf-dim); font-weight: 500; }
+
+/* Refused (an old accept step the standalone module had). */
+.glddf-fate-strip.glddf-refused { --glddf-tone: var(--glddf-faint); background: var(--glddf-ink-1); }
+.glddf-fate-strip.glddf-refused .glddf-fate-name { color: var(--glddf-faint); text-decoration: line-through; }
+.glddf-fate-tag {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  color: var(--glddf-dim);
+  border: 1px solid var(--glddf-rule-strong);
+}
+
+/* ═══ The Fated Roll switch in PF2e's check dialog ═══ */
+
+.glddf-fated-roll-row {
+  display: block;
   width: 100%;
 }
 
 .glddf-fated-roll-toggle {
-  /* The toggle is a commit/confirm control → signal amber (§2.4). */
-  --gl-accent: var(--gl-signal);
-
-  align-items: center;
-  color: color-mix(in oklab, var(--gl-accent) 30%, var(--gl-text-bright));
-  cursor: pointer;
+  position: relative;
   display: flex;
-  flex: 0 0 auto;
-  font-family: var(--gl-font-tech);
-  font-size: 0.76rem;
-  font-weight: var(--gl-weight-bold);
-  gap: 0.6rem;
-  isolation: isolate;
-  justify-content: space-between;
-  letter-spacing: 0.16em;
-  margin: 0;
-  overflow: hidden;
-  padding: 0.46rem 0.9rem 0.46rem 1rem;
-  position: relative;
-  text-transform: uppercase;
-  white-space: nowrap;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-
-  /* Chip notch — top-left (§4.1) */
-  border: 1px solid color-mix(in oklab, var(--gl-accent) 30%, var(--gl-edge));
-  border-radius: 8px;
-  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-sm));
-
-  background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.1), rgb(var(--gl-tint-light) / 0) 34%),
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02), rgb(var(--gl-tint-dark) / 0.2)),
-    linear-gradient(98deg, color-mix(in oklab, var(--gl-accent) 12%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
-  box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
-    inset 0 -10px 22px rgb(var(--gl-tint-dark) / 0.34),
-    0 2px 0 rgb(var(--gl-tint-dark) / 0.4);
-  transition:
-    color var(--gl-d-quick) var(--gl-ease),
-    border-color var(--gl-d-quick) var(--gl-ease),
-    box-shadow var(--gl-d-quick) var(--gl-ease),
-    transform var(--gl-d-tap) var(--gl-ease);
+  min-height: 30px;
+  margin: 0;
+  padding: 4px 10px 4px 6px;
+  box-sizing: border-box;
+  font-family: var(--glddf-font);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--glddf-dim);
+  background: var(--glddf-ink-1);
+  border: 1px solid var(--glddf-rule);
+  clip-path: polygon(var(--glddf-cut-sm) 0, 100% 0, 100% 100%, 0 100%, 0 var(--glddf-cut-sm));
+  cursor: pointer;
+  transition: color var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
 }
 
-/* Edge bar — the accent rail (§7.1) */
-.glddf-fated-roll-toggle::before {
-  background: var(--gl-accent);
-  border-radius: 2px;
-  bottom: 0.34rem;
-  box-shadow:
-    0 0 6px var(--gl-accent),
-    0 0 14px color-mix(in oklab, var(--gl-accent) 45%, transparent);
-  content: "";
-  left: 0;
+.glddf-fated-roll-toggle:hover { color: var(--glddf-paper); border-color: var(--glddf-rule-strong); }
+
+.glddf-fated-roll-die {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--glddf-faint);
+  transition: color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-move) var(--gl-ease);
+}
+.glddf-fated-roll-die .glddf-glyph { width: 16px; height: 16px; }
+
+.glddf-fated-roll-text { flex: 1 1 auto; }
+
+/* The native box stays the control (keyboard, label click); it is drawn as the switch. */
+.glddf-fated-roll-toggle input {
   position: absolute;
-  top: 0.34rem;
-  width: 3px;
-  z-index: 1;
-}
-
-/* Top precision rule — draws on hover (§4.3, §7.2) */
-.glddf-fated-roll-toggle::after {
-  background: linear-gradient(90deg, transparent, var(--gl-accent) 24%, var(--gl-accent) 76%, transparent);
-  box-shadow: 0 0 14px color-mix(in oklab, var(--gl-accent) 70%, transparent);
-  content: "";
-  height: 1px;
-  left: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   opacity: 0;
-  position: absolute;
-  right: 0;
-  top: 0;
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition:
-    transform var(--gl-d-quick) var(--gl-ease),
-    opacity var(--gl-d-quick) var(--gl-ease);
-  z-index: 3;
+  cursor: pointer;
 }
 
-.glddf-fated-roll-toggle > span {
+.glddf-switch {
   position: relative;
-  z-index: 2;
-  text-shadow:
-    0 0 6px color-mix(in oklab, var(--gl-accent) 26%, transparent),
-    0 1px 0 rgb(var(--gl-tint-dark) / 0.5);
+  flex: 0 0 auto;
+  width: 28px;
+  height: 14px;
+  box-sizing: border-box;
+  background: var(--glddf-ink-0);
+  border: 1px solid var(--glddf-ink-5);
+  transition: background var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease);
 }
-
-/* Triangle bullet — the etched indicator (§4.2) */
-.glddf-fated-roll-toggle > span::before {
-  color: color-mix(in oklab, var(--gl-accent) 80%, var(--gl-text-dim));
-  content: "\25B8";
-  font-size: 0.7em;
-  margin-right: 0.5em;
-}
-
-.glddf-fated-roll-toggle:hover {
-  border-color: color-mix(in oklab, var(--gl-accent) 50%, var(--gl-edge));
-  filter: brightness(1.06);
-}
-
-.glddf-fated-roll-toggle:hover::after {
-  opacity: 1;
-  transform: scaleX(1);
-}
-
-/* Press (§6.2) */
-.glddf-fated-roll-toggle:active {
-  transform: translateY(var(--gl-press));
+.glddf-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 8px;
+  height: 8px;
+  background: var(--glddf-faint);
+  transition: translate var(--gl-d-brisk) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
 }
 
 .glddf-fated-roll-toggle:has(input:checked) {
-  border-color: color-mix(in oklab, var(--gl-accent) 70%, var(--gl-edge));
-  color: var(--gl-signal-hot);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in oklab, var(--gl-accent) 70%, transparent),
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
-    inset 0 -10px 22px rgb(var(--gl-tint-dark) / 0.34),
-    0 0 22px color-mix(in oklab, var(--gl-accent) 34%, transparent),
-    0 2px 0 rgb(var(--gl-tint-dark) / 0.4);
+  color: var(--glddf-paper);
+  border-color: color-mix(in oklab, var(--glddf-commit) 45%, var(--glddf-rule));
+  background: linear-gradient(90deg, color-mix(in oklab, var(--glddf-commit) 12%, transparent), transparent 70%), var(--glddf-ink-1);
+}
+.glddf-fated-roll-toggle:has(input:checked) .glddf-fated-roll-die { color: var(--glddf-commit); scale: 1.2; }
+.glddf-fated-roll-toggle:has(input:checked) .glddf-switch { border-color: var(--glddf-commit); background: color-mix(in oklab, var(--glddf-commit) 22%, var(--glddf-ink-0)); }
+.glddf-fated-roll-toggle:has(input:checked) .glddf-switch::after { translate: 14px 0; background: var(--glddf-commit); }
+.glddf-fated-roll-toggle:has(input:focus-visible) { outline: 1px solid var(--glddf-commit); outline-offset: 1px; }
+
+/* ═══ The face config window ═══ */
+
+.glddf-face-config .window-content { padding: 0; background: var(--gl-ink-0); }
+
+.glddf-cfg {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px 14px;
+  font-family: var(--glddf-font);
+  font-size: 13px;
+  color: var(--glddf-paper);
+  background: var(--glddf-ink-0);
 }
 
-.glddf-fated-roll-toggle:has(input:checked) > span {
-  text-shadow:
-    0 0 10px color-mix(in oklab, var(--gl-accent) 50%, transparent),
-    0 1px 0 rgb(var(--gl-tint-dark) / 0.5);
-}
-
-.glddf-fated-roll-toggle:has(input:checked) > span::before {
-  color: var(--gl-accent);
-}
-
-/* Native checkbox → etched signal pip (notched square that fills on commit) */
-.glddf-fated-roll-toggle input {
-  appearance: none;
-  -webkit-appearance: none;
-  background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.06), rgb(var(--gl-tint-dark) / 0.3)),
-    var(--gl-ink-2);
-  border: 1px solid color-mix(in oklab, var(--gl-accent) 40%, var(--gl-edge));
-  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
-  cursor: pointer;
-  display: inline-block;
-  flex: 0 0 auto;
-  height: 1rem;
-  margin: 0;
-  position: relative;
-  width: 1rem;
-  z-index: 2;
-  transition:
-    background var(--gl-d-quick) var(--gl-ease),
-    box-shadow var(--gl-d-quick) var(--gl-ease),
-    border-color var(--gl-d-quick) var(--gl-ease);
-}
-
-.glddf-fated-roll-toggle input:checked {
-  background: var(--gl-accent);
-  border-color: var(--gl-signal-hot);
-  box-shadow:
-    0 0 8px color-mix(in oklab, var(--gl-accent) 60%, transparent),
-    0 0 16px color-mix(in oklab, var(--gl-accent) 35%, transparent);
-}
-
-.glddf-fated-roll-toggle input:checked::after {
-  border: solid var(--gl-ink-0);
-  border-width: 0 2px 2px 0;
-  content: "";
-  height: 0.5rem;
-  left: 50%;
-  position: absolute;
-  top: 44%;
-  transform: translate(-50%, -50%) rotate(45deg);
-  width: 0.28rem;
-}
-
-/* ===========================================================================
-   3. The chat-card fate strip — glass-panel material + chamfer (§3.1, §4.1)
-   =========================================================================== */
-.glddf-fate-strip {
-  /* Accent fallbacks; the active preset overrides --gl-accent at runtime. */
-  --gl-accent: var(--gl-text-dim);
-  --glddf-leading-size: 3.1rem;
-
-  align-items: stretch;
-  color: var(--gl-text);
+.glddf-cfg-head {
   display: flex;
-  font-family: var(--gl-font-tech);
-  font-size: 0.82rem;
-  gap: 0;
-  isolation: isolate;
-  letter-spacing: 0.05em;
-  margin: 9px 0 5px;
-  min-height: var(--glddf-leading-size);
-  overflow: hidden;
-  padding: 0;
-  position: relative;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.glddf-cfg-head p { margin: 0; color: var(--glddf-dim); line-height: 1.45; max-width: 46ch; }
+
+.glddf-cfg-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-
-  /* Chamfer — three soft corners, one diagonal cut top-right (§4.1) */
-  border: 1px solid var(--gl-edge);
-  border-radius: 13px;
-  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
-
-  /* Glass-panel fill (§3.1) */
-  background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.1), rgb(var(--gl-tint-light) / 0) 34%),
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.02), rgb(var(--gl-tint-dark) / 0.2)),
-    linear-gradient(98deg, color-mix(in oklab, var(--gl-accent) 14%, var(--gl-ink-1)), var(--gl-ink-1) 64%);
-  box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
-    inset 0 -12px 28px rgb(var(--gl-tint-dark) / 0.38);
-
-  /* clip-path clips outer shadows → drop + bloom ride on filter (§9.1 note) */
-  filter:
-    drop-shadow(0 18px 42px rgb(var(--gl-tint-dark) / 0.55))
-    drop-shadow(0 2px 0 rgb(var(--gl-tint-dark) / 0.4))
-    drop-shadow(0 0 26px color-mix(in oklab, var(--gl-accent) 18%, transparent));
-
-  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
+  color: var(--glddf-faint);
 }
 
-/* Inner radial light catch (§3.1 ::before) */
-.glddf-fate-strip::before {
-  background: radial-gradient(
-    70% 150% at 50% -50%,
-    color-mix(in oklab, var(--gl-accent) 50%, transparent),
-    transparent 66%
-  );
-  content: "";
-  inset: 0;
-  opacity: 0.22;
-  pointer-events: none;
-  position: absolute;
-  z-index: 0;
-}
+.glddf-cfg-preset { white-space: nowrap; color: var(--glddf-paper); font-weight: 600; }
 
-/* Top precision rule — the sheen sweep lives here (§4.3, §6.2) */
-.glddf-fate-strip::after {
-  background: linear-gradient(90deg, transparent, var(--gl-accent) 24%, var(--gl-accent) 76%, transparent);
-  box-shadow: 0 0 14px color-mix(in oklab, var(--gl-accent) 70%, transparent);
-  content: "";
-  height: 1px;
-  left: 0;
-  opacity: 0;
-  position: absolute;
-  right: 0;
-  top: 0;
-  transform: scaleX(0);
-  transform-origin: left center;
-  z-index: 4;
-}
+.glddf-cfg-rows { display: grid; gap: 4px; }
 
-.glddf-fate-strip > * {
-  position: relative;
-  z-index: 2;
-}
-
-/* --- Etched annotations -------------------------------------------------- */
-
-/* Chamfer hairline — a 1px accent line tracing the cut edge (§4.1) */
-.glddf-fate-strip .glddf-cut {
-  background: color-mix(in oklab, var(--gl-accent) 75%, transparent);
-  box-shadow: 0 0 8px color-mix(in oklab, var(--gl-accent) 60%, transparent);
-  height: 1px;
-  pointer-events: none;
-  position: absolute;
-  right: -3px;
-  top: 8px;
-  transform: rotate(-45deg);
-  transform-origin: center;
-  width: 22px;
-  z-index: 5;
-}
-
-/* L-bracket registration mark — bottom-left (§4.2) */
-.glddf-fate-strip .glddf-bracket {
-  border: 1px solid var(--gl-line-strong);
-  border-right: 0;
-  border-top: 0;
-  bottom: 6px;
-  height: 8px;
-  left: 6px;
-  opacity: 0.5;
-  pointer-events: none;
-  position: absolute;
-  width: 8px;
-  z-index: 5;
-  transition: border-color var(--gl-d-quick) var(--gl-ease), opacity var(--gl-d-quick) var(--gl-ease);
-}
-
-/* Leading face well — frosted inset, flush to left/top/bottom */
-.glddf-fate-face,
-.glddf-fate-glyph {
-  align-self: stretch;
-  background:
-    radial-gradient(ellipse at 50% 32%, rgb(var(--gl-tint-light) / 0.07), transparent 60%),
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.03), rgb(var(--gl-tint-dark) / 0.36));
-  border: none;
-  border-right: 1px solid color-mix(in oklab, var(--gl-accent) 32%, var(--gl-hair));
-  box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.08),
-    inset -1px 0 0 rgb(var(--gl-tint-dark) / 0.4);
-  display: flex;
-  flex: 0 0 var(--glddf-leading-size);
-  height: auto;
-  margin: 0;
-  position: relative;
-  width: var(--glddf-leading-size);
-}
-
-.glddf-fate-face {
-  object-fit: cover;
-  padding: 0.28rem;
-  filter:
-    drop-shadow(0 0 6px color-mix(in oklab, var(--gl-accent) 55%, transparent))
-    drop-shadow(0 0 13px color-mix(in oklab, var(--gl-accent) 35%, transparent))
-    drop-shadow(0 1px 2px rgb(var(--gl-tint-dark) / 0.65));
-}
-
-.glddf-fate-glyph {
+.glddf-cfg-cols,
+.glddf-cfg-row {
+  display: grid;
+  grid-template-columns: 58px 252px 64px minmax(0, 1fr);
   align-items: center;
-  color: color-mix(in oklab, var(--gl-accent) 70%, var(--gl-text));
-  justify-content: center;
-  text-shadow:
-    0 0 8px color-mix(in oklab, var(--gl-accent) 55%, transparent),
-    0 1px 2px rgb(var(--gl-tint-dark) / 0.55);
+  gap: 10px;
+  padding: 6px 8px 6px 6px;
+  background: var(--glddf-ink-1);
+  border: 1px solid var(--glddf-rule);
+  border-left: 2px solid var(--glddf-tone);
 }
 
-.glddf-fate-glyph i {
-  font-size: 1.2rem;
-  line-height: 1;
-  opacity: 0.95;
-}
+.glddf-cfg-cols { padding: 0 8px 0 8px; border: 1px solid transparent; border-left-width: 2px; }
 
-/* --- Body ---------------------------------------------------------------- */
-.glddf-fate-body {
-  align-items: center;
-  display: flex;
-  flex: 1 1 auto;
-  gap: 0.7rem;
-  min-width: 0;
-  padding: 0.5rem 1.05rem 0.5rem 0.95rem;
-  position: relative;
-}
-
-/* Colored rail accent between the leading well and the text body (§7.1) */
-.glddf-fate-body::before {
-  background: var(--gl-accent);
-  border-radius: 2px;
-  bottom: 0.34rem;
-  box-shadow:
-    0 0 6px var(--gl-accent),
-    0 0 14px color-mix(in oklab, var(--gl-accent) 45%, transparent);
-  content: "";
-  left: 0;
-  position: absolute;
-  top: 0.34rem;
-  width: 2px;
-  z-index: 1;
-}
-
-.glddf-fate-body > * {
-  position: relative;
-  z-index: 2;
-}
-
-.glddf-fate-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 0.12rem;
-  min-width: 0;
-}
-
-/* Technical kicker — micro serial / data label (§4.2, §5) */
-.glddf-fate-kicker {
-  color: var(--gl-text-faint);
-  font-family: var(--gl-font-tech);
-  font-size: 0.62rem;
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.2em;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-/* Result name — Oxanium display voice (§5) */
-.glddf-fate-name {
-  color: var(--gl-text-bright);
-  font-family: var(--gl-font-display);
-  font-size: 0.92rem;
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.12em;
-  line-height: 1.05;
-  text-shadow:
-    0 0 10px color-mix(in oklab, var(--gl-accent) 30%, transparent),
-    0 1px 0 rgb(var(--gl-tint-dark) / 0.55);
-}
-
-/* --- Hero bonus numeral lockup (§5 "numbers are heroes") ----------------- */
-.glddf-fate-bonus {
-  align-items: center;
-  background:
-    radial-gradient(ellipse at 50% 28%, rgb(var(--gl-tint-light) / 0.14), transparent 70%),
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.04), rgb(var(--gl-tint-dark) / 0.42));
-  border: 1px solid color-mix(in oklab, var(--gl-accent) 60%, var(--gl-edge));
-  border-radius: 11px;
-  /* Small notch top-left (§4.1) */
-  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut-xs));
-  box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14),
-    inset 0 -1px 0 rgb(var(--gl-tint-dark) / 0.45),
-    0 0 10px color-mix(in oklab, var(--gl-accent) 40%, transparent),
-    0 0 20px color-mix(in oklab, var(--gl-accent) 22%, transparent);
-  display: inline-flex;
-  flex-direction: column;
-  justify-content: center;
-  line-height: 1;
-  margin-left: auto;
-  min-width: 2.7rem;
-  padding: 0.2rem 0.7rem 0.26rem;
-  text-align: center;
-  text-transform: none;
-}
-
-.glddf-fate-bonus-num {
-  color: var(--gl-text-bright);
-  font-family: var(--gl-font-display);
-  font-size: 1.5rem;
+.glddf-cfg-face { display: flex; align-items: center; gap: 8px; }
+.glddf-cfg-num {
+  font-family: var(--glddf-num);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--glddf-dim);
   font-variant-numeric: tabular-nums;
-  font-weight: var(--gl-weight-heavy);
-  letter-spacing: 0.01em;
-  text-shadow:
-    0 0 8px color-mix(in oklab, var(--gl-accent) 70%, transparent),
-    0 0 16px color-mix(in oklab, var(--gl-accent) 40%, transparent),
-    0 1px 1px rgb(var(--gl-tint-dark) / 0.8);
 }
 
-.glddf-fate-bonus-unit {
-  color: var(--gl-text-faint);
-  font-family: var(--gl-font-tech);
-  font-size: 0.5rem;
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.32em;
-  margin-top: 0.05rem;
-  padding-left: 0.32em;
+/* The kind as a segmented control: three radios drawn as one slab. */
+.glddf-cfg-kinds { display: flex; border: 1px solid var(--glddf-ink-5); }
+.glddf-cfg-kind { position: relative; flex: 1 1 0; margin: 0; cursor: pointer; text-align: center; }
+.glddf-cfg-kind + .glddf-cfg-kind { border-left: 1px solid var(--glddf-ink-5); }
+.glddf-cfg-kind input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.glddf-cfg-kind span {
+  display: block;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--glddf-faint);
+  white-space: nowrap;
+  transition: color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
 }
-
-/* ---------------------------------------------------------------------------
-   3.1 Strip states — the dynamic accent channel (§2.5, §7)
-   --------------------------------------------------------------------------- */
-
-/* Static fallbacks; preset overrides (settings.mjs) supersede these. */
-.glddf-fate-strip.glddf-opportunity {
-  --gl-accent: var(--gl-cyan);
+.glddf-cfg-kind:hover span { color: var(--glddf-paper); }
+.glddf-cfg-kind:has(input:checked) span {
+  color: var(--glddf-paper);
+  background: color-mix(in oklab, var(--glddf-tone) 20%, var(--glddf-ink-2));
+  box-shadow: inset 0 -2px 0 var(--glddf-tone);
 }
+.glddf-cfg-kind:has(input:focus-visible) { outline: 1px solid var(--glddf-tone); outline-offset: -1px; }
 
-.glddf-fate-strip.glddf-complication {
-  --gl-accent: var(--gl-signal);
+
+.glddf-cfg :is(input[type="number"], input[type="text"]) {
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  padding: 0 8px;
+  box-sizing: border-box;
+  font-family: var(--glddf-font);
+  font-size: 13px;
+  color: var(--glddf-paper);
+  background: var(--glddf-ink-0);
+  border: 1px solid var(--glddf-ink-5);
+  border-radius: 0;
+  box-shadow: none;
 }
+.glddf-cfg .glddf-cfg-value { font-family: var(--glddf-num); font-variant-numeric: tabular-nums; }
+.glddf-cfg input:focus { outline: none; border-color: var(--glddf-tone); }
+.glddf-cfg input:disabled { color: var(--glddf-faint); background: var(--glddf-ink-1); border-style: dashed; }
+.glddf-cfg input::placeholder { color: var(--glddf-faint); }
 
-.glddf-fate-strip.glddf-blank {
-  --gl-accent: var(--gl-text-dim);
-}
+.glddf-cfg-image { display: flex; gap: 4px; min-width: 0; }
 
-/* Active / featured emphasis — every freshly-rolled strip reads as "live" */
-.glddf-fate-strip:not(.glddf-blank):not(.glddf-refused) .glddf-bracket {
-  border-color: var(--gl-accent);
-  opacity: 1;
-}
-
-/* Defeated / spent — the refused (un-accepted) result (§7.6) */
-.glddf-fate-strip.glddf-refused {
-  filter:
-    saturate(0.18) brightness(0.62)
-    drop-shadow(0 14px 30px rgb(var(--gl-tint-dark) / 0.5));
-  opacity: 0.65;
-}
-
-.glddf-fate-strip.glddf-refused .glddf-bracket {
-  /* The drafting layer never disappears (§7.6) */
-  border-color: var(--gl-line-strong);
-  opacity: 0.5;
-}
-
-/* ---------------------------------------------------------------------------
-   3.2 The reveal contract — sheen sweep + etched ghost (§6.3)
-   anticipation → rule/light moves → content lights → settle
-   --------------------------------------------------------------------------- */
-.glddf-fate-strip.glddf-reveal {
-  animation: glddf-strip-in calc(var(--gl-d-reveal) * var(--glddf-motion-scale)) var(--gl-ease) both;
-}
-
-.glddf-fate-strip.glddf-reveal::after {
-  animation: glddf-sweep calc(var(--gl-d-splash) * var(--glddf-motion-scale)) var(--gl-ease) var(--gl-d-flash) both;
-}
-
-.glddf-fate-strip.glddf-reveal .glddf-fate-kicker,
-.glddf-fate-strip.glddf-reveal .glddf-fate-name {
-  animation: glddf-ghost-in calc(var(--gl-d-reveal) * var(--glddf-motion-scale)) var(--gl-ease) var(--gl-d-quick) both;
-}
-
-.glddf-fate-strip.glddf-reveal .glddf-fate-name {
-  animation-delay: var(--gl-d-brisk);
-}
-
-.glddf-fate-strip.glddf-reveal .glddf-fate-bonus {
-  animation: glddf-pop calc(var(--gl-d-move) * var(--glddf-motion-scale)) var(--gl-pop) var(--gl-d-swift) both;
-}
-
-.glddf-fate-strip.glddf-reveal .glddf-fate-face,
-.glddf-fate-strip.glddf-reveal .glddf-fate-glyph {
-  animation: glddf-well-in calc(var(--gl-d-reveal) * var(--glddf-motion-scale)) var(--gl-ease) both;
-}
-
-@keyframes glddf-strip-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes glddf-sweep {
-  0% {
-    opacity: 0;
-    transform: scaleX(0);
-    transform-origin: left center;
-  }
-  18% {
-    opacity: 1;
-  }
-  70% {
-    opacity: 1;
-    transform: scaleX(1);
-    transform-origin: left center;
-  }
-  100% {
-    opacity: 0;
-    transform: scaleX(1);
-    transform-origin: right center;
-  }
-}
-
-@keyframes glddf-ghost-in {
-  from {
-    opacity: 0.18;
-    transform: translateX(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes glddf-pop {
-  0% {
-    opacity: 0;
-    transform: scale(0.6);
-  }
-  60% {
-    opacity: 1;
-    transform: scale(1.18);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes glddf-well-in {
-  from {
-    opacity: 0;
-    filter: brightness(2.4);
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* ===========================================================================
-   4. The Dice Faces config dialog — glass surface + etched rows
-   =========================================================================== */
-.glddf-face-config-form {
-  display: grid;
-  font-family: var(--gl-font-display);
-  gap: 0.85rem;
-}
-
-.glddf-face-config-form .notes {
-  color: var(--gl-text-dim);
-  font-family: var(--gl-font-tech);
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-}
-
-.glddf-face-config-grid {
-  display: grid;
-  gap: 0.55rem;
-}
-
-.glddf-face-config-row {
-  align-items: end;
-  display: grid;
-  gap: 0.65rem;
-  grid-template-columns: 8rem minmax(8rem, 1fr) 5.5rem minmax(14rem, 2fr);
-  isolation: isolate;
-  padding: 0.7rem 0.75rem;
-  position: relative;
-
-  /* Row chip — soft three-corner radius, notch top-right */
-  border: 1px solid var(--gl-edge);
-  border-radius: 11px;
-  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
-  background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), rgb(var(--gl-tint-light) / 0) 40%),
-    linear-gradient(98deg, color-mix(in oklab, var(--gl-accent) 6%, var(--gl-ink-2)), var(--gl-ink-1) 70%);
-  box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.08),
-    inset 0 -8px 18px rgb(var(--gl-tint-dark) / 0.3);
-}
-
-/* L-bracket registration on each face row */
-.glddf-face-config-row::before {
-  border: 1px solid var(--gl-line-strong);
-  border-bottom: 0;
-  border-right: 0;
-  content: "";
-  height: 8px;
-  left: 6px;
-  opacity: 0.45;
-  position: absolute;
-  top: 6px;
-  width: 8px;
-}
-
-.glddf-face-config-label {
+/* Every button the window ships is sized here: Foundry's own button type is
+   the host's, which in a form is larger than everything around it. */
+.glddf-cfg-icon,
+.glddf-cfg-btn {
+  display: inline-flex;
   align-items: center;
-  display: flex;
-  gap: 0.6rem;
-  min-width: 0;
-}
-
-.glddf-face-config-id {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-}
-
-.glddf-face-config-kicker {
-  color: var(--gl-text-faint);
-  font-family: var(--gl-font-tech);
-  font-size: 0.56rem;
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.2em;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  margin: 0;
+  padding: 0 12px;
+  box-sizing: border-box;
+  font-family: var(--glddf-font);
+  font-size: 12.5px;
+  font-weight: 600;
   line-height: 1;
+  color: var(--glddf-dim);
+  background: var(--glddf-ink-2);
+  border: 1px solid var(--glddf-ink-5);
+  border-radius: 0;
+  box-shadow: none;
+  cursor: pointer;
+  transition: color var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
 }
+.glddf-cfg-icon { flex: 0 0 28px; width: 28px; padding: 0; font-size: 12px; }
+.glddf-cfg-icon:hover,
+.glddf-cfg-btn:hover { color: var(--glddf-paper); border-color: var(--glddf-rule-strong); }
 
-.glddf-face-config-label strong {
-  font-family: var(--gl-font-tech);
-  font-size: 0.78rem;
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.glddf-face-config-preview {
-  background:
-    radial-gradient(ellipse at 50% 30%, rgb(var(--gl-tint-light) / 0.06), transparent 60%),
-    var(--gl-ink-2);
-  border: 1px solid var(--gl-edge);
-  border-radius: 7px;
-  height: 2.4rem;
-  object-fit: contain;
-  padding: 0.15rem;
-  width: 2.4rem;
-}
-
-.glddf-face-config-row label {
-  display: grid;
-  gap: 0.28rem;
-  margin: 0;
-  min-width: 0;
-}
-
-.glddf-face-config-row label > span {
-  color: var(--gl-text-dim);
-  font-family: var(--gl-font-tech);
-  font-size: 0.62rem;
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.glddf-face-config-file {
+.glddf-cfg-summary {
   display: flex;
-  gap: 0.3rem;
-  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 2px 2px 0;
+  color: var(--glddf-dim);
+  font-size: 12px;
 }
+.glddf-cfg-count { display: inline-flex; align-items: baseline; gap: 5px; }
+.glddf-cfg-count b { font-family: var(--glddf-num); font-size: 15px; color: var(--glddf-tone); }
+.glddf-cfg-mean { margin-left: auto; color: var(--glddf-paper); font-variant-numeric: tabular-nums; }
 
-.glddf-face-config-file input {
-  min-width: 0;
-}
+.glddf-cfg-note { margin: 0; font-size: 11.5px; color: var(--glddf-faint); line-height: 1.4; }
 
-.glddf-face-config-file button {
-  flex: 0 0 2rem;
-  margin: 0;
+.glddf-cfg-foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; border-top: 1px solid var(--glddf-rule); }
+.glddf-cfg-foot .glddf-cfg-btn { margin-top: 8px; }
+.glddf-cfg-primary {
+  color: var(--glddf-ink-0);
+  background: var(--glddf-paper);
+  border-color: var(--glddf-paper);
 }
+.glddf-cfg-primary:hover { color: var(--glddf-ink-0); background: var(--gl-text-bright); }
 
 @media (max-width: 720px) {
-  .glddf-face-config-row {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .glddf-face-config-label,
-  .glddf-face-config-image {
-    grid-column: 1 / -1;
-  }
-}
-
-/* ===========================================================================
-   5. Motion tiers (§6.4)
-   =========================================================================== */
-
-/* Cinematic — durations ×1.4, sheens gain a trailing flare */
-body.glddf-motion-cinematic {
-  --glddf-motion-scale: 1.4;
-  --glddf-flare: 28px;
-}
-
-body.glddf-motion-cinematic .glddf-fate-strip.glddf-reveal::after {
-  box-shadow:
-    0 0 14px color-mix(in oklab, var(--gl-accent) 70%, transparent),
-    var(--glddf-flare) 0 36px color-mix(in oklab, var(--gl-accent) 30%, transparent);
-}
-
-/* Reduced — ceremonies become straight fades, no sheens */
-body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal {
-  animation: glddf-fade-in var(--gl-d-brisk) ease both;
-}
-
-body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal::after,
-body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal .glddf-fate-kicker,
-body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal .glddf-fate-name,
-body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal .glddf-fate-bonus,
-body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal .glddf-fate-face,
-body.glddf-motion-reduced .glddf-fate-strip.glddf-reveal .glddf-fate-glyph {
-  animation: none;
-}
-
-@keyframes glddf-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* The live reveal reserves the settled strip's geometry throughout. */
-.glddf-fate-strip.glddf-anime-reveal::after {
-  opacity: var(--glddf-reveal-rule, 0);
-  transform: scaleX(var(--glddf-reveal-rule, 0));
+  .glddf-cfg-cols { display: none; }
+  .glddf-cfg-row { grid-template-columns: 58px minmax(0, 1fr) 64px; }
+  .glddf-cfg-image { grid-column: 1 / -1; }
 }

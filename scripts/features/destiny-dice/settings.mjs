@@ -1,96 +1,93 @@
-import { applyMotionTier as applySuiteMotionTier } from "../../core/theme.mjs";
+/**
+ * Destiny Dice settings: registration, the one reader, and the face config app.
+ *
+ * Importable under plain Node. The config window's ApplicationV2 subclass is
+ * built in a memoised factory, because `foundry.applications.api` does not exist
+ * outside Foundry and this module is imported by the check tool and by the
+ * shared motion checks (the old file reached for it at module scope).
+ */
+
 import {
+  EMISSIVE_INTENSITY_DEFAULT,
+  EMISSIVE_INTENSITY_MAX,
+  EMISSIVE_INTENSITY_MIN,
+  EMISSIVE_INTENSITY_STEP,
   FACE_NUMBERS,
   FATE_KINDS,
-  FATE_PRESETS,
-  FEATURE_ID,
   KIND_ALIASES,
-  KIND_BLANK,
   KIND_OPPORTUNITY,
   MODULE_ID,
-  PRESET_AEGIS_FALLEN,
+  MOTION_TIERS,
+  MOTION_TIER_DEFAULT,
+  PRESETS,
   PRESET_DEFAULT,
-  PRESET_FATE_FACES,
-  PRESET_TIDES_OF_DESTINY,
+  DEFAULT_FACES,
 } from "./constants.mjs";
+import { bonusFor, faceKeys, normalizeImage, normalizeKind, presetId, resolveFace, resolveFaces } from "./faces.mjs";
+import { faceConfigModel, facesFromForm, renderFaceConfig, renderFaceRow, renderSummary } from "./view.mjs";
 
-// Every setting key registered under the shared suite namespace is prefixed
-// with this so destiny-dice keys never collide with other features' keys.
 export const DD_PREFIX = "dd.";
 
-export const SETTINGS = {
+export const SETTINGS = Object.freeze({
   preset: `${DD_PREFIX}preset`,
   emissiveIntensity: `${DD_PREFIX}emissiveIntensity`,
   motionTier: `${DD_PREFIX}motionTier`,
-};
+  ...Object.fromEntries(FACE_NUMBERS.flatMap((face) => {
+    const k = faceKeys(face);
+    return [[`face${face}Kind`, k.kind], [`face${face}Bonus`, k.bonus], [`face${face}Image`, k.image]];
+  })),
+});
+export const FACE_CONFIG_MENU = `${DD_PREFIX}faceConfig`;
 
-// Motion tiers (§6.4).
-export const MOTION_TIERS = ["reduced", "default", "cinematic"];
-export const MOTION_TIER_DEFAULT = "default";
-
-const MOTION_TIER_CHOICES = {
+const MOTION_TIER_CHOICES = Object.freeze({
   reduced: "GLDDF.Settings.MotionTier.Reduced",
   default: "GLDDF.Settings.MotionTier.Default",
   cinematic: "GLDDF.Settings.MotionTier.Cinematic",
-};
+});
+const KIND_CHOICES = Object.freeze(Object.fromEntries(FATE_KINDS.map((k) => [k, `GLDDF.Fate.Kind.${k}`])));
+const PRESET_CHOICES = Object.freeze(Object.fromEntries(Object.entries(PRESETS).map(([id, p]) => [id, p.name])));
 
-export const EMISSIVE_INTENSITY_DEFAULT = 1.0;
-export const EMISSIVE_INTENSITY_MIN = 0;
-export const EMISSIVE_INTENSITY_MAX = 2;
-export const EMISSIVE_INTENSITY_STEP = 0.05;
+/* The keys a reader may ask for. The check tool pins this against what
+   registerSettings() registers, both ways. */
+export const REGISTERED_KEYS = Object.freeze(Object.values(SETTINGS));
 
-for (const face of FACE_NUMBERS) {
-  SETTINGS[`face${face}Kind`] = `${DD_PREFIX}face${face}Kind`;
-  SETTINGS[`face${face}Bonus`] = `${DD_PREFIX}face${face}Bonus`;
-  SETTINGS[`face${face}Image`] = `${DD_PREFIX}face${face}Image`;
-}
+/* ── Reading ──────────────────────────────────────────────────────────── */
 
-// Map old loose filenames the previous version stored to a current asset path.
-const LEGACY_FACE_IMAGE_PATHS = {
-  "tyranny-4": PRESET_FATE_FACES[PRESET_DEFAULT][1].image,
-  "tyranny-2": PRESET_FATE_FACES[PRESET_DEFAULT][2].image,
-  defiance: PRESET_FATE_FACES[PRESET_DEFAULT][5].image,
-  "defiance-2": PRESET_FATE_FACES[PRESET_DEFAULT][5].image,
-};
-
-// Set of paths that are "built-in" defaults for any preset — used to decide
-// whether a stored image setting is a customization or just an old default.
-const BUILTIN_IMAGE_PATHS = new Set();
-for (const preset of Object.values(PRESET_FATE_FACES)) {
-  for (const face of Object.values(preset)) {
-    if (face.image) BUILTIN_IMAGE_PATHS.add(face.image);
+/** A setting, or undefined when Foundry has none (unregistered, no game). */
+export function read(key) {
+  try {
+    return globalThis.game?.settings?.get?.(MODULE_ID, key);
+  } catch {
+    return undefined;
   }
 }
-// Historical default paths that no longer exist as current preset defaults but
-// were shipped by earlier module versions; migration treats them the same as
-// current built-ins (clear → follow active preset). Cover both the new suite
-// install path and the old standalone-module path, since values stored by the
-// previous standalone module still reference `modules/gluniverse-destiny-dice/`.
-for (const legacy of ["defiance.png", "defiance-2.png", "tyranny-2.png", "tyranny-4.png"]) {
-  BUILTIN_IMAGE_PATHS.add(`modules/${MODULE_ID}/assets/${FEATURE_ID}/dice/${legacy}`);
-  BUILTIN_IMAGE_PATHS.add(`modules/gluniverse-destiny-dice/assets/dice/${legacy}`);
+
+export const activePreset = () => presetId(read(SETTINGS.preset));
+export const faces = () => resolveFaces(read);
+export const face = (n) => resolveFace(n, read);
+
+export function emissiveIntensity() {
+  const raw = Number(read(SETTINGS.emissiveIntensity));
+  if (!Number.isFinite(raw)) return EMISSIVE_INTENSITY_DEFAULT;
+  return Math.min(EMISSIVE_INTENSITY_MAX, Math.max(EMISSIVE_INTENSITY_MIN, raw));
 }
 
-const PRESET_CHOICES = {
-  [PRESET_DEFAULT]: "GLDDF.Settings.Preset.Default",
-  [PRESET_AEGIS_FALLEN]: "GLDDF.Settings.Preset.AegisFallen",
-  [PRESET_TIDES_OF_DESTINY]: "GLDDF.Settings.Preset.TidesOfDestiny",
-};
+export function motionTier() {
+  const tier = read(SETTINGS.motionTier);
+  return MOTION_TIERS.includes(tier) ? tier : MOTION_TIER_DEFAULT;
+}
 
-const FATE_KIND_CHOICES = {
-  opportunity: "GLDDF.Fate.Kind.opportunity",
-  complication: "GLDDF.Fate.Kind.complication",
-  blank: "GLDDF.Fate.Kind.blank",
-};
+/** game.i18n with a key fallback, so a Node fixture prints keys. */
+export function t(key, data) {
+  const i18n = globalThis.game?.i18n;
+  if (!i18n) return key;
+  return data ? i18n.format(key, data) : i18n.localize(key);
+}
 
-const FACE_CONFIG_TEMPLATE = `modules/${MODULE_ID}/templates/${FEATURE_ID}/face-config.hbs`;
+/* ── Registration ─────────────────────────────────────────────────────── */
 
 export function registerSettings() {
-  const reg = (key, opts) => game.settings.register(MODULE_ID, key, {
-    scope: "world",
-    config: true,
-    ...opts,
-  });
+  const reg = (key, opts) => game.settings.register(MODULE_ID, key, { scope: "world", config: true, ...opts });
 
   reg(SETTINGS.preset, {
     name: "GLDDF.Settings.Preset.Name",
@@ -98,24 +95,20 @@ export function registerSettings() {
     type: String,
     choices: PRESET_CHOICES,
     default: PRESET_DEFAULT,
+    // The die's faces are baked from the preset's tones when Dice So Nice starts.
     requiresReload: true,
-    onChange: applyThemeFromSettings,
   });
 
   reg(SETTINGS.emissiveIntensity, {
     name: "GLDDF.Settings.EmissiveIntensity.Name",
     hint: "GLDDF.Settings.EmissiveIntensity.Hint",
     type: Number,
-    range: {
-      min: EMISSIVE_INTENSITY_MIN,
-      max: EMISSIVE_INTENSITY_MAX,
-      step: EMISSIVE_INTENSITY_STEP,
-    },
+    range: { min: EMISSIVE_INTENSITY_MIN, max: EMISSIVE_INTENSITY_MAX, step: EMISSIVE_INTENSITY_STEP },
     default: EMISSIVE_INTENSITY_DEFAULT,
     requiresReload: true,
   });
 
-  // Motion is an accessibility/preference concern → per-client scope.
+  // An explicit, per-client choice of how much the result card moves.
   reg(SETTINGS.motionTier, {
     name: "GLDDF.Settings.MotionTier.Name",
     hint: "GLDDF.Settings.MotionTier.Hint",
@@ -123,311 +116,174 @@ export function registerSettings() {
     type: String,
     choices: MOTION_TIER_CHOICES,
     default: MOTION_TIER_DEFAULT,
-    onChange: applyMotionTier,
   });
 
-  game.settings.registerMenu(MODULE_ID, `${DD_PREFIX}faceConfig`, {
+  game.settings.registerMenu(MODULE_ID, FACE_CONFIG_MENU, {
     name: "GLDDF.Settings.FaceConfig.Name",
     label: "GLDDF.Settings.FaceConfig.Label",
     hint: "GLDDF.Settings.FaceConfig.Hint",
     icon: "fa-solid fa-dice-d6",
-    type: DestinyFaceConfig,
+    type: FaceConfigApp(),
     restricted: true,
   });
 
-  for (const face of FACE_NUMBERS) {
-    const defaults = PRESET_FATE_FACES[PRESET_DEFAULT][face];
-    reg(getFaceKindSetting(face), {
-      type: String,
-      choices: FATE_KIND_CHOICES,
-      default: defaults.kind,
-      config: false,
-    });
-    reg(getFaceBonusSetting(face), {
-      type: Number,
-      default: defaults.bonus,
-      config: false,
-    });
-    reg(getFaceImageSetting(face), {
-      type: String,
-      default: "",
-      filePicker: "image",
-      requiresReload: true,
-      config: false,
-    });
+  for (const n of FACE_NUMBERS) {
+    const keys = faceKeys(n);
+    const fallback = DEFAULT_FACES[n];
+    reg(keys.kind, { type: String, choices: KIND_CHOICES, default: fallback.kind, config: false });
+    reg(keys.bonus, { type: Number, default: fallback.bonus, config: false });
+    reg(keys.image, { type: String, default: "", filePicker: "image", config: false });
   }
 }
 
-export function getSetting(key) {
-  return game.settings.get(MODULE_ID, key);
-}
+/* ── Migration (GM only, once per ready) ──────────────────────────────── */
 
-export function normalizeKind(kind) {
-  if (typeof kind !== "string") return KIND_BLANK;
-  const aliased = KIND_ALIASES[kind] ?? kind;
-  return FATE_KINDS.includes(aliased) ? aliased : KIND_BLANK;
-}
-
-export function getActivePresetId() {
-  const value = getSetting(SETTINGS.preset);
-  return FATE_PRESETS[value] ? value : PRESET_DEFAULT;
-}
-
-export function getEmissiveIntensity() {
-  const raw = Number(getSetting(SETTINGS.emissiveIntensity));
-  if (!Number.isFinite(raw)) return EMISSIVE_INTENSITY_DEFAULT;
-  return Math.min(EMISSIVE_INTENSITY_MAX, Math.max(EMISSIVE_INTENSITY_MIN, raw));
-}
-
-export function getActivePreset() {
-  return FATE_PRESETS[getActivePresetId()];
-}
-
-function getPresetFace(face) {
-  const presetId = getActivePresetId();
-  return PRESET_FATE_FACES[presetId]?.[face] ?? PRESET_FATE_FACES[PRESET_DEFAULT][face];
-}
-
+/**
+ * Clear shipped art paths back to "follow the preset", rename the old kind
+ * values, and zero an opportunity's bonus. Each write only when it changes
+ * something, so a settled world writes nothing.
+ */
 export async function migrateLegacySettings() {
   if (!game.user?.isGM) return;
-  for (const face of FACE_NUMBERS) {
-    const imageSetting = getFaceImageSetting(face);
-    const rawImage = getSetting(imageSetting);
-    const migratedImage = normalizeImagePath(rawImage);
+  for (const n of FACE_NUMBERS) {
+    const keys = faceKeys(n);
+    const rawImage = read(keys.image);
+    if (typeof rawImage === "string" && rawImage !== "" && normalizeImage(rawImage) === "") {
+      await game.settings.set(MODULE_ID, keys.image, "");
+    }
+    const rawKind = read(keys.kind);
+    if (KIND_ALIASES[rawKind]) await game.settings.set(MODULE_ID, keys.kind, KIND_ALIASES[rawKind]);
+    if (normalizeKind(read(keys.kind)) === KIND_OPPORTUNITY && Number(read(keys.bonus)) !== 0) {
+      await game.settings.set(MODULE_ID, keys.bonus, 0);
+    }
+  }
+}
 
-    // Clear stored image if it matches any built-in preset default — the
-    // resolved path now comes from the active preset.
-    if (migratedImage && BUILTIN_IMAGE_PATHS.has(migratedImage)) {
-      if (rawImage !== "") await game.settings.set(MODULE_ID, imageSetting, "");
-    } else if (migratedImage !== rawImage) {
-      await game.settings.set(MODULE_ID, imageSetting, migratedImage);
+/* ── The face config window ───────────────────────────────────────────── */
+
+let _app = null;
+
+/**
+ * The window, built on first use. Templateless: `view.mjs` returns the markup,
+ * which is what the preview draws.
+ *
+ * Two bugs the old window had are why it listens to its own inputs: the value
+ * field of an opportunity was disabled at render and stayed disabled when the GM
+ * switched that face to a complication, and a disabled field is not submitted,
+ * so the bonus they then typed was saved as 0. And a change to the faces said
+ * "requires a reload" in a note and never asked for one.
+ */
+export function FaceConfigApp() {
+  if (_app) return _app;
+  const { ApplicationV2 } = foundry.applications.api;
+
+  _app = class DestinyFaceConfig extends ApplicationV2 {
+    static DEFAULT_OPTIONS = {
+      id: "glddf-face-config",
+      tag: "form",
+      classes: ["glddf-face-config"],
+      window: { title: "GLDDF.Settings.FaceConfig.Title", icon: "fa-solid fa-dice-d6", resizable: false },
+      position: { width: 640, height: "auto" },
+      form: { handler: DestinyFaceConfig.#onSubmit, closeOnSubmit: true },
+      actions: {
+        browseImage: DestinyFaceConfig.#onBrowse,
+        resetFaces: DestinyFaceConfig.#onReset,
+      },
+    };
+
+    #draft = null;
+
+    #model() {
+      return faceConfigModel({ faces: this.#draft ?? faces(), preset: activePreset(), t });
     }
 
-    const kindSetting = getFaceKindSetting(face);
-    const kindValue = getSetting(kindSetting);
-    const migratedKind = KIND_ALIASES[kindValue];
-    if (migratedKind && migratedKind !== kindValue) {
-      await game.settings.set(MODULE_ID, kindSetting, migratedKind);
+    async _renderHTML() {
+      return renderFaceConfig(this.#model());
     }
 
-    // Opportunity faces no longer carry numeric bonuses.
-    const resolvedKind = normalizeKind(getSetting(kindSetting));
-    if (resolvedKind === KIND_OPPORTUNITY) {
-      const bonusSetting = getFaceBonusSetting(face);
-      if (Number(getSetting(bonusSetting)) !== 0) {
-        await game.settings.set(MODULE_ID, bonusSetting, 0);
+    _replaceHTML(result, content) {
+      content.innerHTML = result;
+    }
+
+    #bound = false;
+
+    _onRender(context, options) {
+      super._onRender?.(context, options);
+      // The form element outlives a re-render (Reset re-renders), so bind once.
+      if (this.#bound) return;
+      this.#bound = true;
+      this.element.addEventListener("change", (event) => this.#onChange(event));
+    }
+
+    /* Redraw only the row that changed and the summary: re-rendering the whole
+       form would drop focus out of the field being typed in. */
+    #onChange(event) {
+      const name = event.target?.name ?? "";
+      const n = Number(/^face\.(\d)\./.exec(name)?.[1]);
+      if (!FACE_NUMBERS.includes(n)) return;
+      this.#draft = this.#read();
+      const m = this.#model();
+      const row = m.rows.find((r) => r.face === n);
+      const el = this.element.querySelector(`.glddf-cfg-row[data-face="${n}"]`);
+      if (row && el && /\.kind$/.test(name)) {
+        el.outerHTML = renderFaceRow(row, m);
+      } else if (row && el) {
+        el.dataset.tone = row.tone;
+        el.querySelector(".glddf-cfg-face .glddf-fate-face").innerHTML = row.glyph;
+      }
+      const summary = this.element.querySelector(".glddf-cfg-summary");
+      if (summary) summary.innerHTML = renderSummary(m);
+    }
+
+    #read() {
+      const data = new foundry.applications.ux.FormDataExtended(this.element).object;
+      return facesFromForm(data).map((f) => {
+        const kind = normalizeKind(f.kind);
+        return { face: f.face, kind, bonus: bonusFor(kind, f.bonus), image: normalizeImage(f.image) };
+      });
+    }
+
+    static async #onBrowse(_event, target) {
+      const n = target.dataset.face;
+      const input = this.element.querySelector(`input[name="face.${n}.image"]`);
+      const Picker = foundry.applications.apps.FilePicker.implementation;
+      new Picker({
+        type: "image",
+        current: input?.value ?? "",
+        callback: (path) => {
+          if (!input) return;
+          input.value = path;
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        },
+      }).render(true);
+    }
+
+    static async #onReset() {
+      this.#draft = FACE_NUMBERS.map((n) => ({ face: n, ...DEFAULT_FACES[n], image: "" }));
+      await this.render();
+    }
+
+    static async #onSubmit(_event, _form, formData) {
+      const next = facesFromForm(formData.object).map((f) => {
+        const kind = normalizeKind(f.kind);
+        return { face: f.face, kind, bonus: bonusFor(kind, f.bonus), image: normalizeImage(f.image) };
+      });
+      const before = faces();
+      let changed = false;
+      for (const f of next) {
+        const keys = faceKeys(f.face);
+        const was = before[f.face - 1];
+        if (was.kind !== f.kind) await game.settings.set(MODULE_ID, keys.kind, f.kind);
+        if (was.bonus !== f.bonus) await game.settings.set(MODULE_ID, keys.bonus, f.bonus);
+        if (was.image !== f.image) await game.settings.set(MODULE_ID, keys.image, f.image);
+        changed ||= was.kind !== f.kind || was.bonus !== f.bonus || was.image !== f.image;
+      }
+      ui.notifications?.info(t("GLDDF.Settings.FaceConfig.Saved"));
+      // The faces are baked into the 3D die when Dice So Nice starts.
+      if (changed && game.modules.get("dice-so-nice")?.active) {
+        await foundry.applications.settings?.SettingsConfig?.reloadConfirm?.({ world: true });
       }
     }
-  }
-}
-
-export function getKindLabel(kind) {
-  const normalized = normalizeKind(kind);
-  return getActivePreset().labels[normalized] ?? normalized;
-}
-
-export function getKindColor(kind) {
-  const normalized = normalizeKind(kind);
-  return getActivePreset().colors[normalized] ?? "#cccccc";
-}
-
-export function getFateFace(face) {
-  if (!FACE_NUMBERS.includes(face)) return null;
-  const defaults = getPresetFace(face);
-  const kind = getFaceKind(face, defaults.kind);
-  const bonus = kind === KIND_OPPORTUNITY ? 0 : getFaceBonus(face, defaults.bonus);
-  return { kind, bonus };
-}
-
-export function getConfiguredFateFaces() {
-  return Object.fromEntries(FACE_NUMBERS.map((face) => [face, getFateFace(face)]));
-}
-
-export function getFaceImagePath(face) {
-  const stored = normalizeImagePath(getSetting(getFaceImageSetting(face)));
-  if (stored) return stored;
-  return getPresetFace(face)?.image ?? "";
-}
-
-export function getFaceImagePaths(face) {
-  const stored = normalizeImagePath(getSetting(getFaceImageSetting(face)));
-  if (stored) {
-    const builtIn = findBuiltInFace(stored);
-    if (builtIn) return { image: builtIn.image, bump: builtIn.bump, emissive: builtIn.emissive };
-    const root = stored.replace(/\.png$/i, "");
-    return { image: stored, bump: `${root}-bump.png`, emissive: `${root}-emissive.png` };
-  }
-  const presetFace = getPresetFace(face);
-  if (!presetFace?.image) return null;
-  return {
-    image: presetFace.image,
-    bump: presetFace.bump || presetFace.image,
-    emissive: presetFace.emissive || presetFace.image,
   };
-}
-
-function findBuiltInFace(image) {
-  for (const preset of Object.values(PRESET_FATE_FACES)) {
-    for (const face of Object.values(preset)) {
-      if (face.image === image) return face;
-    }
-  }
-  return null;
-}
-
-function getFaceKind(face, fallback) {
-  return normalizeKind(getSetting(getFaceKindSetting(face))) || fallback;
-}
-
-function getFaceBonus(face, fallback) {
-  const value = Number(getSetting(getFaceBonusSetting(face)));
-  return Number.isFinite(value) ? Math.trunc(value) : fallback;
-}
-
-function getFaceKindSetting(face) {
-  return SETTINGS[`face${face}Kind`];
-}
-
-function getFaceBonusSetting(face) {
-  return SETTINGS[`face${face}Bonus`];
-}
-
-function getFaceImageSetting(face) {
-  return SETTINGS[`face${face}Image`];
-}
-
-function normalizeImagePath(value) {
-  if (typeof value !== "string") return "";
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  return LEGACY_FACE_IMAGE_PATHS[trimmed] ?? trimmed;
-}
-
-const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
-
-class DestinyFaceConfig extends HandlebarsApplicationMixin(ApplicationV2) {
-  static DEFAULT_OPTIONS = {
-    id: "glddf-face-config",
-    tag: "form",
-    classes: ["glddf-face-config"],
-    window: {
-      title: "GLDDF.Settings.FaceConfig.Title",
-      icon: "fa-solid fa-dice-d6",
-      contentClasses: ["standard-form"],
-    },
-    position: { width: 760, height: "auto" },
-    form: {
-      handler: DestinyFaceConfig.#onSubmit,
-      closeOnSubmit: true,
-    },
-    actions: {
-      browseImage: DestinyFaceConfig.#onBrowseImage,
-    },
-  };
-
-  static PARTS = {
-    form: { template: FACE_CONFIG_TEMPLATE },
-  };
-
-  async _prepareContext() {
-    const kinds = Object.entries(FATE_KIND_CHOICES).map(([value, label]) => ({
-      value,
-      label: game.i18n.localize(label),
-    }));
-
-    return {
-      reloadHint: game.i18n.localize("GLDDF.Settings.FaceConfig.ReloadHint"),
-      faces: FACE_NUMBERS.map((face) => {
-        const fateFace = getFateFace(face);
-        const storedImage = normalizeImagePath(getSetting(getFaceImageSetting(face)));
-        const resolvedImage = getFaceImagePath(face);
-        const isOpportunity = fateFace.kind === KIND_OPPORTUNITY;
-        return {
-          face,
-          kind: fateFace.kind,
-          bonus: fateFace.bonus,
-          bonusReadOnly: isOpportunity,
-          image: storedImage,
-          previewImage: resolvedImage,
-          imagePlaceholder: getPresetFace(face)?.image ?? "",
-          kinds: kinds.map((kind) => ({ ...kind, selected: kind.value === fateFace.kind })),
-        };
-      }),
-    };
-  }
-
-  static async #onBrowseImage(_event, target) {
-    const face = target.dataset.face;
-    const input = this.element.querySelector(`input[name="face.${face}.image"]`);
-    const preview = this.element.querySelector(`[data-preview-face="${face}"]`);
-    const FilePickerImpl = foundry.applications.apps.FilePicker?.implementation ?? globalThis.FilePicker;
-    new FilePickerImpl({
-      type: "image",
-      current: input?.value ?? "",
-      callback: (path) => {
-        if (input) input.value = path;
-        if (preview) preview.src = path;
-      },
-    }).render(true);
-  }
-
-  static async #onSubmit(_event, _form, formData) {
-    const expanded = foundry.utils.expandObject(formData.object);
-    for (const face of FACE_NUMBERS) {
-      const data = expanded.face?.[face] ?? {};
-      const defaults = PRESET_FATE_FACES[PRESET_DEFAULT][face];
-      const kind = normalizeKind(data.kind) || defaults.kind;
-      const bonus = kind === KIND_OPPORTUNITY ? 0 : (Number(data.bonus) || 0);
-      await game.settings.set(MODULE_ID, getFaceKindSetting(face), kind);
-      await game.settings.set(MODULE_ID, getFaceBonusSetting(face), bonus);
-      await game.settings.set(MODULE_ID, getFaceImageSetting(face), normalizeImagePath(data.image));
-    }
-    ui.notifications?.info(game.i18n.localize("GLDDF.Settings.FaceConfig.Saved"));
-  }
-}
-
-// Etched Glass drives every surface from ONE variable: --gl-accent (§2.5).
-// The active preset's per-kind colors flow into that channel; all glass fills,
-// rails, rims and glows are derived from it in CSS via color-mix. The Fated
-// Roll toggle is a commit control and stays on the fixed signal-amber accent
-// (§2.4), so it is intentionally not themed here.
-export function applyThemeFromSettings() {
-  if (typeof document === "undefined") return;
-
-  const css = [
-    accentRule(".glddf-fate-strip.glddf-opportunity", getKindColor("opportunity")),
-    accentRule(".glddf-fate-strip.glddf-complication", getKindColor("complication")),
-    accentRule(".glddf-fate-strip.glddf-blank", getKindColor("blank")),
-  ].join("\n");
-
-  let style = document.getElementById("glddf-theme-overrides");
-  if (!style) {
-    style = document.createElement("style");
-    style.id = "glddf-theme-overrides";
-    document.head.appendChild(style);
-  }
-  style.textContent = css;
-}
-
-function accentRule(selector, color) {
-  return `${selector} { --gl-accent: ${color}; }`;
-}
-
-// Applies the motion-tier setting (§6.4).
-//
-// Two effects, deliberately separate:
-//   • `--gl-motion-scale` — the shared multiplier every duration token in
-//     gl-tokens.css is derived through, so the tier retimes animations without
-//     this feature owning a duration table. Delegated to core/theme.mjs.
-//   • the `glddf-motion-*` body class — for the non-duration parts of a tier
-//     (which effects run at all, glow intensity), which are feature-specific.
-export function applyMotionTier() {
-  if (typeof document === "undefined" || !document.body) return;
-  const tier = MOTION_TIERS.includes(getSetting(SETTINGS.motionTier))
-    ? getSetting(SETTINGS.motionTier)
-    : MOTION_TIER_DEFAULT;
-  applySuiteMotionTier(tier);
-  for (const candidate of MOTION_TIERS) {
-    document.body.classList.toggle(`glddf-motion-${candidate}`, candidate === tier);
-  }
+  return _app;
 }

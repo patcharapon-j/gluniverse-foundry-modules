@@ -66,10 +66,17 @@ insight.disposeNotification(instant);
 assert.equal(released, 2, 'external disposal must release once');
 let attach;
 globalThis.Hooks = { on: (_name, fn) => { attach = fn; } };
-// fate-result.mjs takes the degree rule from core; the real one, since stripping
-// its import would otherwise leave it undefined.
-globalThis.__degree = await import('../scripts/core/pf2e-degree.mjs');
-const destiny = await production('../scripts/features/destiny-dice/fate-result.mjs', 'const { DEGREE_KEYS, baseDegree, adjustDegreeForNatural } = globalThis.__degree; const FATE_DIE_DENOMINATION="f", FATE_DIE_NOTATION="1df", FLAGS={fate:"fate"}, KIND_OPPORTUNITY="opportunity", MODULE_ID="suite", getFaceImagePaths=()=>null, getFateFace=()=>null, getKindLabel=x=>x, normalizeKind=x=>x;');
+// fate-result.mjs draws through the feature's pure modules; the real ones, since
+// stripping its imports would otherwise leave them undefined. Only the motion
+// engine is faked.
+globalThis.__dd = {
+  ...(await import('../scripts/features/destiny-dice/constants.mjs')),
+  ...(await import('../scripts/features/destiny-dice/fate.mjs')),
+  ...(await import('../scripts/features/destiny-dice/view.mjs')),
+  ...(await import('../scripts/features/destiny-dice/settings.mjs')),
+  MOTION_SCALE: (await import('../scripts/core/theme.mjs')).MOTION_SCALE,
+};
+const destiny = await production('../scripts/features/destiny-dice/fate-result.mjs', 'const { FLAGS, MODULE_ID, REVEAL, TIMING, normalizeFate, fateModel, renderFateStrip, activePreset, motionTier, t, MOTION_SCALE } = globalThis.__dd;');
 destiny.registerFateRendering();
 const root = new Node();
 const fate = { appliedAt: Date.now(), face: 1, kind: 'opportunity', bonus: 0 };
