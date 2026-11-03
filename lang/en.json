@@ -44,7 +44,7 @@
   "GLS.feature.flatfinder.title": "Flatfinder (PF2e)",
   "GLS.feature.flatfinder.hint": "Proficiency without Level tools: competence bands on skill checks, Flatfinder's incapacitation rule, flattened item DCs, and a PWoL threat strip and encounter planner.",
   "GLS.feature.destiny-dice.title": "Destiny Dice (PF2e)",
-  "GLS.feature.destiny-dice.hint": "A cinematic Destiny/Fate die for PF2e checks and rerolls.",
+  "GLS.feature.destiny-dice.hint": "A d6 fate die thrown with PF2e checks. A complication adds its number to the result.",
   "GLS.feature.insight.title": "Insight",
   "GLS.feature.insight.hint": "Passive, broadcastable on-screen notifications and cues.",
   "GLS.feature.stage.title": "Stage",
