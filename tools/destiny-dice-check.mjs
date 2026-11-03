@@ -313,7 +313,12 @@ const dist = (a, b) => Math.hypot(...oklab(a).map((v, i) => v - oklab(b)[i]));
   // Behaviour: two concurrent applies on one message write once.
   const updates = [];
   let rolled = 0;
-  class FakeTerm { constructor(d) { Object.assign(this, d); } async evaluate() { this._evaluated = true; return this; } }
+  // Foundry's terms refuse a second evaluate, and an OperatorTerm is born evaluated.
+  class FakeTerm {
+    constructor(d) { Object.assign(this, d); }
+    async evaluate() { if (this._evaluated) throw new Error(`The ${this.constructor.name} has already been evaluated and is now immutable`); this._evaluated = true; return this; }
+  }
+  class FakeOperator extends FakeTerm { constructor(d) { super(d); this._evaluated = true; } }
   class FakeRoll {
     constructor(formula) { this.formula = formula; this.dice = [{ faces: 6, results: [{ result: 1, active: true }] }]; this.terms = []; this.options = {}; }
     async evaluate() { rolled++; await new Promise((r) => setTimeout(r, 5)); return this; }
@@ -321,7 +326,7 @@ const dist = (a, b) => Math.hypot(...oklab(a).map((v, i) => v - oklab(b)[i]));
     static fromData(d) { const r = new FakeRoll(d.formula); r.terms = d.terms; r.options = d.options ?? {}; r.total = d.total; r._total = d.total; return r; }
   }
   globalThis.Roll = FakeRoll;
-  globalThis.foundry = { dice: { terms: { OperatorTerm: FakeTerm, NumericTerm: FakeTerm } }, utils: { deepClone: (o) => JSON.parse(JSON.stringify(o)) } };
+  globalThis.foundry = { dice: { terms: { OperatorTerm: FakeOperator, NumericTerm: FakeTerm } }, utils: { deepClone: (o) => JSON.parse(JSON.stringify(o)) } };
   globalThis.ui = { notifications: { error() {}, info() {} } };
   const flags = {};
   const check = {

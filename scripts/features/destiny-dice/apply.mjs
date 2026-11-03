@@ -127,8 +127,9 @@ async function withBonus(message, bonus, label) {
     const { OperatorTerm, NumericTerm } = foundry.dice.terms;
     const op = new OperatorTerm({ operator: bonus >= 0 ? "+" : "-" });
     const num = new NumericTerm({ number: Math.abs(bonus), options: { flavor: label } });
-    await op.evaluate();
-    await num.evaluate();
+    // An OperatorTerm is born evaluated, and a second evaluate throws.
+    if (!op._evaluated) await op.evaluate();
+    if (!num._evaluated) await num.evaluate();
     roll.terms.push(op, num);
     roll._total = before + bonus;
     roll.resetFormula?.();
