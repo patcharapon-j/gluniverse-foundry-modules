@@ -462,7 +462,20 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   so within `FOG_WALL_HOLD` squares of one the soft map is pulled back toward
   the bake as drawn down (`fogWallHold`): the blur and the edge no longer lay
   mist on the floor at its foot. It never goes past the bake, so nothing unseen
-  shows. Figures are never fogged. The drift is
+  shows. Figures are never fogged. **Night readability**: on a dark board
+  half a floor's light is about the mist's own, so remembered and unseen ground
+  used to look the same. As the scene darkens (`uNight`, from the darker of
+  Foundry's darkness and the hour, never `uAmbient`, which a floor below the
+  viewed Level dims) each state keeps its own band above the mist: remembered
+  ground is lifted to at least `FOG_MEMORY_FLOOR` and drawn neutral grey, never
+  past `FOG_MEMORY_UNDER` of the same pixel in sight; ground in sight now is
+  lifted to at least `FOG_SEEN_FLOOR` (by at most `FOG_SEEN_GAIN`), colour
+  kept. By day neither floor reaches the board's own light and the look is
+  unchanged. The edge of what the viewer sees right now is drawn on the ground
+  (terrain tops, the viewed Level's and the floors below) as a device-pixel
+  line with a faint glow inside it, along the soft map's half-way line
+  (`dioSightRim`), so a token on a gantry can tell at a glance which floor
+  below it sees. The drift is
   a straight translation of the noise (`FOG_DRIFT_CELLS` per `TIMING.fogDrift`),
   so it never repeats and never wraps. With no vision bake (the GM) there is no
   fog at all.

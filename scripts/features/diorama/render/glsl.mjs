@@ -71,6 +71,7 @@ uniform sampler2D uVisionMap;
 uniform float uUseVision;
 uniform vec2 uWorldSize;
 uniform float uAmbient;
+uniform float uNight;
 uniform vec3 uKeyDir;
 uniform sampler2D uShadowMap;
 uniform mat4 uShadowMatrix;
@@ -495,6 +496,27 @@ vec3 dioFogColor(float k, float n) {
 }
 
 /*
+ * The three states have to read apart at a glance on a dark board too, where
+ * half of a night floor's light is about the mist's own and the lit floor is
+ * not much more. So as the scene darkens (dioNightness) each state is held to
+ * its own band, from the mist up: remembered ground is lifted to at least
+ * FOG_MEMORY_FLOOR (plus some of its own light, so its detail stays) but never
+ * past FOG_MEMORY_UNDER of the same pixel in sight, and drawn neutral grey
+ * rather than mist blue; ground in sight now is lifted to at least
+ * FOG_SEEN_FLOOR, by at most FOG_SEEN_GAIN, its colour kept. By day both
+ * floors sit under the board's own light and the look is exactly as before.
+ */
+const float FOG_MEMORY_FLOOR = 0.12;
+const float FOG_SEEN_FLOOR = 0.27;
+const float FOG_SEEN_GAIN = 2.3;
+const float FOG_MEMORY_UNDER = 0.65;
+
+/** 0 by day, 1 on a night board: how far the readability floors apply (materials.mjs uNight). */
+float dioNightness() {
+  return uNight;
+}
+
+/*
  * The fog of war over a lit surface (fogStyle clouds; nothing for the GM or a
  * flat fog). Out of sight now, the ground is the map as remembered, dim and
  * grey under a faint low mist, faded in over the soft map rather than switched
@@ -507,12 +529,36 @@ vec3 dioFogOfWar(vec3 c, float vis, vec3 wp) {
   float n = dioFogNoise(wp.xz, 0.0);
   vec2 s = fogSoftAt(wp.xz);
   float away = 1.0 - smoothstep(0.2, 0.8, s.x);
-  vec3 memory = mix(vec3(dot(c, DIO_LUMA)), c, 0.25) * 0.5;
-  memory = mix(memory, dioFogColor(0.0, n), 0.12 + 0.2 * smoothstep(0.3, 0.8, n));
-  c = mix(c, memory, away);
+  float night = dioNightness();
+  float l = dot(c, DIO_LUMA);
+  float gain = mix(1.0, clamp(FOG_SEEN_FLOOR / max(l, 0.02), 1.0, FOG_SEEN_GAIN), night);
+  vec3 seen = c * gain;
+  // never up to the same pixel in sight: what is seen now always reads brighter
+  float lm = mix(0.5 * l, max(0.5 * l, min(FOG_MEMORY_FLOOR + 0.3 * l, FOG_MEMORY_UNDER * l * gain)), night);
+  vec3 memory = mix(vec3(l), c, 0.25) * (lm / max(l, 1e-3));
+  memory = mix(memory, dioFogColor(0.0, n), (0.12 + 0.2 * smoothstep(0.3, 0.8, n)) * (1.0 - 0.7 * night));
+  c = mix(seen, memory, away);
   float unseen = fogUnseenAt(wp.xz);
   float shadow = smoothstep(0.16 * n, 0.5, unseen);
   return mix(c, dioFogColor(0.0, n), shadow);
+}
+
+/*
+ * The edge of what the viewer sees right now, on the ground (TOP_FRAG): a
+ * device-pixel hairline along the soft map's half-way line (its R, visible
+ * now, blurred over FOG_BLUR), with a faint glow just inside it, so the line
+ * between "in sight" and "remembered" or "mist" reads at any zoom and on any
+ * map. Nothing for the GM or the flat style. Returns the colour to add.
+ */
+const vec3 FOG_RIM_COLOR = vec3(0.72, 0.84, 1.0);
+vec3 dioSightRim(vec3 wp) {
+  // one exit, derivatives taken unconditionally (docs/DIORAMA.md, Shaders on Windows)
+  float on = step(0.5, uUseVision) * step(0.5, uFogStyle.x);
+  float sx = fogSoftAt(wp.xz).x;
+  float fw = max(fwidth(sx), 1e-4);
+  float line = 1.0 - smoothstep(0.4, 1.3, abs(sx - 0.5) / fw);
+  float glow = smoothstep(0.5, 0.56, sx) * (1.0 - smoothstep(0.56, 0.9, sx));
+  return FOG_RIM_COLOR * (line + glow * 0.08) * mix(0.32, 0.5, dioNightness()) * on;
 }
 
 /**
@@ -607,7 +653,7 @@ void main() {
     c = mix(c, ink, gridLine(vWorld.xz) * uGrid.a);
   }
   c = heightGrade(c, vWorld.y);
-  gl_FragColor = vec4(dioFinish(c, vis, vWorld), 1.0);
+  gl_FragColor = vec4(dioFinish(c, vis, vWorld) + dioSightRim(vWorld), 1.0);
 }
 `;
 
