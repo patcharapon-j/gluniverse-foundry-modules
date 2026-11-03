@@ -1,175 +1,226 @@
 /**
- * GLUniverse Suite — Mythic GME feature: the oracle engine.
+ * Mythic GME: a roll, as a log entry.
  *
- * Pure-ish roll logic for the Mythic Game Master Emulator 2nd Edition tables,
- * plus the persisted Chaos Factor. No UI here — the panel calls these and renders
- * the returned result objects. Rolls are silent internal d100s (no chat / no 3D
- * dice) per the feature contract; the panel offers an explicit "send to chat".
+ * Pure. Each function here rolls through `rules.mjs` / `catalog.mjs` and
+ * returns the entry the log stores. An entry holds the dice and the keys of
+ * what they landed on, never localised text, so the log reads in whatever
+ * language the GM's client is in and the chat card says exactly what the
+ * panel said (both draw from `model.mjs`).
  *
- * Fate Chart model: every cell is a triple [excYes, yes, excNo] taken from one
- * master sequence, indexed by (chaosFactor + oddsOffset) clamped to [1..13]. This
- * reproduces the printed chart exactly (verified against the rulebook rows) while
- * staying compact. See docs / the feature grill notes for the derivation.
+ * Log entries written before the remake were finished English strings
+ * (`{ label, result, meta, tone, subs }`). `normalizeEntry` keeps them as
+ * `kind: "legacy"` and draws them as they were.
  */
 
-import { SUITE_ID } from "../../core/const.mjs";
-import { clamp, toInt } from "../../core/util.mjs";
-import { MEANING, ELEMENTS } from "./data/tables.mjs";
+import { LISTS, LOG_MAX } from "./constants.mjs";
+import { CORE_MEANING, elementById, rollElement, rollMeaning } from "./catalog.mjs";
+import {
+  VERDICTS, chaosAfterScene, clampChaos, oddsById, pickFromList, rollEventFocus, rollFate,
+  rollSceneAdjustment, sceneCheck, EVENT_FOCUS, SCENE_ADJUSTMENTS, DEFAULT_ODDS,
+} from "./rules.mjs";
 
-export const FEATURE_ID = "mythic-gme";
-export const CHAOS_KEY = "mythic.chaos";
-export const LOG_KEY = "mythic.log";
-export const POS_KEY = "mythic.panelPos";
-export const AUTOEVENT_KEY = "mythic.autoEvent";
+export const ENTRY_VERSION = 2;
+export const KINDS = Object.freeze(["fate", "event", "meaning", "element", "scene", "adjust", "chaos", "list", "legacy"]);
 
-export const CHAOS_MIN = 1;
-export const CHAOS_MAX = 9;
-export const CHAOS_DEFAULT = 5;
-export const LOG_MAX = 50;
-
-/** d(n): silent internal die, 1..n. */
-const d = (n) => 1 + Math.floor(Math.random() * n);
-const roll100 = () => d(100);
-
-/* ── Fate Chart ─────────────────────────────────────────────────────────── */
-
-/** Master sequence of [exceptionalYes, yes, exceptionalNo] thresholds (1-indexed). */
-const FATE_MASTER = [
-  [0, 1, 81],   // 1  (excNo≥81; excYes "X" = 0 → never)
-  [1, 5, 82],   // 2
-  [2, 10, 83],  // 3
-  [3, 15, 84],  // 4
-  [5, 25, 86],  // 5
-  [7, 35, 88],  // 6
-  [10, 50, 91], // 7  (the 50/50-at-CF5 centre)
-  [13, 65, 94], // 8
-  [15, 75, 96], // 9
-  [17, 85, 98], // 10
-  [18, 90, 99], // 11
-  [19, 95, 100],// 12
-  [20, 99, 101],// 13 (excNo "x" = 101 → never)
-];
-
-/** Odds rows (low→high) and their offset into the master sequence. */
-export const ODDS = [
-  { id: "impossible", offset: -2 },
-  { id: "nearly-impossible", offset: -1 },
-  { id: "very-unlikely", offset: 0 },
-  { id: "unlikely", offset: 1 },
-  { id: "fifty-fifty", offset: 2 },
-  { id: "likely", offset: 3 },
-  { id: "very-likely", offset: 4 },
-  { id: "nearly-certain", offset: 5 },
-  { id: "certain", offset: 6 },
-];
-
-const oddsById = (id) => ODDS.find((o) => o.id === id) ?? ODDS[4];
-
-/** The [excYes, yes, excNo] cell for an odds id at a chaos factor. */
-function fateCell(oddsId, cf) {
-  const idx = clamp(cf + oddsById(oddsId).offset, 1, FATE_MASTER.length);
-  return FATE_MASTER[idx - 1];
-}
-
-/* ── Event Focus ────────────────────────────────────────────────────────── */
-
-const EVENT_FOCUS = [
-  [5, "Remote Event"],
-  [10, "Ambiguous Event"],
-  [20, "New NPC"],
-  [40, "NPC Action"],
-  [45, "NPC Negative"],
-  [50, "NPC Positive"],
-  [55, "Move Toward A Thread"],
-  [65, "Move Away From A Thread"],
-  [70, "Close A Thread"],
-  [80, "PC Negative"],
-  [85, "PC Positive"],
-  [100, "Current Context"],
-];
-
-function focusFor(r) {
-  for (const [max, label] of EVENT_FOCUS) if (r <= max) return label;
-  return EVENT_FOCUS[EVENT_FOCUS.length - 1][1];
-}
-
-/* ── Chaos Factor state (world setting) ─────────────────────────────────── */
-
-export const getChaos = () =>
-  clamp(toInt(game.settings.get(SUITE_ID, CHAOS_KEY), CHAOS_DEFAULT), CHAOS_MIN, CHAOS_MAX);
-
-export async function setChaos(v) {
-  const next = clamp(toInt(v, CHAOS_DEFAULT), CHAOS_MIN, CHAOS_MAX);
-  await game.settings.set(SUITE_ID, CHAOS_KEY, next);
-  return next;
-}
-
-export const adjustChaos = (delta) => setChaos(getChaos() + toInt(delta, 0));
-
-/* ── Rolls ──────────────────────────────────────────────────────────────── */
+const cleanQuestion = (q) => String(q ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
 
 /**
- * Ask the Fate Chart. Returns the yes/no verdict plus whether a Random Event was
- * triggered (doubles with the tens digit ≤ chaos factor).
+ * A Random Event: Event Focus, a meaning pair, and (when the focus is about a
+ * thread or a character and that list has rows) the row it is about.
  */
-export function rollFate(oddsId, cf = getChaos()) {
-  const [excYes, yes, excNo] = fateCell(oddsId, cf);
-  const r = roll100();
-
-  let verdict, key;
-  if (r <= excYes) { verdict = "Exceptional Yes"; key = "exceptional-yes"; }
-  else if (r <= yes) { verdict = "Yes"; key = "yes"; }
-  else if (r >= excNo) { verdict = "Exceptional No"; key = "exceptional-no"; }
-  else { verdict = "No"; key = "no"; }
-
-  const tens = Math.floor(r / 10);
-  const ones = r % 10;
-  const isDouble = r < 100 && tens === ones && r >= 11;
-  const eventTriggered = isDouble && tens <= cf;
-
-  return { oddsId, cf, roll: r, verdict, key, yes, threshold: [excYes, yes, excNo], eventTriggered };
-}
-
-/** Roll the Event Focus table. */
-export function rollEventFocus() {
-  const r = roll100();
-  return { roll: r, focus: focusFor(r) };
-}
-
-/** Roll the two-column Actions meaning table (verb + subject-ish). */
-export function rollActions() {
-  const i1 = d(100), i2 = d(100);
-  return { rolls: [i1, i2], words: [MEANING.action1[i1 - 1], MEANING.action2[i2 - 1]] };
-}
-
-/** Roll the two-column Descriptions meaning table. */
-export function rollDescriptions() {
-  const i1 = d(100), i2 = d(100);
-  return { rolls: [i1, i2], words: [MEANING.descriptor1[i1 - 1], MEANING.descriptor2[i2 - 1]] };
-}
-
-/** A full Random Event: Event Focus + an Actions meaning pair. */
-export function rollRandomEvent() {
-  const focus = rollEventFocus();
-  const meaning = rollActions();
-  return { focus, meaning };
-}
-
-/** Roll a single Elements meaning table by id. */
-export function rollElement(id) {
-  const table = ELEMENTS.find((e) => e.id === id);
-  if (!table) return null;
-  const i = d(100);
-  return { id, name: table.name, roll: i, word: table.entries[i - 1] };
-}
-
-/** Elements grouped by category, in declaration order — for the panel picker. */
-export function elementGroups() {
-  const groups = [];
-  const byCat = new Map();
-  for (const e of ELEMENTS) {
-    if (!byCat.has(e.category)) { byCat.set(e.category, []); groups.push({ category: e.category, tables: byCat.get(e.category) }); }
-    byCat.get(e.category).push({ id: e.id, name: e.name });
+export function randomEvent({ rng = Math.random, actions1 = null, lists = null } = {}) {
+  const focus = rollEventFocus(rng);
+  const meaning = rollMeaning("actions", { rng, actions1 });
+  let pick = null;
+  if (focus.list) {
+    const hit = pickFromList(lists?.[focus.list], rng);
+    pick = hit ? { list: focus.list, name: hit.name, roll: hit.roll, of: hit.of } : { list: focus.list, empty: true };
   }
-  return groups;
+  return { focus: { roll: focus.roll, key: focus.key }, meaning, pick };
+}
+
+export function askFate({ oddsId, cf, question = "", autoEvent = true, rng = Math.random, actions1 = null, lists = null } = {}) {
+  const r = rollFate(oddsId, cf, rng);
+  const entry = {
+    kind: "fate",
+    question: cleanQuestion(question),
+    odds: r.oddsId,
+    cf: r.cf,
+    roll: r.roll,
+    key: r.key,
+    cell: r.threshold,
+    event: null,
+    eventPending: false,
+  };
+  if (r.eventTriggered) {
+    if (autoEvent) entry.event = randomEvent({ rng, actions1, lists });
+    else entry.eventPending = true;
+  }
+  return entry;
+}
+
+export function eventEntry(opts = {}) {
+  return { kind: "event", ...randomEvent(opts) };
+}
+
+export function meaningEntry(table, { rng = Math.random, actions1 = null } = {}) {
+  return { kind: "meaning", ...rollMeaning(CORE_MEANING.includes(table) ? table : "actions", { rng, actions1 }) };
+}
+
+export function elementEntry(id, rng = Math.random) {
+  const r = rollElement(id, rng);
+  return r ? { kind: "element", ...r } : null;
+}
+
+/** Test the expected scene. An altered scene rolls its adjustment, an interrupted one its event. */
+export function sceneEntry({ cf, rng = Math.random, actions1 = null, lists = null } = {}) {
+  const s = sceneCheck(cf, rng);
+  const entry = { kind: "scene", roll: s.roll, cf: s.cf, result: s.result, adjust: null, event: null };
+  if (s.result === "altered") entry.adjust = rollSceneAdjustment(rng);
+  if (s.result === "interrupted") entry.event = randomEvent({ rng, actions1, lists });
+  return entry;
+}
+
+/** A Scene Adjustment on its own, for a scene the GM already knows is altered. */
+export function adjustEntry(rng = Math.random) {
+  const a = rollSceneAdjustment(rng);
+  return { kind: "adjust", rolls: a.rolls, adjustments: a.adjustments };
+}
+
+/** The end of a scene: the Chaos Factor before and after. */
+export function chaosEntry(cf, inControl) {
+  const from = clampChaos(cf);
+  return { kind: "chaos", from, to: chaosAfterScene(from, inControl), inControl: !!inControl };
+}
+
+export function listEntry(list, entries, rng = Math.random) {
+  if (!LISTS.includes(list)) return null;
+  const hit = pickFromList(entries, rng);
+  return hit ? { kind: "list", list, name: hit.name, roll: hit.roll, of: hit.of } : null;
+}
+
+/** Give an entry its id and time. */
+export function stamp(entry, { now = Date.now(), rng = Math.random } = {}) {
+  if (!entry) return null;
+  const id = `m${now.toString(36)}${Math.floor(rng() * 1e6).toString(36)}`;
+  return { v: ENTRY_VERSION, id, at: now, ...entry };
+}
+
+/* ── reading the log back ────────────────────────────────────────────────── */
+
+const int = (v, lo, hi) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n >= lo && n <= hi ? n : null;
+};
+const str = (v, max = 120) => (typeof v === "string" ? v.slice(0, max) : v == null ? "" : String(v).slice(0, max));
+const ints = (a, lo, hi) => (Array.isArray(a) ? a.map((x) => int(x, lo, hi)).filter((x) => x != null) : []);
+const FOCUS_KEYS = EVENT_FOCUS.map((f) => f.key);
+const ADJUST_KEYS = SCENE_ADJUSTMENTS.map((a) => a.key);
+
+function normalizeMeaning(m) {
+  if (!m || typeof m !== "object") return null;
+  const words = Array.isArray(m.words) ? m.words.map((w) => str(w, 60)).filter(Boolean).slice(0, 2) : [];
+  if (!words.length) return null;
+  return { table: CORE_MEANING.includes(m.table) ? m.table : "actions", rolls: ints(m.rolls, 1, 100).slice(0, 2), words, missing: !!m.missing };
+}
+
+function normalizeEvent(e) {
+  if (!e || typeof e !== "object") return null;
+  const key = FOCUS_KEYS.includes(e.focus?.key) ? e.focus.key : null;
+  if (!key) return null;
+  const out = { focus: { roll: int(e.focus.roll, 1, 100) ?? 1, key }, meaning: normalizeMeaning(e.meaning), pick: null };
+  if (e.pick && LISTS.includes(e.pick.list)) {
+    out.pick = e.pick.empty
+      ? { list: e.pick.list, empty: true }
+      : { list: e.pick.list, name: str(e.pick.name, 80), roll: int(e.pick.roll, 1, 999) ?? 1, of: int(e.pick.of, 1, 999) ?? 1 };
+  }
+  return out;
+}
+
+/**
+ * One stored entry, made safe to draw. Unknown or broken entries come back
+ * null and are dropped, so a hand-edited or half-written log never breaks the
+ * panel.
+ */
+export function normalizeEntry(raw, index = 0) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = typeof raw.id === "string" && raw.id ? raw.id.slice(0, 40) : `legacy-${index}`;
+  const at = Number.isFinite(raw.at) ? raw.at : 0;
+  const base = { v: ENTRY_VERSION, id, at };
+
+  if (raw.v !== ENTRY_VERSION || !KINDS.includes(raw.kind) || raw.kind === "legacy") {
+    // Before the remake: finished strings. Kept, never re-derived.
+    if (typeof raw.result !== "string" && typeof raw.label !== "string") return null;
+    const subs = Array.isArray(raw.subs)
+      ? raw.subs.slice(0, 4).map((s) => ({ label: str(s?.label, 60), result: str(s?.result, 120), meta: str(s?.meta, 60), tone: str(s?.tone, 20) }))
+      : [];
+    return { ...base, kind: "legacy", label: str(raw.label, 80), result: str(raw.result, 160), meta: str(raw.meta, 80), tone: str(raw.tone, 20) || "neutral", subs };
+  }
+
+  switch (raw.kind) {
+    case "fate": {
+      const roll = int(raw.roll, 1, 100);
+      if (roll == null || !VERDICTS.includes(raw.key)) return null;
+      const cell = ints(raw.cell, 0, 101);
+      return {
+        ...base,
+        kind: "fate",
+        question: cleanQuestion(raw.question),
+        odds: oddsById(raw.odds) ? raw.odds : DEFAULT_ODDS,
+        cf: clampChaos(raw.cf),
+        roll,
+        key: raw.key,
+        cell: cell.length === 3 ? cell : null,
+        event: normalizeEvent(raw.event),
+        eventPending: !!raw.eventPending,
+      };
+    }
+    case "event": {
+      const ev = normalizeEvent(raw);
+      return ev ? { ...base, kind: "event", ...ev } : null;
+    }
+    case "meaning": {
+      const m = normalizeMeaning(raw);
+      return m ? { ...base, kind: "meaning", ...m } : null;
+    }
+    case "element": {
+      const roll = int(raw.roll, 1, 100);
+      if (roll == null || !raw.word) return null;
+      return { ...base, kind: "element", id: str(raw.id, 60), name: str(raw.name || elementById(raw.id)?.name, 80), roll, word: str(raw.word, 80) };
+    }
+    case "scene": {
+      const roll = int(raw.roll, 1, 10);
+      if (roll == null || !["expected", "altered", "interrupted"].includes(raw.result)) return null;
+      const adjust = raw.adjust && Array.isArray(raw.adjust.adjustments)
+        ? { rolls: ints(raw.adjust.rolls, 1, 10), adjustments: raw.adjust.adjustments.filter((k) => ADJUST_KEYS.includes(k) && k !== "two-adjustments").slice(0, 2), double: !!raw.adjust.double }
+        : null;
+      return { ...base, kind: "scene", roll, cf: clampChaos(raw.cf), result: raw.result, adjust, event: normalizeEvent(raw.event) };
+    }
+    case "adjust": {
+      const adjustments = (Array.isArray(raw.adjustments) ? raw.adjustments : []).filter((k) => ADJUST_KEYS.includes(k) && k !== "two-adjustments").slice(0, 2);
+      return adjustments.length ? { ...base, kind: "adjust", rolls: ints(raw.rolls, 1, 10), adjustments } : null;
+    }
+    case "chaos":
+      return { ...base, kind: "chaos", from: clampChaos(raw.from), to: clampChaos(raw.to), inControl: !!raw.inControl };
+    case "list": {
+      if (!LISTS.includes(raw.list) || !raw.name) return null;
+      return { ...base, kind: "list", list: raw.list, name: str(raw.name, 80), roll: int(raw.roll, 1, 999) ?? 1, of: int(raw.of, 1, 999) ?? 1 };
+    }
+    default:
+      return null;
+  }
+}
+
+/** The stored log, made safe: newest first, at most LOG_MAX, ids unique. */
+export function normalizeLog(raw) {
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(raw) ? raw : []).forEach((r, i) => {
+    const e = normalizeEntry(r, i);
+    if (!e) return;
+    if (seen.has(e.id)) e.id = `${e.id}-${i}`;
+    seen.add(e.id);
+    out.push(e);
+  });
+  return out.slice(0, LOG_MAX);
 }
