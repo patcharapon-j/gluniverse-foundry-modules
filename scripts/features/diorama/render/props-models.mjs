@@ -89,6 +89,17 @@ export function loadModel(src, onReady = null) {
   return e;
 }
 
+/**
+ * Let go of every cached model's GPU copies, keeping the models. A texture
+ * holds a `dispose` listener from each renderer that uploaded it, and that
+ * listener holds the renderer's GL context, so a cache that outlives a renderer
+ * kept every closed view's context alive (issue #168). Disposing fires those
+ * listeners, which unhook and free; the next renderer uploads again.
+ */
+export function releaseModelGpu() {
+  for (const e of cache.values()) disposeModel(e.model);
+}
+
 function disposeModel(m) {
   for (const p of m?.parts ?? []) {
     p.geometry?.dispose();

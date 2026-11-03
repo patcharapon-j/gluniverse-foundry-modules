@@ -55,7 +55,7 @@ import { MATERIALS } from "./materials.mjs";
 import { loadDrawable } from "./art.mjs";
 import { stampStates, kitParts, footprintCells, hashString, ROOF_SHAPES } from "../terrain/props.mjs";
 import { buildPropGeometries, ROCK_VARIANTS, stairs, fence, hip, latheOf, extrusion, pipeAlong, finish } from "./props-geo.mjs";
-import { loadModel, modelScale } from "./props-models.mjs";
+import { loadModel, modelScale, releaseModelGpu } from "./props-models.mjs";
 import { SlabSet } from "./props-slabs.mjs";
 
 export { buildPropGeometries };
@@ -868,5 +868,6 @@ export class PropsLayer {
     this.geos = null;
     this.group.clear();
     this.casters.clear();
+    releaseModelGpu();
   }
 }

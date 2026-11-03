@@ -185,6 +185,15 @@ export default async function check(ctx) {
   const rsrc = readFileSync(join(ctx.root, "scripts/features/diorama/render/props.mjs"), "utf8");
   const body = rsrc.slice(rsrc.indexOf("  frame(_t"), rsrc.indexOf("  /** The nearest BLOCKING"));
   ctx.ok("PropsLayer.frame allocates nothing", body.length > 0 && !/\bnew\s|\[\s*\]|=\s*\{|\.\.\./.test(body.replace(/\/\/.*$/gm, "")));
+  // The model cache outlives a view: its textures hold each renderer's dispose
+  // listener and with it that renderer's GL context, so closing the view must
+  // let go of the cache's GPU copies or every closed view's context leaks (#168).
+  const msrc = readFileSync(join(ctx.root, "scripts/features/diorama/render/props-models.mjs"), "utf8");
+  const disposeBody = rsrc.slice(rsrc.lastIndexOf("  dispose() {"));
+  ctx.ok("closing the view releases the model cache's GPU copies",
+    /releaseModelGpu\(\);/.test(disposeBody)
+      && /export function releaseModelGpu\(\) \{\s*for \(const e of cache\.values\(\)\) disposeModel\(e\.model\);\s*\}/.test(msrc)
+      && /p\.geometry\?\.dispose\(\);\s*p\.map\?\.dispose\(\);\s*p\.emissiveMap\?\.dispose\(\);/.test(msrc));
 
   // ── strings ──
   const lang = JSON.parse(readFileSync(join(ctx.root, "lang/diorama-props.en.json"), "utf8"));
