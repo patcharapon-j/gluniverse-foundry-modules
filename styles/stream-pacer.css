@@ -772,11 +772,20 @@
 
 .sp-peril {
   --sp-peril: var(--sp-red-deep);
-  --sp-peril-bright: color-mix(in srgb, var(--sp-red-deep) 38%, rgb(var(--gl-tint-light)));
-  --sp-peril-glow: color-mix(in srgb, color-mix(in srgb, var(--sp-red-deep) 85%, rgb(var(--gl-tint-light))) 60%, transparent);
-  --sp-peril-red: color-mix(in srgb, var(--sp-red-deep), #ff1e30);
-  --sp-peril-red-glow: color-mix(in srgb, var(--sp-peril-red) 60%, transparent);
-  --sp-peril-ghost: color-mix(in srgb, color-mix(in srgb, color-mix(in srgb, var(--sp-red-deep) 40%, #78dcff) 90%, rgb(var(--gl-tint-light))) 35%, transparent);
+  /* the alert red the stage leans toward, and the cool partner of its lens fringe */
+  --sp-peril-alert: #ff1e30;
+  --sp-peril-cool: #78dcff;
+  --sp-peril-red: color-mix(in srgb, var(--sp-red-deep) 30%, var(--sp-peril-alert));
+  --sp-peril-red-glow: color-mix(in srgb, var(--sp-peril-red) 50%, transparent);
+  --sp-peril-glow: color-mix(in srgb, var(--sp-peril-red) 42%, transparent);
+  --sp-peril-bright: color-mix(in srgb, var(--sp-peril-red) 25%, rgb(var(--gl-tint-light)));
+  --sp-peril-ghost: color-mix(in srgb, var(--sp-peril-bright) 10%, transparent);
+  --sp-peril-fringe: color-mix(in srgb, var(--sp-peril-cool) 35%, transparent);
+  /* the title's cut edge: a lit lip, then blood, then ember */
+  --sp-peril-blood: color-mix(in srgb, var(--sp-peril-red) 75%, rgb(var(--gl-tint-dark)));
+  --sp-peril-ember: color-mix(in srgb, var(--sp-peril-red) 45%, rgb(var(--gl-tint-dark)));
+  --sp-peril-drop: rgb(var(--gl-tint-dark) / 0.75);
+  --sp-peril-push: cubic-bezier(0.2, 0.6, 0.3, 1);  /* the camera's slow push-in */
   --sp-peril-strobe: steps(1);   /* a light that is on or off, never between */
   --sp-peril-typing: steps(24);  /* the subtitle types out */
   --sp-peril-len: var(--sp-peril-stage, var(--gl-drift));
@@ -791,29 +800,31 @@
   font-family: var(--sp-font);
 }
 
-/* Fine scanlines across the whole stage. */
+/* Fine dark scanlines across the whole stage, one device line in two. */
 .sp-peril::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 40;
   pointer-events: none;
-  background: repeating-linear-gradient(0deg, transparent 0 2px, rgb(var(--gl-tint-light) / 0.018) 2px 3px);
+  background: repeating-linear-gradient(0deg, transparent 0 1px, rgb(var(--gl-tint-dark) / 0.07) 1px 2px);
 }
 
-/* Radial darkening + the crimson wash, so the field reads as danger. */
+/* Deep edges + a crimson wash behind the title, so the field reads as danger. */
 .sp-peril .sp-pk-vignette {
   position: absolute;
   inset: 0;
   z-index: 10;
   background:
-    radial-gradient(ellipse at 50% 50%, transparent 28%, rgb(var(--gl-tint-dark) / 0.55) 100%),
-    radial-gradient(ellipse at 50% 50%, var(--sp-peril-glow), transparent 60%);
+    radial-gradient(ellipse 70% 62% at 50% 50%, transparent 30%, rgb(var(--gl-tint-dark) / 0.6) 100%),
+    radial-gradient(ellipse 40% 34% at 50% 50%, color-mix(in srgb, var(--sp-peril-red) 30%, transparent), transparent 70%);
   opacity: 0;
   animation: sp-pk-fade-hold var(--sp-peril-len) var(--gl-ease-inout) forwards;
 }
 
-/* The title drifting in outline behind everything. */
+/* The title drifting in outline behind everything, in depth: two far rows
+   small and faint, one near row large and red. The room pushes in slower than
+   the title does, which is what reads as a camera. */
 .sp-peril .sp-pk-marquee {
   position: absolute;
   inset: -6% 0;
@@ -823,24 +834,28 @@
   justify-content: space-around;
   overflow: hidden;
   opacity: 0;
-  animation: sp-pk-fade-hold var(--sp-peril-len) var(--gl-ease) forwards;
+  animation:
+    sp-pk-fade-hold var(--sp-peril-len) var(--gl-ease) forwards,
+    sp-pk-push-far var(--sp-peril-len) var(--sp-peril-push) forwards;
 }
 .sp-peril .sp-pk-marquee-row {
   display: flex;
   white-space: nowrap;
-  font-weight: var(--gl-weight-bold);
-  font-size: 12vh;
+  font-weight: 800;
+  font-stretch: 125%;
+  font-size: 8.5vh;
   line-height: 1.05;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: transparent;
-  -webkit-text-stroke: 1.5px var(--sp-peril-ghost);
+  -webkit-text-stroke: 1px var(--sp-peril-ghost);
   will-change: transform;
 }
 .sp-peril .sp-pk-marquee-row span { padding: 0 0.4em; }
 .sp-peril .sp-pk-marquee-row:nth-child(1) { animation: sp-pk-drift-l var(--gl-loop-lg) var(--gl-linear) infinite; }
 .sp-peril .sp-pk-marquee-row:nth-child(2) {
-  -webkit-text-stroke-color: var(--sp-peril-red-glow);
+  font-size: 19vh;
+  -webkit-text-stroke-color: color-mix(in srgb, var(--sp-peril-red) 22%, transparent);
   animation: sp-pk-drift-r var(--gl-loop-xl) var(--gl-linear) infinite;
 }
 .sp-peril .sp-pk-marquee-row:nth-child(3) { animation: sp-pk-drift-l var(--gl-loop-xl) var(--gl-linear) infinite; }
@@ -858,7 +873,9 @@
   animation: sp-pk-sweep var(--sp-peril-len) var(--gl-ease) forwards;
 }
 
-/* The impact shockwave ring (also what is left when the field is off or shed). */
+/* The impact shockwave (also what is left when the field is off or shed). It
+   grows by scale, so its 1px border ends as a soft band, not a hairline: the
+   field draws the hairline. */
 .sp-peril .sp-pk-shock {
   position: absolute;
   top: 50%;
@@ -866,11 +883,11 @@
   width: 40px;
   height: 40px;
   z-index: 20;
-  border: 3px solid var(--sp-peril-red);
+  border: 1px solid color-mix(in srgb, var(--sp-peril-red) 38%, transparent);
   border-radius: 50%;
   transform: translate(-50%, -50%) scale(0);
   opacity: 0;
-  box-shadow: 0 0 40px var(--sp-peril-red-glow), inset 0 0 40px var(--sp-peril-glow);
+  box-shadow: 0 0 26px color-mix(in srgb, var(--sp-peril-red) 30%, transparent);
   animation: sp-pk-shock var(--sp-peril-len) var(--gl-ease) forwards;
 }
 
@@ -878,17 +895,29 @@
 .sp-peril .sp-pk-frame { position: absolute; inset: 0; z-index: 26; }
 .sp-peril .sp-pk-corner {
   position: absolute;
-  width: 58px;
-  height: 58px;
-  border: 0 solid var(--sp-peril-red);
+  width: 46px;
+  height: 46px;
+  border: 0 solid color-mix(in srgb, var(--sp-peril-red) 85%, transparent);
   opacity: 0;
-  filter: drop-shadow(0 0 6px var(--sp-peril-red-glow));
   animation: sp-pk-corner var(--sp-peril-len) var(--gl-ease) forwards;
 }
-.sp-peril .sp-pk-tl { top: 30px; left: 30px; border-width: 2px 0 0 2px; }
-.sp-peril .sp-pk-tr { top: 30px; right: 30px; border-width: 2px 2px 0 0; }
-.sp-peril .sp-pk-bl { bottom: 30px; left: 30px; border-width: 0 0 2px 2px; }
-.sp-peril .sp-pk-br { bottom: 30px; right: 30px; border-width: 0 2px 2px 0; }
+.sp-peril .sp-pk-tl { top: 30px; left: 30px; border-width: 1.5px 0 0 1.5px; }
+.sp-peril .sp-pk-tr { top: 30px; right: 30px; border-width: 1.5px 1.5px 0 0; }
+.sp-peril .sp-pk-bl { bottom: 30px; left: 30px; border-width: 0 0 1.5px 1.5px; }
+.sp-peril .sp-pk-br { bottom: 30px; right: 30px; border-width: 0 1.5px 1.5px 0; }
+/* a lit pip on each bracket's knuckle */
+.sp-peril .sp-pk-corner::after {
+  content: "";
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: var(--sp-peril-red);
+  box-shadow: 0 0 8px var(--sp-peril-alert);
+}
+.sp-peril .sp-pk-tl::after { top: -2.75px; left: -2.75px; }
+.sp-peril .sp-pk-tr::after { top: -2.75px; right: -2.75px; }
+.sp-peril .sp-pk-bl::after { bottom: -2.75px; left: -2.75px; }
+.sp-peril .sp-pk-br::after { bottom: -2.75px; right: -2.75px; }
 .sp-peril .sp-pk-edge {
   position: absolute;
   left: 50%;
@@ -913,10 +942,12 @@
   white-space: nowrap;
   z-index: 25;
   font-family: var(--sp-font);
-  font-size: 10px;
-  letter-spacing: 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-stretch: 112%;
+  letter-spacing: 0.34em;
   text-transform: uppercase;
-  color: var(--sp-peril-bright);
+  color: color-mix(in srgb, var(--sp-peril-bright) 62%, transparent);
   -webkit-mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
           mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
   opacity: 0;
@@ -954,13 +985,17 @@
   transform: translateX(-50%);
   background: linear-gradient(180deg, transparent, var(--sp-peril-red-glow) 40%, var(--sp-peril-red-glow) 60%, transparent);
 }
+/* a hairline ring with a tick every 30°, turning */
 .sp-peril .sp-pk-rd {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 120px;
-  height: 120px;
-  border: 1px solid var(--sp-peril-red-glow);
+  width: 210px;
+  height: 210px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(var(--sp-peril-red-glow) 0 1.2deg, color-mix(in srgb, var(--sp-peril-red) 12%, transparent) 1.2deg 30deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 98px, #000 98.5px 104px, transparent 104.5px);
+          mask: radial-gradient(circle, transparent 0 98px, #000 98.5px 104px, transparent 104.5px);
   transform: translate(-50%, -50%) rotate(45deg);
   animation: sp-pk-spin var(--sp-peril-len) var(--gl-linear) forwards;
 }
@@ -977,12 +1012,13 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  font-weight: var(--gl-weight-bold);
+  font-weight: 900;
+  font-stretch: 130%;
   text-transform: uppercase;
   line-height: 1;
   font-size: clamp(180px, 32vw, 460px);
   color: rgb(var(--gl-tint-light));
-  text-shadow: 0 0 40px var(--sp-peril-glow), 0 0 90px var(--sp-peril-red-glow), 0 6px 16px rgb(var(--gl-tint-dark));
+  text-shadow: 0 0 30px color-mix(in srgb, var(--sp-peril-red) 70%, transparent), 0 0 120px color-mix(in srgb, var(--sp-peril-blood) 55%, transparent);
   opacity: 0;
   transform: translate(-50%, -50%) scale(1.22);
   animation: sp-pk-pf var(--gl-d-tap) var(--gl-ease-sharp) both;
@@ -991,7 +1027,8 @@
 
 /* The title. Sharp and snappy, no bounce: tight micro-slides, rapid
    per-character flashing and tracking that collapses each line into place,
-   then a frozen hold. The lines assemble after the montage. */
+   then a frozen hold, all under a slow push-in. The lines assemble after the
+   montage. The push rides `scale`, so it never fights the jolt's transform. */
 .sp-peril .sp-pk-stack {
   position: absolute;
   top: 50%;
@@ -1002,18 +1039,23 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  animation: sp-pk-fade-hold var(--sp-peril-len) var(--gl-ease) forwards, sp-pk-jolt var(--sp-peril-len) var(--gl-linear) forwards;
+  animation:
+    sp-pk-fade-hold var(--sp-peril-len) var(--gl-ease) forwards,
+    sp-pk-jolt var(--sp-peril-len) var(--gl-linear) forwards,
+    sp-pk-push-near var(--sp-peril-len) var(--sp-peril-push) forwards;
 }
 .sp-peril .sp-pk-tag {
   font-family: var(--sp-font);
-  font-size: 13px;
-  letter-spacing: 7px;
-  color: var(--sp-peril-red);
+  font-size: 12px;
+  font-weight: 650;
+  font-stretch: 118%;
+  letter-spacing: 0.5em;
+  color: color-mix(in srgb, var(--sp-peril-red) 80%, rgb(var(--gl-tint-light)));
+  background: color-mix(in srgb, var(--sp-peril-ember) 55%, transparent);
   text-transform: uppercase;
-  font-weight: var(--gl-weight-medium);
   margin-bottom: 14px;
   padding: 4px 14px;
-  border: 1px solid var(--sp-peril-red-glow);
+  border: 1px solid color-mix(in srgb, var(--sp-peril-red) 45%, transparent);
   clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
   transform-origin: center;
   opacity: 0;
@@ -1022,11 +1064,12 @@
 .sp-peril .sp-pk-line {
   display: flex;
   justify-content: center;
-  font-weight: var(--gl-weight-bold);
+  font-weight: 860;
+  font-stretch: 122%;
   text-transform: uppercase;
-  line-height: 0.92;
-  font-size: clamp(64px, 15vw, 168px);
-  letter-spacing: 0.04em;
+  line-height: 0.88;
+  font-size: clamp(64px, 14vw, 176px);
+  letter-spacing: 0.01em;
   will-change: filter, letter-spacing;
 }
 /* Tracking collapse + a quick brightness strobe as each line lands. */
@@ -1037,36 +1080,57 @@
   animation: sp-pk-track-2 var(--sp-peril-len) var(--gl-ease-sharp) both, sp-pk-strobe-2 var(--sp-peril-len) var(--sp-peril-strobe) both;
 }
 /* Letters are anime.js (band.js): line 1 drops in, line 2 slides in from the
-   side, each out of a blur. They rest hidden until their beat. */
+   side, each out of a blur. They rest hidden until their beat. Each is cut
+   from the screen: a lit lip, a blood edge and an ember floor below the face,
+   a tight red glow, then a long drop shadow. */
 .sp-peril .sp-pk-l {
   display: inline-block;
   white-space: pre;
   opacity: 0;
-  color: rgb(var(--gl-tint-light));
-  text-shadow: 0 0 30px var(--sp-peril-glow), 0 0 70px var(--sp-peril-red-glow), 0 4px 10px rgb(var(--gl-tint-dark));
+  color: color-mix(in srgb, rgb(var(--gl-tint-light)) 96%, var(--sp-peril-red));
+  text-shadow:
+    0 1px 0 var(--sp-peril-bright),
+    0 2px 0 var(--sp-peril-blood),
+    0 3px 0 var(--sp-peril-ember),
+    0 0 18px color-mix(in srgb, var(--sp-peril-red) 55%, transparent),
+    0 0 54px color-mix(in srgb, var(--sp-peril-blood) 38%, transparent),
+    0 18px 40px var(--sp-peril-drop);
 }
-/* Line 2 carries an RGB-split shadow. */
+/* Line 1 lands through a lens fringe that closes before line 2 starts. Its
+   own length ends there, so nothing restyles the letters after it. */
+.sp-peril .sp-pk-line-1 .sp-pk-l {
+  animation: sp-pk-fringe calc(var(--sp-peril-len) * 0.31) var(--gl-linear) both;
+}
+/* Line 2 keeps its RGB split. */
 .sp-peril .sp-pk-line-2 .sp-pk-l {
   text-shadow:
-    -3px 0 var(--sp-peril-red),
-    2px 0 var(--sp-peril-ghost),
-    0 0 30px var(--sp-peril-glow),
-    0 0 70px var(--sp-peril-red-glow),
-    0 4px 10px rgb(var(--gl-tint-dark));
+    -2px 0 color-mix(in srgb, var(--sp-peril-red) 85%, transparent),
+    2px 0 var(--sp-peril-fringe),
+    0 2px 0 var(--sp-peril-blood),
+    0 3px 0 var(--sp-peril-ember),
+    0 0 18px color-mix(in srgb, var(--sp-peril-red) 55%, transparent),
+    0 0 54px color-mix(in srgb, var(--sp-peril-blood) 38%, transparent),
+    0 18px 40px var(--sp-peril-drop);
 }
+/* The rule is a measured scale: a lit hairline over a tick every 22px. */
 .sp-peril .sp-pk-rule {
-  height: 2px;
+  height: 9px;
   width: 0;
   margin: 10px 0;
-  background: linear-gradient(90deg, transparent, var(--sp-peril-red) 30%, var(--sp-peril) 50%, var(--sp-peril-red) 70%, transparent);
-  box-shadow: 0 0 12px var(--sp-peril-red-glow);
+  background:
+    linear-gradient(90deg, transparent, var(--sp-peril-red) 25%, var(--sp-peril-bright) 50%, var(--sp-peril-red) 75%, transparent) 0 4px / 100% 1px no-repeat,
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--sp-peril-red) 55%, transparent) 0 1px, transparent 1px 22px) 0 0 / 100% 9px no-repeat;
+  -webkit-mask: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+          mask: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
   animation: sp-pk-rule var(--sp-peril-len) var(--gl-ease-sharp) forwards;
 }
 .sp-peril .sp-pk-sub {
   font-family: var(--sp-font);
-  font-size: 13px;
-  letter-spacing: 6px;
-  color: var(--sp-peril-bright);
+  font-size: 12.5px;
+  font-weight: 560;
+  font-stretch: 112%;
+  letter-spacing: 0.42em;
+  color: color-mix(in srgb, var(--sp-peril-bright) 86%, transparent);
   text-transform: uppercase;
   margin-top: 14px;
   max-width: 0;
@@ -1080,10 +1144,27 @@
   position: absolute;
   inset: 0;
   z-index: 38;
-  background: radial-gradient(ellipse at 50% 50%, rgb(var(--gl-tint-light) / 0.95), var(--sp-peril-red-glow) 55%, transparent 75%);
+  background: radial-gradient(ellipse 55% 40% at 50% 50%, rgb(var(--gl-tint-light) / 0.9), color-mix(in srgb, var(--sp-peril-red) 35%, transparent) 45%, transparent 75%);
   opacity: 0;
   mix-blend-mode: screen;
   animation: sp-pk-flash var(--sp-peril-len) var(--sp-peril-strobe) forwards;
+}
+
+/* An anamorphic streak through the title on both hits, with the flash. */
+.sp-peril .sp-pk-streak {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  z-index: 37;
+  translate: 0 -50%;
+  background: linear-gradient(90deg, transparent, var(--sp-peril-red-glow) 18%, var(--sp-peril-bright) 50%, var(--sp-peril-red-glow) 82%, transparent);
+  box-shadow: 0 0 14px 2px color-mix(in srgb, var(--sp-peril-red) 55%, transparent), 0 0 60px 8px color-mix(in srgb, var(--sp-peril-alert) 25%, transparent);
+  opacity: 0;
+  scale: 0 1;
+  mix-blend-mode: screen;
+  animation: sp-pk-streak var(--sp-peril-len) var(--gl-linear) forwards;
 }
 
 /* ═══ The two settings forms (Foundry windows; only small touches) ═════════ */
@@ -1212,4 +1293,44 @@
   39% { opacity: 0.95; }
   41% { opacity: 0; }
   100% { opacity: 0; }
+}
+/* the camera: the title pushes in further than the room behind it */
+@keyframes sp-pk-push-near {
+  from { scale: 0.97; }
+  to { scale: 1.045; }
+}
+@keyframes sp-pk-push-far {
+  from { scale: 1; }
+  to { scale: 1.025; }
+}
+/* on the two flash beats: opens across the screen, then thins and goes */
+@keyframes sp-pk-streak {
+  0%, 2.8% { opacity: 0; scale: 0.1 1; }
+  3.6% { opacity: 1; scale: 1 1; }
+  12% { opacity: 0; scale: 1.2 0.6; }
+  38.4% { opacity: 0; scale: 0.1 1; }
+  39.2% { opacity: 1; scale: 1 1; }
+  48% { opacity: 0; scale: 1.2 0.6; }
+  100% { opacity: 0; }
+}
+/* runs over 31% of the stage: split wide until line 1 lands (19%), closed by 31% */
+@keyframes sp-pk-fringe {
+  0%, 61% {
+    text-shadow:
+      -9px 0 color-mix(in srgb, var(--sp-peril-red) 90%, transparent),
+      9px 0 color-mix(in srgb, var(--sp-peril-cool) 55%, transparent),
+      0 0 0 transparent,
+      0 0 18px color-mix(in srgb, var(--sp-peril-red) 55%, transparent),
+      0 0 54px color-mix(in srgb, var(--sp-peril-blood) 38%, transparent),
+      0 18px 40px var(--sp-peril-drop);
+  }
+  100% {
+    text-shadow:
+      0 1px 0 var(--sp-peril-bright),
+      0 2px 0 var(--sp-peril-blood),
+      0 3px 0 var(--sp-peril-ember),
+      0 0 18px color-mix(in srgb, var(--sp-peril-red) 55%, transparent),
+      0 0 54px color-mix(in srgb, var(--sp-peril-blood) 38%, transparent),
+      0 18px 40px var(--sp-peril-drop);
+  }
 }

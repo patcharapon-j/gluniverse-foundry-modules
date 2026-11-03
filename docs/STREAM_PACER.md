@@ -27,11 +27,14 @@ is two rows: Raise hand and Need time, then the traffic light with the current
 answer beside it. Sound and desktop alerts are icons in the header, and the
 header collapses the panel to one 32px line.
 
-**The Dire Peril splash** is the old feature's full-screen stage, kept as it
-was apart from the type, which is the skin's `--sp-font`: a letter-by-letter
-montage, then the two words slam in over a WebGL danger field (plasma, a hex
-lattice and two shockwave rings) with corner brackets, running hazard text and a
-drifting outline marquee. It lasts `TIMING.perilStage`; every beat is a CSS
+**The Dire Peril splash** is the old feature's full-screen stage, with the old
+beats and timing, set in the skin's `--sp-font` and shot like a film: a
+letter-by-letter montage, then the two words slam in over a WebGL danger field
+(crimson plasma with hot filaments, light rays and embers, a one-pixel hex
+lattice, hairline shock rings and an anamorphic streak on both hits) with corner
+brackets, running hazard text and an outline marquee in depth. The title is a
+wide cut letter with a lit lip, closes a lens fringe as it lands, and pushes in
+slower than its room. It lasts `TIMING.perilStage`; every beat is a CSS
 keyframe laid out as a share of that one length, which `playPerilSplash` writes
 as `--sp-peril-stage` and unmounts at. It never takes a click. Ending the peril
 ends the splash at once. The field (`peril-field.js`) is a suite surface, built

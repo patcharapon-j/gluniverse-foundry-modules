@@ -263,5 +263,6 @@ export function perilStageHTML({ dire, peril, tag, subtitle, runTop, runBottom }
     + line(peril, 2)
     + `<div class="sp-pk-sub">${esc(subtitle)}</div>`
     + `</div>`
+    + `<div class="sp-pk-streak" aria-hidden="true"></div>`
     + `<div class="sp-pk-flash" aria-hidden="true"></div>`;
 }

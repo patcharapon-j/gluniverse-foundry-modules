@@ -1,11 +1,13 @@
 // Stream Pacer — the Dire Peril field: the full-screen WebGL backdrop behind
 // the splash.
 //
-// One procedural fragment shader paints the danger field: domain-warped plasma
-// in the peril colours, a drifting hexagonal lattice, an impact shockwave on
-// declare and a second slam ring on the title's impact, then scanlines,
-// chromatic fringing, vignette and grain. The element sits one layer below the
-// splash so its wash and lettering composite on top.
+// One procedural fragment shader paints the danger field: domain-warped crimson
+// plasma laced with thin hot filaments, light rays from the core and drifting
+// embers, a hexagonal lattice drawn one render pixel wide, a hairline shock on
+// declare that lights the lattice as it passes, a second slam ring and an
+// anamorphic streak on the title's impact, then a filmic shoulder, a deep
+// vignette and fine grain. The element sits one layer below the splash so its
+// wash and lettering composite on top.
 //
 // The context is a suite Surface (core/gl-surfaces.mjs). A burst lasts a few
 // seconds and the context then sits idle until the next declare, so under a
@@ -62,9 +64,9 @@ float noise(vec2 p){
 float fbm(vec2 p){
   float v = 0.0;
   float a = 0.5;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 4; i++) {
     v += a * noise(p);
-    p *= 2.03;
+    p = p * 2.03 + 7.1;
     a *= 0.5;
   }
   return v;
@@ -86,89 +88,111 @@ float hexEdge(vec2 uv){
   return 0.5 - hexDist(gv);
 }
 
+// A ring of radius R and width w, split across the channels for a lens fringe.
+vec3 fringeRing(float d, float R, float w, float split){
+  return vec3(
+    exp(-pow((d - R - split) / w, 2.0)),
+    exp(-pow((d - R) / w, 2.0)),
+    exp(-pow((d - R + split) / w, 2.0)));
+}
+
+// Seconds into the burst: the slam ring, and the streak with the title's flash.
+const float SLAM = 1.55;
+const float STREAK = 1.6;
+
 void main(){
-  // Aspect-corrected centred coords.
+  // Aspect-corrected centred coords; one render pixel in those units.
   vec2 uv = v_uv;
   vec2 p = (uv - 0.5) * vec2(u_res.x / u_res.y, 1.0);
   float dist = length(p);
   float t = u_time;
+  float px = 1.0 / u_res.y;
 
-  // --- Plasma energy field (domain warped) ---
-  vec2 q = p * 2.4;
-  q += 0.35 * vec2(fbm(q + t * 0.18), fbm(q - t * 0.14));
-  float energy = fbm(q + vec2(t * 0.12, -t * 0.09));
-  energy = pow(energy, 1.4);
+  // --- Plasma (domain warped) with thin hot filaments through it ---
+  vec2 q = p * 1.7;
+  q += 0.5 * vec2(fbm(q + t * 0.11), fbm(q.yx - t * 0.09));
+  float energy = fbm(q + vec2(t * 0.07, -t * 0.05));
+  float fil = 1.0 - abs(2.0 * fbm(q * 1.9 + vec2(-t * 0.06, t * 0.04)) - 1.0);
+  fil = pow(fil, 7.0);
 
-  // Colour bed: deep -> mid -> hot driven by energy + radial falloff.
-  vec3 col = mix(u_deep, u_mid, smoothstep(0.25, 0.75, energy));
-  col = mix(col, u_hot, smoothstep(0.62, 0.95, energy) * (0.5 + 0.5 * u_intensity));
+  // Colour bed: near black -> deep -> crimson, the filaments and core on top.
+  vec3 col = mix(vec3(0.010, 0.002, 0.004), u_deep, smoothstep(0.12, 0.6, energy));
+  col = mix(col, u_mid, smoothstep(0.58, 0.92, energy) * 0.9);
+  col += u_hot * fil * 0.26 * (0.35 + 0.65 * u_intensity);
+  col += u_mid * exp(-dist * dist * 3.2) * 0.85 * (0.35 + 0.65 * u_intensity);
 
-  // Centre hot core.
-  col += u_hot * smoothstep(0.55, 0.0, dist) * 0.35 * u_intensity;
+  // --- Light rays from the core, and embers drifting up through them ---
+  vec2 dir = p / max(dist, 1e-4);
+  float rays = noise(dir * 4.0 + vec2(t * 0.25, 0.0)) * noise(dir * 11.0 - vec2(0.0, t * 0.18));
+  rays = pow(rays, 1.6) * smoothstep(0.04, 0.45, dist) * exp(-dist * 1.5);
+  col += u_hot * rays * 0.55 * (0.3 + 0.7 * u_intensity);
 
-  // --- Hexagonal tech lattice ---
-  float scale = 11.0;
-  vec2 huv = p * scale + vec2(0.0, t * 0.6);
-  float edge = hexEdge(huv);
-  float lattice = smoothstep(0.06, 0.0, edge);
-  float scan = 0.5 + 0.5 * sin(p.y * 6.0 - t * 2.2);
-  col += u_hot * lattice * (0.10 + 0.18 * scan) * (0.4 + 0.6 * u_intensity);
+  vec2 g = p * 20.0 + vec2(t * 0.15, -t * 0.55);
+  vec2 id = floor(g);
+  vec2 o = vec2(hash(id + 3.1), hash(id + 7.7)) - 0.5;
+  float r = hash(id);
+  float mote = (1.0 - smoothstep(0.0, 0.07, length(fract(g) - 0.5 - o * 0.7)))
+    * step(0.88, r) * (0.45 + 0.55 * sin(t * 2.3 + r * 40.0));
+  col += u_hot * vec3(1.0, 1.4, 1.2) * mote * 0.4 * smoothstep(0.1, 0.6, dist);
 
-  // --- Impact shockwave ---
-  float ringR = u_burst * 1.4;
-  float ring = smoothstep(0.10, 0.0, abs(dist - ringR));
-  col += (u_hot + u_mid) * ring * (1.0 - clamp(u_burst, 0.0, 1.0)) * 1.6;
+  // --- Hexagonal lattice, one render pixel wide at any size ---
+  float sc = 13.0;
+  float lattice = 1.0 - smoothstep(0.0, px * sc * 1.3, hexEdge(p * sc + vec2(0.0, t * 0.3)));
+  float band = 0.5 + 0.5 * sin(p.y * 4.0 - t * 1.4);
+  col += u_hot * lattice * 0.11 * smoothstep(1.2, 0.15, dist) * (0.45 + 0.55 * band) * (0.5 + 0.5 * u_intensity);
 
-  // Secondary slam ring synced to the title impact (~1.55s in).
-  float t2 = clamp((t - 1.55) / 0.6, 0.0, 1.5);
-  float ring2R = t2 * 1.25;
-  float ring2 = smoothstep(0.08, 0.0, abs(dist - ring2R));
-  col += (u_hot + u_mid) * ring2 * (1.0 - clamp(t2, 0.0, 1.0)) * 1.3;
+  // --- The declare: a hairline wavefront, a soft halo, the cells it lights ---
+  float R = u_burst * 1.55;
+  float fade = 1.0 - clamp(u_burst, 0.0, 1.0);
+  col += fringeRing(dist, R, 0.006, 0.004) * vec3(1.0, 0.72, 0.74) * 1.5 * fade;
+  col += u_hot * exp(-pow((dist - R) / 0.14, 2.0)) * 0.4 * fade;
+  col += u_hot * lattice * smoothstep(R - 0.3, R, dist) * step(dist, R) * fade * 0.9;
 
-  // --- Ambient pulse rings ---
-  float pulse = sin(dist * 26.0 - t * 5.0);
-  col += u_mid * smoothstep(0.6, 1.0, pulse) * 0.05 * u_intensity;
+  // --- The title's slam: a second ring ---
+  float t2 = clamp((t - SLAM) / 0.55, 0.0, 1.5);
+  float f2 = (1.0 - clamp(t2, 0.0, 1.0)) * step(0.001, t2);
+  col += fringeRing(dist, t2 * 1.3, 0.005, 0.0035) * vec3(1.0, 0.7, 0.72) * 1.2 * f2;
+  col += u_hot * exp(-pow((dist - t2 * 1.3) / 0.1, 2.0)) * 0.3 * f2;
 
-  // --- Chromatic fringe at the edges ---
-  float fr = fbm(p * 3.0 + t * 0.5);
-  col.r += fr * 0.06 * smoothstep(0.3, 0.9, dist);
-  col.b += (1.0 - fr) * 0.05 * smoothstep(0.3, 0.9, dist);
+  // --- An anamorphic streak across the centre on both hits ---
+  float imp = exp(-max(t - 0.02, 0.0) * 3.2) + step(STREAK, t) * exp(-max(t - STREAK, 0.0) * 3.6);
+  col += vec3(1.0, 0.62, 0.66) * exp(-abs(p.y) * 160.0) * exp(-abs(p.x) * 0.9) * imp * 1.1;
+  col += u_hot * exp(-abs(p.y) * 22.0) * exp(-abs(p.x) * 1.4) * imp * 0.35;
 
-  // --- Scanlines ---
-  float sl = 0.92 + 0.08 * sin(uv.y * u_res.y * 1.6);
-  col *= sl;
+  // --- Grade: lift with the envelope, roll the highlights off, vignette ---
+  col *= 0.8 + 0.7 * u_intensity;
+  col = col / (1.0 + col * 0.35);
+  col *= smoothstep(1.5, 0.2, dist);
+  col *= 0.95 + 0.05 * sin(uv.y * u_res.y * 3.14159);
 
-  // --- Vignette ---
-  col *= smoothstep(1.25, 0.25, dist);
-
-  // --- Film grain ---
-  float grain = hash(uv * u_res + fract(t) * 91.7) - 0.5;
-  col += grain * 0.05;
-
-  // Overall energy lift from the envelope.
-  col *= (0.55 + 0.65 * u_intensity);
+  // --- Fine grain ---
+  col += (hash(uv * u_res + fract(t) * 91.7) - 0.5) * 0.022;
 
   gl_FragColor = vec4(max(col, 0.0), 1.0);
 }
 `;
 
-// Internal resolution. The field is soft noise under a translucent wash and
-// the lettering, so it renders at half the device resolution and never more
-// than MAX_EDGE_PX on its long edge, then the browser scales it up. A 4K
-// display at full DPR would otherwise shade ~8M pixels a frame for a burst.
-const RENDER_SCALE = 0.5;
-const MAX_EDGE_PX = 1280;
+// Internal resolution. The plasma is soft, but the lattice and the rings are
+// hairlines, so the field renders at three quarters of the device resolution
+// and never more than MAX_EDGE_PX on its long edge, then the browser scales it
+// up. A 4K display at full DPR would otherwise shade ~8M pixels a frame for a
+// burst.
+const RENDER_SCALE = 0.75;
+const MAX_EDGE_PX = 1600;
+
+/** The alert red the hot end of the bed leans toward. */
+const ALERT_RED = '#ff1e30';
 
 /**
- * The field's colour bed, derived from the suite's peril crimson exactly as the
- * splash's `--sp-peril-*` tokens are: a deep bed, the crimson itself, and a hot
- * alert red pushed toward red-orange. 0..1 rgb arrays for the shader.
+ * The field's colour bed, derived from the suite's peril crimson: a deep bed,
+ * a blood crimson pulled from the peril toward the alert red, and a hot red
+ * almost at the alert red. 0..1 rgb arrays for the shader.
  */
 export function perilFieldColors(peril = PALETTE.peril) {
   return {
-    deep: hexToRgbFloat(darken(peril, 0.6)),
-    mid: hexToRgbFloat(peril),
-    hot: hexToRgbFloat(lighten(mix(peril, '#ff1e30', 0.5), 0.25))
+    deep: hexToRgbFloat(darken(peril, 0.75)),
+    mid: hexToRgbFloat(darken(mix(peril, ALERT_RED, 0.5), 0.22)),
+    hot: hexToRgbFloat(lighten(mix(peril, ALERT_RED, 0.85), 0.12))
   };
 }
 
