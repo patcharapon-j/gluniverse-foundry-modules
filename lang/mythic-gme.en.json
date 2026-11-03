@@ -1,18 +1,32 @@
 {
   "GLMYTHIC": {
     "title": "Mythic GME Oracle",
-    "hint": "GM-facing quick-roll oracle for the Mythic Game Master Emulator 2nd Edition: Fate Chart, Random Events, and every Meaning & Elements table, with a persisted Chaos Factor.",
+    "hint": "A GM's oracle for the Mythic Game Master Emulator 2nd Edition: the Fate Chart against a shared Chaos Factor, Random Events, scene checks, Threads and Characters lists, and the bundled meaning tables.",
     "control": "Mythic GME Oracle",
     "cf": {
       "title": "Chaos Factor",
-      "up": "Raise Chaos Factor",
-      "down": "Lower Chaos Factor",
-      "abbr": "CF"
+      "up": "Raise the Chaos Factor",
+      "down": "Lower the Chaos Factor",
+      "abbr": "CF",
+      "tier": {
+        "calm": "Calm",
+        "steady": "Steady",
+        "wild": "Wild"
+      }
+    },
+    "tab": {
+      "ask": "Ask",
+      "scene": "Scene",
+      "meaning": "Meaning",
+      "lists": "Lists"
     },
     "fate": {
       "label": "Fate",
       "odds": "Odds",
-      "ask": "Ask Fate"
+      "ask": "Ask Fate",
+      "question": "Question",
+      "questionHint": "Ask a yes or no question, then pick the odds",
+      "cell": "Exceptional Yes at {excYes} or under · Yes at {yes} or under · Exceptional No at {excNo} or over"
     },
     "odds": {
       "impossible": "Impossible",
@@ -36,32 +50,135 @@
       "label": "Random Event",
       "focus": "Focus",
       "triggered": "Random Event",
-      "flagged": "triggered — roll it",
-      "meaning": "Meaning"
+      "flagged": "triggered, roll it",
+      "meaning": "Meaning",
+      "pending": "Triggered. Roll it from Ask.",
+      "flag": "Event"
+    },
+    "focus": {
+      "remote": "Remote Event",
+      "ambiguous": "Ambiguous Event",
+      "new-npc": "New NPC",
+      "npc-action": "NPC Action",
+      "npc-negative": "NPC Negative",
+      "npc-positive": "NPC Positive",
+      "toward-thread": "Move Toward A Thread",
+      "away-thread": "Move Away From A Thread",
+      "close-thread": "Close A Thread",
+      "pc-negative": "PC Negative",
+      "pc-positive": "PC Positive",
+      "current-context": "Current Context"
+    },
+    "meta": {
+      "d100": "d100 {roll}",
+      "d10": "d10 {roll}",
+      "cf": "Chaos {cf}",
+      "chance": "{yes}% yes",
+      "pick": "{roll} of {of}"
+    },
+    "scene": {
+      "check": "Test the expected scene",
+      "checkHint": "{change}% it changes",
+      "end": "End the scene",
+      "inControl": "In control",
+      "outOfControl": "Out of control",
+      "down": "Chaos down one",
+      "up": "Chaos up one",
+      "result": {
+        "expected": "As expected",
+        "altered": "Altered scene",
+        "interrupted": "Interrupted"
+      }
+    },
+    "adjust": {
+      "button": "Scene adjustment",
+      "title": "Scene Adjustment",
+      "label": "Adjust",
+      "also": "And",
+      "remove-character": "Remove A Character",
+      "add-character": "Add A Character",
+      "reduce-activity": "Reduce/Remove An Activity",
+      "increase-activity": "Increase An Activity",
+      "remove-object": "Remove An Object",
+      "add-object": "Add An Object",
+      "two-adjustments": "Make 2 Adjustments"
+    },
+    "chaos": {
+      "moved": "Chaos {from} to {to}",
+      "floor": "Already at the lowest Chaos Factor.",
+      "ceiling": "Already at the highest Chaos Factor."
     },
     "meaning": {
       "action": "Meaning · Action",
       "description": "Meaning · Description",
       "actionBtn": "Action",
-      "descBtn": "Description"
+      "descBtn": "Description",
+      "table": {
+        "actions": "Actions",
+        "descriptions": "Descriptions"
+      },
+      "missing": "Actions Table 1 is not bundled, so this is Table 2 alone. Link a RollTable for Table 1 on the Meaning page.",
+      "missingShort": "Table 2 only",
+      "linked": "Table 1 · {name}",
+      "unlink": "Unlink Actions Table 1",
+      "dropHint": "Drop a RollTable here to use it as Actions Table 1",
+      "dropWrong": "Drop a RollTable to link it as Actions Table 1."
+    },
+    "category": {
+      "plot": "Adventure & Plot",
+      "characters": "Characters",
+      "actions": "Actions",
+      "creatures": "Creatures",
+      "locations": "Locations",
+      "objects": "Objects & Powers",
+      "senses": "Senses"
     },
     "elements": {
-      "search": "Search tables…"
+      "search": "Search tables",
+      "none": "No table matches."
+    },
+    "list": {
+      "threads": "Threads",
+      "characters": "Characters",
+      "emptyPick": "The list is empty",
+      "weight": "Weight {n}",
+      "weightHint": "How many times it is on the list. Click to change.",
+      "remove": "Remove",
+      "roll": "Roll",
+      "addLabel": "Add",
+      "add": {
+        "threads": "Add a thread",
+        "characters": "Add a character"
+      },
+      "empty": {
+        "threads": "No threads yet. Random Events about a thread will pick from here.",
+        "characters": "No characters yet. Random Events about an NPC will pick from here."
+      },
+      "private": "Lists and the log stay in this browser. Players never receive them."
     },
     "log": {
-      "title": "Oracle Log",
-      "clear": "Clear log",
-      "empty": "Rolls appear here. Nothing yet.",
+      "title": "Log",
+      "clear": "Clear the log",
+      "empty": "Ask a question or roll a table. Results land here.",
       "toChat": "Send to GM chat",
-      "sent": "Sent to GM chat."
+      "sent": "Sent to GM chat.",
+      "whisper": "Whisper to the GMs",
+      "reveal": "Show the table",
+      "whispered": "Whispered to the GMs."
     },
     "chat": {
       "alias": "Mythic Oracle"
     },
+    "quick": {
+      "label": "Mythic GME",
+      "roll": "Roll",
+      "ask": "Ask: {odds}",
+      "chance": "{yes}% yes at Chaos {cf}"
+    },
     "settings": {
       "autoEvent": {
         "name": "Auto-roll triggered Random Events",
-        "hint": "When a Fate Chart roll triggers a Random Event (doubles with the tens digit ≤ Chaos Factor), roll and show it inline under the Yes/No result."
+        "hint": "When a Fate Chart roll comes up doubles at or under the Chaos Factor, roll the Random Event and show it under the answer."
       }
     }
   }
