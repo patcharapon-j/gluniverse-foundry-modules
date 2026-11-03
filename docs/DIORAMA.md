@@ -401,8 +401,9 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   ground is never drawn at all**: tops, cliff faces, water, props and walls
   there discard, so they write no colour and no outline. A cliff face counts
   as seen when the top it hangs from is, or the ground just past its foot
-  (`FACE_FOOT`, an eighth of a square: any further would look over a Foundry
-  wall the bake knows and the shader does not). So the near face of a terrace
+  (`FACE_FOOT`, half a bake pixel, so seen ground has to reach the face itself:
+  any further would look over a Foundry wall standing just in front of it,
+  which the bake knows and the shader does not). So the near face of a terrace
   too tall for sight to reveal its top still stands on the seen ground and
   rises into the mist. Such a face takes its fog look from half a square out
   (`FACE_FOG`), since the edge of sight is full mist at its foot. The gap is filled by

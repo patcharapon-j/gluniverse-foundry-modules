@@ -181,8 +181,13 @@ float visionAt(vec2 xz) {
  * with the sun behind it shades the seen floor in front of it even though its
  * top is hidden. Only a caster within that reach of seen ground passes, which
  * is a face the party can already see, never the hidden ground behind it.
+ *
+ * FACE_FOOT (cells) is half a bake pixel at the bake's finest (16 a cell,
+ * view/bake.mjs), so it lands in the pixel touching the face: seen ground has
+ * to reach the face itself. Any further out and a Foundry wall standing just in
+ * front of a hidden face would leave a sample on seen ground past the wall.
  */
-const float FACE_FOOT = 0.12;
+const float FACE_FOOT = 0.03;
 float shadowTap(vec3 p, vec2 o, vec3 wp, float dz) {
   // explicit levels throughout (the map has none): an implicit one inside this
   // loop's branches is a gradient in divergent flow, which D3D refuses to link
@@ -794,7 +799,9 @@ vec3 fallSheet(vec3 lipC, float a, float d, float up, bool intoWater) {
  * the viewer sees. Only just past the plane: a wall or anything else between the
  * viewer and the face already took that ground out of the bake, and any reach
  * further out would look over a Foundry wall the bake knows and this does not.
+ * The lip sits FACE_LIP inside the plane (terrain-mesh.mjs LIP_INSET).
  */
+const float FACE_LIP = 0.03;
 /*
  * A face seen only from its foot takes its fog of war from further out
  * (cells): the edge of sight reaches the mist's full colour within a quarter
@@ -807,7 +814,7 @@ const float FACE_FOG = 0.6;
 
 void main() {
   vec2 out2 = normalize(vNormal.xz + vec2(1e-6));
-  vec2 foot = vLip + out2 * FACE_FOOT;
+  vec2 foot = vLip + out2 * (FACE_LIP + FACE_FOOT);
   float visLip = visionAt(vLip), visFoot = visionAt(foot);
   float vis = max(visLip, visFoot);
   vec2 fogXZ = vLip + out2 * FACE_FOG;
