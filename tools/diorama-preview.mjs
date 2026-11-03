@@ -59,6 +59,9 @@
  *   levels=1    v14 Levels: the map as an upper floor (base 20 ft) with a hole, a
  *               cellar drawn below it by setLevels; levels=ghost  the cellar as a
  *               GM-only ghost (a still)
+ *   fx=burst|strike|cone|condition  a Spellsprite (pf2e-fx) effect among three standees,
+ *               through the shipped mirror; mat=, outcome=, style=, cond=, fxseek=<s> holds
+ *               it that far in, fxspeed=<k>
  *   buildings=1 Foundry tiles: a roof over the house, a rug, a mirrored banner, a
  *               GM-only ghost; roof=in|out|cut|radial; view=house; probe=tiles
  *
@@ -847,6 +850,71 @@ r.setCamera(cam, { animate: false });
 // grid=1: the square grid on walkable tops, in the scene's colour and alpha
 let grid = { on: Q.get("grid") === "1", color: "#000000", alpha: 0.35 };
 r.setOptions({ tiltShift: Q.get("tilt") === "1", cutaway: Q.get("cutaway") !== "0", grid });
+
+// fx=burst|strike|cone|condition: a Spellsprite (pf2e-fx) effect among three standees on
+// the grass, painted by the SHIPPED mirror (integrations/spellsprite.mjs) through
+// r.setPixelSource, from a local stand-in Director stepping the sim at 120 Hz.
+// mat=<material> outcome=hit|crit|miss style=<weapon style> fxseek=<s> holds the sim that
+// far in (stills; the page keeps drawing it), fxspeed=<k> slows or speeds it.
+const FX = Q.get("fx");
+if (FX) {
+  const [{ compile }, { STEP }, { SpellspriteMirror }] = await Promise.all([
+    import("/scripts/features/pf2e-fx/compile.mjs"),
+    import("/scripts/features/pf2e-fx/core/sim.mjs"),
+    import("/scripts/features/diorama/integrations/spellsprite.mjs"),
+  ]);
+  const cast = [
+    { id: "fxCaster", art: ART.rogue, x: 9.5, y: 8.5, h: 5, d: 1 },
+    { id: "fxA", art: ART.goblin, x: 13.5, y: 7.5, h: 4, d: -1 },
+    { id: "fxB", art: ART.goblin, x: 13.5, y: 9.5, h: 4, d: -1 },
+  ];
+  // side by side as the camera sees them, so the knight's card does not hide its own swing
+  if (FX === "strike") { cast[0] = { ...cast[0], art: ART.knight, x: 12.4, y: 7.5, h: 6 }; cast[1] = { ...cast[1], x: 13.4, y: 8.5 }; }
+  const g = (c) => terrain.groundAt(c.x * SIZE, c.y * SIZE, SIZE);
+  r.setTokens(cast.map((c) => ({ id: c.id, name: c.id, x: c.x * SIZE, y: c.y * SIZE, footQ: g(c), groundQ: g(c), heightQ: c.h, widthCells: 1,
+    art: c.art, disposition: c.d, visible: true, ghost: false, controlled: false, hovered: false, targets: [], turn: null, conditions: [], bars: [] })));
+  r.setEffects([]);
+  r.setLinks([]);
+  window.__tacticsOverlays = { cells: [] };
+  r.setOverlays(window.__tacticsOverlays);
+  const body = (c) => ({ id: c.id, x: c.x, y: c.y, size: 1, h: c.h / 4 });
+  const outcome = Q.get("outcome") ?? "hit";
+  const mat = Q.get("mat") ?? ({ strike: "kinetic", cone: "cold" }[FX] ?? "fire");
+  const spec = (seed) => {
+    const base = { id: "preview", seed, func: "harm", material: mat, outcome, rank: 5, tradition: "arcane", look: null, weapon: null, condition: null, area: null };
+    const [C, A, B] = cast.map(body);
+    if (FX === "strike") return { ...base, kind: "strike", weapon: { style: Q.get("style") ?? "slash" }, caster: C, targets: [{ ...A, outcome }] };
+    if (FX === "condition") return { ...base, kind: "condition", caster: null, targets: [{ ...A, outcome }], condition: { slug: Q.get("cond") ?? "persistent-damage", value: 1 } };
+    if (FX === "cone") return { ...base, kind: "area", caster: C, targets: [{ ...A, outcome }, { ...B, outcome }], area: { shape: "cone", x: C.x + 0.3, y: C.y, dir: 0, len: 5 } };
+    return { ...base, kind: "area", caster: C, targets: [{ ...A, outcome }, { ...B, outcome }], area: { shape: "burst", x: 13.5, y: 8.5, r: 1.5 } };
+  };
+  let seedN = 7, sim = null;
+  const restart = () => { sim = compile(spec(seedN++)); };
+  restart();
+  const hold = Q.has("fxseek") ? Number(Q.get("fxseek")) : null;
+  if (hold != null) while (sim.t < hold) sim.step(STEP);
+  const mirror = new SpellspriteMirror({ sims: () => (sim ? [{ key: "fx", sim }] : []), groundQ: (x, y) => terrain.groundAt(x, y, SIZE) });
+  r.setPixelSource(mirror);
+  window.__fx = { mirror, restart, get sim() { return sim; } };
+  if (hold == null) {
+    const speed = Number(Q.get("fxspeed") ?? 1);
+    let last = performance.now(), acc = 0;
+    const tick = (now) => {
+      acc += Math.min(0.05, Math.max(0, now - last) / 1000) * speed; last = now;
+      let n = 0;
+      while (acc >= STEP && n++ < 12) { sim.step(STEP); acc -= STEP; }
+      if ((sim.done && sim.t > 0.5) || sim.t > sim.period + 0.6) restart();
+      r.requestRender();
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  // from the south-west, so the plateau stands behind the goblins rather than in front of them
+  cam = { ...cam, yawStep: Q.has("yaw") ? Number(Q.get("yaw")) : 6, zoom: Q.has("zoom") ? Number(Q.get("zoom")) : 2.6, target: FX === "condition" ? { x: cast[1].x * SIZE, y: cast[1].y * SIZE, zQ: 2 }
+    : { x: (FX === "strike" ? 12.9 : 11.8) * SIZE, y: (FX === "strike" ? 8.0 : 8.5) * SIZE, zQ: 1 } };
+  r.setCamera(cam, { animate: false });
+  document.getElementById("label").hidden = true;
+}
 
 // levels=1: a two-Level scene (v14 Levels), through the shipped pure modules.
 // The painted map is the upper floor ("hall", base 20 ft) with a hole in its

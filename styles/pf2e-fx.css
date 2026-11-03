@@ -1,0 +1,108 @@
+/* ==========================================================================
+   GLUniverse Suite — Spellsprite (pf2e-fx)
+
+   The look editor and the GM's world looks. Etched Glass, identity through
+   --gl-accent on the feature root. The effects themselves are drawn on the
+   canvas and never touch this sheet.
+   ========================================================================== */
+
+.glfx {
+  --gl-accent: var(--gl-violet);
+}
+
+.glfx .window-content {
+  padding: 0;
+  background: var(--gl-ink-0);
+}
+
+.glfx-body {
+  /* Feature-local only. */
+  --glfx-floor: var(--gl-ink-1);
+  --glfx-grid: rgb(var(--gl-tint-light) / 0.06);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-3);
+  padding: var(--gl-sp-4);
+  color: var(--gl-text);
+  font-size: var(--gl-fs-sm);
+  background: linear-gradient(180deg, var(--gl-ink-1), var(--gl-ink-0));
+}
+
+.glfx-stage {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  border: var(--gl-hair) solid var(--gl-line-strong);
+  border-radius: var(--gl-radius);
+}
+
+.glfx-hint {
+  margin: 0;
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+}
+
+.glfx-row {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  align-items: center;
+  gap: var(--gl-sp-3);
+}
+
+.glfx-row > span:first-child {
+  color: var(--gl-text-dim);
+  font-size: var(--gl-fs-xs);
+}
+
+.glfx-check {
+  grid-template-columns: auto 1fr;
+}
+
+.glfx-hue {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-2);
+}
+
+.glfx-hue input[type="range"] {
+  flex: 1;
+  accent-color: var(--gl-accent);
+}
+
+.glfx-rule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gl-sp-2);
+  margin: 0;
+  padding: var(--gl-sp-3);
+  border: var(--gl-hair) solid var(--gl-line-strong);
+  border-radius: var(--gl-radius);
+}
+
+.glfx-rule legend {
+  display: flex;
+  align-items: center;
+  gap: var(--gl-sp-2);
+  padding: 0 var(--gl-sp-1);
+  font-size: var(--gl-fs-xs);
+  color: var(--gl-text-dim);
+}
+
+.glfx-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--gl-sp-2);
+  margin-top: var(--gl-sp-2);
+}
+
+/* .gl-btn takes its type from the host; size it here. */
+.glfx .gl-btn {
+  font-size: 12px;
+}
+
+.glfx .glfx-icon {
+  font-size: 11px;
+  padding: var(--gl-sp-1) var(--gl-sp-2);
+}

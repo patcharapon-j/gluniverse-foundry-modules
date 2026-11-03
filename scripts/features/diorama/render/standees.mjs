@@ -263,6 +263,8 @@ export class StandeesLayer {
     /** True while a reticle is up (the renderer claims motion for its breathe). */
     this.targeted = false;
     this._lastNow = 0;
+    /** Effect reactions (setReactions), or null. */
+    this.react = null;
   }
 
   setGridSize(size) { this.size = size || 100; }
@@ -287,6 +289,28 @@ export class StandeesLayer {
       }
     }
     return g;
+  }
+
+  /**
+   * A per-token transient reaction (an effect landing on it), asked once per
+   * frame per figure: `fn(id, x, z)` (cells) → null or
+   * `{ flash: [r,g,b,a] 0..1, tint: [r,g,b,a] 0..1, squash, dx, dz }` (squash
+   * as `squashAt`'s, dx dz a knockback in cells). Transient: nothing is stored
+   * on the figure, and a null puts it back exactly as it was.
+   * @param {((id:string, x:number, z:number) => object|null)|null} fn
+   */
+  setReactions(fn) { this.react = typeof fn === "function" ? fn : null; }
+
+  /** Write one figure's reaction (or clear the last one). @returns {object|null} */
+  applyReaction(e, p) {
+    let r = null;
+    if (this.react && e.root.visible) { try { r = this.react(e.id, p.x, p.z); } catch { r = null; } }
+    if (!r && !e.reacting) return null;
+    e.reacting = !!r;
+    const cu = e.card.material.uniforms, f = r?.flash, t = r?.tint;
+    if (cu.uReact) cu.uReact.value.set(f?.[0] ?? 1, f?.[1] ?? 1, f?.[2] ?? 1, f?.[3] ?? 0);
+    if (cu.uReactTint) cu.uReactTint.value.set(t?.[0] ?? 0, t?.[1] ?? 0, t?.[2] ?? 0, t?.[3] ?? 0);
+    return r;
   }
 
   setGhosts(on) {
@@ -852,9 +876,15 @@ export class StandeesLayer {
       if (rise !== 0) this.raise(e, rise, lift);
       // the card's squash since its last contact, springing back
       // in the hand: a stretch as it leaves the table (negative squash)
-      const s = h ? -(h.stretch ?? 0) : squashAt(e.squash.amp, now - e.squash.t0);
-      if (h || s > 0) active = true; else e.squash.amp = 0;
+      const s0 = h ? -(h.stretch ?? 0) : squashAt(e.squash.amp, now - e.squash.t0);
+      if (h || s0 > 0) active = true; else e.squash.amp = 0;
+      // an effect landing on it (setReactions): its squash on top, its knockback, its flash
+      const rx = this.applyReaction(e, p);
+      if (rx) active = true;
+      const s = s0 + (Number(rx?.squash) || 0);
       e.body.scale.set(1 + s * 0.5, 1 - s, 1 + s * 0.5);
+      e.body.position.x = Number(rx?.dx) || 0;
+      e.body.position.z = Number(rx?.dz) || 0;
       // YXZ: turn to the camera's yaw, then lean back about the card's own x axis.
       e.card.rotation.order = "YXZ";
       e.card.rotation.set(-lean, yaw, 0);

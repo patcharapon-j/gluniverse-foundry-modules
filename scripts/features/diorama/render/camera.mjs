@@ -29,7 +29,18 @@ export class CameraRig {
     // the eased "view" values: yaw, pitch rad; zoom; target cells
     this.view = { yaw: yawOf(0), pitch: pitchOf(CAMERA.defaultPitch), zoom: 1, tx: 0, ty: 0, tz: 0 };
     this.tween = null;
+    /** A transient screen-space nudge (cells along the camera's right and up): an effect's shake. */
+    this.shake = { x: 0, y: 0 };
     this.apply();
+  }
+
+  /** Nudge the view by (x, y) cells along the screen; (0, 0) puts it back. Never part of the state. */
+  setShake(x = 0, y = 0) {
+    x = Number.isFinite(x) ? x : 0; y = Number.isFinite(y) ? y : 0;
+    if (x === this.shake.x && y === this.shake.y) return false;
+    this.shake.x = x; this.shake.y = y;
+    this.apply();
+    return true;
   }
 
   setGridSize(size) {
@@ -113,6 +124,7 @@ export class CameraRig {
     c.position.set(v.tx + DISTANCE * cp * Math.sin(v.yaw), v.ty + DISTANCE * Math.sin(v.pitch), v.tz + DISTANCE * cp * Math.cos(v.yaw));
     c.up.set(0, 1, 0);
     c.lookAt(v.tx, v.ty, v.tz);
+    if (this.shake && (this.shake.x || this.shake.y)) { c.translateX(this.shake.x); c.translateY(this.shake.y); }
     c.updateProjectionMatrix();
     c.updateMatrixWorld(true);
   }
