@@ -95,8 +95,9 @@ etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
   docs/adr/0004-resource-trackers-skin.md, the Creaturedex's skin,
   docs/adr/0005-creaturedex-skin.md, PF2e Odds' ink skin,
   docs/adr/0006-odds-and-line-skin.md, the stream view's skin,
-  docs/adr/0007-stream-view-skin.md, and the Stage and Theatre GM console,
-  docs/adr/0008-stage-theatre-console.md — each lives only under its features' own
+  docs/adr/0007-stream-view-skin.md, the Stage and Theatre GM console,
+  docs/adr/0008-stage-theatre-console.md, and the Mythic GME panel,
+  docs/adr/0009-mythic-gme-skin.md — each lives only under its features' own
   roots and never on `:root`); `styles/gl-tokens.css` is the single source of truth and
   `styles/gl-motion.css` the single keyframe pool. Use the `--gl-*` tokens and
   the `.gl-*` utilities. The non-negotiables:
@@ -1920,6 +1921,26 @@ Halo rings a 2D token, so PF2e effects that show on the token join them there.
 Before touching `render/`, load the `diorama-craft` skill: one sun, contact
 shadow first, hairlines in device px, damped motion, no runtime program
 variants.
+
+**When touching Mythic GME** (`features/mythic-gme/`, `styles/mythic-gme.css`,
+`lang/mythic-gme.en.json`), re-run its check. Everything it covers fails
+silently: a Fate Chart cell one band off is a plausible answer, a Random Event
+rule that misses 99 never says so, a runtime-built key prints itself:
+
+```bash
+node tools/mythic-gme-check.mjs
+```
+
+Zero problems required. Three things are worth knowing. **The bundled meaning
+columns are misnamed** (`MEANING.action1` is Actions Table 2, `descriptor2` is
+Locations, Actions Table 1 is absent); `catalog.mjs` is their only reader, and
+Table 1 comes only from a GM-linked RollTable. **Rolls never leave the client**
+until the GM posts a card through `chat.mjs`, whose whisper leaves the stream
+login off; the log and the lists are client settings. **Log entries store dice
+and keys**, and pre-remake string entries are kept as `legacy`. The model and
+markup are pure: `node tools/mythic-gme-preview.mjs && node
+tools/preview-server.mjs 8983`, then `/.preview/mythic.html`. See
+`docs/MYTHIC_GME.md`.
 
 **When touching the Performance feature, the shared frame budget or any
 feature's shedding** (`features/perf/`, `core/budget.mjs`, `core/gl-surfaces.mjs`,
