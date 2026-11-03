@@ -13,7 +13,7 @@
  * `onReady` run only when the feature is enabled and the pf2e system is present.
  */
 
-import { MODULE_ID } from "./constants.js";
+import { MODULE_ID, ffKey } from "./constants.js";
 import { getSetting, registerSettings as registerFlatfinderSettings } from "./settings.js";
 import { renderCompetenceBadge } from "./competence.js";
 import { registerIncapacitation } from "./incapacitation.js";
@@ -57,13 +57,20 @@ function onRenderCombatTracker(app, html) {
  * open planner), batched so a burst of updates is one redraw.
  */
 let redrawTimer = null;
-function redrawSoon() {
-  if (!game.user?.isGM || !getSetting("encounterBudget")) return;
+let redrawTracker = false;
+function redrawSoon(tracker) {
+  if (!game.user?.isGM) return;
+  // The tracker redraws itself on combat changes; it only needs a push for a
+  // creature changing underneath it. An open planner reads any actor, the
+  // party and the viewed combat, so it refreshes on all of them.
+  if (tracker && getSetting("encounterBudget")) redrawTracker = true;
   if (redrawTimer) return;
   redrawTimer = setTimeout(() => {
+    const tracker = redrawTracker;
     redrawTimer = null;
+    redrawTracker = false;
     try {
-      ui.combat?.render?.();
+      if (tracker) ui.combat?.render?.();
       refreshPlanner();
     } catch (err) {
       console.error(`${MODULE_ID} | Encounter redraw error`, err);
@@ -78,16 +85,21 @@ const inViewedCombat = (actor) => {
 };
 
 function wireEncounterRedraws() {
-  Hooks.on("updateActor", (actor) => {
-    if (inViewedCombat(actor)) redrawSoon();
-  });
+  Hooks.on("updateActor", (actor) => redrawSoon(inViewedCombat(actor)));
   for (const hook of ["createItem", "deleteItem"]) {
     Hooks.on(hook, (item) => {
-      if (item?.type === "effect" && inViewedCombat(item.parent)) redrawSoon();
+      if (item?.type === "effect") redrawSoon(inViewedCombat(item.parent));
     });
   }
   Hooks.on("updateToken", (token, changes) => {
-    if ("disposition" in (changes ?? {}) && inViewedCombat(token?.actor)) redrawSoon();
+    if ("disposition" in (changes ?? {})) redrawSoon(inViewedCombat(token?.actor));
+  });
+  for (const hook of ["createCombat", "updateCombat", "deleteCombat", "createCombatant", "deleteCombatant"]) {
+    Hooks.on(hook, () => redrawSoon(false));
+  }
+  const eliteWeak = `${MODULE_ID}.${ffKey("eliteWeakLevel")}`;
+  Hooks.on("updateSetting", (setting) => {
+    if (setting?.key === eliteWeak) redrawSoon(false);
   });
 }
 
