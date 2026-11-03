@@ -1,17 +1,26 @@
 /**
- * GLUniverse Suite — Mythic GME feature adapter.
+ * GLUniverse Suite: Mythic GME feature adapter.
  *
- * A GM-facing quick-roll oracle for the Mythic Game Master Emulator 2nd Edition:
- * a draggable panel with the Fate Chart, Random Events, and every Meaning /
- * Elements table, plus a persisted Chaos Factor. System-agnostic, off by default.
- * See oracle.mjs (engine), panel.mjs (UI), data/tables.mjs (bundled tables).
+ * A GM's oracle for the Mythic Game Master Emulator 2nd Edition: the Fate
+ * Chart against a persisted Chaos Factor, Random Events, scene checks, the
+ * Threads and Characters lists, and every bundled meaning table. System
+ * agnostic, off by default. See docs/MYTHIC_GME.md.
+ *
+ *   rules.mjs    the rules, pure          catalog.mjs  the meaning tables, pure
+ *   oracle.mjs   a roll as a log entry    lists.mjs    lists and panel memory
+ *   model.mjs    what is shown, pure      render.mjs   the markup, pure
+ *   store.mjs    settings, the one reader and writer
+ *   session.mjs  roll and log            chat.mjs     post a card
+ *   app.mjs      the panel                main.mjs     settings and wiring
  */
 
 import { Suite } from "../../core/registry.mjs";
-import { FEATURE_ID } from "./oracle.mjs";
-import { registerSettings, onInit, onReady } from "./main.mjs";
-import { MythicPanel } from "./panel.mjs";
-import * as oracle from "./oracle.mjs";
+import { FEATURE_ID } from "./constants.mjs";
+import { registerSettings, onInit, onReady, openPanel } from "./main.mjs";
+import { rollElement } from "./catalog.mjs";
+import { rollFate } from "./rules.mjs";
+import { endScene, rollAskFate, rollEvent, rollSceneCheck } from "./session.mjs";
+import { getChaos, setChaos } from "./store.mjs";
 
 Suite.register({
   id: FEATURE_ID,
@@ -24,16 +33,27 @@ Suite.register({
   core: false,
   defaultEnabled: false,
 
-  registerSettings() { registerSettings(); },
-  onInit() { onInit(); },
-  onReady() { onReady(); },
+  registerSettings() {
+    registerSettings();
+  },
+  onInit() {
+    onInit();
+  },
+  onReady() {
+    onReady();
+  },
 
   api: {
-    open: () => MythicPanel.open(),
-    rollFate: oracle.rollFate,
-    rollRandomEvent: oracle.rollRandomEvent,
-    rollElement: oracle.rollElement,
-    getChaos: oracle.getChaos,
-    setChaos: oracle.setChaos,
+    open: () => openPanel(),
+    /** Silent and unlogged, as before the remake: `{ oddsId, cf, roll, key, yes, threshold, eventTriggered }`. */
+    rollFate: (oddsId, cf) => rollFate(oddsId, cf ?? getChaos()),
+    rollElement: (id) => rollElement(id),
+    getChaos: () => getChaos(),
+    setChaos: (v) => setChaos(v),
+    /** Logged rolls: each lands in this client's panel log and resolves to its entry. */
+    askFate: (oddsId, question) => rollAskFate(oddsId, question),
+    rollRandomEvent: () => rollEvent(),
+    checkScene: () => rollSceneCheck(),
+    endScene: (inControl) => endScene(!!inControl),
   },
 });
