@@ -175,7 +175,14 @@ float visionAt(vec2 xz) {
  * that far towards the sun from the point it shades (the map is orthographic:
  * depth runs straight along the key). dz is the map's depth per cell moved
  * towards the sun, wp the point shaded.
+ *
+ * A cliff face is seen from the ground at its foot (SIDE_FRAG), so a caster
+ * counts as seen when the ground FACE_FOOT back towards the receiver is: a wall
+ * with the sun behind it shades the seen floor in front of it even though its
+ * top is hidden. Only a caster within that reach of seen ground passes, which
+ * is a face the party can already see, never the hidden ground behind it.
  */
+const float FACE_FOOT = 0.12;
 float shadowTap(vec3 p, vec2 o, vec3 wp, float dz) {
   // explicit levels throughout (the map has none): an implicit one inside this
   // loop's branches is a gradient in divergent flow, which D3D refuses to link
@@ -183,7 +190,9 @@ float shadowTap(vec3 p, vec2 o, vec3 wp, float dz) {
   if (p.z - 0.0018 <= d) return 1.0;
   if (uUseVision > 0.5 && uFogStyle.x > 0.5 && dz < 0.0) {
     vec2 cuv = (wp.xz + uKeyDir.xz * ((d - p.z) / dz)) / uWorldSize;
-    vec4 cv = dioInWorld(cuv) ? textureLod(uVisionMap, cuv, 0.0) : vec4(0.0);
+    vec2 fuv = cuv - normalize(uKeyDir.xz + vec2(1e-6)) * (FACE_FOOT / uWorldSize);
+    vec4 cv = max(dioInWorld(cuv) ? textureLod(uVisionMap, cuv, 0.0) : vec4(0.0),
+      dioInWorld(fuv) ? textureLod(uVisionMap, fuv, 0.0) : vec4(0.0));
     if (max(cv.r, cv.g) <= 0.5) return 1.0;
   }
   return 0.0;
@@ -778,8 +787,31 @@ vec3 fallSheet(vec3 lipC, float a, float d, float up, bool intoWater) {
   return c;
 }
 
+/*
+ * Where a face is seen from, FACE_FOOT (LIT, beside shadowTap) cells past its
+ * own plane: the ground at its foot. A cliff taller than sight reveals hides its
+ * top (the sight outline cuts it out) but not its face, which stands on ground
+ * the viewer sees. Only just past the plane: a wall or anything else between the
+ * viewer and the face already took that ground out of the bake, and any reach
+ * further out would look over a Foundry wall the bake knows and this does not.
+ */
+/*
+ * A face seen only from its foot takes its fog of war from further out
+ * (cells): the edge of sight reaches the mist's full colour within a quarter
+ * square of the hidden top (render/fog.mjs FOG_EDGE_GROW + FOG_EDGE_SOFT),
+ * so the foot itself would paint the whole face as mist. Half a square out it
+ * reads as the ground in front of it, and the mist meets it at its top edge.
+ * This only ever chooses a look: whether the face is drawn is FACE_FOOT's.
+ */
+const float FACE_FOG = 0.6;
+
 void main() {
-  float vis = visionAt(vLip);
+  vec2 out2 = normalize(vNormal.xz + vec2(1e-6));
+  vec2 foot = vLip + out2 * FACE_FOOT;
+  float visLip = visionAt(vLip), visFoot = visionAt(foot);
+  float vis = max(visLip, visFoot);
+  vec2 fogXZ = vLip + out2 * FACE_FOG;
+  vec3 fogAt = visFoot > visLip ? vec3(fogXZ.x, vWorld.y, fogXZ.y) : vWorld;
   // Under cloud (fogStyle clouds), the board keeps its plinth where nobody has
   // seen: it is dark, unpainted and the same everywhere, so it tells nothing,
   // and the bank sits on it instead of floating over the room.
@@ -866,7 +898,7 @@ void main() {
   lit = heightGrade(lit, vWorld.y);
   // the plinth is the table's, not the map's: no cloud creeps onto it
   bool plinth = cut && vWorld.y < uHeightRange.x - 0.05 && uFogStyle.x > 0.5 && uUseVision > 0.5;
-  gl_FragColor = vec4(plinth ? dioFinishFigure(lit, vWorld) : dioFinish(lit, vis, vWorld), 1.0);
+  gl_FragColor = vec4(plinth ? dioFinishFigure(lit, vWorld) : dioFinish(lit, vis, fogAt), 1.0);
 }
 `;
 
