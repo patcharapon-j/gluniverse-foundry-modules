@@ -19,7 +19,11 @@ groups and traits that PF2e 8.5 ships.
 
 When the name and the damage disagree, the damage colours the effect and the
 name shapes it. An element in the name becomes `accent`. A "Frost Claw" that
-deals fire is a claw rake, made of fire, with a cold accent.
+deals fire is a claw rake, made of fire, with a cold accent. Purely physical
+damage is the exception: `kinetic` yields to the named element, so a "Stone
+Fist" is earth and an "Ice Claw" that deals slashing is cold. A property rune's
+element is never overridden. The element words are a strict list: "Cold Iron"
+and "Light Hammer" name no element.
 
 A custom look (`looks.mjs`) still overrides the material, the hue, the flourish
 and the take. The curated slug table (`FX_CURATED`) may set any axis.
@@ -37,7 +41,9 @@ looks editor and old callers).
 These are closed sets in `constants.mjs`: `DELIVERY_VOCAB`, `MOTIF_VOCAB`,
 `PROP_VOCAB` and `FLAVOR_VOCAB`. A resolver may only emit a listed value, and
 `fx-check` requires a renderer for every delivery. Growing a set means adding
-the value, its lexicon entries and its renderer in the same change.
+the value, its lexicon entries and its renderer in the same change. The
+semantics pass added `squeeze`, `bloom` and the props `boost` and `area` from
+the compendium survey; their renderers land with the renderer pass.
 
 ### Delivery
 
@@ -72,7 +78,12 @@ and hoof.
 | `buffet` | wing |
 | `slam` | fist, slam, body, pseudopod, limb, branch, arm, headbutt |
 | `pincer` | pincer |
-| `grasp` | hand, ghostly hand, touch |
+| `grasp` | hand, ghostly hand, touch, seize, capture |
+| `squeeze` | constrict, coil, crush, garrote: a hold that tightens |
+
+A natural attack wins over a weapon word in its name ("Bone Spear Claw" rakes),
+unless a base weapon of two or more words matched ("Hand Adze", "Shield
+Spikes", "Rope Dart"). A slam on a PC unarmed attack is `fist`.
 
 **Ranged weapons**, by group, then name:
 
@@ -99,6 +110,24 @@ and hoof.
 | `net` | web, net |
 | `missile` | missile, rocket |
 
+A strike may also carry `ray` or `orb` when its name says so ("Eye Beam",
+"Solar Bolt") or when a ranged strike with no physical damage names nothing.
+
+Ranged reads in this order: the base item's own override (whips lash,
+javelins and chakrams are `thrown`, the blunderbuss and scatterguns are
+`pellets`), then the group, then the name, then a default. An NPC strike counts
+as ranged when it has a range increment **or** a `thrown-N` or
+`range-increment-N` trait, because PF2e stores a thrown javelin's range there
+and leaves `range` null. A group that only shoots (bow, crossbow, firearm,
+sling, every SF2e ranged group) is ranged unless the weapon has `combination`.
+An NPC strike reads its group and base item from the weapon it links
+(`flags.<system>.linkedWeapon`) before its own name.
+
+**SF2e** arrives as the same `weapon` documents with SF2e groups. Area guns say
+their shape in traits (`area-cone`, `area-line`, `area-burst-N`), not in
+`system.area`, so a projectile weapon with `area-cone` (the scattergun) reads as
+`pellets` with no `scatter` trait. Grenades are group `grenade` with base item
+`grenade`. An SF2e creature's area strike carries `system.area`.
 **Spells and abilities** with harm or hazard:
 
 | Delivery | What it is |
@@ -117,8 +146,12 @@ and hoof.
 | `gaze` | gaze |
 | `voice` | auditory or linguistic: word, roar, shout, song, command |
 | `breath` | a cone or line from the mouth |
-| `aura` | a persistent aura |
+| `aura` | a persistent aura, or a harm spell with no range and no target |
+| `bloom` | it appears on the target: a single-target save spell, the structural default |
 
+A name that says wall gives `wall` whatever the function. An ability whose
+name names a natural action uses it: Trample is `stomp`, Constrict `squeeze`,
+Rend `rake`, Swallow Whole `jaws`, Throw Rock `rock`.
 **Non-harm:** `form`. compile.mjs then picks FORMS by `func`, and the motif
 draws on top.
 
@@ -139,11 +172,15 @@ A motif is a depicted object, mostly from name nouns, grouped by kind:
 | Beasts | `serpent`, `dragon`, `beast`, `swarm`, `web` |
 | Energy | `flame`, `orb`, `ray`, `shield`, `wall` |
 
+A motif that repeats the delivery is dropped (a wall spell's `wall`, a ray's
+`ray`). The words of a matched base weapon are the weapon, not a motif, so a
+Hand Crossbow is an `arrow`, never a `hand`. A strike with no motif noun takes
+its body part (`claw` for `rake`, `wing` for `buffet`) or its group's arm.
 ### Props
 
 | Group | Props |
 |---|---|
-| Weapon | `deadly`, `fatal`, `scatter`, `automatic`, `concussive`, `kickback`, `splash`, `heavy` (two-hand), `power` (Vicious Swing), `reach`, `sweep`, `agile`, `forceful`, `backstabber`, `volley`, `unwieldy`, `tech` |
+| Weapon | `deadly`, `fatal`, `scatter`, `automatic`, `concussive`, `kickback`, `splash`, `heavy` (two-hand), `power` (Vicious Swing), `reach`, `sweep`, `agile`, `forceful`, `backstabber`, `volley`, `unwieldy`, `tech`, `boost` (SF2e `boost-N`), `area` (SF2e `area-*`) |
 | Material | `precious` (cold iron, silver, adamantine), `magical`, `persistent` |
 | Spell traits | `incapacitation`, `fortune`, `misfortune`, `auditory`, `visual`, `linguistic`, `emotion`, `fear`, `curse`, `polymorph`, `teleportation`, `summon`, `healing`, `nonlethal`, `holy`, `unholy`, `death`, `light`, `darkness`, `poison`, `disease` |
 | Scale | `minor` (cantrip or rank 1), `major` (rank 7+) |
