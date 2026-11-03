@@ -11,8 +11,9 @@ import { coverBetween as terrainCover } from "../terrain/occlusion.mjs";
 import { distToQ } from "../terrain/model.mjs";
 import { creatureHeightDist, eyeQ } from "../rules/creature.mjs";
 import { lineOfSight } from "../rules/los.mjs";
+import { edgeWallTopQ } from "./sight-backend.mjs";
 import { pf2eDistance, PF2E_SPACE_FT } from "../rules/distance3d.mjs";
-import { activeContext, anyContext } from "./context.mjs";
+import { activeContext, anyContext, wallContext } from "./context.mjs";
 import { tokenLevelId } from "../terrain/levels.mjs";
 
 const docOf = (t) => t?.document ?? t ?? null;
@@ -70,9 +71,10 @@ export const coverKey = (cover) => `GLDIO.cover.${cover}`;
  * Walls that stop sight outright, px: Foundry's own edges (canvas.edges) of
  * walls with normal sight. An open door has no edge; limited, proximity and
  * one-way walls are left to Foundry's own vision, which already decided
- * whether the target is visible at all.
+ * whether the target is visible at all. With a Level's terrain (`live`), each
+ * wall carries the top the 3D view draws, so a line above it passes over.
  */
-export function sightWalls() {
+export function sightWalls(live = null) {
   const NORMAL = globalThis.CONST?.EDGE_SENSE_TYPES?.NORMAL ?? 20;
   const out = [];
   const edges = globalThis.canvas?.edges;
@@ -80,7 +82,8 @@ export function sightWalls() {
   for (const e of edges.values()) {
     if (!e?.a || !e?.b || e.type !== "wall" || e.direction) continue;
     if ((e.sight ?? 0) !== NORMAL) continue;
-    out.push({ ax: e.a.x, ay: e.a.y, bx: e.b.x, by: e.b.y });
+    const topQ = live ? edgeWallTopQ(e, live) : null;
+    out.push({ ax: e.a.x, ay: e.a.y, bx: e.b.x, by: e.b.y, ...(topQ === null ? {} : { topQ }) });
   }
   return out;
 }
@@ -131,7 +134,8 @@ export function tacticsBetween(attackerToken, targetToken) {
   if (a.parent && b.parent && a.parent !== b.parent) return null;
   // Two Levels: walls only (no one floor's ground decides it), drawn in absolute heights.
   const level = sharedLevel(a, b);
-  const live = level === undefined ? null : (activeContext(scene, level) ?? null);
+  // A flat saved terrain counts: its walls have tops (the same context sight uses).
+  const live = level === undefined ? null : (wallContext(scene, level) ?? null);
   const any = live ?? anyContext(scene, level ?? null);
   const grid = any?.grid ?? { size: globalThis.canvas?.grid?.size ?? 100, distance: globalThis.canvas?.grid?.distance ?? 5 };
   // Ground is marched in the Level's own frame; the drawn line comes back absolute.
@@ -142,7 +146,7 @@ export function tacticsBetween(attackerToken, targetToken) {
     { x: ca.x, y: ca.y, eyeQ: eyeQ(a, grid) - baseQ },
     { x: cb.x, y: cb.y, footQ: distToQ(Number(b.elevation) || 0, grid.distance) - baseQ, heightQ,
       radiusPx: (Math.min(b.width ?? 1, b.height ?? 1) * grid.size) / 2 },
-    grid.size, { walls: sightWalls() });
+    grid.size, { walls: sightWalls(live) });
   if (baseQ && r.line) r.line = { ...r.line, a: { ...r.line.a, zQ: r.line.a.zQ + baseQ }, b: { ...r.line.b, zQ: r.line.b.zQ + baseQ } };
   return { ...r, distance: tokenDistance(attackerToken, targetToken), rise: (Number(b.elevation) || 0) - (Number(a.elevation) || 0) };
 }

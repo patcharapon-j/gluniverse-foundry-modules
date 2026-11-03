@@ -48,14 +48,25 @@ and `light`.
   `los.contains(point)` on points at the target's base elevation, never
   reaching the backend. `DetectionMode#_testLOS` is wrapped (libWrapper, MIXED)
   to test the target's feet, middle and head in 3D.
+- **Walls.** A wall's top is the one the 3D view draws (`terrain/wall-top.mjs`):
+  the ground beside it plus the scene's wall height, or the Wall Height module's
+  `top`. A polygon drops a wall whose top is below its eye; a point test drops
+  one its 3D ray crosses above the top. Detection tests each target height the
+  ground leaves clear against the walls separately, since a low wall can hide the
+  feet and not the head. Edges that belong to no Wall document always block.
+  The class is also installed as the `move` backend, for walls only: a move
+  collision test drops a wall the token's feet cross within the terrain's step
+  height of its top. Climbing is not an exception, since any user can pick Climb
+  and room walls have no ceiling here. Walls get their tops on any scene with
+  saved terrain, flat or not (`wallContext`); the ground rules still need relief.
 - **Light in 3D.** Foundry's illumination and vision textures are screen-space,
   so the view bakes world-space maps from these same polygons. That keeps 2D and
   3D in agreement by construction.
 - **Coexistence.** The backend is installed only where the slot still holds
   Foundry's own class. If another module replaced it, Diorama stands down for
   that type and reports a conflict instead of chaining blindly.
-- A flat scene, or one with no terrain flag, adds no edges and tests exactly
-  like the base class.
+- A scene with no terrain flag tests exactly like the base class. A flat saved
+  scene adds no ground edges, but its walls have tops.
 - **Levels.** Each scene Level has its own terrain, stored relative to the
   Level's base. A polygon reads its own Level (`PointSourcePolygon#level`), and
   the eye, a light's own elevation and a point test's destination lose that
@@ -67,7 +78,7 @@ and `light`.
 
 - Height occlusion costs one extra edge set per source per refresh. It is
   bounded by the merged cliff outline, not the cell count.
-- Any module that also replaces the sight or light backend (for example a
+- Any module that also replaces the sight, light or move backend (for example a
   wall-height module) and Diorama are exclusive per type. The first one wins and
   the other is told.
 - A Foundry update that changes `_identifyEdges`, `_testCollision` or

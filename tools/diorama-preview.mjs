@@ -1000,7 +1000,7 @@ if (TACTICS && !LIFE && !PROPS_ON) {
   }
 
   if (Q.has("los")) {
-    const sightWalls = walls().filter((w) => w.type === "wall" && w.baseQ > 0).map((w) => ({ ax: w.a[0], ay: w.a[1], bx: w.b[0], by: w.b[1] }));
+    const sightWalls = walls().filter((w) => w.type === "wall" && w.baseQ > 0).map((w) => ({ ax: w.a[0], ay: w.a[1], bx: w.b[0], by: w.b[1], topQ: w.topQ }));
     for (const pair of Q.get("los").split(",")) {
       const [an, bn] = pair.split("-"), A = toks[an], B = toks[bn];
       if (!A || !B) continue;

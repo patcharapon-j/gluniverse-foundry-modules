@@ -23,6 +23,8 @@
 import { DIAGONALS, occupancy, reachBand, reachBudgets, solveReach, wallIndex } from "../rules/reach.mjs";
 import { DAGGERHEART, PF2E } from "../rules/systems.mjs";
 import { altitude, heightDist, seams, speed as speedOf } from "./seams.mjs";
+import { movesOverWall, wallDocOf, wallSpanQ } from "../terrain/wall-top.mjs";
+import { distToQ } from "../terrain/model.mjs";
 
 const MOVEMENT_COST = "modifyMovementCost";
 
@@ -56,8 +58,10 @@ export function occupantsOf(tok, size, systemId, seen = null) {
   return out;
 }
 
-function blockingWalls() {
+function blockingWalls(terrain = null, grid = null) {
   const out = [];
+  // A wall's top (terrain/wall-top.mjs), so a move over it is not counted as blocked.
+  const topOf = (doc) => (terrain && doc && grid ? wallSpanQ(doc, terrain, grid.size, grid.distance)?.topQ ?? null : null);
   const NONE = globalThis.CONST?.EDGE_SENSE_TYPES?.NONE ?? 0;
   const edges = globalThis.canvas?.edges;
   const list = edges?.values ? [...edges.values()] : null;
@@ -69,6 +73,7 @@ function blockingWalls() {
       out.push({
         ax: e.a.x, ay: e.a.y, bx: e.b.x, by: e.b.y,
         ignoresFrom: dir && typeof e.orientPoint === "function" ? (x, y) => e.orientPoint({ x, y }) === dir : null,
+        topQ: topOf(wallDocOf(e)),
       });
     }
     return out;
@@ -79,7 +84,7 @@ function blockingWalls() {
     const d = w.document;
     if (!d || !d.move || (d.door && d.ds === OPEN)) continue;
     const [ax, ay, bx, by] = d.c;
-    out.push({ ax, ay, bx, by, ignoresFrom: null });
+    out.push({ ax, ay, bx, by, ignoresFrom: null, topQ: topOf(d) });
   }
   return out;
 }
@@ -139,13 +144,20 @@ export function reachOf({ tok, scene, grid, terrain, action, seen = null }) {
   const src = doc._source ?? doc;
   const start = { i: Math.round(src.y / size), j: Math.round(src.x / size) };
   const w = Math.max(1, Math.round(Number(src.width) || 1)), h = Math.max(1, Math.round(Number(src.height) || 1));
-  const walls = wallIndex(blockingWalls(), size);
+  const walls = wallIndex(blockingWalls(terrain, grid), size);
+  // The mover's feet: the ground it steps off plus its altitude (flying keeps it).
+  const altQ = distToQ(Number(altitude(doc)) || 0, grid.distance);
+  const stepQ = Number(terrain?.stepHeight) || 0;
+  const over = (a) => {
+    const feet = (terrain && typeof terrain.groundAt === "function" ? terrain.groundAt(a.x, a.y, size) : 0) + altQ;
+    return (w) => movesOverWall(w.topQ ?? null, feet, stepQ);
+  };
   const groundBound = seams.movement?.groundBound ?? ((a) => a === "walk" || a === "crawl");
   const cliffs = terrain && groundBound(act) && typeof terrain.step === "function";
   const centre = (i, j) => ({ x: (j + w / 2) * size, y: (i + h / 2) * size });
   const blocked = (fi, fj, ti, tj) => {
     const a = centre(fi, fj), b = centre(ti, tj);
-    if (walls.crosses(a.x, a.y, b.x, b.y)) return true;
+    if (walls.crosses(a.x, a.y, b.x, b.y, over(a))) return true;
     if (cliffs) {
       for (let di = 0; di < h; di++) for (let dj = 0; dj < w; dj++) {
         try { if (terrain.step(fi + di, fj + dj, ti + di, tj + dj).climb) return true; } catch { /* off the map */ }

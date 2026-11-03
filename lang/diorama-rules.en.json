@@ -20,5 +20,6 @@
   "GLDIO.rules.fallPf2e": "Fall: {distance} {units} · {damage} bludgeoning, land prone",
   "GLDIO.rules.fallPf2eWater": "Fall into water: {distance} {units} · {damage} bludgeoning",
   "GLDIO.rules.climb": "Climb: {distance} {units}",
-  "GLDIO.rules.backendConflict": "Diorama: another module already replaced the {type} polygon backend, so ground height does not block {type} on the canvas."
+  "GLDIO.rules.backendConflict": "Diorama: another module already replaced the {type} polygon backend, so ground height does not block {type} on the canvas.",
+  "GLDIO.rules.backendConflictMove": "Diorama: another module already replaced the movement polygon backend, so a token cannot fly or step over a wall's top."
 }

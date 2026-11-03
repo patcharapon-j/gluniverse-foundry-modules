@@ -80,10 +80,13 @@ export function blockedSpans(t, a, b) {
 }
 
 /**
- * Where a map segment crosses walls: sorted t (0..1) along a → b.
- * @param {Array<{ax:number,ay:number,bx:number,by:number}>} walls  px
+ * Where a map segment crosses walls: sorted t (0..1) along a → b. With the
+ * line's heights (`az`, `bz`, q), a wall with a `topQ` the line passes over
+ * is not crossed.
+ * @param {Array<{ax:number,ay:number,bx:number,by:number,topQ?:number}>} walls  px
  */
-export function wallCrossings(walls, ax, ay, bx, by) {
+export function wallCrossings(walls, ax, ay, bx, by, az = null, bz = null) {
+  const heights = Number.isFinite(az) && Number.isFinite(bz);
   const out = [];
   const rx = bx - ax, ry = by - ay;
   for (const w of walls ?? []) {
@@ -94,7 +97,9 @@ export function wallCrossings(walls, ax, ay, bx, by) {
     const t = (qx * sy - qy * sx) / den;
     const u = (qx * ry - qy * rx) / den;
     // the two ends are the creatures' own centres: a wall exactly there does not count
-    if (t > 1e-6 && t < 1 - 1e-6 && u >= 0 && u <= 1) out.push(t);
+    if (!(t > 1e-6 && t < 1 - 1e-6 && u >= 0 && u <= 1)) continue;
+    if (heights && Number.isFinite(w.topQ) && az + (bz - az) * t > w.topQ) continue;
+    out.push(t);
   }
   return out.sort((p, q) => p - q);
 }
@@ -136,7 +141,7 @@ export const COVER_AC = Object.freeze({ none: 0, standard: 2, greater: 4 });
  * @param {{x:number,y:number,eyeQ:number}} from  px + q
  * @param {{x:number,y:number,footQ:number,heightQ:number,radiusPx:number}} to
  * @param {number} gridSize
- * @param {{walls?:Array<{ax:number,ay:number,bx:number,by:number}>}} [o]  sight-blocking walls, px
+ * @param {{walls?:Array<{ax:number,ay:number,bx:number,by:number,topQ?:number}>}} [o]  sight-blocking walls, px (topQ: the terrain's frame; none blocks at any height)
  * @returns {{
  *   cover:"none"|"standard"|"greater", lineOfSight:boolean, blocked:number, total:number,
  *   rays:Array<{key:string, blocked:boolean}>,
@@ -151,7 +156,7 @@ export function lineOfSight(t, from, to, gridSize, { walls = null } = {}) {
   let centre = null;
   for (const p of targets) {
     const spans = blockedSpans(t, A, rayPoint(p.x, p.y, p.zQ, gridSize));
-    const hits = walls ? wallCrossings(walls, from.x, from.y, p.x, p.y) : [];
+    const hits = walls ? wallCrossings(walls, from.x, from.y, p.x, p.y, from.eyeQ, p.zQ) : [];
     const isBlocked = spans.length > 0 || hits.length > 0;
     if (isBlocked) blocked++;
     rays.push({ key: p.key, blocked: isBlocked });

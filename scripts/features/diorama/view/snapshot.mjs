@@ -19,6 +19,7 @@
 import { SUITE_ID } from "../../../core/const.mjs";
 import { FLAG_STANDEE, WALL_MATERIALS } from "../constants.mjs";
 import { distToQ } from "../terrain/model.mjs";
+import { groundUnderWall, wallSpanQ } from "../terrain/wall-top.mjs";
 import { artMarksOf, standeeMarks } from "../rules/creature.mjs";
 import { canViewMode, barsFor } from "../integrations/bars.mjs";
 import { conditionsFor } from "../integrations/conditions.mjs";
@@ -65,22 +66,7 @@ export function wallKind(doc, isGM) {
   return { type: "wall", door: "none" };
 }
 
-/**
- * Ground under a wall, in q: the highest ground either side of it, sampled at
- * three points along it a quarter cell out on both sides.
- */
-export function groundUnderWall(terrain, x0, y0, x1, y1, size) {
-  if (!terrain) return 0;
-  const dx = x1 - x0, dy = y1 - y0;
-  const len = Math.hypot(dx, dy) || 1;
-  const nx = (-dy / len) * size * 0.25, ny = (dx / len) * size * 0.25;
-  let top = -Infinity;
-  for (const f of [0.25, 0.5, 0.75]) {
-    const x = x0 + dx * f, y = y0 + dy * f;
-    top = Math.max(top, terrain.groundAt(x + nx, y + ny, size), terrain.groundAt(x - nx, y - ny, size));
-  }
-  return Number.isFinite(top) ? top : 0;
-}
+export { groundUnderWall };
 
 /**
  * The renderer's WallState for one wall document.
@@ -95,13 +81,8 @@ export function wallState(doc, { isGM, terrain, size, distance, defaultMaterial 
   const [x0, y0, x1, y1] = c;
   const pick = (m) => (WALL_MATERIALS.includes(m) ? m : null);
   const material = pick(terrain?.walls?.[doc.id]) ?? pick(defaultMaterial) ?? WALL_MATERIALS[0];
-  const baseQ = groundUnderWall(terrain, x0, y0, x1, y1, size);
-  let topQ = baseQ + Math.max(1, num(terrain?.wallHeight, 8));
-  const wh = doc.flags?.["wall-height"];
-  if (wh && wh.top !== null && wh.top !== undefined && wh.top !== "") {
-    const top = Number(wh.top);
-    if (Number.isFinite(top)) topQ = Math.max(baseQ + 1, Math.round(distToQ(top, distance)));
-  }
+  // The same top sight and cover use (terrain/wall-top.mjs).
+  const { baseQ, topQ } = wallSpanQ(doc, terrain, size, distance);
   return { id: doc.id, a: [x0, y0], b: [x1, y1], type: k.type, door: k.door, material, baseQ, topQ };
 }
 
