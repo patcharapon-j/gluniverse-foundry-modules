@@ -21,6 +21,7 @@
 import { MODULE_ID } from "./constants.js";
 import { getSetting } from "./settings.js";
 import { flatfinderEffectiveLevel } from "./adjustments.js";
+import { incapacitationBonus, spellLevel } from "./rules.mjs";
 import { bossIncapacitationLevel } from "../pf2e-variant-rules/boss/profile.mjs";
 import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
 
@@ -42,18 +43,31 @@ function getOriginItem(context) {
   return context?.item ?? context?.origin?.item ?? context?.origin ?? null;
 }
 
-/** Effective Flatfinder level of the incapacitation source (spell = 2x rank). */
+/**
+ * Effective Flatfinder level of the incapacitation source.
+ *
+ * A spell is twice its rank. An item with a level of its own (a consumable, a
+ * PC's feat) is that level. An NPC ability carries no level, and the level
+ * that effect was written against is its creature's, so it falls back to the
+ * origin creature's Flatfinder level: Elite/Weak included, which a bare
+ * `origin:level` roll option (PF2e's live level, a single step) gets wrong.
+ */
 function getSourceLevel(context) {
   const item = getOriginItem(context);
   if (item) {
     if (item.type === "spell") {
       const rank = item.rank ?? item.system?.level?.value ?? item.level;
-      if (typeof rank === "number") return rank * 2;
+      if (typeof rank === "number") return spellLevel(rank);
     }
     const level = item.level ?? item.system?.details?.level?.value ?? item.system?.level?.value;
     if (typeof level === "number") return level;
   }
-  // Fall back to an origin level roll option, e.g. "origin:level:6".
+  const originActor = item?.actor ?? context?.origin?.actor ?? null;
+  if (originActor) {
+    const level = creatureLevel(originActor);
+    if (typeof level === "number") return level;
+  }
+  // Last resort: an origin level roll option, e.g. "origin:level:6".
   const options = context?.options instanceof Set ? [...context.options] : context?.options ?? [];
   const opt = options.find((o) => /^origin:(?:item:)?level:-?\d+$/.test(o ?? ""));
   if (opt) return Number(opt.split(":").pop());
@@ -127,14 +141,16 @@ function applyFlatfinderIncapacitation(check, context) {
   const sourceLevel = bossIncapacitationLevel(originActor) ?? getSourceLevel(context);
   if (typeof targetLevel !== "number" || typeof sourceLevel !== "number") return;
 
-  const diff = targetLevel - sourceLevel;
-  if (diff <= 0) return; // Only a higher-level target benefits.
+  // Only a higher-level target benefits (twice the difference, max +10).
+  const bonus = incapacitationBonus(targetLevel, sourceLevel);
 
-  const bonus = Math.min(diff * 2, 10);
-  if (bonus <= 0) return;
-
-  // Build the modifier first (most likely point of failure) before mutating anything.
-  if (!addFlatfinderModifier(check, bonus)) return;
+  // Flatfinder REPLACES the core rule, so PF2e's degree step goes whenever the
+  // levels are known, bonus or not. The standalone module removed it only when
+  // it added a bonus, so wherever PF2e's own levels (one Elite step, a boss's
+  // base level) said "higher" and Flatfinder's said "not", the target still got
+  // the core rule's free degree. Build the modifier first (the most likely
+  // point of failure) before mutating anything.
+  if (bonus > 0 && !addFlatfinderModifier(check, bonus)) return;
   suppressNativeIncapacitation(context);
 }
 
