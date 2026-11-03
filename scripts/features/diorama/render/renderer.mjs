@@ -23,6 +23,7 @@
  *                                                // graphics: resolveGraphics() (options.mjs)
  *   r.setEnvironment(env);                       // resolved environment (environment.mjs)
  *   r.setProps(PropState[]);                     // render/props.mjs
+ *   r.setPropsSeen(Set<propId>);                 // seen in 3D over hidden ground
  *   r.setLevels([{ id, terrain, image, rect, dim }]);  // floors below the viewed Level: render/level-stack.mjs
  *   r.setShed(ladderLike);                       // { allows(name) }
  *   r.requestRender();
@@ -462,6 +463,12 @@ export class DioramaRenderer {
     this.torches.setProps(props ?? []);
     this.shadow.dirty = true;
     this.updateShadowBounds();
+    this.requestRender();
+  }
+
+  /** @param {Set<string>} ids props a viewer sees in 3D over hidden ground (view/props-seen.mjs) */
+  setPropsSeen(ids) {
+    this.props.setSeen(ids);
     this.requestRender();
   }
 

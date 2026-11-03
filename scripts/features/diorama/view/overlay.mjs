@@ -20,6 +20,7 @@ import { TerrainStore, supportsScene } from "../terrain/store.mjs";
 import { liveTerrain, onTerrainChange } from "../terrain/live.mjs";
 import { readWalls, readTokens, backgroundSrc, loadArt } from "./snapshot.mjs";
 import { Baker } from "./bake.mjs";
+import { bakeHidden, bakeViewers, propsSeen } from "./props-seen.mjs";
 import { Input } from "./input.mjs";
 import { Hud } from "./hud.mjs";
 import { PEEK, Peek, pivotToShow, sceneAt } from "./peek.mjs";
@@ -600,6 +601,8 @@ function flush() {
     if (d.has("props")) { r.setProps?.(S.props = stackProps(S.scene, S.stack, { isGM: gm && !S.asPlayers })); d.add("roofs"); }
     if (d.has("levels")) loadLevelFloors();
     if (d.has("lighting") && S.lighting) r.setLighting(S.lighting);
+    // props standing in plain 3D sight over ground the polygon hides (a tree on a cliff's top)
+    if (d.has("lighting") || d.has("props")) r.setPropsSeen?.(propsSeenNow());
     // Foundry tiles as decals and roofs, then which roofs open, for whom (docs/DIORAMA_BUILDINGS.md)
     if (d.has("tiles")) {
       S.tiles = readTiles({ scene: S.scene, isGM: gm, asPlayers: S.asPlayers, grid: S.grid, walls: S.walls, ground: S.ground });
@@ -849,6 +852,18 @@ function roofsNow() {
     grid: S.grid,
     heightQ: (tok) => (heightDist(tok?.actor ?? null, tok?.document ?? null) / (S.grid?.distance || 5)) * 4,
   });
+}
+
+/** The props this viewer sees in 3D over hidden ground (view/props-seen.mjs); none without a vision bake. */
+function propsSeenNow() {
+  const hidden = bakeHidden(S.lighting?.vision ?? null, S.baker?.scale ?? 0);
+  if (!hidden || !S.grid || !S.terrain) return new Set();
+  try {
+    return propsSeen({ props: S.props, grid: S.grid, hidden, viewers: bakeViewers(S.baker, { terrain: S.terrain, grid: S.grid }) });
+  } catch (e) {
+    err("diorama: props sight failed", e);
+    return new Set();
+  }
 }
 
 /** The GM's "cut away roofs": every roof in the GM's own view shows the room under it. */

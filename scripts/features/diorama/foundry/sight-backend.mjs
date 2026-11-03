@@ -386,6 +386,29 @@ export function clearSampleHeights(live, eyeQv, from, point, footDist, heightDis
   return out;
 }
 
+/**
+ * Does an eye see a column standing at a point (a prop), the way a token
+ * standing there is seen (testLOSWrapper)? The ground is marched in 3D at the
+ * column's feet, middle and top, and each height it leaves clear is one wall
+ * ray (`collides`, the installed backend with the cliffs left out). The cliff
+ * outline hides the ground the column stands on, never the column.
+ * @param {{terrain:object, grid:object, base?:number}} live
+ * @param {number} eye  q, the Level's frame
+ * @param {{x:number,y:number}} from   px
+ * @param {{x:number,y:number}} point  px
+ * @param {number} foot    distance units, the Level's frame
+ * @param {number} height  distance units
+ * @param {(elevation:number) => boolean} collides  a wall stands between the eye and the point at this elevation
+ * @returns {boolean}
+ */
+export function columnSeen(live, eye, from, point, foot, height, collides) {
+  const clear = clearSampleHeights(live, eye, from, point, foot, height);
+  if (!clear.length) return false;
+  const base = Number(live.base) || 0;
+  _detecting++;
+  try { return clear.some((d) => !collides(base + d)); } finally { _detecting--; }
+}
+
 /** MIXED wrapper for DetectionMode#_testLOS. */
 function testLOSWrapper(wrapped, visionSource, mode, target, test) {
   if (!this.walls) return wrapped(visionSource, mode, target, test);

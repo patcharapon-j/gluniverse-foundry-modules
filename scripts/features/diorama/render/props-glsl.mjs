@@ -13,6 +13,13 @@
  *   iTint  vec3   the GM's colour, or white
  *   iInfo  vec4   seed 0..1, ghost (GM-only prop), base y in cells, has tint
  *   iFade  float  1 drawn, 0 gone: a roof faded while a figure is under it
+ *   iSeen  float  1 when a viewer sees the prop itself in 3D though the ground
+ *                 under it is hidden (a tree's crown over a cliff's lip), else 0
+ *
+ * A prop draws where the ground at its centre or under the pixel has been seen,
+ * or where iSeen says the prop itself is: who sees it is the view's question
+ * (view/props-seen.mjs), asked the way Foundry is asked about a token on that
+ * ground (foundry/sight-backend.mjs columnSeen).
  *
  * The look is painted, not photographed: a contact shadow and a soft base AO
  * ground every prop, box edges catch a lit bevel, a thin rim separates a prop
@@ -74,6 +81,7 @@ export const PROP_VERT = /* glsl */ `
 attribute vec3 iTint;
 attribute vec4 iInfo;
 attribute float iFade;
+attribute float iSeen;
 uniform float uTime;
 uniform float uPropSway;   // 0..1: foliage sway (high detail, wind), scaled by the level of detail
 uniform vec3 uPropWind;    // x, z direction on the map, speed 0..1
@@ -86,6 +94,7 @@ varying vec3 vTint;
 varying vec4 vInfo;
 varying vec2 vCenter;
 varying float vFade;
+varying float vSeen;
 void main() {
 #ifdef USE_INSTANCING
   mat4 im = instanceMatrix;
@@ -95,6 +104,7 @@ void main() {
   vec3 s = vec3(length(im[0].xyz), length(im[1].xyz), length(im[2].xyz));
   vec4 wp = modelMatrix * im * vec4(position, 1.0);
   vec3 n = mat3(im) * (normal / max(s * s, vec3(1e-6)));
+  vSeen = iSeen;
   if (uFoliage > 0.5 && uPropSway > 0.001) {
     // planted at the base, moving most at the top; each prop on its own phase
     float k = position.y * position.y;
@@ -132,6 +142,7 @@ varying vec3 vTint;
 varying vec4 vInfo;
 varying vec2 vCenter;
 varying float vFade;
+varying float vSeen;
 
 /*
  * The material's colour at a point. 'hi' (0..1) is how much relief it
@@ -283,7 +294,7 @@ vec3 propAlbedo(int m, int part, vec3 wp, vec3 lp, vec3 n, float seed, float hi)
 }
 
 void main() {
-  float vis = max(visionAt(vWorld.xz), visionAt(vCenter));
+  float vis = max(max(visionAt(vWorld.xz), visionAt(vCenter)), vSeen);
   if (vis <= 0.0) discard;
   bool ghost = vInfo.y > 0.5;
   if (ghost && propHatch()) discard;
@@ -356,6 +367,7 @@ export const PROP_MODEL_VERT = /* glsl */ `
 attribute vec3 iTint;
 attribute vec4 iInfo;
 attribute float iFade;
+attribute float iSeen;
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec3 vTint;
@@ -363,6 +375,7 @@ varying vec4 vInfo;
 varying vec2 vCenter;
 varying vec2 vUv;
 varying float vFade;
+varying float vSeen;
 void main() {
 #ifdef USE_INSTANCING
   mat4 im = instanceMatrix;
@@ -377,6 +390,7 @@ void main() {
   vTint = iTint;
   vInfo = iInfo;
   vFade = iFade;
+  vSeen = iSeen;
   vUv = uv;
   vCenter = (modelMatrix * vec4(im[3].xyz, 1.0)).xz;
   gl_Position = projectionMatrix * viewMatrix * wp;
@@ -396,8 +410,9 @@ varying vec4 vInfo;
 varying vec2 vCenter;
 varying vec2 vUv;
 varying float vFade;
+varying float vSeen;
 void main() {
-  float vis = max(visionAt(vWorld.xz), visionAt(vCenter));
+  float vis = max(max(visionAt(vWorld.xz), visionAt(vCenter)), vSeen);
   if (vis <= 0.0) discard;
   bool ghost = vInfo.y > 0.5;
   if (ghost && propHatch()) discard;
@@ -539,13 +554,14 @@ uniform float uHasTex;
 uniform vec3 uCardTint;
 uniform float uCardGhost;
 uniform float uCardFade;
+uniform float uCardSeen;   // iSeen, for the one card
 uniform vec3 uGhostColor;
 varying vec2 vUv;
 varying vec3 vWorld;
 varying vec2 vCenter;
 varying vec3 vFace;
 void main() {
-  float vis = visionAt(vCenter);
+  float vis = max(visionAt(vCenter), uCardSeen);
   if (vis <= 0.0) discard;
   vec4 tex = uHasTex > 0.5 ? texture2D(uCardTex, vUv) : vec4(0.5, 0.5, 0.55, 1.0);
   if (tex.a < 0.5) discard;

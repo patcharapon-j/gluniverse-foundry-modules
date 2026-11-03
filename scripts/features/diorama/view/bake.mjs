@@ -26,6 +26,11 @@
  * sources for tokens it does not control. It has no explored fog (the GM's
  * exploration is not a player's), and it hands back a point test so the view
  * can hide tokens no player sees.
+ *
+ * Each bake also keeps who looked (`viewers`: token, origin, LOS polygon, sight
+ * and light-perception range in px) and a lit test (`lit`), so the view can ask
+ * which props stand in plain 3D sight over ground the polygon hides
+ * (view/props-seen.mjs).
  */
 
 import { BAKE_PX_PER_CELL, TIMING } from "../constants.mjs";
@@ -165,6 +170,8 @@ export class Baker {
     this.drawLight(lights);
     let vision = null;
     this.seen = null;
+    this.viewers = [];
+    this.lit = (x, y) => globalLit || lights.some((l) => l.shape?.contains?.(x, y));
     if (mode === "own") { this.drawOwnVision(lights, globalLit); vision = this.vision; }
     else if (mode === "players") { this.drawPlayersVision(lights, globalLit); vision = this.vision; }
     const sources = [];
@@ -260,6 +267,10 @@ export class Baker {
     for (const src of sourceList(globalThis.canvas?.effects?.visionSources)) {
       if (!src?.active) continue;
       this.drawSight(ctx, { fov: src.shape ?? src.fov, los: src.los, lights, globalLit, blinded: !!src.isBlinded });
+      const doc = src.object?.document;
+      if (doc && src.los && !src.isBlinded) {
+        this.viewers.push({ doc, origin: src.origin ?? src.los.origin, los: src.los, range: Number(src.radius) || 0, lightRange: Number(src.lightRadius ?? Infinity) });
+      }
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
@@ -269,6 +280,7 @@ export class Baker {
     const ctx = this.beginVision();
     const viewers = playerSight();
     for (const v of viewers) this.drawSight(ctx, { ...v, lights, globalLit, blinded: false });
+    this.viewers = viewers.map((v) => ({ doc: v.doc, origin: v.los.origin, los: v.los, range: v.range, lightRange: Infinity }));
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
     this.seen = (x, y) => viewers.some((v) => v.fov?.contains?.(x, y)
@@ -361,7 +373,7 @@ function playerSight() {
         fov = los.intersectCircle ? los.intersectCircle(circle, { density: 48 }) : null;
       } catch { fov = null; }
     }
-    out.push({ fov, los });
+    out.push({ fov, los, doc, range: range > 0 ? range * dpx : 0 });
   }
   return out;
 }

@@ -131,7 +131,8 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   is a legal step, but the route never takes one to save a few feet: it is
   solved twice, without drops and with them, and a square the first reaches
   keeps that route (`preferReach`), so a walker goes down the stairs and jumps
-  only where that is the only way down. Per player
+  only where that is the only way down. Each square is drawn per sub-cell on
+  the ground under it, so one on a flight lies on its steps. Per player
   (`dio.reach`): when selected, only while moving, or never.
   Other creatures count too. A mover may pass through an ally's squares but not
   end there, and may not pass through an enemy's, so those squares show as out
@@ -406,7 +407,11 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   which the bake knows and the shader does not). So the near face of a terrace
   too tall for sight to reveal its top still stands on the seen ground and
   rises into the mist. Such a face takes its fog look from half a square out
-  (`FACE_FOG`), since the edge of sight is full mist at its foot. The gap is filled by
+  (`FACE_FOG`), since the edge of sight is full mist at its foot. A prop on
+  such hidden ground is asked about the way a token there is, in 3D at its
+  foot, middle and top past the ground and the walls (`columnSeen`,
+  `view/props-seen.mjs`), so a tree whose crown clears the lip draws while the
+  ground under it stays hidden. The gap is filled by
   a mist backdrop: a box over the board's footprint, from the plinth to above
   the highest ground anyone has seen or explored, drawn from inside at the far
   plane. Its top reads only seen ground (`fogSeenTop`), so the mist never
