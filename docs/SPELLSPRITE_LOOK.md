@@ -194,22 +194,11 @@ its body part (`claw` for `rake`, `wing` for `buffet`) or its group's arm.
 
 ## Density and glow
 
-- **Density:** `ART_PER_SQUARE` is 52. Every size in a particle and every
-  constant in a shape is art pixels at 52 per square. Hairlines and the outline
-  stay 1 px, so a shape keeps its world size and carries twice the detail.
-- **Ramps:** 11 steps, interpolated in OKLab between the 7 hand-tuned anchors.
-  The hue shift survives, `S(R, t)` is unchanged, and `rotateRamp` measures its
-  base hue at t = 2/3.
-- **Glow:** a fourth layer of soft light with no bands and no dither:
-  - It is built from bright pixels of the stand and flat layers, plus parts
-    marked `glow: true`.
-  - It is painted at quarter resolution and uploaded with linear sampling.
-  - It is additive on a dark floor and a low-alpha tint on a bright one.
-  - The Light layer's banded floor pool stays.
-  - `glow` is in SHED_ORDER right after `minor`.
-- **Sprite clock:** stays at 12 fps. Particles move at 120 Hz.
-- **Budget:** perf-check passes, and the cost table in `fx-check --verbose`
-  stays within 2.5× of the 26 px numbers.
+Deferred. `ART_PER_SQUARE` stays at 26 and there is no glow layer yet. The
+52 px density and soft glow are a separate change (branch
+`t3/spellsprite-density-glow`): its first cut cost too much paint time and
+the glow washed a fireball white. Every size in this document is art pixels at
+26 per square. The sprite clock stays at 12 fps; particles move at 120 Hz.
 
 ## Renderer API
 
