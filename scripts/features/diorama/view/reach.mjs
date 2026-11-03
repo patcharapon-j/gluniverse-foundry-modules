@@ -60,11 +60,13 @@ export function occupantsOf(tok, size, systemId, seen = null) {
   return out;
 }
 
-function blockingWalls(terrain = null, grid = null, levelBaseQ = 0) {
+function blockingWalls(terrain = null, grid = null) {
   const out = [];
   // A wall's top (terrain/wall-top.mjs), so a move over it is not counted as
   // blocked. No terrain: no tops, every wall blocks, as the move backend does.
-  const topOf = (doc) => (terrain && doc && grid ? wallSpanQ(doc, terrain, grid.size, grid.distance, levelBaseQ)?.topQ ?? null : null);
+  // The overlay's terrain is already absolute (view/overlay.mjs, Level base
+  // included), so no Level base is passed here.
+  const topOf = (doc) => (terrain && doc && grid ? wallSpanQ(doc, terrain, grid.size, grid.distance)?.topQ ?? null : null);
   const NONE = globalThis.CONST?.EDGE_SENSE_TYPES?.NONE ?? 0;
   const edges = globalThis.canvas?.edges;
   const list = edges?.values ? [...edges.values()] : null;
@@ -151,7 +153,7 @@ export function reachOf({ tok, scene, grid, terrain, action, seen = null }) {
   // rules on and saved terrain on the mover's Level. Anywhere else the drop
   // would refuse a move over a wall, so the picture must too.
   const wallLive = wallContext(scene, tokenLevelId(doc));
-  const walls = wallIndex(blockingWalls(wallLive ? terrain : null, grid, wallLive?.baseQ ?? 0), size);
+  const walls = wallIndex(blockingWalls(wallLive ? terrain : null, grid), size);
   // The mover's feet: the ground it steps off plus its altitude (flying keeps it).
   const altQ = distToQ(Number(altitude(doc)) || 0, grid.distance);
   const stepQ = Number(terrain?.stepHeight) || 0;
