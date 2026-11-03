@@ -128,15 +128,12 @@ export class InsightComposeDialog extends HandlebarsApplicationMixin(Application
   /** Tick these user ids (the ones that have a chip); the rest stay as they are. */
   #tick(ids) {
     const wanted = new Set(ids);
-    let added = 0;
     for (const input of this.element.querySelectorAll('input[name="target"]')) {
       if (!wanted.has(input.value)) continue;
-      if (!input.checked) added++;
       input.checked = true;
       InsightComposeDialog._picked.add(input.value);
     }
     this.#syncPicked();
-    return added;
   }
 
   /** Tick every connected player (not the other GMs). */
