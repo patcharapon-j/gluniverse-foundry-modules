@@ -409,7 +409,21 @@ export default async function check(ctx) {
     !sb.columnSeen(hillLive, lowEye, { x: 550, y: 250 }, { x: 25, y: 250 }, 20, 2, noWalls));
   ctx.ok("props: a wall between hides the crown the ground left clear",
     !sb.columnSeen(hillLive, lowEye, { x: 550, y: 250 }, { x: 100, y: 250 }, 20, 15, () => true));
-  const { propsSeen } = await import(ctx.url("scripts/features/diorama/view/props-seen.mjs"));
+  const { propsSeen, bakeViewers } = await import(ctx.url("scripts/features/diorama/view/props-seen.mjs"));
+  // The adapter keeps Foundry's vision cone, which a polygon's testCollision does not test.
+  const hadConfig = "CONFIG" in globalThis, oldConfig = globalThis.CONFIG;
+  globalThis.CONFIG = { Canvas: { polygonBackends: { sight: { testCollision: () => false } } } };
+  try {
+    const coneSees = (rotation, externalRadius = 0) => bakeViewers({
+      lit: () => true,
+      viewers: [{ doc: tok(0), origin: { x: 550, y: 250, elevation: 0 }, range: 1000, lightRange: Infinity, los: { config: { angle: 90, rotation, externalRadius } } }],
+    }, hillLive)[0].sees({ x: 100, y: 250 }, 20, 15);
+    ctx.ok("props: a clear crown behind a viewer's sight cone is not seen", !coneSees(0));
+    ctx.ok("props: the same crown inside the cone is", coneSees(90));
+    ctx.ok("props: within the external radius every direction counts", coneSees(0, 500));
+  } finally {
+    if (hadConfig) globalThis.CONFIG = oldConfig; else delete globalThis.CONFIG;
+  }
   const asked = [];
   const viewer = { sees: (p, foot, height) => { asked.push([p.x, p.y, foot, height]); return height > 10; } };
   const seenSet = propsSeen({

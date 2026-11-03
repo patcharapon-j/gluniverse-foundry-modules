@@ -40,6 +40,23 @@ export function propsSeen({ props = [], grid, hidden, viewers = [] }) {
   return out;
 }
 
+/**
+ * Outside a vision cone: Foundry's own test (DetectionMode._testCollision),
+ * which a polygon's testCollision does not make. Within the external radius
+ * every direction counts.
+ * @param {{angle?:number, rotation?:number, externalRadius?:number}} cfg
+ */
+export function outsideCone(cfg, origin, p) {
+  const { angle = 360, rotation = 0, externalRadius = 0 } = cfg ?? {};
+  if (!(angle < 360)) return false;
+  const dx = p.x - origin.x, dy = p.y - origin.y;
+  if (dx * dx + dy * dy <= externalRadius * externalRadius) return false;
+  if (angle <= 0) return true;
+  const aMin = rotation + 90 - angle / 2;
+  const a = (Math.atan2(dy, dx) * 180) / Math.PI;
+  return ((((a - aMin) % 360) + 360) % 360) > angle;
+}
+
 /** Where the vision bake does not see the ground now (R under half). */
 export function bakeHidden(vision, scale) {
   const ctx = vision?.getContext?.("2d", { willReadFrequently: true });
@@ -51,7 +68,8 @@ export function bakeHidden(vision, scale) {
 
 /**
  * The bake's viewers (view/bake.mjs) as `sees` tests: in sight range, or lit and
- * in light-perception range, and in clear 3D line past the ground and the walls.
+ * in light-perception range, inside the vision cone, and in clear 3D line past
+ * the ground and the walls.
  * @param {{viewers?:object[], lit?:(x:number,y:number)=>boolean}} baker
  * @param {{terrain:object, grid:object}} live  the view's absolute terrain
  */
@@ -73,6 +91,7 @@ export function bakeViewers(baker, live) {
       sees: (p, foot, height) => {
         const d = Math.hypot(p.x - o.x, p.y - o.y);
         if (!(d <= v.range || (d <= v.lightRange && baker.lit?.(p.x, p.y)))) return false;
+        if (outsideCone(cfg, o, p)) return false;
         return columnSeen(live, eye, from, p, foot, height, (elevation) => {
           try { return !!Backend.testCollision(from, { x: p.x, y: p.y, elevation }, { ...cfg, type: "sight", mode: "any" }); } catch { return true; }
         });
