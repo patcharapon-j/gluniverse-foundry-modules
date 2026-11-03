@@ -19,7 +19,7 @@ import {
   describeItem, describeCondition, describeSkillAction, describeTick, outcomeFrom,
   weaponStyleOf, inlineTemplate, inlineDamage, runeMaterials,
 } from "../scripts/features/pf2e-fx/semantics.mjs";
-import { FUNCTIONS, MATERIALS, WEAPON_STYLES, DELIVERIES, TRADITIONS } from "../scripts/features/pf2e-fx/constants.mjs";
+import { FUNCTIONS, MATERIALS, WEAPON_STYLES, DELIVERIES, TRADITIONS, DELIVERY_VOCAB, MOTIF_VOCAB, PROP_VOCAB, FLAVOR_VOCAB } from "../scripts/features/pf2e-fx/constants.mjs";
 
 const fails = [];
 let passed = 0;
@@ -94,6 +94,62 @@ const CASES = [
 ];
 for (const [label, doc, opts, want] of CASES) expect(label, describeItem(doc, opts), want);
 
+/* ── the look axes: the name shapes, the damage colours ──────────────── */
+
+const wpn = (name, group, damageType, { range = null, traits = [], baseItem = null, usage = "held-in-one-hand" } = {}) =>
+  ({ name, type: "weapon", system: { baseItem, group, range, usage: { value: usage }, damage: { damageType, dice: 1, die: "d6" }, runes: { property: [] }, traits: { value: traits } } });
+const npc = (name, damage, { range = null, traits = [] } = {}) =>
+  ({ name, type: "melee", system: { damageRolls: Object.fromEntries(damage.map((d, i) => [`d${i}`, { damage: "2d6", damageType: d }])), range, traits: { value: traits } } });
+const act = (name, slug, traits, extra = {}) => ({ name, type: "action", system: { slug, actionType: { value: "action" }, actions: { value: 1 }, traits: { value: traits }, description: { value: "" }, ...extra } });
+const LOOK = [
+  // PF2e firearms, crossbows, slings: never an arrow
+  ["Arquebus", wpn("Arquebus", "firearm", "piercing", { range: 150, baseItem: "arquebus", traits: ["concussive", "fatal-d12", "kickback"], usage: "held-in-two-hands" }), {}, { delivery: "bullet", "weapon.style": "ranged" }],
+  ["Flintlock Pistol", wpn("Flintlock Pistol", "firearm", "piercing", { range: 40, baseItem: "flintlock-pistol", traits: ["concussive", "fatal-d8"] }), {}, { delivery: "bullet" }],
+  ["Blunderbuss (scatter)", wpn("Blunderbuss", "firearm", "piercing", { range: 40, baseItem: "blunderbuss", traits: ["concussive", "scatter-10"] }), {}, { delivery: "pellets" }],
+  ["Crossbow", wpn("Crossbow", "crossbow", "piercing", { range: 120, baseItem: "crossbow" }), {}, { delivery: "bolt", motif: "arrow" }],
+  ["Sling", wpn("Sling", "sling", "bludgeoning", { range: 50, baseItem: "sling", traits: ["propulsive"] }), {}, { delivery: "stone" }],
+  ["NPC Pistol (no group)", npc("Pistol", ["piercing"], { range: { increment: 40 }, traits: ["concussive"] }), {}, { delivery: "bullet" }],
+  // SF2e weapon groups
+  ["SF2e Laser Pistol", wpn("Laser Pistol", "laser", "fire", { range: 60, baseItem: "laser-pistol", traits: ["tech"] }), {}, { delivery: "laser", "weapon.ranged": true, material: "fire" }],
+  ["SF2e Plasma Cannon", wpn("Plasma Cannon", "plasma", "electricity", { range: 60, traits: ["tech", "area-line"], usage: "held-in-two-hands" }), {}, { delivery: "plasma", "weapon.ranged": true }],
+  ["SF2e Autotarget Rifle", wpn("Autotarget Rifle", "projectile", "piercing", { range: 60, traits: ["automatic", "tech"], usage: "held-in-two-hands" }), {}, { delivery: "bullet" }],
+  ["SF2e Shirren-eye Rifle", wpn("Shirren-eye Rifle", "sniper", "piercing", { range: 120, traits: ["tech", "unwieldy"], usage: "held-in-two-hands" }), {}, { delivery: "slug" }],
+  ["SF2e Scattergun (area-cone)", wpn("Scattergun", "projectile", "piercing", { range: 30, traits: ["area-cone", "tech"], usage: "held-in-two-hands" }), {}, { delivery: "pellets" }],
+  ["SF2e Frag Grenade", wpn("Frag Grenade", "grenade", "piercing", { range: 30, baseItem: "grenade", traits: ["area-burst-10", "consumable", "tech"] }), {}, { delivery: "grenade" }],
+  ["SF2e Flamethrower", wpn("Flamethrower", "flame", "fire", { range: 30, traits: ["area-line", "tech"], usage: "held-in-two-hands" }), {}, { delivery: "jet", material: "fire" }],
+  ["SF2e Arc Pistol", wpn("Arc Pistol", "shock", "electricity", { range: 40, traits: ["tech"] }), {}, { delivery: "zap" }],
+  ["SF2e Sonic Rifle", wpn("Sonic Rifle", "sonic", "sonic", { range: 60, traits: ["tech"], usage: "held-in-two-hands" }), {}, { delivery: "sonicwave" }],
+  ["SF2e Zero Cannon", wpn("Zero Cannon", "cryo", "cold", { range: 60, traits: ["tech", "area-line"], usage: "held-in-two-hands" }), {}, { delivery: "jet", material: "cold" }],
+  ["SF2e creature: Aeon Rifle via its linked laser", npc("Aeon Rifle", ["fire"], { range: { increment: 100 } }), { weapon: wpn("Aeon Rifle", "laser", "fire", { range: 100 }) }, { delivery: "laser" }],
+  // natural attacks
+  ["Wolf Jaws", npc("Wolf Jaws", ["piercing"], { traits: ["unarmed"] }), {}, { delivery: "jaws" }],
+  ["Troll Claw", F.trollClaw, {}, { delivery: "rake", motif: "claw" }],
+  ["Dragon Tail", F.dragonTail, {}, { delivery: "lash" }],
+  ["Horn", npc("Horn", ["piercing"], { traits: ["unarmed"] }), {}, { delivery: "gore" }],
+  ["Stinger", npc("Stinger", ["piercing", "poison"], { traits: ["unarmed"] }), {}, { delivery: "sting" }],
+  ["Wing", npc("Wing", ["bludgeoning"], { traits: ["reach-15"] }), {}, { delivery: "buffet" }],
+  ["Breath Weapon", F.poisonBreath, {}, { delivery: "breath" }],
+  ["Breath Weapon (named)", { ...F.poisonBreath, name: "Breath Weapon" }, {}, { delivery: "breath", motif: null }],
+  // spells
+  ["Fireball", F.fireball, {}, { delivery: "lob" }],
+  ["Meteor Swarm", spell("Meteor Swarm", "meteor-swarm", { area: { type: "burst", value: 40 }, damage: { 0: { formula: "6d10", kinds: ["damage"], type: "fire" } }, defense: { save: { basic: true, statistic: "reflex" } }, level: { value: 9 }, range: { value: "500 feet" }, traits: { traditions: ["arcane", "primal"], value: ["concentrate", "fire", "manipulate"] } }), {}, { delivery: "fall", motif: "comet" }],
+  ["Force Barrage", F.forceBarrage, {}, { delivery: "darts" }],
+  ["Chain Lightning", spell("Chain Lightning", "chain-lightning", { damage: { 0: { formula: "8d12", kinds: ["damage"], type: "electricity" } }, defense: { save: { basic: true, statistic: "reflex" } }, level: { value: 6 }, range: { value: "500 feet" }, target: { value: "1 creature, plus any number of additional creatures" }, traits: { traditions: ["arcane", "primal"], value: ["concentrate", "electricity", "manipulate"] } }), {}, { motif: "chain", material: "electricity" }],
+  ["Spiritual Armament", spell("Spiritual Armament", "spiritual-armament", { damage: { 0: { formula: "2d8", kinds: ["damage"], type: "spirit" } }, defense: { passive: { statistic: "ac" } }, level: { value: 2 }, range: { value: "120 feet" }, target: { value: "1 creature" }, traits: { traditions: ["divine", "occult"], value: ["attack", "concentrate", "manipulate", "sanctified", "spirit"] } }), {}, { motif: "weapon" }],
+  ["Hydraulic Push", spell("Hydraulic Push", "hydraulic-push", { damage: { 0: { formula: "3d6", kinds: ["damage"], type: "bludgeoning" } }, defense: { passive: { statistic: "ac" } }, range: { value: "60 feet" }, target: { value: "1 creature" }, traits: { traditions: ["arcane", "primal"], value: ["attack", "concentrate", "manipulate", "water"] } }), {}, { motif: "wave", delivery: "ray" }],
+  // class features and actions
+  ["Flurry of Blows", act("Flurry of Blows", "flurry-of-blows", ["flourish", "monk"]), {}, { flavor: "flurry" }],
+  ["Kineticist impulse", { ...act("Ocean's Balm", "oceans-balm", ["healing", "impulse", "kineticist", "manipulate", "water"]), type: "feat" }, {}, { flavor: "impulse" }],
+  ["Rage", act("Rage", "rage", ["barbarian", "concentrate", "emotion", "mental"]), {}, { flavor: "rage" }],
+  // the damage colours, the name accents; a purely physical blow yields to the named element
+  ["Frost Claw dealing fire", npc("Frost Claw", ["fire"], { traits: ["unarmed"] }), {}, { material: "fire", accent: "cold", delivery: "rake" }],
+  ["Ice Claw dealing slashing", npc("Ice Claw", ["slashing"], { traits: ["unarmed"] }), {}, { material: "cold", delivery: "rake" }],
+  ["Stone Fist", npc("Stone Fist", ["bludgeoning"]), {}, { material: "earth", delivery: "slam" }],
+  ["Cold Iron Dagger stays kinetic", wpn("Cold Iron Dagger", "knife", "piercing", { baseItem: "dagger" }), {}, { material: "kinetic", delivery: "stab" }],
+  ["Light Hammer stays kinetic", wpn("Light Hammer", "hammer", "bludgeoning", { baseItem: "light-hammer" }), {}, { material: "kinetic" }],
+];
+for (const [label, doc, opts, want] of LOOK) expect(label, describeItem(doc, opts), want);
+
 expect("Demoralize", describeSkillAction("demoralize", ["auditory", "concentrate", "emotion", "fear", "mental"]), { func: "hinder", material: "mental", kind: "attack", mode: "attack" });
 expect("Trip", describeSkillAction("trip", ["attack"]), { func: "control", kind: "attack" });
 expect("Grapple", describeSkillAction("grapple", ["attack"]), { func: "control", kind: "attack" });
@@ -155,6 +211,10 @@ for (const [i, j] of JUNK.entries()) for (const o of ROLLS) {
   if (r.accent != null && !MATERIALS.includes(r.accent)) bad.push(`accent ${r.accent}`);
   if (r.tradition != null && !TRADITIONS.includes(r.tradition)) bad.push(`tradition ${r.tradition}`);
   if (r.weapon && !WEAPON_STYLES.includes(r.weapon.style)) bad.push(`style ${r.weapon.style}`);
+  if (r.delivery != null && !DELIVERY_VOCAB.includes(r.delivery)) bad.push(`delivery ${r.delivery}`);
+  if (r.motif != null && !MOTIF_VOCAB.includes(r.motif)) bad.push(`motif ${r.motif}`);
+  if (!Array.isArray(r.props) || r.props.some((p) => !PROP_VOCAB.includes(p))) bad.push(`props ${r.props}`);
+  if (r.flavor != null && !FLAVOR_VOCAB.includes(r.flavor)) bad.push(`flavor ${r.flavor}`);
   if (!(r.rank >= 1 && r.rank <= 10)) bad.push(`rank ${r.rank}`);
   if (bad.length) fails.push(`junk #${i}: ${bad.join(", ")}`); else passed++;
 }
