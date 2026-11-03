@@ -101,6 +101,8 @@ export function hasAsides(text) {
  *
  * @returns {{aside: boolean, text: string, closes?: boolean, opens?: boolean}[]}
  */
+const WORDY = /[\p{L}\p{N}]/u;
+
 export function asideRuns(text) {
   const parts = splitAsides(text);
   if (!parts.some((part) => part.aside)) return parts;
@@ -110,7 +112,13 @@ export function asideRuns(text) {
     let said = part.text;
     if (parts[i - 1]?.aside) said = said.trimStart();
     if (parts[i + 1]?.aside) said = said.trimEnd();
-    if (said) runs.push({ aside: false, text: said });
+    if (!said) return;
+    // Punctuation with no words is not something said: "the door is *trembling*." ends on the aside,
+    // not on a quoted "." of its own. It joins the aside it touches.
+    const prev = runs[runs.length - 1];
+    if (!WORDY.test(said) && prev?.aside) prev.text += said;
+    else if (!WORDY.test(said) && parts[i + 1]?.aside) parts[i + 1] = { ...parts[i + 1], text: said + parts[i + 1].text };
+    else runs.push({ aside: false, text: said });
   });
   runs.forEach((run, i) => {
     if (!run.aside) return;
