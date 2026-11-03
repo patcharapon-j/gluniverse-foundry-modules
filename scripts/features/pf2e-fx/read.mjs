@@ -662,9 +662,12 @@ function reconcile() {
   reconcileTimer = null;
   if (!director) return;
   const want = new Map();
+  /** Tokens still on the board that this viewer can no longer see: their loops vanish, never fade. */
+  const unseen = new Set();
   if (canvas?.ready && enabled(SETTINGS.conditions)) {
     for (const token of canvas.tokens?.placeables ?? []) {
       const body = bodyOf(token);
+      if (!body && token?.id) unseen.add(token.id);
       if (!body || !token.actor) continue;
       for (const [keySlug, c] of conditionsOf(token.actor)) {
         const desc = describeCondition(c.slug, { value: c.value, damageType: c.damageType });
@@ -675,6 +678,7 @@ function reconcile() {
       }
     }
   }
+  for (const id of unseen) { try { director.dropLoops(`cond:${id}:`); } catch { /* gone */ } }
   for (const key of [...active]) {
     if (want.has(key)) continue;
     try { director.stopLoop(key); } catch { /* gone */ }

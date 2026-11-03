@@ -93,6 +93,17 @@ export class Director {
     return true;
   }
 
+  /**
+   * Remove every loop whose key starts with `prefix` at once, fading ones too:
+   * their creature just went out of sight, and a fading tail would follow it.
+   */
+  dropLoops(prefix) {
+    let n = 0;
+    for (const [key, entry] of this.running) if (entry.loop && key.startsWith(prefix)) { this.running.delete(key); n++; }
+    if (n) this.changed();
+    return n;
+  }
+
   /** Stop every loop whose key starts with `prefix` (an actor's conditions). */
   stopLoops(prefix) {
     for (const [key, entry] of this.running) if (entry.loop && key.startsWith(prefix)) entry.sim.stop();
