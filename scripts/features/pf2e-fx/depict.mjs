@@ -194,11 +194,12 @@ const BASE_MOTIF = Object.freeze({
 /** The base item a weapon or strike is: its own field, its slug, then its name. */
 export function baseItemOf(item) {
   const sys = sysOf(item);
+  const hit = lookup(nameTokens(item?.name), BASE_TOKENS);
   for (const v of [sys.baseItem, sys.slug]) {
     const s = slugify(v);
-    if (s && BASE_GROUP[s]) return { base: s, src: "structure", span: null };
+    // the data names the base; the name's matching words are still the weapon, not a motif
+    if (s && BASE_GROUP[s]) return { base: s, src: "structure", span: hit?.v === s ? [hit.i, hit.i + hit.n] : null };
   }
-  const hit = lookup(nameTokens(item?.name), BASE_TOKENS);
   return hit ? { base: hit.v, src: "name", span: [hit.i, hit.i + hit.n] } : null;
 }
 
@@ -578,6 +579,8 @@ export function motifOf(item, ctx = {}) {
   // the words of a base weapon's name are the weapon, not a motif ("Hand Crossbow")
   const span = ctx.strike ? baseItemOf(item)?.span : null;
   if (span) tokens = [...tokens.slice(0, span[0]), ...tokens.slice(span[1])];
+  // "Breath Weapon" is a breath, not a weapon
+  tokens = tokens.filter((t, i) => !(t === "weapon" && tokens[i - 1] === "breath"));
   const joined = tokens.join(" ");
   for (const [p, m] of Object.entries(PHRASE_MOTIF)) if (new RegExp(`\\b${p}\\b`).test(joined)) return { motif: m, src: "name" };
   const redundant = DELIVERY_MOTIF[ctx.delivery];
