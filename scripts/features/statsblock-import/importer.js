@@ -626,7 +626,7 @@ function parseTopLevelField(section, key, value, npc, warnings) {
       else if (["npc", "creature", "monster"].includes(k)) npc.kind = "npc";
       break;
     }
-    case "stealth": npc.hazard.stealth = { value: parseSignedInt(value), details: value.replace(/^[-+]?\d+\s*;?\s*/i, "").trim() }; break;
+    case "stealth": npc.hazard.stealth = parseHazardStealth(value); break;
     case "hardness": npc.hazard.hardness = Math.max(0, parseSignedInt(value)); break;
     case "complexity": npc.hazard.complex = /complex/i.test(value); break;
     case "complex": npc.hazard.complex = /^(true|yes|complex|1)$/i.test(value.trim()); break;
@@ -1314,7 +1314,7 @@ function renderPreview(parsed, validation = null) {
   const hazardCard = actorType === "hazard" ? `
     <div class="gluni-preview-card">
       <h3>${t("GLSBI.preview.hazardHeading")}</h3>
-      <p><strong>${t("GLSBI.preview.stealth")}</strong> ${signed(npc.hazard.stealth.value)} &nbsp; <strong>${t("GLSBI.preview.hardness")}</strong> ${npc.hazard.hardness} &nbsp; <strong>${t("GLSBI.preview.complexity")}</strong> ${t(npc.hazard.complex ? "GLSBI.preview.complex" : "GLSBI.preview.simple")}</p>
+      <p><strong>${t("GLSBI.preview.stealth")}</strong> ${signed(npc.hazard.stealth.value)} (DC ${npc.hazard.stealth.value + 10}) &nbsp; <strong>${t("GLSBI.preview.hardness")}</strong> ${npc.hazard.hardness} &nbsp; <strong>${t("GLSBI.preview.complexity")}</strong> ${t(npc.hazard.complex ? "GLSBI.preview.complex" : "GLSBI.preview.simple")}</p>
       ${npc.hazard.disable ? `<p><strong>${t("GLSBI.preview.disable")}</strong> ${escapeHtml(npc.hazard.disable)}</p>` : ""}
     </div>` : "";
   return `
@@ -1837,6 +1837,20 @@ function parseArea(value) {
 function parseDistance(value) {
   const match = String(value ?? "").match(/(\d+)/);
   return match ? Number(match[1]) : null;
+}
+
+// Hazard Stealth comes as a modifier (`+15`) or, the way the books and AoN print
+// it, as a DC (`DC 25 (trained)`). PF2e stores the modifier, which is DC - 10.
+// An explicit modifier wins over a DC on the same line (`+14; DC 14`).
+function parseHazardStealth(value) {
+  const text = String(value ?? "").trim();
+  const modifier = (rest) => ({ value: parseSignedInt(rest), details: rest.replace(/^[-+]?\d+\s*;?\s*/i, "").trim() });
+  if (/^[-+]?\d/.test(text)) return modifier(text);
+  const dc = text.match(/^DC\s*(\d+)\s*[;,]?\s*([\s\S]*)$/i);
+  if (!dc) return modifier(text);
+  const rest = dc[2].trim();
+  if (/^[-+]\d/.test(rest)) return modifier(rest);
+  return { value: Number(dc[1]) - 10, details: rest };
 }
 
 function parseSignedInt(value) {
