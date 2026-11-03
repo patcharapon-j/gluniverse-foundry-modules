@@ -253,6 +253,27 @@ const dist = (a, b) => Math.hypot(...oklab(a).map((v, i) => v - oklab(b)[i]));
   ok(FT.naturalOf({ terms: [{ class: "Die", faces: 20, results: [{ result: 7, active: false, discarded: true }, { result: 15, active: true }] }] }) === 15, "degree: keep-higher natural is not the kept die");
 }
 
+/* ── 7b. the card PF2e baked ─────────────────────────────────────────── */
+{
+  const K = await imp("scripts/features/destiny-dice/card.mjs");
+  const label = (d) => ({ criticalFailure: "Critical Failure", failure: "Failure", success: "Success", criticalSuccess: "Critical Success" })[d];
+  // Shapes PF2e 8.5's #createResultFlavor emits (convertXMLNode output).
+  const plain = `<h4 class="action">Athletics</h4><div class="target-dc-result" data-tooltip-class="pf2e"><div class="target-dc"><span data-whose="opposer">DC 20</span></div><div class="result degree-of-success">Result: <span class="failure">Failure</span> <span data-whose="opposer">by -2</span></div></div><ul class="notes"></ul>`;
+  const out = K.refreshResultFlavor(plain, { shift: { after: "success", unadjusted: "success" }, total: 22, dc: 20, label });
+  ok(out.includes(`<span class="success">Success</span>`) && out.includes(`by +2</span>`) && out.includes(`<span data-whose="opposer">DC 20</span>`), `card: the plain result line is not rewritten: ${out}`);
+  const hidden = plain.replace(`class="result degree-of-success"`, `class="result degree-of-success" data-visibility="gm"`);
+  ok(K.refreshResultFlavor(hidden, { shift: { after: "success", unadjusted: "success" }, total: 22, dc: 20, label }).includes(`data-visibility="gm">Result: <span class="success">`), "card: rewriting the result drops PF2e's visibility");
+  const adjusted = `<div class="result degree-of-success">Result: <span class="unadjusted">Success</span> <span class="success adjusted" data-tooltip="Juggernaut">Critical Success</span> <span data-visibility="gm" data-whose="opposer">by +1</span></div>`;
+  const adj = K.refreshResultFlavor(adjusted, { shift: { after: "criticalSuccess", unadjusted: "success" }, total: 25, dc: 20, label });
+  ok(adj.includes(`<span class="unadjusted">Success</span>`) && adj.includes(`<span class="criticalSuccess adjusted" data-tooltip="Juggernaut">Critical Success</span>`) && adj.includes(`data-whose="opposer">by +5</span>`), `card: an adjusted result line is not rewritten: ${adj}`);
+  ok(K.refreshResultFlavor("<p>no result here</p>", { shift: { after: "success" }, total: 1, dc: 1, label }) === "<p>no result here</p>", "card: unrecognised flavor is changed");
+  const reroll = (firstDiscard) => `<div class="${firstDiscard ? "reroll-discard" : ""}"><div class="dice-roll"><h4 class="dice-total">18</h4></div></div><div class="reroll-second ${firstDiscard ? "" : "reroll-discard"}"><div class="dice-roll"><h4 class="dice-total failure">12</h4></div></div>`;
+  ok(K.refreshRerollTotal(reroll(false), 22).includes(`dice-total">22</h4>`) && K.refreshRerollTotal(reroll(false), 22).includes(">12</h4>"), "card: a reroll rewrites the discarded total, or misses the kept one");
+  ok(K.refreshRerollTotal(reroll(true), 16).includes(`dice-total failure">16</h4>`) && K.refreshRerollTotal(reroll(true), 16).includes(">18</h4>"), "card: a reroll that kept the second roll rewrites the wrong total");
+  ok(K.degreeKey("attack", "success") === "PF2E.Check.Result.Degree.Attack.success" && K.degreeKey(undefined, "failure") === "PF2E.Check.Result.Degree.Check.failure", "card: PF2e's degree label key is built wrong");
+  ok(/refreshResultFlavor\(message\.flavor/.test(stripComments(sources["apply.mjs"])) && /refreshRerollTotal\(/.test(stripComments(sources["apply.mjs"])), "card: the fate write no longer refreshes what PF2e baked");
+}
+
 /* ── 8. stored fates ─────────────────────────────────────────────────── */
 {
   const old = FT.normalizeFate({ face: 2, kind: "tyranny", bonus: 2, accepted: null, appliedAt: 5 });
@@ -356,7 +377,7 @@ const dist = (a, b) => Math.hypot(...oklab(a).map((v, i) => v - oklab(b)[i]));
 
 /* ── 11. purity and motion ───────────────────────────────────────────── */
 {
-  for (const f of ["constants.mjs", "faces.mjs", "glyphs.mjs", "raster.mjs", "fate.mjs", "view.mjs"]) {
+  for (const f of ["constants.mjs", "faces.mjs", "glyphs.mjs", "raster.mjs", "fate.mjs", "view.mjs", "card.mjs"]) {
     const src = stripComments(sources[f]);
     for (const word of ["game", "foundry", "canvas", "Hooks", "ui", "document", "window"]) {
       ok(!new RegExp(`\\b${word}\\s*[.?\\[]`).test(src), `purity: ${f} reaches ${word}`);

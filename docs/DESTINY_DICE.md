@@ -31,7 +31,13 @@ says the fate changed the result ("Failure > Success") follows PF2e's own
 
 The degree is PF2e's rule: `shiftDegree()` in `fate.mjs` applies the natural
 20/1 step and then the check's stored `dosAdjustments` (Juggernaut and the
-like), so the strip and the card agree.
+like), so the strip and the card agree. PF2e bakes the result line into the
+message flavor and a reroll's totals into its content, so `card.mjs` rewrites
+the degree, the offset and the kept total in the same update. Outcome notes
+are not re-filtered: PF2e picks them with private code at roll time.
+
+A hero point reroll clones the fated roll, term and marker included, so the
+old bonus is taken out before the new fate's is added.
 
 ## The die
 

@@ -17,6 +17,7 @@
 
 import { err } from "../../core/const.mjs";
 import { DSN_COLORSET, DSN_NAMESPACE, FATED_OPTION, FLAGS, HERO_REROLL_OPTION, MODULE_ID, TIMING } from "./constants.mjs";
+import { degreeKey, refreshRerollTotal, refreshResultFlavor } from "./card.mjs";
 import { naturalOf, normalizeFate, shiftDegree } from "./fate.mjs";
 import { fateNotation, ownsFateDie } from "./fate-die.mjs";
 import { face as readFace, t } from "./settings.mjs";
@@ -199,10 +200,19 @@ export async function applyFate(message, { source = "manual", wait = false } = {
       if (bonusRoll.shift) {
         updates["flags.pf2e.context.outcome"] = bonusRoll.shift.after;
         updates["flags.pf2e.context.unadjustedOutcome"] = bonusRoll.shift.unadjusted;
+        const context = message.flags?.pf2e?.context;
+        const flavor = refreshResultFlavor(message.flavor, {
+          shift: bonusRoll.shift,
+          total: bonusRoll.total,
+          dc: Number(context?.dc?.value),
+          label: (degree) => game.i18n?.localize?.(degreeKey(context?.dc?.scope, degree)) ?? degree,
+        });
+        if (flavor !== message.flavor) updates.flavor = flavor;
       }
     }
     const content = message.content ?? "";
-    const cleaned = content.replace(OLD_STRIP, "");
+    let cleaned = content.replace(OLD_STRIP, "");
+    if (bonusRoll?.changed && message.flags?.pf2e?.context?.isReroll) cleaned = refreshRerollTotal(cleaned, bonusRoll.total);
     if (cleaned !== content) updates.content = cleaned;
     await message.update(updates);
     return fate;
