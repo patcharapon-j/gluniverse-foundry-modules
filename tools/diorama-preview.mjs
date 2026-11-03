@@ -40,7 +40,8 @@
  *               brazier prop whose warm light becomes a fire; lightFx=off|on
  *   fow=clouds|flat  the fog of war's style; unseen=wide  sight in the middle only;
  *               unseen=pillar  a wedge of unseen ground behind a pillar;
- *               unseen=cliff  the plateau's top hidden, its faces and stairs seen
+ *               unseen=cliff  the plateau's top hidden, its faces and stairs seen,
+ *               a pine at its lip seen in 3D (seen=0: as the bake alone draws it)
  *   tower=1     a 50 ft tower in the far corner (hidden under unseen=wide)
  *   reach=1     the rogue's movement range, stepping round the other creatures
  *   props=1     the props gallery (every shape, every material, a stack, cards,
@@ -678,6 +679,19 @@ if (PROPS2_ON) {
     });
     document.body.append(pre);
   }, 3000);
+}
+
+// unseen=cliff: a pine at the plateau's lip, in plain 3D sight from below though the
+// ground under it is hidden (view/props-seen.mjs), and a crate set back that is not.
+// seen=0 draws them as the bake alone would.
+if (Q.get("unseen") === "cliff" && !TORCHES_ON && !PROPS_ON && !PROPS2_ON) {
+  const PM = await import("/scripts/features/diorama/terrain/props.mjs");
+  const norm = PM.normalizeProps([
+    { id: "lip-pine", shape: "pine", x: 9.6, y: 3.5, w: 0.9, d: 0.9, h: 3, rot: 0, label: "pine at the lip" },
+    { id: "back-crate", shape: "crate", x: 13.5, y: 3.5, w: 0.7, d: 0.7, h: 0.6, rot: 20, label: "crate set back" },
+  ]);
+  r.setProps(PM.propStates(PM.resolveProps(terrain, norm).props, { isGM: false }));
+  r.setPropsSeen(new Set(Q.get("seen") === "0" ? [] : ["lip-pine"]));
 }
 
 // torches=1: the brazier the second light burns in (a warm light on a prop named for a fire)

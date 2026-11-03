@@ -23,6 +23,8 @@
  *                                 roof under 0.5 casts no shadow and cannot be
  *                                 picked; at 0 it is gone. Who fades is the
  *                                 view's business (render/roofs.mjs).
+ *   .setSeen(Set<propId>)         props a viewer sees in 3D though the ground
+ *                                 under them is hidden (view/props-seen.mjs)
  *   .animated(fx) → bool          true only while foliage sways (fx.detail high,
  *                                 wind blowing, a foliage part on the board)
  *   .frame(t, dt, camera, fx) → bool   true while it wants another frame
@@ -227,6 +229,7 @@ export const PROP_MATERIAL_FACTORIES = {
         uCardTint: { value: new THREE.Vector3(1, 1, 1) },
         uCardGhost: { value: 0 },
         uCardFade: { value: 1 },
+        uCardSeen: { value: 0 },
         uGhostColor: c.uGhostColor,
       },
       side: THREE.DoubleSide,
@@ -345,6 +348,8 @@ export class PropsLayer {
     }, this.group, this.casters, this.casterMat);
     /** prop id → fade 0..1 (roofs) */
     this.fades = new Map();
+    /** prop ids a viewer sees in 3D over hidden ground (setSeen) */
+    this.seenIds = new Set();
     /** model src → the materials of its parts */
     this.modelMats = new Map();
     this.wind = 0;
@@ -504,9 +509,11 @@ export class PropsLayer {
       const tint = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
       const info = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
       const fade = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(1), 1);
+      const seen = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
       geo.setAttribute("iTint", tint);
       geo.setAttribute("iInfo", info);
       geo.setAttribute("iFade", fade);
+      geo.setAttribute("iSeen", seen);
       const material = g.factory === "model"
         ? this.modelMaterial(g.model, key, g.opts)
         : PROP_MATERIAL_FACTORIES.prop(this.shared, { ...g.opts, common: this.common });
@@ -521,7 +528,7 @@ export class PropsLayer {
       this.group.add(mesh);
       this.casters.add(caster);
       const dyn = this.dyn.has(key.split("|")[0]) ? key.split("|")[0] : null;
-      b = { mesh, caster, tint, info, fade, capacity, states: [], entries: [], geo, src, material, dyn, ownMaterial: g.factory !== "model" };
+      b = { mesh, caster, tint, info, fade, seen, capacity, states: [], entries: [], geo, src, material, dyn, ownMaterial: g.factory !== "model" };
       this.buckets.set(key, b);
     }
     for (let i = 0; i < n; i++) {
@@ -543,6 +550,27 @@ export class PropsLayer {
     b.info.needsUpdate = true;
     b.restaged = true;
     this.writeFades(b);
+    this.writeSeen(b);
+  }
+
+  /** A bucket's iSeen from this.seenIds (a kit's parts follow the kit). */
+  writeSeen(b) {
+    for (let i = 0; i < b.entries.length; i++) {
+      const s = b.entries[i].s;
+      b.seen.setX(i, this.seenIds.has(s.kitOf ?? s.id) ? 1 : 0);
+    }
+    b.seen.needsUpdate = true;
+  }
+
+  /**
+   * The props a viewer sees in 3D though the ground under them is hidden
+   * (view/props-seen.mjs): Set<propId>. One attribute per bucket, a uniform per
+   * card; nothing is rebuilt.
+   */
+  setSeen(ids) {
+    this.seenIds = ids instanceof Set ? ids : new Set();
+    for (const b of this.buckets.values()) if (b.entries.length) this.writeSeen(b);
+    for (const c of this.cards.values()) c.material.uniforms.uCardSeen.value = this.seenIds.has(c.state.id) ? 1 : 0;
   }
 
   /** One material per model part, shared by every prop drawing that model. */
@@ -692,6 +720,7 @@ export class PropsLayer {
     u.uCardSize.value.set(w, h);
     u.uCardGhost.value = s.ghost ? 1 : 0;
     u.uCardFade.value = fade;
+    u.uCardSeen.value = this.seenIds.has(s.id) ? 1 : 0;
     if (s.tint) { this._c.setStyle(s.tint, THREE.NoColorSpace); u.uCardTint.value.set(this._c.r, this._c.g, this._c.b); }
     else u.uCardTint.value.set(1, 1, 1);
     c.mesh.position.set(num(s.x), num(s.base), num(s.y));

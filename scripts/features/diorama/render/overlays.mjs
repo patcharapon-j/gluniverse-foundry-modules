@@ -18,7 +18,7 @@
  */
 
 import * as THREE from "./three.mjs";
-import { TIMING } from "../constants.mjs";
+import { SUB, TIMING } from "../constants.mjs";
 import { PALETTE } from "../../../core/theme.mjs";
 import { MATERIALS, cssRgb } from "./materials.mjs";
 import { clamp01, ease } from "./tween.mjs";
@@ -238,16 +238,25 @@ export class OverlaysLayer {
     const line = [0.95, 0.7, 0.5];
     const w = 0.04;
     const ends = (band, i, j) => { const n = bandAt.get(`${i},${j}`) ?? 0; return n === 0 || n > band; };
+    // Each square is drawn as its SUB × SUB sub-cells, each on its own ground, so
+    // a square on a flight lies on the steps rather than floating at the top one.
+    const d = 1 / SUB;
     for (const cell of reach.cells) {
       const { i, j, band } = cell;
       const c = cssRgb(colors[band - 1] ?? colors.at(-1), PALETTE.info);
-      const y = this.cellTopQ(i, j) / 4 + LIFT * 0.45;
-      quad(j + 0.02, i + 0.02, j + 0.98, i + 0.98, y, c, fill[band - 1] ?? 0.1);
-      const e = y + 0.002, la = line[band - 1] ?? 0.5;
-      if (ends(band, i - 1, j)) quad(j, i, j + 1, i + w, e, c, la);
-      if (ends(band, i + 1, j)) quad(j, i + 1 - w, j + 1, i + 1, e, c, la);
-      if (ends(band, i, j - 1)) quad(j, i, j + w, i + 1, e, c, la);
-      if (ends(band, i, j + 1)) quad(j + 1 - w, i, j + 1, i + 1, e, c, la);
+      const fa = fill[band - 1] ?? 0.1, la = line[band - 1] ?? 0.5;
+      const top = ends(band, i - 1, j), bottom = ends(band, i + 1, j), left = ends(band, i, j - 1), right = ends(band, i, j + 1);
+      for (let a = 0; a < SUB; a++) for (let b = 0; b < SUB; b++) {
+        const z0 = i + a * d, x0 = j + b * d, z1 = z0 + d, x1 = x0 + d;
+        const g = this.ground(x0 + d / 2, z0 + d / 2);
+        const y = (Number.isFinite(g) ? g : this.cellTopQ(i, j) / 4) + LIFT * 0.45;
+        quad(b ? x0 : x0 + 0.02, a ? z0 : z0 + 0.02, b < SUB - 1 ? x1 : x1 - 0.02, a < SUB - 1 ? z1 : z1 - 0.02, y, c, fa);
+        const e = y + 0.002;
+        if (top && a === 0) quad(x0, z0, x1, z0 + w, e, c, la);
+        if (bottom && a === SUB - 1) quad(x0, z1 - w, x1, z1, e, c, la);
+        if (left && b === 0) quad(x0, z0, x0 + w, z1, e, c, la);
+        if (right && b === SUB - 1) quad(x1 - w, z0, x1, z1, e, c, la);
+      }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));

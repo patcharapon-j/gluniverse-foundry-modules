@@ -400,6 +400,48 @@ export default async function check(ctx) {
   ctx.ok("high ground: from below, the creature on the plateau's edge is seen",
     sb.targetInClearLine(hillLive, eyeQ(tok(0), grid), { x: 550, y: 250 }, { x: 175, y: 250 }, 20, 6));
 
+  // Props on hidden high ground are asked about like a token there (view/props-seen.mjs).
+  const lowEye = eyeQ(tok(0), grid);
+  const noWalls = () => false;
+  ctx.ok("props: a tree's crown over the cliff's lip is seen from below",
+    sb.columnSeen(hillLive, lowEye, { x: 550, y: 250 }, { x: 100, y: 250 }, 20, 15, noWalls));
+  ctx.ok("props: a crate set back on the plateau is not",
+    !sb.columnSeen(hillLive, lowEye, { x: 550, y: 250 }, { x: 25, y: 250 }, 20, 2, noWalls));
+  ctx.ok("props: a wall between hides the crown the ground left clear",
+    !sb.columnSeen(hillLive, lowEye, { x: 550, y: 250 }, { x: 100, y: 250 }, 20, 15, () => true));
+  const { propsSeen, bakeViewers } = await import(ctx.url("scripts/features/diorama/view/props-seen.mjs"));
+  // The adapter keeps Foundry's vision cone, which a polygon's testCollision does not test.
+  const hadConfig = "CONFIG" in globalThis, oldConfig = globalThis.CONFIG;
+  globalThis.CONFIG = { Canvas: { polygonBackends: { sight: { testCollision: () => false } } } };
+  try {
+    const coneSees = (rotation, externalRadius = 0) => bakeViewers({
+      lit: () => true,
+      viewers: [{ doc: tok(0), origin: { x: 550, y: 250, elevation: 0 }, range: 1000, lightRange: Infinity, los: { config: { angle: 90, rotation, externalRadius } } }],
+    }, hillLive)[0].sees({ x: 100, y: 250 }, 20, 15);
+    ctx.ok("props: a clear crown behind a viewer's sight cone is not seen", !coneSees(0));
+    ctx.ok("props: the same crown inside the cone is", coneSees(90));
+    ctx.ok("props: within the external radius every direction counts", coneSees(0, 500));
+  } finally {
+    if (hadConfig) globalThis.CONFIG = oldConfig; else delete globalThis.CONFIG;
+  }
+  const asked = [];
+  const viewer = { sees: (p, foot, height) => { asked.push([p.x, p.y, foot, height]); return height > 10; } };
+  const seenSet = propsSeen({
+    grid,
+    hidden: (x) => x < 200,
+    viewers: [viewer],
+    props: [
+      { id: "tree", shape: "tree", x: 1, y: 2.5, base: 4, h: 3 },
+      { id: "crate", shape: "crate", x: 0.5, y: 2.5, base: 4, h: 0.5 },
+      { id: "ghost", shape: "tree", x: 1, y: 2.5, base: 4, h: 3, ghost: true },
+      { id: "slab", shape: "slab", x: 1, y: 2.5, base: 4, h: 3 },
+      { id: "low", shape: "tree", x: 5, y: 2.5, base: 0, h: 3 },
+    ],
+  });
+  ctx.ok("props: only a tall prop on hidden ground is seen", seenSet.size === 1 && seenSet.has("tree"), JSON.stringify([...seenSet]));
+  ctx.ok("props: asked in px and distance units, never for ghosts, slabs or seen ground",
+    asked.length === 2 && JSON.stringify(asked[0]) === JSON.stringify([100, 250, 20, 15]), JSON.stringify(asked));
+
   // Walls have the top the 3D view draws: an eye above it sees over.
   const wallDoc = (c, flags = {}) => ({ documentName: "Wall", id: "w", c, flags });
   const fence = () => new StubEdge({ x: 300, y: 0 }, { x: 300, y: 150 }, { id: "wall.f", sight: 20, light: 20, object: wallDoc([300, 0, 300, 150]) });
