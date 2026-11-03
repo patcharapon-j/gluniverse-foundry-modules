@@ -1,148 +1,200 @@
 /**
- * Flatfinder encounter XP budget & difficulty badge in the Combat Tracker.
+ * Flatfinder encounter XP — the world side.
  *
- * As the GM adds PCs and monsters/hazards to the encounter tracker, this computes
- * the total Flatfinder (Proficiency-without-Level) XP and the resulting difficulty
- * band, then renders a badge at the top of the tracker. PCs define the party level
- * and party size; hostile NPCs and hazards are counted as the threat.
+ * Reads the viewed combat into plain entries (`threatEntry`, `combatSnapshot`),
+ * hands them to the pure model (encounter-model.mjs) and draws the strip at the
+ * top of the combat tracker from the pure view (view.mjs). Combat Intro asks
+ * `computeEncounter(combat)` for its threat card, so the shape of that return
+ * value (`severity`, `totalXp`, `budget`) is a contract.
+ *
+ * Who counts:
+ *   - the party is every player character in the encounter, or the Party
+ *     actor's characters while none has been added yet;
+ *   - a threat is an NPC or hazard whose token is not Friendly or Neutral and
+ *     whose actor is not on the party's side;
+ *   - each creature counts ONCE. A Boss Creature's extra turns are real
+ *     Combatants carrying the boss's own actor, so reading combatants naively
+ *     counted a Supreme boss three times, on top of its ×3. Extra turns are
+ *     refused and actors are de-duplicated by uuid (PF2e's own analysis does
+ *     the same), so a linked creature added twice is still one creature.
  */
 
-import {
-  ENCOUNTER_BUDGET,
-  PWL_DIFF_MAX,
-  PWL_DIFF_MIN,
-  PWL_XP_BY_DIFF,
-} from "./constants.js";
+import { THREAT_ORDER } from "./constants.js";
 import { asElement, getSetting } from "./settings.js";
-import { flatfinderEffectiveLevel } from "./adjustments.js";
-import { bossXpFactor } from "../pf2e-variant-rules/boss/profile.mjs";
+import { adjustmentOf, flatfinderEffectiveLevel, liveLevelOf } from "./adjustments.js";
+import { buildEncounter } from "./encounter-model.mjs";
+import { partyLevelOf } from "./rules.mjs";
+import { trackerHTML } from "./view.mjs";
+import { bossBadge, bossXpFactor } from "../pf2e-variant-rules/boss/profile.mjs";
+import { isExtraTurn } from "../pf2e-variant-rules/boss/initiative.mjs";
 
-function actorLevel(actor) {
-  const lvl = actor?.level ?? actor?.system?.details?.level?.value;
-  return typeof lvl === "number" ? lvl : null;
+const t = (key, data) => (data ? game.i18n.format(key, data) : game.i18n.localize(key));
+
+const hasTrait = (actor, trait) =>
+  !!(actor?.traits?.has?.(trait) || actor?.system?.traits?.value?.includes?.(trait));
+
+/** A player character who belongs to the party (not a minion, familiar or eidolon). */
+export function isPartyMember(actor) {
+  if (actor?.type !== "character") return false;
+  if (hasTrait(actor, "minion") || hasTrait(actor, "eidolon")) return false;
+  return actor.alliance !== "opposition";
 }
 
-/** XP value of a single threat creature/hazard relative to the party level. */
-function threatXp(actor, partyLevel) {
-  // Use the effective Flatfinder level so Elite/Weak threats count as +/-2 levels.
-  const level = flatfinderEffectiveLevel(actor);
-  if (level === null) return 0;
-  const diff = Math.max(PWL_DIFF_MIN, Math.min(PWL_DIFF_MAX, level - partyLevel));
-  let xp = PWL_XP_BY_DIFF[String(diff)] ?? 0;
-  // Simple hazards are worth 20% of a creature of the same level; complex hazards
-  // use the full creature value.
-  if (actor?.type === "hazard" && actor?.system?.details?.isComplex === false) {
-    xp = Math.round(xp * 0.2);
-  }
-  // A Boss Creature (Adventures+) is worth twice its base creature as a Greater
-  // boss and three times as a Supreme one. Deliberately a multiplier on top of
-  // the *base* level's XP, never a shift of the level fed to the table above:
-  // that level already carries the boss's +2/+4 for incapacitation, and letting
-  // it into this lookup would multiply the boss's XP a second time. Returns 1
-  // for every ordinary creature and in every non-PF2e world.
-  return xp * bossXpFactor(actor);
+/** One threat as a plain model entry. */
+export function threatEntry(actor, { id, name, img, hidden = false } = {}) {
+  const hazard = actor?.type === "hazard" ? (actor.system?.details?.isComplex ? "complex" : "simple") : null;
+  const badge = bossBadge(actor);
+  return {
+    id: id ?? actor?.id ?? "",
+    uuid: actor?.uuid ?? null,
+    name: name ?? actor?.name ?? "",
+    img: img ?? actor?.img ?? "",
+    // Flatfinder's level: Elite/Weak as ±2 from the base. The boss bump is
+    // NOT folded in here — a boss reaches the budget through its XP factor
+    // alone, or it would be counted twice.
+    level: flatfinderEffectiveLevel(actor),
+    hazard,
+    adjustment: hazard ? null : adjustmentOf(actor),
+    bossFactor: bossXpFactor(actor),
+    bossTier: badge?.tier ?? null,
+    minion: hasTrait(actor, "minion"),
+    hidden: !!hidden,
+  };
+}
+
+/** Is this combatant one of the encounter's threats? */
+function isThreat(combatant, actor) {
+  if (actor.type !== "npc" && actor.type !== "hazard") return false;
+  if (actor.alliance === "party") return false;
+  const disposition = combatant.token?.disposition;
+  const D = globalThis.CONST?.TOKEN_DISPOSITIONS ?? { FRIENDLY: 1, NEUTRAL: 0 };
+  return disposition !== D.FRIENDLY && disposition !== D.NEUTRAL;
 }
 
 /**
- * Inspect the active combat and return the computed budget, or null when nothing
- * useful can be shown.
+ * Who is in a combat: `{ pcs: Actor[], threats: { combatant, actor }[] }`,
+ * each creature once (extra boss turns refused, actors de-duplicated by uuid).
  */
-export function computeEncounter(combat) {
-  if (!combat) return null;
-
+export function combatParticipants(combat) {
   const pcs = [];
   const threats = [];
-  for (const combatant of combat.combatants) {
+  const seen = new Set();
+  for (const combatant of combat?.combatants ?? []) {
     const actor = combatant.actor;
     if (!actor) continue;
-    if (actor.type === "character") {
-      pcs.push(actor);
-      continue;
-    }
-    if (actor.type !== "npc" && actor.type !== "hazard") continue;
-    const disposition = combatant.token?.disposition;
-    // Treat hostiles (and disposition-less entries) as threats; skip friendly/neutral NPCs.
-    if (disposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY) continue;
-    if (disposition === CONST.TOKEN_DISPOSITIONS.NEUTRAL) continue;
-    threats.push(actor);
+    if (isExtraTurn(combatant)) continue;
+    const key = actor.uuid ?? combatant.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (isPartyMember(actor)) pcs.push(actor);
+    else if (isThreat(combatant, actor)) threats.push({ combatant, actor });
   }
-
-  if (!threats.length) return null;
-
-  const partySize = pcs.length || game.actors?.party?.members?.length || 4;
-
-  let partyLevel;
-  if (pcs.length) {
-    partyLevel = Math.round(
-      pcs.reduce((sum, a) => sum + (actorLevel(a) ?? 0), 0) / pcs.length
-    );
-  } else {
-    partyLevel = actorLevel(game.actors?.party) ?? 1;
-  }
-
-  const totalXp = threats.reduce((sum, a) => sum + threatXp(a, partyLevel), 0);
-
-  const budget = {};
-  for (const [key, { base, perPc }] of Object.entries(ENCOUNTER_BUDGET)) {
-    budget[key] = base + (partySize - 4) * perPc;
-  }
-
-  let severity = "trivial";
-  if (totalXp >= budget.extreme) severity = "extreme";
-  else if (totalXp >= budget.severe) severity = "severe";
-  else if (totalXp >= budget.moderate) severity = "moderate";
-  else if (totalXp >= budget.low) severity = "low";
-
-  return { totalXp, severity, budget, partyLevel, partySize, threatCount: threats.length };
+  return { pcs, threats };
 }
 
-export function renderEncounterBudget(app, html) {
+/** Read a combat into `{ pcs, threats }`: party actors, and one model entry per threat creature. */
+export function combatSnapshot(combat) {
+  const { pcs, threats } = combatParticipants(combat);
+  return {
+    pcs,
+    threats: threats.map(({ combatant, actor }) =>
+      threatEntry(actor, { id: combatant.id, name: combatant.name, img: combatant.img, hidden: combatant.hidden })
+    ),
+  };
+}
+
+/** The party: the PCs in the encounter, else the Party actor's, else an assumed level 1 party of 4. */
+export function partyOf(pcs = []) {
+  const inCombat = pcs.map(liveLevelOf);
+  if (pcs.length) return { level: partyLevelOf(inCombat) ?? 1, size: pcs.length, source: "combat" };
+  const members = (game.actors?.party?.members ?? []).filter(isPartyMember);
+  if (members.length) {
+    return { level: partyLevelOf(members.map(liveLevelOf)) ?? 1, size: members.length, source: "party" };
+  }
+  return { level: 1, size: 4, source: "default" };
+}
+
+/** The encounter's model (encounter-model.mjs), or null when it has no threats. */
+export function encounterModel(combat) {
+  if (!combat) return null;
+  const { pcs, threats } = combatSnapshot(combat);
+  if (!threats.length) return null;
+  return buildEncounter({ party: partyOf(pcs), threats, group: true, sort: true });
+}
+
+/**
+ * The standalone module's shape, which Combat Intro reads: `severity`,
+ * `totalXp`, and `budget` as the five budgets keyed by rating.
+ */
+export function computeEncounter(combat) {
+  const model = encounterModel(combat);
+  if (!model) return null;
+  return {
+    ...model,
+    severity: model.rating,
+    budget: model.budgets,
+    partyLevel: model.party.level,
+    partySize: model.party.size,
+    threatCount: model.count,
+  };
+}
+
+/* ── The tracker strip ─────────────────────────────────────────────────── */
+
+/** Whether the breakdown is open; per client, survives re-renders. */
+let open = false;
+/** The fill each combat's meter last drew, so a change slides from there. */
+const lastFill = new Map();
+
+/**
+ * Draw (or redraw) the strip. Removes the old one first, so a render that
+ * should show nothing leaves nothing behind.
+ */
+export function renderEncounterBudget(app, html, { onPlan } = {}) {
   const root = asElement(html);
-  if (!root) return;
+  if (!root?.querySelector) return;
   root.querySelector(".flatfinder-encounter-budget")?.remove();
 
   if (!game.user?.isGM) return;
   if (!getSetting("encounterBudget")) return;
 
-  const combat = app?.viewed ?? app?.combat ?? game.combats?.viewed ?? game.combat;
-  const data = computeEncounter(combat);
-  if (!data) return;
+  const combat = app?.viewed ?? game.combats?.viewed ?? game.combat ?? null;
+  const model = encounterModel(combat);
+  const key = combat?.id ?? "";
+  const last = model ? lastFill.get(key) ?? null : null;
+  if (model) lastFill.set(key, { fill: model.meter.fill, rating: model.rating });
 
-  const { totalXp, severity, budget, partyLevel, partySize } = data;
-  const severityLabel = game.i18n.localize(
-    `PF2E-FLATFINDER.Encounter.Severity.${severity.charAt(0).toUpperCase()}${severity.slice(1)}`
-  );
+  const holder = document.createElement("div");
+  holder.innerHTML = trackerHTML(model, {
+    t,
+    open,
+    from: last?.fill ?? null,
+    rerated: !!last && last.rating !== model.rating,
+  });
+  const strip = holder.firstElementChild;
+  if (!strip) return;
 
-  const tooltip = [
-    game.i18n.format("PF2E-FLATFINDER.Encounter.Tooltip.Party", { level: partyLevel, size: partySize }),
-    game.i18n.format("PF2E-FLATFINDER.Encounter.Tooltip.Budget", {
-      trivial: budget.trivial,
-      low: budget.low,
-      moderate: budget.moderate,
-      severe: budget.severe,
-      extreme: budget.extreme,
-    }),
-  ].join("<br>");
+  strip.addEventListener("click", (event) => {
+    const button = event.target.closest?.("[data-ff-action]");
+    if (!button || !strip.contains(button)) return;
+    event.preventDefault();
+    const action = button.dataset.ffAction;
+    if (action === "toggle") {
+      open = !strip.classList.contains("is-open");
+      strip.classList.toggle("is-open", open);
+      button.setAttribute("aria-expanded", String(open));
+    } else if (action === "plan") onPlan?.();
+  });
 
-  const badge = document.createElement("div");
-  badge.className = "flatfinder-encounter-budget";
-  badge.dataset.severity = severity;
-  badge.dataset.tooltip = tooltip;
-  badge.innerHTML =
-    `<div class="ff-eb-row">` +
-    `<span class="ff-eb-title">${game.i18n.localize("PF2E-FLATFINDER.Encounter.Title")}</span>` +
-    `<span class="ff-eb-severity">${severityLabel}</span>` +
-    `</div>` +
-    `<div class="ff-eb-row ff-eb-detail">` +
-    `<span class="ff-eb-xp">${game.i18n.format("PF2E-FLATFINDER.Encounter.Xp", { xp: totalXp })}</span>` +
-    `<span class="ff-eb-budget">${game.i18n.format("PF2E-FLATFINDER.Encounter.BudgetShort", { budget: budget[severity] })}</span>` +
-    `</div>`;
+  // PF2e's own threat line reads the standard XP table (pf2e-flatten does not
+  // switch the system's PWoL variant on), so beside this strip it would rate the
+  // same fight differently. The strip replaces it while it is drawn.
+  if (model) root.querySelector("section.metrics")?.setAttribute("hidden", "");
 
-  // Insert above the combatant list when possible, else at the top of the tracker.
   const list = root.querySelector("ol.combat-tracker, ol.directory-list, .combat-tracker");
-  if (list && list.parentElement) {
-    list.parentElement.insertBefore(badge, list);
-  } else {
-    root.prepend(badge);
-  }
+  if (list?.parentElement) list.parentElement.insertBefore(strip, list);
+  else root.prepend(strip);
 }
+
+/** The threat keys, re-exported for callers that only want the order. */
+export { THREAT_ORDER };
