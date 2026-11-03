@@ -42,6 +42,13 @@ export function wallDocOf(edge) {
   return null;
 }
 
+/** Does this WallState (view/snapshot.mjs) stop sight? Windows and terrain walls do not here. */
+export function blocksSightWall(w) {
+  if (!w?.a || !w?.b) return false;
+  if (w.type === "wall") return true;
+  return (w.type === "door" || w.type === "secret") && w.door !== "open";
+}
+
 /**
  * Can a mover get past a wall it crosses? Only when its feet where it crosses
  * are within a step of the top: a low rail stepped over, or flying above it.

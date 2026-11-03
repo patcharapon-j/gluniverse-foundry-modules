@@ -415,14 +415,19 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   foot, middle and top past the ground and the walls (`columnSeen`,
   `view/props-seen.mjs`), so a tree whose crown clears the lip draws while the
   ground under it stays hidden. **Dead ground** goes the other way: the sight
-  polygon cuts only ground that rises above the eye, so the floor at the foot of
-  a block, or below the ledge a viewer stands on, is inside it while a creature
-  standing there is hidden by the 3D test. The bake asks each patch (half a
-  square) the way it asks about a token: a medium creature standing on it, its
-  feet, middle and head marched from every token viewer's eye past the terrain
+  polygon cuts only ground that rises above the eye and drops every wall whose
+  top is below the eye, so the floor at the foot of a block, below the ledge a
+  viewer stands on, or just behind a fence it looks over is inside it, though
+  nobody could see that floor. The bake asks each patch (half a square) whether
+  its floor is seen: a ray from every token viewer's eye to `GROUND_LIFT` above
+  the ground (the lowest feet any creature has), marched past the terrain and
+  under the tops of the low walls that viewer's polygon dropped
   (`view/dead-ground.mjs`). A patch no viewer sees that way loses "visible now"
-  and keeps "explored", so it takes the remembered look. 3D only: the 2D map is
-  unchanged. The gap is filled by
+  and keeps "explored", so it takes the remembered look. It needs no creature
+  size: raising a ray's far end raises all of it, so floor that is seen means
+  any creature standing there is seen past the terrain, and a tall one on dead
+  ground can still show over the lip. 3D only: the 2D map is unchanged. The gap
+  is filled by
   a mist backdrop: a box over the board's footprint, from the plinth to above
   the highest ground anyone has seen or explored, drawn from inside at the far
   plane. Its top reads only seen ground (`fogSeenTop`), so the mist never

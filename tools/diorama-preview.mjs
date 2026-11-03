@@ -44,6 +44,7 @@
  *               a pine at its lip seen in 3D (seen=0: as the bake alone draws it);
  *               unseen=wall  the walled room's inside never seen (the mist ends on its walls);
  *               unseen=dead  the knight on the plateau: the ground at its foot is dead ground
+ *               (dead=rogue: seen from the rogue on the grass)
  *   tower=1     a 50 ft tower in the far corner (hidden under unseen=wide)
  *   reach=1     the rogue's movement range, stepping round the other creatures
  *   props=1     the props gallery (every shape, every material, a stack, cards,
@@ -348,8 +349,11 @@ function visionCanvas() {
   if (Q.get("unseen") === "dead") {
     g.fillStyle = "rgb(255,255,0)"; g.fillRect(0, 0, c.width, c.height);
     const all = { contains: () => true, getBounds: () => ({ x: 0, y: 0, width: COLS * 100, height: ROWS * 100 }) };
-    const eye = 8 + (0.9 * 6 * 4) / 5;
-    const dead = deadGround({ terrain, grid: { size: 100, distance: 5 }, viewers: [{ eye, origin: knightAt, fov: all }] });
+    // dead=rogue: from the rogue on the grass instead (the stairs from below, the fence)
+    const fromRogue = Q.get("dead") === "rogue";
+    const eye = (fromRogue ? 0 : 8) + (0.9 * 6 * 4) / 5;
+    const dead = deadGround({ terrain, grid: { size: 100, distance: 5 }, walls: walls(),
+      viewers: [{ eye, origin: fromRogue ? rogueAt : knightAt, fov: all }] });
     g.globalCompositeOperation = "multiply"; g.fillStyle = "rgb(0,255,255)";
     for (const [si, sj] of dead) g.fillRect((sj * k) / SUB, (si * k) / SUB, k / SUB, k / SUB);
     g.globalCompositeOperation = "source-over";

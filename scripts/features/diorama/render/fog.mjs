@@ -41,6 +41,7 @@ import * as THREE from "./three.mjs";
 import { MATERIALS } from "./materials.mjs";
 import { FOG_LAYERS, FOG_RAY_TAPS } from "./glsl.mjs";
 import { TIMING } from "../constants.mjs";
+import { blocksSightWall } from "../terrain/wall-top.mjs";
 
 export { FOG_LAYERS };
 /** The soft map's resolution, px per cell. */
@@ -197,12 +198,8 @@ export function fogEdge(rgba, w, h, grow, soften) {
 /** Cells either side of a sight-blocking wall where the soft map keeps to the bake (fogWallHold). */
 export const FOG_WALL_HOLD = 1.5;
 
-/** Does this WallState stop sight (and so end the view on its own line)? */
-export function blocksSightWall(w) {
-  if (!w?.a || !w?.b) return false;
-  if (w.type === "wall" || w.type === "secret") return true;
-  return w.type === "door" && w.door !== "open";
-}
+/** A WallState that stops sight ends the view on its own line (terrain/wall-top.mjs). */
+export { blocksSightWall };
 
 /**
  * How near each soft-map texel is to a sight-blocking wall, 0..1: 1 on the

@@ -118,7 +118,7 @@ export class Baker {
    * @param {{cols:number, rows:number, size:number}} o.grid
    * @param {() => ("own"|"players"|null)} o.mode   vision mode
    * @param {() => boolean} [o.known]   the players know the layout: the whole board counts as explored
-   * @param {() => ({terrain:object, grid:object}|null)} [o.ground]  the view's absolute terrain, for dead ground
+   * @param {() => ({terrain:object, grid:object, walls?:object[]}|null)} [o.ground]  the view's absolute terrain and walls, for dead ground
    * @param {(result:{darkness:number, light:HTMLCanvasElement, vision:HTMLCanvasElement|null, sources:object[]}) => void} o.onBaked
    */
   constructor({ grid, mode, known = () => false, ground = () => null, onBaked }) {
@@ -308,7 +308,7 @@ export class Baker {
       if (v.doc?.documentName === "Token") { try { eye = eyeQ(v.doc, g.grid); } catch { eye = null; } }
       return { ...v, eye: Number.isFinite(eye) && v.origin ? eye : null };
     });
-    const dead = deadGround({ terrain: g.terrain, grid: g.grid, viewers, lit: this.lit });
+    const dead = deadGround({ terrain: g.terrain, grid: g.grid, viewers, walls: g.walls ?? [], lit: this.lit });
     if (!dead.length) return;
     const ctx = this.vision.getContext("2d");
     const b = this.ppc / SUB;

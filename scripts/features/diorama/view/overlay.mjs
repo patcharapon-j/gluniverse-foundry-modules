@@ -265,7 +265,7 @@ async function mount(scene) {
     grid: S.grid,
     mode: visionMode,
     known: () => !!S.scene?.getFlag?.(SUITE_ID, FLAG_KNOWN),
-    ground: () => (S.terrain && S.grid ? { terrain: S.terrain, grid: S.grid } : null),
+    ground: () => (S.terrain && S.grid ? { terrain: S.terrain, grid: S.grid, walls: S.walls ?? [] } : null),
     onBaked: (res) => { S.lighting = res; mark("lighting"); if (S.asPlayers) mark("tokens"); },
   });
   S.seq = new SequencerMirror({ onChange: () => mark("effects"), groundQ });

@@ -449,8 +449,8 @@ export default async function check(ctx) {
   ctx.ok("props: asked in px and distance units, never for ghosts, slabs or seen ground",
     asked.length === 2 && JSON.stringify(asked[0]) === JSON.stringify([100, 250, 20, 15]), JSON.stringify(asked));
 
-  // Dead ground (view/dead-ground.mjs): ground the polygon shows where a creature
-  // standing would be hidden, tested like one, is dimmed in the 3D bake.
+  // Dead ground (view/dead-ground.mjs): floor the polygon shows and no viewer
+  // sees (past the terrain and past low walls it looks over) is dimmed in the 3D bake.
   const { deadGround } = await import(ctx.url("scripts/features/diorama/view/dead-ground.mjs"));
   const everywhere = { contains: () => true, getBounds: () => ({ x: 0, y: 0, width: 600, height: 600 }) };
   const onTop = { eye: topEye, origin: { x: 125, y: 250 }, fov: everywhere };
@@ -460,15 +460,32 @@ export default async function check(ctx) {
     !deadKeys.has("5,11") && !deadKeys.has("5,0") && !deadKeys.has("5,3"), [...deadKeys].join(" "));
   ctx.ok("dead ground: the same patch a creature there is hidden on",
     !sb.targetInClearLine(hillLive, topEye, { x: 125, y: 250 }, { x: 225, y: 275 }, 0, 6));
+  ctx.ok("dead ground: it is the floor, whatever stands there (a head clears the lip, the floor is still dead)",
+    deadKeys.has("5,8") && sb.targetInClearLine(hillLive, topEye, { x: 125, y: 250 }, { x: 425, y: 275 }, 0, 6), [...deadKeys].join(" "));
+  // A fence the eye looks over (the polygon dropped it) hides the floor just behind it.
+  const flat = Terrain.blank(6, 6);
+  const lowEyeQ = eyeQ(tok(0), grid);
+  const atFoot = { eye: lowEyeQ, origin: { x: 50, y: 275 }, fov: everywhere };
+  const fenceAt = (x, topQ, extra = {}) => ({ a: [x, 0], b: [x, 600], type: "wall", door: "none", baseQ: 0, topQ, ...extra });
+  const behind = (walls) => new Set(deadGround({ terrain: flat, grid, viewers: [atFoot], walls }).map(([si, sj]) => `${si},${sj}`));
+  const fenced = behind([fenceAt(300, 2)]);
+  ctx.ok("dead ground: the floor just behind a fence the eye looks over is dead, further out is not",
+    fenced.has("5,7") && !fenced.has("5,11") && !fenced.has("5,5"), [...fenced].join(" "));
+  ctx.ok("dead ground: a wall through the patch itself does not dim it",
+    !behind([fenceAt(325, 2)]).has("5,6"));
+  ctx.ok("dead ground: a wall the eye cannot see over is left to the polygon, an open door blocks nothing",
+    behind([fenceAt(300, 8)]).size === 0 && behind([fenceAt(300, 2, { type: "door", door: "open" })]).size === 0
+      && behind([fenceAt(300, 2, { type: "secret", door: "open" })]).size === 0 && behind([fenceAt(300, 2, { type: "secret", door: "closed" })]).has("5,7"));
   ctx.ok("dead ground: a viewer that is not a token keeps what it shows",
     deadGround({ terrain: hill, grid, viewers: [onTop, { eye: null, origin: { x: 125, y: 250 }, fov: everywhere }] }).length === 0);
   ctx.ok("dead ground: only ground a polygon shows is asked about",
-    deadGround({ terrain: hill, grid, viewers: [{ ...onTop, fov: { contains: (x) => x > 400, getBounds: everywhere.getBounds } }] }).length === 0);
+    deadGround({ terrain: hill, grid, viewers: [{ ...onTop, fov: { contains: (x) => x > 500, getBounds: everywhere.getBounds } }] }).length === 0);
   ctx.ok("dead ground: a flat map is never dead",
     deadGround({ terrain: Terrain.blank(6, 6), grid, viewers: [{ ...onTop, eye: eyeQ(tok(0), grid) }] }).length === 0);
-  ctx.ok("dead ground: the bake dims it and passes the terrain (view/bake.mjs, view/overlay.mjs)",
+  ctx.ok("dead ground: the bake dims it and passes the terrain and walls (view/bake.mjs, view/overlay.mjs)",
     /dimDeadGround\(\)/.test(readFileSync(join(ctx.root, "scripts/features/diorama/view/bake.mjs"), "utf8"))
-      && /ground: \(\) => \(S\.terrain && S\.grid/.test(readFileSync(join(ctx.root, "scripts/features/diorama/view/overlay.mjs"), "utf8")));
+      && /walls: g\.walls/.test(readFileSync(join(ctx.root, "scripts/features/diorama/view/bake.mjs"), "utf8"))
+      && /ground: \(\) => \(S\.terrain && S\.grid \? \{ terrain: S\.terrain, grid: S\.grid, walls: S\.walls/.test(readFileSync(join(ctx.root, "scripts/features/diorama/view/overlay.mjs"), "utf8")));
 
   // Walls have the top the 3D view draws: an eye above it sees over.
   const wallDoc = (c, flags = {}) => ({ documentName: "Wall", id: "w", c, flags });
