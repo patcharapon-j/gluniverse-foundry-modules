@@ -451,7 +451,8 @@ const DELIVER = {
   rake: (s, M, ctx) => melee(s, M, ctx, {
     name: "rake", at: 0.22, cf: 1, period: 2.2, glint: false,
     stroke(s2, A, T, { flip, big, sc, F }) {
-      const L = 22 * sc * (big ? 1.15 : 1), tear = tearOf(M, F);
+      // a miss tears only air: no blood on a claw that never touched anyone
+      const L = 22 * sc * (big ? 1.15 : 1), tear = A.miss ? M.R : tearOf(M, F);
       for (let k = -1; k <= 1; k++) s2.add({ k: "mlGash", ...at3(A, T, 0.6), lane: k, gap: 5.5 * sc, L: L * (k ? 0.82 : 1), w: 2 * Math.min(1.3, sc), flip, life: 8 / 12, R: M.R, tear, wait: (k + 1) * 0.02 });
     },
     land: { blood: true },
