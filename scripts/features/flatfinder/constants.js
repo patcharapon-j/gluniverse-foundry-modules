@@ -60,6 +60,9 @@ export const PWL_DIFF_MAX = 7;
 /**
  * Standard PF2e encounter budget, expressed for a party of 4 with the
  * per-extra-character adjustment that scales the budget for other party sizes.
+ * PF2e's own `generateEncounterBudgets` states the same table as a fraction of
+ * 20 XP per character (x0.5, x0.75, x1, x1.5, x2); tools/flatfinder-check.mjs
+ * holds the two equal for every party size.
  */
 export const ENCOUNTER_BUDGET = {
   trivial: { base: 40, perPc: 10 },
@@ -68,4 +71,46 @@ export const ENCOUNTER_BUDGET = {
   severe: { base: 120, perPc: 30 },
   extreme: { base: 160, perPc: 40 },
 };
+
+/** The five threat ratings, mildest first. Keys are i18n (`Encounter.Severity.*`) and data. */
+export const THREAT_ORDER = Object.freeze(["trivial", "low", "moderate", "severe", "extreme"]);
+
+/** The party size the budget table is written for. */
+export const BASE_PARTY = 4;
+
+/**
+ * A simple hazard is worth a fifth of a creature of its level. That is the exact
+ * ratio between PF2e's simple-hazard and creature XP tables, applied here to the
+ * Proficiency-without-Level creature table; complex hazards count as creatures.
+ */
+export const SIMPLE_HAZARD_FACTOR = 0.2;
+
+/** Flatfinder counts an Elite creature as 2 levels higher and a Weak one 2 lower. */
+export const ELITE_WEAK_SHIFT = 2;
+
+/**
+ * Flatfinder's incapacitation rule: a target that outlevels the source gains an
+ * untyped bonus of twice the difference, capped, and a spell counts as twice
+ * its rank.
+ */
+export const INCAP_BONUS_PER_LEVEL = 2;
+export const INCAP_BONUS_MAX = 10;
+export const SPELL_LEVEL_PER_RANK = 2;
+
+/**
+ * How recent a chat card must be for its badge to play its entrance. Older
+ * cards (the log on load, a re-render) draw settled. Not an animation length:
+ * the entrance itself runs on the suite's duration tokens.
+ */
+export const FRESH_CARD_MS = 6000;
+
+/** Every setting this feature registers, unprefixed (the key is `ff.<name>`). */
+export const SETTING_KEYS = Object.freeze([
+  "competenceBadge",
+  "incapacitation",
+  "flattenDc",
+  "eliteWeakLevel",
+  "encounterBudget",
+  "planner",
+]);
 
