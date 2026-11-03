@@ -7,7 +7,7 @@
  */
 
 import { Suite } from "../../core/registry.mjs";
-import { registerSettings, onInit, onReady } from "./flatfinder.js";
+import { api, registerSettings, onInit, onReady } from "./flatfinder.js";
 
 Suite.register({
   id: "flatfinder",
@@ -31,6 +31,9 @@ Suite.register({
   onReady() {
     onReady();
   },
+
+  // `openPlanner()` refuses non-GMs and does nothing until a GM calls it.
+  api,
 
   legacy: {
     id: "pf2e-flatfinder",

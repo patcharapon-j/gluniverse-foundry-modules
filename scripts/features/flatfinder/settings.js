@@ -67,6 +67,7 @@ export function registerSettings() {
     type: Boolean,
     default: true,
     requiresReload: false,
+    onChange: redrawEncounter,
   });
 
   game.settings.register(MODULE_ID, ffKey("encounterBudget"), {
@@ -77,5 +78,27 @@ export function registerSettings() {
     type: Boolean,
     default: true,
     requiresReload: false,
+    onChange: redrawEncounter,
   });
+
+  // The encounter planner's working state: one plan per GM client, never shown
+  // in a settings sheet. Read and written only through planner-store.mjs.
+  game.settings.register(MODULE_ID, ffKey("planner"), {
+    scope: "client",
+    config: false,
+    type: Object,
+    default: {},
+  });
+}
+
+/**
+ * Settings that change what the tracker strip says redraw it. A re-render of
+ * the combat tracker is harmless with the feature off: nothing draws the strip.
+ */
+function redrawEncounter() {
+  try {
+    globalThis.ui?.combat?.render?.();
+  } catch {
+    /* the sidebar is not up yet */
+  }
 }

@@ -35,21 +35,24 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FEATURE = join(ROOT, "scripts/features/pf2e-variant-rules");
+// import() takes a URL: a bare Windows path ("C:\...") is refused as an unknown scheme.
+const url = (...parts) => pathToFileURL(join(...parts)).href;
 
 const problems = [];
 const fail = (msg) => problems.push(msg);
-const read = (p) => readFileSync(join(ROOT, p), "utf8");
+// LF only: several checks slice a function body on "\n}\n", which a CRLF checkout never contains.
+const read = (p) => readFileSync(join(ROOT, p), "utf8").replace(/\r\n/g, "\n");
 
 /* ── 1. Pure rule logic ──────────────────────────────────────────────────── */
 
-const rules = await import(join(FEATURE, "rules.mjs"));
+const rules = await import(url(FEATURE, "rules.mjs"));
 const { chipTriggers, chipAmount, chipBasis, resolveChip, dentsFromDamage, dentThresholds, dentState, hpForDents, dentsRepaired, carefulQualifies, woundPenalties } = rules;
-const { DEFAULT_DENT_CONFIG } = await import(join(FEATURE, "constants.mjs"));
+const { DEFAULT_DENT_CONFIG } = await import(url(FEATURE, "constants.mjs"));
 
 // Chip fires on the highest no-damage degree and nowhere else.
 if (!chipTriggers("attack-roll", "failure")) fail("chip: a missed Strike must trigger chip damage");
@@ -296,7 +299,7 @@ if (!/max\s*>\s*0/.test(codeOf("setDents"))) {
    that just reads `system.hardness` is therefore a resolver that says a solid
    adamantine greatsword is exactly as tough as a wooden spoon. */
 {
-  const { hardnessOf, materialHardness, HARDNESS_SOURCE } = await import(join(FEATURE, "hardness.mjs"));
+  const { hardnessOf, materialHardness, HARDNESS_SOURCE } = await import(url(FEATURE, "hardness.mjs"));
 
   // These are PF2e's own numbers, not ours; a drift here is a silent lie about
   // the system's data.
@@ -515,7 +518,7 @@ if (!/check\.push\(/.test(woundsSrc)) {
 
 /* ── 5. Prefix routing ───────────────────────────────────────────────────── */
 
-const { PREFIX, RULES, SETTINGS } = await import(join(FEATURE, "constants.mjs"));
+const { PREFIX, RULES, SETTINGS } = await import(url(FEATURE, "constants.mjs"));
 const childPrefixes = Object.values(RULES).map((r) => r.prefix);
 
 for (const p of childPrefixes) {
@@ -615,9 +618,9 @@ for (const m of css.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)) {
 /* ── 9. Boss Creatures ───────────────────────────────────────────────────── */
 
 const BOSS = join(FEATURE, "boss");
-const bossRules = await import(join(BOSS, "rules.mjs"));
-const bossData = await import(join(BOSS, "data.mjs"));
-const bossPlacement = await import(join(BOSS, "initiative.mjs"));
+const bossRules = await import(url(BOSS, "rules.mjs"));
+const bossData = await import(url(BOSS, "data.mjs"));
+const bossPlacement = await import(url(BOSS, "initiative.mjs"));
 const {
   TIERS,
   bossLevel,
@@ -992,7 +995,7 @@ for (const [element, damage] of Object.entries(INFUSED)) {
 /* 9g. Downfall triggers, tiers and settings, all built at runtime. */
 
 for (const trigger of Object.values(bossData.ABILITIES.length ? {} : {})) void trigger;
-const bossConstants = await import(join(BOSS, "constants.mjs"));
+const bossConstants = await import(url(BOSS, "constants.mjs"));
 for (const trigger of Object.values(bossConstants.DOWNFALL_TRIGGER)) {
   if (!bossLang[`GLVR.boss.trigger.${trigger}`]) fail(`boss: downfall trigger '${trigger}' has no label`);
   if (!bossLang[`GLVR.boss.triggerHint.${trigger}`]) fail(`boss: downfall trigger '${trigger}' has no hint`);

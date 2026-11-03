@@ -42,7 +42,7 @@
   "GLS.feature.initiative.title": "Initiative",
   "GLS.feature.initiative.hint": "Premium combat initiative tracker overlay with condition badges and turn markers.",
   "GLS.feature.flatfinder.title": "Flatfinder (PF2e)",
-  "GLS.feature.flatfinder.hint": "Surfaces flat-footed / off-guard conditions and competence in PF2e combat.",
+  "GLS.feature.flatfinder.hint": "Proficiency without Level tools: competence bands on skill checks, Flatfinder's incapacitation rule, flattened item DCs, and a PWoL threat strip and encounter planner.",
   "GLS.feature.destiny-dice.title": "Destiny Dice (PF2e)",
   "GLS.feature.destiny-dice.hint": "A cinematic Destiny/Fate die for PF2e checks and rerolls.",
   "GLS.feature.insight.title": "Insight",
