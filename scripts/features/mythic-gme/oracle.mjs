@@ -69,7 +69,8 @@ export function meaningEntry(table, { rng = Math.random, actions1 = null } = {})
 
 export function elementEntry(id, rng = Math.random) {
   const r = rollElement(id, rng);
-  return r ? { kind: "element", ...r } : null;
+  // The table's id is `table`: an entry's own `id` is the one `stamp` gives it.
+  return r ? { kind: "element", table: r.id, name: r.name, roll: r.roll, word: r.word } : null;
 }
 
 /** Test the expected scene. An altered scene rolls its adjustment, an interrupted one its event. */
@@ -103,7 +104,7 @@ export function listEntry(list, entries, rng = Math.random) {
 export function stamp(entry, { now = Date.now(), rng = Math.random } = {}) {
   if (!entry) return null;
   const id = `m${now.toString(36)}${Math.floor(rng() * 1e6).toString(36)}`;
-  return { v: ENTRY_VERSION, id, at: now, ...entry };
+  return { ...entry, v: ENTRY_VERSION, id, at: now };
 }
 
 /* ── reading the log back ────────────────────────────────────────────────── */
@@ -186,7 +187,7 @@ export function normalizeEntry(raw, index = 0) {
     case "element": {
       const roll = int(raw.roll, 1, 100);
       if (roll == null || !raw.word) return null;
-      return { ...base, kind: "element", id: str(raw.id, 60), name: str(raw.name || elementById(raw.id)?.name, 80), roll, word: str(raw.word, 80) };
+      return { ...base, kind: "element", table: str(raw.table, 60), name: str(raw.name || elementById(raw.table)?.name, 80), roll, word: str(raw.word, 80) };
     }
     case "scene": {
       const roll = int(raw.roll, 1, 10);

@@ -264,6 +264,28 @@ ok(new Set(LOG.map((e) => e.id)).size === LOG.length, "log ids are unique");
 ok(O.normalizeLog(Array.from({ length: 80 }, () => SAMPLE[2])).length === C.LOG_MAX, "the log keeps 50");
 ok(O.normalizeLog([SAMPLE[0], SAMPLE[0]]).map((e) => e.id).filter((v, i, a) => a.indexOf(v) === i).length === 2, "duplicate ids are separated");
 for (const k of O.KINDS) ok(LOG.some((e) => e.kind === k), `the sample covers kind "${k}"`);
+{
+  // The same table rolled twice is two entries, each found by its own id
+  // (the panel's post buttons resolve a card by id).
+  const a = stamp(O.elementEntry("locations", scripted([1], [100])), 50);
+  const b = stamp(O.elementEntry("locations", scripted([100], [100])), 51);
+  const log = O.normalizeLog([b, a]);
+  ok(a.id !== "locations" && a.id !== b.id, "an elements entry keeps its stamped id");
+  eq(log.find((e) => e.id === a.id)?.word, CAT.elementById("locations").entries[0], "an older roll of a repeated table resolves to itself");
+  ok(log[1]?.table === "locations", "an elements entry names its table separately");
+}
+{
+  // An Actions read without Table 1 says so wherever it lands, chat included.
+  const ev = stamp(O.eventEntry({ rng: scripted([90, 5], [100, 100]) }), 60);
+  const fate = stamp(O.askFate({ oddsId: "likely", cf: 6, rng: scripted([22, 90, 5], [100, 100, 100]) }), 61);
+  for (const e of [ev, fate]) {
+    const v = M.entryView(O.normalizeEntry(e));
+    ok(v.note?.k === "GLMYTHIC.meaning.missing", `a ${e.kind} with an Actions read lacking Table 1 carries the notice`);
+    ok(RE.chatHTML(v, (k) => k).includes("GLMYTHIC.meaning.missing"), `the ${e.kind} chat card prints the notice`);
+  }
+  const linked = stamp(O.eventEntry({ rng: scripted([90, 5, 5], [100, 100, 3]), actions1: ["a", "b", "c"] }), 62);
+  ok(!M.entryView(O.normalizeEntry(linked)).note, "a linked Table 1 carries no notice");
+}
 
 /* ── 9. i18n: every key any model can produce, and every literal ─────────── */
 
