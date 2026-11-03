@@ -16,6 +16,7 @@
  *   r.setOverlays({ path, cells, ruler, pings, hover, reach, los, falls });   // shapes: overlays.mjs
  *   r.setAreas(AreaState[]);                     // spell areas as volumes: areas.mjs
  *   r.setEffects(EffectState[]);
+ *   r.setPixelSource({ frame(view) } | null);    // per-frame pixel effects (Spellsprite), see setPixelSource
  *   r.setLinks([{ sourceId, targetId, color:[r,g,b] }]);   // target lines, chest → base
  *   r.setCamera({ yawStep, pitchIndex, zoom, target }, { animate });
  *   r.getCamera();
@@ -158,6 +159,10 @@ export class DioramaRenderer {
     this._casters = [this.standees.casters, this.props.casters, this.tiles.casters];
     /** Reused every frame: what the standees need from the view. */
     this._standeeFrame = { pxWorld: 0.01, markers: true, life: true, dust: true, hover: true };
+    /** The per-frame pixel effects (setPixelSource), and the view it is handed (reused). */
+    this.pixelSource = null;
+    this._pixelView = { yaw: 0, pitch: 0, rx: 1, ry: 0, fx: 0, fy: -1, pxWorld: 0.01, size: 100, now: 0 };
+    this._pixelWarned = false;
 
     this.rig = new CameraRig();
     this.shadow = new ShadowPass(this.shared);
@@ -428,6 +433,52 @@ export class DioramaRenderer {
   }
 
   /**
+   * Pixel effects painted per frame from the camera (integrations/spellsprite.mjs).
+   * `src.frame(view)` is asked once per drawn frame with
+   * `{ yaw, pitch, rx, ry, fx, fy, pxWorld, size, now }` (the eased camera: its
+   * right and away vectors across the map, scene axes; world cells per device
+   * px) and returns `{ live, effects: pixel EffectState[], react, shake }`:
+   * `react(id, x, z)` per standee (render/standees.mjs setReactions), `shake`
+   * {x, y} cells along the screen. While `live` the loop keeps drawing (and
+   * holds the motion claim); an idle source costs one call per frame that some
+   * other change asked for, and nothing at all otherwise.
+   * @param {{frame:(view:object) => object}|null} src
+   */
+  setPixelSource(src) {
+    this.pixelSource = src && typeof src.frame === "function" ? src : null;
+    if (!this.pixelSource) {
+      this.effects.setPixels([]);
+      this.effects.pixelLive = false;
+      this.standees.setReactions(null);
+      this.rig.setShake(0, 0);
+    }
+    this.requestRender();
+  }
+
+  /** Ask the pixel source for this frame. @returns {boolean} live */
+  pixelFrame(now, pxWorld) {
+    const src = this.pixelSource;
+    if (!src) return false;
+    const v = this._pixelView, yaw = this.rig.view.yaw, pitch = this.rig.view.pitch;
+    // camera at target + (sin yaw, ·, cos yaw): right across the map is (cos, −sin), away (−sin, −cos)
+    v.yaw = yaw; v.pitch = pitch;
+    v.rx = Math.cos(yaw); v.ry = -Math.sin(yaw);
+    v.fx = -Math.sin(yaw); v.fy = -Math.cos(yaw);
+    v.pxWorld = pxWorld; v.size = this.grid.size || 100; v.now = now;
+    let out = null;
+    try { out = src.frame(v); } catch (e) {
+      if (!this._pixelWarned) { this._pixelWarned = true; console.error("GLUniverse Suite | diorama pixel effects failed", e); }
+      out = null;
+    }
+    const live = !!out?.live;
+    this.effects.setPixels(out?.effects ?? []);
+    this.effects.pixelLive = live;
+    this.standees.setReactions(out?.react ?? null);
+    this.rig.setShake(Number(out?.shake?.x) || 0, Number(out?.shake?.y) || 0);
+    return live;
+  }
+
+  /**
    * @param {{yawStep?:number, pitchIndex?:number, zoom?:number, target?:{x:number,y:number,zQ:number}}} state
    * @param {{animate?:boolean}} [o]
    */
@@ -687,6 +738,8 @@ export class DioramaRenderer {
     this.props.pxWorld = sf.pxWorld;
     sf.markers = fx.markers;
     sf.life = fx.life; sf.dust = fx.dust; sf.hover = fx.hover;
+    // pixel effects paint from this camera, before the figures they strike take their pose
+    if (this.pixelFrame(t, sf.pxWorld)) active = true;
     if (this.standees.frame(t, this.rig.camera, yaw, sway, sf)) active = true;
     if (this.standees.castersDirty) { this.standees.castersDirty = false; this.shadow.dirty = true; }
     if (sway) active = true;

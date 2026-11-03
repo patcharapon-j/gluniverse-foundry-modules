@@ -224,6 +224,8 @@ export const MATERIALS = {
         uOutline: { value: new THREE.Vector4(...hexToRgbFloat(PALETTE.ink0), 2) },
         uGlow: { value: 0 },
         uMode: { value: mode === "xray" ? 1 : mode === "glow" ? 2 : 0 },
+        uReact: { value: new THREE.Vector4(1, 1, 1, 0) },
+        uReactTint: { value: new THREE.Vector4(0, 0, 0, 0) },
       }),
     });
     if (mode === "card") {
@@ -263,6 +265,31 @@ export const MATERIALS = {
       transparent: true,
       depthWrite: false,
       depthTest,
+      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      side: THREE.DoubleSide,
+    });
+  },
+
+  /**
+   * Pixel art (render/effects.mjs "pixel-*"): NORMAL alpha blending, so an
+   * outline or a smoke underside darker than the ground stays dark; additive
+   * only for the light layer. The texture's own filters are NEAREST (set where
+   * it is made); depth tested, never written, so it sorts with the other
+   * transparent things.
+   */
+  pixel(_shared, { map = null, additive = false, opacity = 1 } = {}) {
+    return new THREE.ShaderMaterial({
+      name: additive ? "dio.pixel.light" : "dio.pixel",
+      vertexShader: PROGRAMS.pixel.vertex,
+      fragmentShader: PROGRAMS.pixel.fragment,
+      uniforms: {
+        uTex: { value: map },
+        uBox: { value: new THREE.Vector4(1, 1, 0, 0) },
+        uOpacity: { value: opacity },
+      },
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
       blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
       side: THREE.DoubleSide,
     });
@@ -617,7 +644,7 @@ export const MATERIALS = {
 /** Which program each factory compiles (for the check tool). */
 export const MATERIAL_PROGRAM = Object.freeze({
   top: "top", side: "side", water: "water", wall: "wall", card: "card", solid: "solid",
-  unlit: "unlit", ring: "ring", glass: "glass", footprint: "footprint", reticle: "reticle", link: "link", ribbon: "ribbon", backdrop: "backdrop", table: "table", depth: "depth", blur: "blur",
+  unlit: "unlit", pixel: "pixel", ring: "ring", glass: "glass", footprint: "footprint", reticle: "reticle", link: "link", ribbon: "ribbon", backdrop: "backdrop", table: "table", depth: "depth", blur: "blur",
   particles: "particles", splash: "splash",
   fog: "fog", fogBackdrop: "fogBackdrop", flame: "flame", ember: "ember", torchShadow: "torchShadow",
 });
