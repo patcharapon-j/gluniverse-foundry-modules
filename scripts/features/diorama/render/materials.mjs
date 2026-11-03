@@ -54,6 +54,10 @@ export function createShared() {
     uUseVision: { value: 0 },
     uWorldSize: { value: new THREE.Vector2(1, 1) },
     uAmbient: { value: 1 },
+    // 0 by day, 1 at night: the darker of Foundry's darkness and the hour's, eased.
+    // The fog of war's readability floors read it (glsl.mjs dioNightness), not
+    // uAmbient, which a quieter floor below the viewed Level dims on its own.
+    uNight: { value: 0 },
     // A low sun (≈38° up) from the back-left of the default view: long cast
     // shadows, and lit and shaded faces of every block read apart. The
     // environment moves it with the time of day (atmosphere.mjs).

@@ -375,6 +375,18 @@ export class DioramaRenderer {
   }
 
   /**
+   * The scene's light from the darker of Foundry's darkness and the hour's:
+   * uAmbient, and uNight (0 by day, 1 at night, eased; the fog of war's
+   * readability floors follow it, glsl.mjs dioNightness).
+   */
+  applyAmbient() {
+    const d = Math.max(this._darkness ?? 0, this.env?.darkness ?? 0);
+    this.shared.uAmbient.value = 1 - d * 0.85;
+    const t = Math.max(0, Math.min(1, (d - 0.3) / 0.52));
+    this.shared.uNight.value = t * t * (3 - 2 * t);
+  }
+
+  /**
    * `sources`: the lights in the bake, as plain data (view/bake.mjs
    * lightData): what flickers, burns and shades (render/torches.mjs).
    * @param {{darkness?:number, light?:HTMLCanvasElement|null, vision?:HTMLCanvasElement|null, sources?:object[]}} o
@@ -384,8 +396,7 @@ export class DioramaRenderer {
     this.fog.setVision(vision);
     const d = Math.max(0, Math.min(1, Number(darkness) || 0));
     this._darkness = d;
-    // the darker of Foundry's darkness and the hour's
-    this.shared.uAmbient.value = 1 - Math.max(d, this.env?.darkness ?? 0) * 0.85;
+    this.applyAmbient();
     this.lightTex = this.swapWorldTexture(this.lightTex, light);
     this.shared.uLightMap.value = this.lightTex ?? this._blank.light;
     this.visionTex = this.swapWorldTexture(this.visionTex, vision);
@@ -504,7 +515,7 @@ export class DioramaRenderer {
     if (!this.atmosphere.setEnvironment(env ?? null) && this._envSet) return;
     this._envSet = true;
     this.env = env ?? null;
-    this.shared.uAmbient.value = 1 - Math.max(this._darkness ?? 0, this.env?.darkness ?? 0) * 0.85;
+    this.applyAmbient();
     this.props.setEnvironment?.(this.env);
     this.shadow.dirty = true;
     this.requestRender();

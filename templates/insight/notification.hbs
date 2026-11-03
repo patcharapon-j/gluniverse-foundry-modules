@@ -23,7 +23,8 @@
           <span class="insight-tag-mark" aria-hidden="true"></span>
           <span class="insight-sense" id="{{id}}-sense">{{#if sense}}{{sense}}{{else}}{{localize "INSIGHT.SenseDefault"}}{{/if}}</span>
         </div>
-        <div class="insight-private">{{localize "INSIGHT.Private"}}</div>
+        {{!-- "Only you", unless the GM chose to say who else got the same card. --}}
+        <div class="insight-private">{{#if shared}}{{shared}}{{else}}{{localize "INSIGHT.Private"}}{{/if}}</div>
       </header>
 
       {{#if title}}

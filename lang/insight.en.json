@@ -38,5 +38,17 @@
   "INSIGHT.ComposeAllPlayers": "All players",
   "INSIGHT.ComposeNobody": "Nobody else is connected.",
   "INSIGHT.ComposeLabel": "Label",
-  "INSIGHT.ComposeSentCount": "Sent to {count}"
+  "INSIGHT.ComposeSentCount": "Sent to {count}",
+  "INSIGHT.ComposeSendCount": "Send to {count}",
+  "INSIGHT.ComposePickSelected": "Selected",
+  "INSIGHT.ComposePickSelectedHint": "Add the players who own the tokens you have selected.",
+  "INSIGHT.ComposePickTargets": "Targets",
+  "INSIGHT.ComposePickTargetsHint": "Add the players who own the tokens you have targeted.",
+  "INSIGHT.ComposePickNone": "None",
+  "INSIGHT.ComposePickNoTokens": "Select or target some tokens first.",
+  "INSIGHT.ComposePickNoOwners": "None of those tokens belong to a connected player.",
+  "INSIGHT.ComposeShared": "Show who else got it",
+  "INSIGHT.ComposeSharedHint": "Each card names the other people you sent it to, instead of saying \"Only you\". Needs two or more people.",
+  "INSIGHT.SharedWith": "With {names}",
+  "INSIGHT.SharedWithCount": "With {count} others"
 }

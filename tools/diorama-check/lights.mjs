@@ -426,6 +426,43 @@ export default async function check(ctx) {
   ctx.ok("the edge of sight is soft over a fraction of a square, and a thin wedge still reads as unseen",
     edge.ok && vRead && Fg.FOG_EDGE_GROW > 0 && Fg.FOG_EDGE_GROW <= 0.5 && Fg.FOG_EDGE_SOFT > 0 && Fg.FOG_EDGE_SOFT <= 0.5,
     JSON.stringify({ ...edge, vRead }));
+  // Seen, remembered and unseen read apart on a night board (issue #168): each
+  // state held to its own band above the mist, driven by uNight (never
+  // uAmbient, which a floor below the viewed Level dims), exactly the old look
+  // by day; and the edge of sight drawn on the ground as a device-pixel line.
+  const numOf = (name) => Number(new RegExp(`const float ${name} = ([0-9.]+);`).exec(LITSRC)?.[1]);
+  const memF = numOf("FOG_MEMORY_FLOOR"), seenF = numOf("FOG_SEEN_FLOOR"), gain = numOf("FOG_SEEN_GAIN"), under = numOf("FOG_MEMORY_UNDER");
+  // glsl.mjs dioFogOfWar, restated: the gain on what is seen, then the remembered luma
+  const bands = (l, night) => {
+    const g = (1 - night) + night * Math.min(gain, Math.max(1, seenF / Math.max(l, 0.02)));
+    const lm0 = (1 - night) * 0.5 * l + night * Math.max(0.5 * l, Math.min(memF + 0.3 * l, under * l * g));
+    // the mist's tint at its heaviest (n high), then the cap held after it at night
+    const w = 0.32 * (1 - 0.7 * night), tinted = lm0 * (1 - w) + mistNight * w;
+    const cap = Math.min(1, (under * l * g) / Math.max(tinted, 1e-4));
+    const lm = tinted * ((1 - night) + night * cap);
+    return { lm, seen: l * g };
+  };
+  const formulaPinned = /float gain = mix\(1\.0, clamp\(FOG_SEEN_FLOOR \/ max\(l, 0\.02\), 1\.0, FOG_SEEN_GAIN\), night\);/.test(LITSRC)
+    && /float lm = mix\(0\.5 \* l, max\(0\.5 \* l, min\(FOG_MEMORY_FLOOR \+ 0\.3 \* l, FOG_MEMORY_UNDER \* l \* gain\)\), night\);/.test(LITSRC)
+    && /float capped = min\(1\.0, FOG_MEMORY_UNDER \* l \* gain \/ max\(dot\(memory, DIO_LUMA\), 1e-4\)\);\s*memory \*= mix\(1\.0, capped, night\);\s*c = mix\(seen, memory, away\);/.test(LITSRC);
+  const mistNight = 0.028 * 0.299 + 0.034 * 0.587 + 0.055 * 0.114; // dioFogColor's floor
+  const darkFloor = [0.08, 0.12, 0.2, 0.3].map((l) => bands(l, 1));
+  const anyNight = [0, 0.01, 0.03, 0.06, 0.12, 0.3, 0.6, 0.9].map((l) => bands(l, 1));
+  const day = [0.2, 0.5, 0.8].map((l) => ({ l, ...bands(l, 0) }));
+  const fogFn = /vec3 dioFogOfWar\(vec3 c, float vis, vec3 wp\) \{([\s\S]*?)\n\}/.exec(LITSRC)?.[1] ?? "";
+  const rimFn = /vec3 dioSightRim\(vec3 wp\) \{([\s\S]*?)\n\}/.exec(LITSRC)?.[1] ?? "";
+  const rendererSrc = read(`${DIO}/render/renderer.mjs`);
+  const readOk = /float dioNightness\(\) \{\s*return uNight;\s*\}/.test(LITSRC) && /float night = dioNightness\(\);/.test(fogFn)
+    && !/uAmbient/.test(fogFn) && /uNight: \{ value: 0 \}/.test(read(`${DIO}/render/materials.mjs`))
+    && /this\.shared\.uNight\.value = /.test(rendererSrc) && (rendererSrc.match(/this\.applyAmbient\(\);/g) ?? []).length >= 2
+    && !/uNight/.test(read(`${DIO}/render/level-stack.mjs`));
+  const rimOk = /fwidth\(sx\)/.test(rimFn) && !/return/.test(rimFn.replace(/return FOG_RIM_COLOR[^;]*;\s*$/, ""))
+    && /dioFinish\(c, vis, vWorld\) \+ dioSightRim\(vWorld\)/.test(G.TOP_FRAG);
+  ctx.ok("seen, remembered and mist read apart at night; by day the remembered look is unchanged",
+    formulaPinned && darkFloor.every((b) => b.lm >= 2.5 * mistNight) && anyNight.every((b) => b.seen >= 1.5 * b.lm - 1e-9)
+      // by day: the old look, half its light under the full-weight tint, no cap
+      && day.every((b) => Math.abs(b.lm - (0.5 * b.l * 0.68 + mistNight * 0.32)) < 1e-9 && Math.abs(b.seen - b.l) < 1e-9) && readOk && rimOk,
+    JSON.stringify({ memF, seenF, gain, mistNight, darkFloor, readOk, rimOk }));
   // Nothing unseen throws a sun shadow: the receiver finds the caster along the
   // key from the map's depth and drops it if nobody has seen it. Driven through
   // the real ShadowPass fit, so the depth-per-cell term is the matrix's own.

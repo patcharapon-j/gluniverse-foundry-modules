@@ -119,7 +119,13 @@
  * in the error panel. `window.__ready` turns true once every model settled.
  *
  * Query parameters: yaw, pitch, still, idle, shed, dark, grid, cutaway, tilt,
- * the environment and graphics ones above, and the framing:
+ * the environment and graphics ones above, the fog of war:
+ *   sight=<row>,<col>[,<altitude ft>]  a medium viewer on that map square: its
+ *                         polygon swept with the sight backend's height rules,
+ *                         dead ground dimmed as the bake does (view/dead-ground.mjs)
+ *   explored=<r>,<c>;<r>,<c>  earlier positions whose sight is remembered
+ *   known=1               the whole board explored
+ * and the framing:
  *   view=full             the whole map (default; may zoom out past the
  *                         view's own minimum so a big map fits)
  *   focus=<row>,<col>     centre that map square; zoom=<n> (default 2)
@@ -1358,7 +1364,8 @@ ${ERR_JS}
 <script type="module">
 import { DioramaRenderer } from "/scripts/features/diorama/render/renderer.mjs";
 import { VIEW_CELLS, yawOf, pitchOf } from "/scripts/features/diorama/render/camera.mjs";
-import { Terrain, distToQ } from "/scripts/features/diorama/terrain/model.mjs";
+import { Terrain, distToQ, qToDist } from "/scripts/features/diorama/terrain/model.mjs";
+import { deadGround } from "/scripts/features/diorama/view/dead-ground.mjs";
 import { compileLayout } from "/scripts/features/diorama/terrain/layout.mjs";
 import { normalizeProps, propToJSON, resolveProps, propStates } from "/scripts/features/diorama/terrain/props.mjs";
 import { loadModel } from "/scripts/features/diorama/render/props-models.mjs";
@@ -1366,7 +1373,7 @@ import { cliffEdges } from "/scripts/features/diorama/terrain/occlusion.mjs";
 import { wallState, loadArt } from "/scripts/features/diorama/view/snapshot.mjs";
 import { Baker, lightData } from "/scripts/features/diorama/view/bake.mjs";
 import { polygonEyeQ, outlineFloorQ, dropWallsSeenOver } from "/scripts/features/diorama/foundry/sight-backend.mjs";
-import { SHED_ORDER, SIZE_HEIGHT } from "/scripts/features/diorama/constants.mjs";
+import { SHED_ORDER, SIZE_HEIGHT, SUB } from "/scripts/features/diorama/constants.mjs";
 import { PALETTE } from "/scripts/core/theme.mjs";
 import { resolveEnv, applyPreset, normalizeEnv } from "/scripts/features/diorama/environment.mjs";
 import { resolveGraphics } from "/scripts/features/diorama/options.mjs";
@@ -1503,7 +1510,89 @@ lightDocs.forEach((l, k) => {
 });
 const baker = new Baker({ grid: { cols: COLS, rows: ROWS, size: SIZE }, mode: () => null, onBaked: () => {} });
 baker.drawLight(lights);
-r.setLighting({ darkness, light: baker.light, vision: null, sources: lights.map(lightData).filter(Boolean) });
+
+/* ------------------------------------------------------------ vision (optional) */
+// sight=<row>,<col>[,<altitude ft>]  a medium viewer standing on that map square:
+// its polygon swept as the sight backend cuts it (walls it cannot see over, ground
+// rising above its eye), visible = fov ∪ (los ∩ lit), dead ground dimmed as the
+// bake does (view/dead-ground.mjs). explored=<r>,<c>;<r>,<c>  earlier positions
+// whose sight is remembered; known=1  the whole board explored.
+const cellXY = (s) => { const [rr, cc] = s.split(",").map(Number); return { i: rr + off.i, j: cc + off.j, alt: Number(s.split(",")[2]) || 0 }; };
+const polyOf = (shape, origin) => {
+  const p = shape.points;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let k = 0; k < p.length; k += 2) { x0 = Math.min(x0, p[k]); x1 = Math.max(x1, p[k]); y0 = Math.min(y0, p[k + 1]); y1 = Math.max(y1, p[k + 1]); }
+  return { points: p, origin, getBounds: () => ({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 }),
+    contains(x, y) {
+      let inn = false;
+      for (let a = 0, b = p.length - 2; a < p.length; b = a, a += 2) {
+        if ((p[a + 1] > y) !== (p[b + 1] > y) && x < ((p[b] - p[a]) * (y - p[a + 1])) / (p[b + 1] - p[a + 1]) + p[a]) inn = !inn;
+      }
+      return inn;
+    } };
+};
+const sightBlockers = wallDocs.filter((w) => Number(w.sight ?? 20) === 20 && !(Number(w.door) > 0 && Number(w.ds) === 1))
+  .map((doc) => ({ a: { x: doc.c[0], y: doc.c[1] }, b: { x: doc.c[2], y: doc.c[3] }, object: { documentName: "Wall", ...doc } }));
+const lightPolys = lights.map((l) => polyOf(l.shape, { x: l.data.x, y: l.data.y }));
+const litAt = (x, y) => darkness <= 0 || lightPolys.some((p) => p.contains(x, y));
+const viewerAt = (s) => {
+  const c = cellXY(s);
+  const x = (c.j + 0.5) * SIZE, y = (c.i + 0.5) * SIZE;
+  const elevation = qToDist(rules.groundAt(x, y, SIZE), DIST) + c.alt;
+  const doc = { documentName: "Token", elevation, width: 1, height: 1, actor: null };
+  const origin = { x, y, elevation };
+  const poly = { origin, config: { type: "sight", dioToken: doc } };
+  let edges = sightBlockers, segs = [];
+  if (saved) {
+    const set = new Set(sightBlockers);
+    dropWallsSeenOver(set, live, polygonEyeQ(poly, live));
+    edges = [...set];
+    segs = cliffsAbove(outlineFloorQ(poly, live));
+  }
+  segs = [...edges.map((e) => [e.a.x, e.a.y, e.b.x, e.b.y]), ...segs];
+  const los = polyOf(sweep(x, y, Math.hypot(COLS, ROWS) * SIZE, segs), origin);
+  return { doc, origin, los, fov: null, eye: polygonEyeQ(poly, live), x, y, elevation };
+};
+let vision = null;
+const viewer = Q.has("sight") ? viewerAt(Q.get("sight")) : null;
+if (viewer || Q.get("known") === "1") {
+  const vc = baker.vision, ctx = vc.getContext("2d"), s = baker.scale;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = Q.get("known") === "1" ? "rgb(0,255,0)" : "rgb(0,0,0)";
+  ctx.fillRect(0, 0, vc.width, vc.height);
+  const paint = (v, style) => {
+    ctx.save();
+    ctx.setTransform(s, 0, 0, s, 0, 0);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = style;
+    ctx.beginPath();
+    const p = v.los.points;
+    ctx.moveTo(p[0], p[1]);
+    for (let k = 2; k < p.length; k += 2) ctx.lineTo(p[k], p[k + 1]);
+    ctx.closePath();
+    ctx.clip();
+    if (darkness <= 0) ctx.fillRect(0, 0, vc.width / s, vc.height / s);
+    else for (const l of lights) { ctx.beginPath(); const q = l.shape.points; ctx.moveTo(q[0], q[1]); for (let k = 2; k < q.length; k += 2) ctx.lineTo(q[k], q[k + 1]); ctx.closePath(); ctx.fill(); }
+    ctx.restore();
+  };
+  for (const e of (Q.get("explored") || "").split(";").filter(Boolean)) paint(viewerAt(e), "rgb(0,255,0)");
+  if (viewer) {
+    // explored is a separate bit, so a second green over the first stays green
+    ctx.globalCompositeOperation = "source-over";
+    paint(viewer, "rgb(255,255,0)");
+    const dead = deadGround({ terrain: rules, grid: { size: SIZE, distance: DIST }, viewers: [{ ...viewer }], walls, lit: litAt });
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = "multiply";
+    ctx.fillStyle = "rgb(0,255,255)";
+    const b = baker.ppc / SUB;
+    for (const [si, sj] of dead) ctx.fillRect(sj * b, si * b, b, b);
+    ctx.globalCompositeOperation = "source-over";
+    notes.push("sight from " + Q.get("sight") + ", eye " + viewer.eye.toFixed(1) + " q, dead " + dead.length + " patches");
+  }
+  vision = vc;
+}
+r.setLighting({ darkness, light: baker.light, vision, sources: lights.map(lightData).filter(Boolean) });
 
 ${ENV_JS}
 
@@ -1529,6 +1618,13 @@ const tokens = (DATA.tokens ?? []).map((t, k) => {
     art: t.img || disc(t.color || DISC[k % DISC.length], t.name), disposition: Number.isFinite(t.disposition) ? t.disposition : 0,
     visible: true, ghost: false, controlled: false, hovered: false, targets: [], turn: null, conditions: [], bars: [] };
 });
+// the sight= viewer stands where it looks from
+if (viewer) {
+  const groundQ = rules.groundAt(viewer.x, viewer.y, SIZE);
+  tokens.push({ id: "viewer", name: "Viewer", x: viewer.x, y: viewer.y, footQ: groundQ + Math.round(distToQ(cellXY(Q.get("sight")).alt, DIST)), groundQ,
+    heightQ: Math.round(distToQ(SIZE_HEIGHT.med, DIST)), widthCells: 1, art: disc(PALETTE.info, "V"), disposition: 1,
+    visible: true, ghost: false, controlled: true, hovered: false, targets: [], turn: null, conditions: [], bars: [] });
+}
 r.setTokens(tokens);
 
 ${SHED_JS}

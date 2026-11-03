@@ -34,6 +34,7 @@ const OUT = resolve(ROOT, outArg ? outArg.slice(6) : ".preview/insight.html");
 const { getPresets } = await import("../scripts/features/insight/module/themes.mjs");
 const { TIMINGS, DURATIONS } = await import("../scripts/features/insight/module/notification.mjs");
 const { safeBody, composeBody } = await import("../scripts/features/insight/module/body.mjs");
+const { sharedLabel } = await import("../scripts/features/insight/module/recipients.mjs");
 const PRESETS = Object.fromEntries(Object.entries(getPresets()).map(([id, cfg]) => [id, cfg.vars]));
 
 const LANG = JSON.parse(await readFile(resolve(ROOT, "lang/insight.en.json"), "utf8"));
@@ -82,6 +83,7 @@ const SAMPLES = {
     id: "insight-1730000001-9c1d",
     title: "You recognise the sigil",
     sense: "Perception",
+    shared: sharedLabel(["Bram", "Seri"], (k, d) => LANG[k].replace(/\{(\w+)\}/g, (_m, n) => d[n]), "en"),
     body: safeBody("<p>It is the same mark that was burned into the cellar door in Vethkar, the one your sister told you never to open. <i>Whoever is here has been here before you.</i></p>"),
     pending: 2,
   },
@@ -108,7 +110,7 @@ const SAMPLES = {
 
 /** Each row of the sheet: one simulated screen. */
 const ROWS = [
-  { key: "a", note: "Full edge · Dreadlight · titled, two more waiting", sample: "titled", preset: "dreadlight", intensity: "full" },
+  { key: "a", note: "Full edge · Dreadlight · titled, shared with two others, two more waiting", sample: "titled", preset: "dreadlight", intensity: "full" },
   { key: "b", note: "Full edge · Fantasy accent", sample: "divine", preset: "fantasy", intensity: "full" },
   { key: "c", note: "Recall Knowledge hand-off · no title, fixed label", sample: "recall", preset: "dreadlight", intensity: "full" },
   { key: "d", note: "Subtle edge · no vignette, half burn · with a picture", sample: "image", preset: "dreadlight", intensity: "subtle" },
@@ -135,8 +137,14 @@ const COMPOSE_FULL = compose({
   ],
   sense: "Perception",
   message: "The hairs on your neck rise.",
+  sendLabel: LANG["INSIGHT.ComposeSendCount"].replace("{count}", "2"),
+  shared: true,
+  soloPick: false,
 });
-const COMPOSE_EMPTY = compose({ hasPlayers: false, people: [], sense: "", message: "" });
+const COMPOSE_EMPTY = compose({
+  hasPlayers: false, people: [], sense: "", message: "",
+  sendLabel: LANG["INSIGHT.ComposeSend"], shared: false, soloPick: true,
+});
 
 /* The beat list, read off the shipped clock. */
 const beats = (t) => [
