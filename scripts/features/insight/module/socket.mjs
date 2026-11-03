@@ -19,6 +19,7 @@
 import { onSocket, emitSocket } from "../../../core/socket.mjs";
 import { enqueue } from "./queue.mjs";
 import { safeBody, isBlankBody } from "./body.mjs";
+import { sharedLabel } from "./recipients.mjs";
 
 const FEATURE_ID = "insight";
 export const MESSAGE_TYPE = "insight.notification";
@@ -39,7 +40,21 @@ export function validPayload(p) {
   for (const k of ["title", "sense", "image", "theme"]) {
     if (p[k] != null && typeof p[k] !== "string") return false;
   }
+  if (p.shared != null && typeof p.shared !== "boolean") return false;
   return true;
+}
+
+/**
+ * Who else a card went to, as this recipient may be told. Empty unless the GM
+ * chose to say so; a card sent to several people without it still reads
+ * "Only you" on each screen, which is the GM's call. Pure.
+ * @param {object} p - a payload that passed `validPayload`
+ * @param {string} selfId
+ * @returns {string[]} user ids, never `selfId`
+ */
+export function sharedWith(p, selfId) {
+  if (p?.shared !== true) return [];
+  return [...new Set(p.targets)].filter((t) => t !== selfId);
 }
 
 /**
@@ -82,6 +97,10 @@ function receive(payload) {
   if (!payload.targets.includes(game.user.id)) return;
   const data = cardData(payload);
   if (isBlankBody(data.body) && !data.title) return;
+  // Names are looked up here, on the receiving side, from the ids the server
+  // delivered; the payload never carries a name a sender could dress up.
+  const names = sharedWith(payload, game.user.id).map((id) => game.users.get(id)?.name);
+  data.shared = sharedLabel(names, (k, d) => game.i18n.format(k, d), game.i18n.lang);
   enqueue(data);
 }
 
@@ -95,6 +114,7 @@ function receive(payload) {
  * @param {string|null} [data.sense] - the label on the card's tag
  * @param {string|null} [data.image]
  * @param {string|null} [data.theme] - accent preset override
+ * @param {boolean} [data.shared] - tell each recipient who else got it
  * @returns {boolean} whether anything was sent
  */
 export function sendNotification(data) {
@@ -109,6 +129,7 @@ export function sendNotification(data) {
     sense: data.sense || null,
     image: data.image || null,
     theme: data.theme || null,
+    shared: data.shared === true,
   };
   if (!validPayload(payload)) return false;
 

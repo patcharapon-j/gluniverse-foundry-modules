@@ -9,11 +9,17 @@ import { scaledMs } from "../../../core/theme.mjs";
 import { sendNotification } from "./socket.mjs";
 import { composeBody, isBlankBody } from "./body.mjs";
 import { applyTheme } from "./themes.mjs";
+import { actorsOf, playerOwners } from "./recipients.mjs";
 
 const { HandlebarsApplicationMixin, ApplicationV2 } = foundry.applications.api;
 
 /** How long the Sent state reads before the window closes (ms, before the motion tier). */
 const SENT_HOLD = 520;
+
+/** "Send", or "Send to 3" once anyone is ticked. */
+const sendLabel = (count) => (count > 0
+  ? game.i18n.format("INSIGHT.ComposeSendCount", { count })
+  : game.i18n.localize("INSIGHT.ComposeSend"));
 
 export class InsightComposeDialog extends HandlebarsApplicationMixin(ApplicationV2) {
 
@@ -29,6 +35,9 @@ export class InsightComposeDialog extends HandlebarsApplicationMixin(Application
     actions: {
       send: InsightComposeDialog.#onSend,
       pickPlayers: InsightComposeDialog.#onPickPlayers,
+      pickSelected: InsightComposeDialog.#onPickSelected,
+      pickTargets: InsightComposeDialog.#onPickTargets,
+      pickNone: InsightComposeDialog.#onPickNone,
     },
   };
 
@@ -40,6 +49,8 @@ export class InsightComposeDialog extends HandlebarsApplicationMixin(Application
   static _picked = new Set();
   /** The label last used, offered again next time. */
   static _sense = "";
+  /** Whether a card to several people names the others; remembered like the label. */
+  static _shared = false;
 
   _message = "";
 
@@ -61,6 +72,10 @@ export class InsightComposeDialog extends HandlebarsApplicationMixin(Application
     context.hasPlayers = context.people.some((p) => !p.isGM);
     context.sense = InsightComposeDialog._sense;
     context.message = this._message;
+    const picked = context.people.filter((p) => p.selected).length;
+    context.sendLabel = sendLabel(picked);
+    context.shared = InsightComposeDialog._shared;
+    context.soloPick = picked < 2;
     return context;
   }
 
@@ -76,9 +91,14 @@ export class InsightComposeDialog extends HandlebarsApplicationMixin(Application
       InsightComposeDialog._sense = event.target.value;
     });
     form?.addEventListener("change", (event) => {
+      if (event.target?.name === "shared") {
+        InsightComposeDialog._shared = event.target.checked;
+        return;
+      }
       if (event.target?.name !== "target") return;
       if (event.target.checked) InsightComposeDialog._picked.add(event.target.value);
       else InsightComposeDialog._picked.delete(event.target.value);
+      this.#syncPicked();
     });
     // Enter in the label field would otherwise submit the form natively and
     // navigate away with the draft. Sending is the Send button's job.
@@ -91,14 +111,68 @@ export class InsightComposeDialog extends HandlebarsApplicationMixin(Application
     });
   }
 
-  /** Tick every connected player (not the other GMs). */
-  static #onPickPlayers() {
+  /**
+   * Keep the Send button's count and the "who else" switch in step with the
+   * chips. Written in place, never re-rendered, so the caret stays put.
+   */
+  #syncPicked() {
+    const form = this.element?.querySelector("form");
+    if (!form) return;
+    const count = form.querySelectorAll('input[name="target"]:checked').length;
+    const send = form.querySelector(".insight-send-btn");
+    if (send && !this._sending) send.textContent = sendLabel(count);
+    const shared = form.querySelector('input[name="shared"]');
+    if (shared) shared.disabled = count < 2;
+  }
+
+  /** Tick these user ids (the ones that have a chip); the rest stay as they are. */
+  #tick(ids) {
+    const wanted = new Set(ids);
+    let added = 0;
     for (const input of this.element.querySelectorAll('input[name="target"]')) {
-      const user = game.users.get(input.value);
-      if (!user || user.isGM) continue;
+      if (!wanted.has(input.value)) continue;
+      if (!input.checked) added++;
       input.checked = true;
       InsightComposeDialog._picked.add(input.value);
     }
+    this.#syncPicked();
+    return added;
+  }
+
+  /** Tick every connected player (not the other GMs). */
+  static #onPickPlayers() {
+    this.#tick(game.users.filter((u) => u.active && !u.isGM).map((u) => u.id));
+  }
+
+  /** Tick the players who own the tokens the GM has selected. */
+  static #onPickSelected() {
+    this.#pickOwners(canvas?.tokens?.controlled ?? []);
+  }
+
+  /** Tick the players who own the tokens the GM has targeted. */
+  static #onPickTargets() {
+    this.#pickOwners(game.user.targets ?? []);
+  }
+
+  #pickOwners(tokens) {
+    const actors = actorsOf(tokens);
+    if (!actors.length) {
+      ui.notifications.info(game.i18n.localize("INSIGHT.ComposePickNoTokens"));
+      return;
+    }
+    const owners = playerOwners(actors, game.users);
+    if (!owners.length) {
+      ui.notifications.info(game.i18n.localize("INSIGHT.ComposePickNoOwners"));
+      return;
+    }
+    this.#tick(owners);
+  }
+
+  /** Untick everyone. */
+  static #onPickNone() {
+    for (const input of this.element.querySelectorAll('input[name="target"]')) input.checked = false;
+    InsightComposeDialog._picked.clear();
+    this.#syncPicked();
   }
 
   static #onSend(_event, button) {
@@ -114,7 +188,9 @@ export class InsightComposeDialog extends HandlebarsApplicationMixin(Application
     const sense = String(data.get("sense") ?? "").trim();
     InsightComposeDialog._sense = sense;
 
-    if (!sendNotification({ targets, title: null, body, sense: sense || null, image: null })) return;
+    // Only meaningful with company; with one recipient the card says "Only you".
+    const shared = targets.length > 1 && data.get("shared") === "on";
+    if (!sendNotification({ targets, title: null, body, sense: sense || null, image: null, shared })) return;
     this._sending = true;
     this._message = "";
 

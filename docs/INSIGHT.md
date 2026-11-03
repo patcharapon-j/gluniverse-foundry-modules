@@ -51,11 +51,24 @@ shorter reach), Off (the card alone).
 ## Sending
 
 The GM's scene control opens the compose window: a chip per connected user (in
-their own Foundry colour, "All players" ticks every player), an optional label,
-the message. A blank line starts a new paragraph; `<b>` and `<i>` work. The
-window keeps the draft when someone connects or leaves.
+their own Foundry colour), an optional label, the message. A blank line starts
+a new paragraph; `<b>` and `<i>` work. The window keeps the draft when someone
+connects or leaves.
 
-`sendNotification({ targets, title, body, sense, image, theme })` in
+One card can go to several people at once. Beside "Send to" sit quick picks:
+All players, Selected (the connected players who own the tokens the GM has
+selected), Targets (the same for the GM's targets) and None. The picks add to
+what is ticked, so "Selected" then a click on one more chip works. The Send
+button counts who it will reach ("Send to 3").
+
+By default each card still reads "Only you", which is the GM's call: three
+players can each believe they alone noticed. "Show who else got it" (two or
+more recipients) swaps that tag for "With Kai and Mira", or "With 4 others"
+past two names, so the table knows who to talk to. The payload carries only
+`shared: true`; each receiver names the others from its own user list
+(`module/recipients.mjs`), so a payload can never put a made-up name there.
+
+`sendNotification({ targets, title, body, sense, image, theme, shared })` in
 `module/socket.mjs` is the one way out (Recall Knowledge calls it). It is GM
 only, and it emits with `recipients`, so the server delivers the payload to the
 named users and nobody else.
