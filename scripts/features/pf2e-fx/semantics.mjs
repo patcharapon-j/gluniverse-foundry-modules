@@ -540,7 +540,8 @@ function strikeOf(item, opts = {}) {
   const splash = group === "bomb" || traits.has("bomb") || traits.has("splash") || (num(sys.splashDamage?.value) ?? 0) > 0;
   const d = strikeDelivery(item, { ranged, damage: damageOf(item), traits, linked });
   const style = STYLE_OF[d.delivery] ?? (ranged ? "ranged" : "unarmed");
-  return { weapon: { style, ranged, splash, heavy }, delivery: d.delivery, src: d.src, base: d.base, group: d.group };
+  // the group rides along so a renderer can tell black powder (firearm) from an SF2e gun (projectile)
+  return { weapon: { style, ranged, splash, heavy, group: group || null }, delivery: d.delivery, src: d.src, base: d.base, group: d.group };
 }
 
 /** A Strike's style: `{ style, ranged, splash, heavy }` (constants.mjs WEAPON_STYLES). */

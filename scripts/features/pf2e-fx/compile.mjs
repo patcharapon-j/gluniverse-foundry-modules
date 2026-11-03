@@ -28,7 +28,7 @@ import { TAU, clamp } from "./core/rand.mjs";
 import { RAMP, rotateRamp, S } from "./core/palette.mjs";
 import { Sim } from "./core/sim.mjs";
 import { charge, projectile, sd, still } from "./core/motifs.mjs";
-import { ART_PER_SQUARE, FAMILY_OF } from "./constants.mjs";
+import { ART_PER_SQUARE, DELIVERY_GROUPS, FAMILY_OF } from "./constants.mjs";
 import { familyModule } from "./families/index.mjs";
 import { CRAFTS, FORMS } from "./forms.mjs";
 import { STRIKES } from "./strikes.mjs";
@@ -193,7 +193,7 @@ function harmCtx(s, M) {
 }
 
 /** A strike-shaped delivery's timeline (a Strike, or a Rend or a Trample that is not one). */
-const strikeTimeline = (d) => STRIKES[d] ?? RANGED[d] ?? null;
+const strikeTimeline = (d) => (DELIVERY_GROUPS.ranged.includes(d) ? RANGED[d] ?? STRIKES[d] : STRIKES[d] ?? RANGED[d]) ?? null;
 
 /* ── the timelines ───────────────────────────────────────────────────── */
 
