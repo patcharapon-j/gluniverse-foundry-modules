@@ -178,6 +178,12 @@ circumstance or status bonuses (+1, +2).
 Hazard-only: `Stealth`, `Hardness`, `Complexity` (`simple`/`complex`), `Disable`,
 `Routine`, `Reset`.
 
+Hazard `Stealth` takes either form: a modifier (`+15; (trained) to notice the
+tripwire`) or a DC as the books print it (`DC 25 (trained) to notice the
+tripwire`), stored as the modifier DC − 10. Text after the number becomes the
+Stealth details. When a line carries both (`+14; DC 14`), the modifier wins.
+The exporter always writes the modifier form.
+
 You may also group fields under `## Abilities`, `## Skills` or `## Defense`
 headings instead of listing them at the top; the parser routes them either way.
 
