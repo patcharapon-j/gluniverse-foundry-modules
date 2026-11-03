@@ -32,6 +32,7 @@ import { HOOKS as STREAM_HOOKS } from "../../stream/constants.js";
 import { turnState, currentCombatantToken } from "../integrations/turns.mjs";
 import { templateAreas } from "../integrations/templates.mjs";
 import { SequencerMirror } from "../integrations/sequencer.mjs";
+import { SpellspriteMirror, fxApi, onFxChange } from "../integrations/spellsprite.mjs";
 import { currentLines, linksOn, onLinesChanged } from "../integrations/target-lines.mjs";
 import { OPTIONS, resolveGraphics } from "../options.mjs";
 import { sceneEnvironment, environmentTouched, ENV_HOOKS } from "./environment-source.mjs";
@@ -57,7 +58,7 @@ const fresh = () => ({
   root: null, canvas: null, r: null, Renderer: null, surface: null,
   hooks: [], unTerrain: null, unLines: null, keyFn: null, resizeObs: null, tokenIds: new Set(),
   dirty: new Set(), raf: 0, labelUntil: 0, labelRaf: 0,
-  baker: null, input: null, hud: null, seq: null, peek: null,
+  baker: null, input: null, hud: null, seq: null, peek: null, sprite: null, unSprite: null,
   lighting: null, bg: null, bgSeq: 0, cellSeq: 0,
   overlays: emptyOverlays(),
   asPlayers: false, cutaway: true, savedCamera: null,
@@ -269,6 +270,10 @@ async function mount(scene) {
     onBaked: (res) => { S.lighting = res; mark("lighting"); if (S.asPlayers) mark("tokens"); },
   });
   S.seq = new SequencerMirror({ onChange: () => mark("effects"), groundQ });
+  // Spellsprite (pf2e-fx): painted by the renderer every frame while its sims run; the api fails closed
+  S.sprite = new SpellspriteMirror({ sims: () => fxApi()?.sims(S.scene?.id) ?? [], groundQ, siteSeen: spriteSiteSeen });
+  S.r?.setPixelSource?.(S.sprite);
+  S.unSprite = onFxChange(() => S.r?.requestRender());
 
   S.resizeObs = new ResizeObserver(() => resize());
   S.resizeObs.observe(root);
@@ -298,6 +303,7 @@ function createRenderer() {
   S.r = new S.Renderer({ canvas: c, pixelRatio: globalThis.devicePixelRatio || 1 });
   // The grid first: the camera converts its px target with the grid size.
   if (S.grid) S.r.setGrid(gridArg());
+  if (S.sprite) S.r.setPixelSource?.(S.sprite);
   if (S.input) bindInput();
   resize();
 }
@@ -393,6 +399,7 @@ function teardown() {
   for (const timer of S.holds.values()) clearTimeout(timer);
   S.unTerrain?.();
   S.unLines?.();
+  S.unSprite?.();
   if (S.keyFn) window.removeEventListener("keydown", S.keyFn, true);
   S.resizeObs?.disconnect();
   const safe = (fn) => { try { fn(); } catch (e) { err("diorama: teardown", e); } };
@@ -401,6 +408,7 @@ function teardown() {
   safe(() => S.hud?.dispose());
   safe(() => S.baker?.dispose());
   safe(() => S.seq?.dispose());
+  safe(() => S.sprite?.dispose());
   safe(() => S.r?.dispose());
   safe(() => S.surface?.dispose());
   safe(() => releaseFloorArt());
@@ -645,6 +653,11 @@ async function loadLevelFloors() {
 }
 
 const gridArg = () => ({ size: S.grid.size, distance: S.grid.distance, cols: S.grid.cols, rows: S.grid.rows, sceneRect: S.grid.sceneRect });
+
+/** A Spellsprite site named for a token (a target) stands only while that token is on this viewer's board. */
+function spriteSiteSeen(id) {
+  return !/^[A-Za-z0-9]{16}$/.test(String(id)) || S.tokenIds.has(String(id));
+}
 
 function groundQ(x, y) {
   try { return S.terrain ? S.terrain.groundAt(x, y, S.grid.size) : 0; } catch { return 0; }

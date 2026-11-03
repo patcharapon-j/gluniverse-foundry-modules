@@ -1992,6 +1992,32 @@ mask, and Die Glow 0 sends no emissive, since DSN ignores an intensity of 0.
 tools/preview-server.mjs 8981`, then `/.preview/destiny.html` (`view`,
 `preset`, `tier`, `glow`, `checks=1`). See `docs/DESTINY_DICE.md`.
 
+**When touching Spellsprite** (`features/pf2e-fx/`, `styles/pf2e-fx.css`,
+`diorama/integrations/spellsprite.mjs`), re-run its checks. Everything they
+cover fails silently:
+
+```bash
+node tools/fx-check.mjs
+node tools/fx-semantics-check.mjs
+```
+
+Zero problems required, plus `diorama-check` if the mirror or the sims' shape
+moved, and `node tools/fx-coverage.mjs` after any change to `semantics.mjs`
+(it rewrites `docs/SPELLSPRITE_COVERAGE.md`). Four things are worth knowing.
+**Privacy is `read.mjs`'s alone**, with pf2e-odds' `seesTruth`,
+`reachedPlayers` and `metagame` imported, never restated: a message the viewer
+cannot read plays nothing, and without the truth every impact is the neutral
+`hit`, because a crit's frames tell the table the result. **Everything else is
+pure and seeded** (no `game`, `canvas`, `foundry`, `ui`, `Hooks`, `PIXI` or
+`Math.random`), seeded by message id, so every client draws one fireball.
+**Areas are a wave, not particles** (`area.mjs`): per-pixel timing from the
+area's own metric, a 4×4 scar grain, never fine dither. **The 2D canvas
+texture is resized through `base.resource.update()` with its frame parked at
+1×1 first**, or a shrinking canvas throws. To see it: `node
+tools/fx-canvas-preview.mjs && node tools/preview-server.mjs`, then
+`/.preview/fx-canvas.html` (judge stills with `seek`; headless Chrome starves
+animation frames). See `docs/SPELLSPRITE.md`.
+
 **When touching the Performance feature, the shared frame budget or any
 feature's shedding** (`features/perf/`, `core/budget.mjs`, `core/gl-surfaces.mjs`,
 `core/pan.mjs`, any `SHED_ORDER`, any suite WebGL context, any backdrop blur),

@@ -1243,6 +1243,8 @@ uniform vec3 uFacing;
 uniform vec4 uOutline;
 uniform float uGlow;
 uniform float uMode;
+uniform vec4 uReact;      // a struck figure's flash: rgb, a strength (render/standees.mjs setReactions)
+uniform vec4 uReactTint;  // the effect light falling on it: rgb, a strength
 varying vec2 vUv;
 varying vec3 vFoot;
 float cardA(vec2 uv) {
@@ -1309,7 +1311,9 @@ void main() {
     }
   }
   lit *= 1.0 + uLift;
+  lit += paint * uReactTint.rgb * uReactTint.a;
   vec3 col = mix(uOutline.rgb, dioFinishFigure(lit, vFoot + vec3(0.0, 0.6, 0.0)), artCov);
+  col = mix(col, uReact.rgb, uReact.a * artCov);
   float a = lineCov;
   if (uGhost > 0.5) {
     float hatch = step(0.5, fract((gl_FragCoord.x + gl_FragCoord.y) / 9.0));
@@ -1364,6 +1368,25 @@ varying vec2 vUv;
 void main() {
   vec4 c = uUseTex > 0.5 ? texture2D(uTex, vUv) : vec4(1.0);
   c.rgb *= uColor;
+  c.a *= uOpacity;
+  if (c.a <= 0.003) discard;
+  gl_FragColor = c;
+}
+`;
+
+/**
+ * Pixel art (Spellsprite's layers, render/effects.mjs "pixel-*" kinds). The
+ * source canvas is bucket-sized, so uBox maps the quad onto the drawn part of
+ * it: xy the scale, zw the offset. Sampled NEAREST, never mipmapped: one art
+ * pixel is a whole number of device pixels on a standing quad.
+ */
+export const PIXEL_FRAG = /* glsl */ `
+uniform sampler2D uTex;
+uniform vec4 uBox;
+uniform float uOpacity;
+varying vec2 vUv;
+void main() {
+  vec4 c = texture2D(uTex, uBox.zw + vUv * uBox.xy);
   c.a *= uOpacity;
   if (c.a <= 0.003) discard;
   gl_FragColor = c;
@@ -2432,6 +2455,7 @@ export const PROGRAMS = Object.freeze({
   card: { vertex: CARD_VERT, fragment: CARD_FRAG },
   solid: { vertex: SOLID_VERT, fragment: SOLID_FRAG },
   unlit: { vertex: UNLIT_VERT, fragment: UNLIT_FRAG },
+  pixel: { vertex: UNLIT_VERT, fragment: PIXEL_FRAG },
   ring: { vertex: UNLIT_VERT, fragment: RING_FRAG },
   glass: { vertex: GLASS_VERT, fragment: GLASS_FRAG },
   footprint: { vertex: UNLIT_VERT, fragment: FOOTPRINT_FRAG },
