@@ -41,7 +41,9 @@
  *   fow=clouds|flat  the fog of war's style; unseen=wide  sight in the middle only;
  *               unseen=pillar  a wedge of unseen ground behind a pillar;
  *               unseen=cliff  the plateau's top hidden, its faces and stairs seen,
- *               a pine at its lip seen in 3D (seen=0: as the bake alone draws it)
+ *               a pine at its lip seen in 3D (seen=0: as the bake alone draws it);
+ *               unseen=wall  the walled room's inside never seen (the mist ends on its walls);
+ *               unseen=dead  the knight on the plateau: the ground at its foot is dead ground
  *   tower=1     a 50 ft tower in the far corner (hidden under unseen=wide)
  *   reach=1     the rogue's movement range, stepping round the other creatures
  *   props=1     the props gallery (every shape, every material, a stack, cards,
@@ -125,13 +127,13 @@ const page = String.raw`<!doctype html>
 <script type="module">
 import { DioramaRenderer } from "/scripts/features/diorama/render/renderer.mjs";
 import { Terrain } from "/scripts/features/diorama/terrain/model.mjs";
+import { deadGround } from "/scripts/features/diorama/view/dead-ground.mjs";
 import { KIND, DIR, SUB, SHED_ORDER, BAKE_PX_PER_CELL } from "/scripts/features/diorama/constants.mjs";
 import { PALETTE } from "/scripts/core/theme.mjs";
 import { resolveEnv, applyPreset, normalizeEnv } from "/scripts/features/diorama/environment.mjs";
 import { resolveGraphics } from "/scripts/features/diorama/options.mjs";
 
-const Q = new URLSearchParams(location.search);
-const COLS = 16, ROWS = 12, SIZE = 100;
+const Q = new URLSearchParams(location.search);const COLS = 16, ROWS = 12, SIZE = 100;
 
 /* ------------------------------------------------------------ seeded rng */
 let seed = 7;
@@ -333,6 +335,24 @@ function visionCanvas() {
     g.fillStyle = "rgb(0,0,0)"; g.beginPath();
     g.moveTo(...pt(base - half, tan)); g.lineTo(...pt(base - half, far)); g.lineTo(...pt(base + half, far)); g.lineTo(...pt(base + half, tan));
     g.closePath(); g.fill();
+  }
+  // unseen=wall: the party outside the walled room, its inside never seen; the
+  // mist ends on the walls' own line, not on the floor at their foot
+  if (Q.get("unseen") === "wall") {
+    g.fillStyle = "rgb(255,255,0)"; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = "rgb(0,0,0)"; g.fillRect(10 * k, 2 * k, 4 * k, 4 * k);
+    g.fillRect(1.5 * k, 0, 5 * k, 3.6 * k); // north of the fence
+  }
+  // unseen=dead: the knight on the plateau sees everything the polygon shows,
+  // and the ground at the plateau's own foot is dead ground (view/dead-ground.mjs)
+  if (Q.get("unseen") === "dead") {
+    g.fillStyle = "rgb(255,255,0)"; g.fillRect(0, 0, c.width, c.height);
+    const all = { contains: () => true, getBounds: () => ({ x: 0, y: 0, width: COLS * 100, height: ROWS * 100 }) };
+    const eye = 8 + (0.9 * 6 * 4) / 5;
+    const dead = deadGround({ terrain, grid: { size: 100, distance: 5 }, viewers: [{ eye, origin: knightAt, fov: all }] });
+    g.globalCompositeOperation = "multiply"; g.fillStyle = "rgb(0,255,255)";
+    for (const [si, sj] of dead) g.fillRect((sj * k) / SUB, (si * k) / SUB, k / SUB, k / SUB);
+    g.globalCompositeOperation = "source-over";
   }
   // unseen=cliff: a party on the grass at the plateau's west foot, whose top is
   // past what sight reveals (the outline cuts it out, behind it too). Its faces

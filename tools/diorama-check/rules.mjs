@@ -343,6 +343,13 @@ export default async function check(ctx) {
     cliffsIn(tSight).length === 0 && sb.outlineFloorQ(tSight, tLive) === Math.floor(eyeQ(tok(0), grid) + (sb.SIGHT_REVEAL_DIST / grid.distance) * 4),
     String(cliffsIn(tSight).length));
   ctx.ok("reveal: lights keep the exact outline", cliffsIn(tLight).length === 4 && sb.outlineFloorQ(tLight, tLive) === Math.floor(sb.polygonEyeQ(tLight, tLive)));
+  // The GM's "view as players": a token the GM has not selected has no vision source.
+  const unsourced = new TCls(); unsourced.config = { type: "sight", source: undefined, dioToken: tok(0) }; unsourced.origin = { x: 50, y: 250, elevation: 0 };
+  unsourced._identifyEdges();
+  ctx.ok("reveal: a token with no vision source still sees from its own eye",
+    sb.polygonEyeQ(unsourced, tLive) === eyeQ(tok(0), grid) && cliffsIn(unsourced).length === 0, `${sb.polygonEyeQ(unsourced, tLive)} ${cliffsIn(unsourced).length}`);
+  ctx.ok("reveal: players' sight names its token (view/bake.mjs)",
+    /source: token\.vision \?\? undefined, dioToken: doc/.test(readFileSync(join(ctx.root, "scripts/features/diorama/view/bake.mjs"), "utf8")));
   ctx.ok("reveal: a creature behind the 10 ft block is still hidden in 3D",
     !sb.targetInClearLine(tLive, eyeQ(tok(0), grid), { x: 50, y: 250 }, { x: 550, y: 250 }, 0, 6));
   ctx.ok("reveal: the lift is a medium creature, from SIZE_HEIGHT", /SIGHT_REVEAL_DIST = SIZE_HEIGHT\.med/.test(readFileSync(join(ctx.root, "scripts/features/diorama/foundry/sight-backend.mjs"), "utf8")));
@@ -441,6 +448,27 @@ export default async function check(ctx) {
   ctx.ok("props: only a tall prop on hidden ground is seen", seenSet.size === 1 && seenSet.has("tree"), JSON.stringify([...seenSet]));
   ctx.ok("props: asked in px and distance units, never for ghosts, slabs or seen ground",
     asked.length === 2 && JSON.stringify(asked[0]) === JSON.stringify([100, 250, 20, 15]), JSON.stringify(asked));
+
+  // Dead ground (view/dead-ground.mjs): ground the polygon shows where a creature
+  // standing would be hidden, tested like one, is dimmed in the 3D bake.
+  const { deadGround } = await import(ctx.url("scripts/features/diorama/view/dead-ground.mjs"));
+  const everywhere = { contains: () => true, getBounds: () => ({ x: 0, y: 0, width: 600, height: 600 }) };
+  const onTop = { eye: topEye, origin: { x: 125, y: 250 }, fov: everywhere };
+  const deadKeys = new Set(deadGround({ terrain: hill, grid, viewers: [onTop] }).map(([si, sj]) => `${si},${sj}`));
+  ctx.ok("dead ground: from the plateau, the foot of its cliff is dead", deadKeys.has("5,4"), [...deadKeys].join(" "));
+  ctx.ok("dead ground: the far low ground and the plateau are not",
+    !deadKeys.has("5,11") && !deadKeys.has("5,0") && !deadKeys.has("5,3"), [...deadKeys].join(" "));
+  ctx.ok("dead ground: the same patch a creature there is hidden on",
+    !sb.targetInClearLine(hillLive, topEye, { x: 125, y: 250 }, { x: 225, y: 275 }, 0, 6));
+  ctx.ok("dead ground: a viewer that is not a token keeps what it shows",
+    deadGround({ terrain: hill, grid, viewers: [onTop, { eye: null, origin: { x: 125, y: 250 }, fov: everywhere }] }).length === 0);
+  ctx.ok("dead ground: only ground a polygon shows is asked about",
+    deadGround({ terrain: hill, grid, viewers: [{ ...onTop, fov: { contains: (x) => x > 400, getBounds: everywhere.getBounds } }] }).length === 0);
+  ctx.ok("dead ground: a flat map is never dead",
+    deadGround({ terrain: Terrain.blank(6, 6), grid, viewers: [{ ...onTop, eye: eyeQ(tok(0), grid) }] }).length === 0);
+  ctx.ok("dead ground: the bake dims it and passes the terrain (view/bake.mjs, view/overlay.mjs)",
+    /dimDeadGround\(\)/.test(readFileSync(join(ctx.root, "scripts/features/diorama/view/bake.mjs"), "utf8"))
+      && /ground: \(\) => \(S\.terrain && S\.grid/.test(readFileSync(join(ctx.root, "scripts/features/diorama/view/overlay.mjs"), "utf8")));
 
   // Walls have the top the 3D view draws: an eye above it sees over.
   const wallDoc = (c, flags = {}) => ({ documentName: "Wall", id: "w", c, flags });

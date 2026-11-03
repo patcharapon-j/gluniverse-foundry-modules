@@ -348,6 +348,8 @@ export class DioramaRenderer {
   /** @param {object[]} walls WallState[] */
   setWalls(walls) {
     this.walls.set(walls, clock(), this._drawn);
+    // the soft fog map ends the mist on a sight-blocking wall's line (render/fog.mjs)
+    this.fog.setWalls(walls);
     this.shadow.dirty = true;
     this.requestRender();
   }

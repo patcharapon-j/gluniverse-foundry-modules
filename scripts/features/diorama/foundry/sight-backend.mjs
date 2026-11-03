@@ -75,7 +75,10 @@ export function polygonEyeQ(poly, live) {
   const { terrain, grid } = live;
   // Heights are in the Level's own frame: absolute elevations lose its base.
   const baseQ = Number(live.baseQ) || 0;
-  const doc = poly.config.source?.object?.document;
+  // A token with no vision source (the GM's "view as players" sights every player
+  // token, and Foundry gives a GM none for a token it has not selected) is named
+  // by `dioToken`, so the eye is its own and not the origin's floor.
+  const doc = poly.config.source?.object?.document ?? poly.config.dioToken;
   if (type === "sight" && isTokenDoc(doc)) return eyeQ(doc, grid) - baseQ;
   const o = poly.origin ?? {};
   const ground = terrain.groundAt(o.x ?? 0, o.y ?? 0, grid.size);
