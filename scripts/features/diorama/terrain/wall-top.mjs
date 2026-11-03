@@ -45,8 +45,8 @@ export function wallDocOf(edge) {
 /** Does this WallState (view/snapshot.mjs) stop sight? Windows and terrain walls do not here. */
 export function blocksSightWall(w) {
   if (!w?.a || !w?.b) return false;
-  if (w.type === "wall" || w.type === "secret") return true;
-  return w.type === "door" && w.door !== "open";
+  if (w.type === "wall") return true;
+  return (w.type === "door" || w.type === "secret") && w.door !== "open";
 }
 
 /**

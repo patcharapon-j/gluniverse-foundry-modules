@@ -474,7 +474,8 @@ export default async function check(ctx) {
   ctx.ok("dead ground: a wall through the patch itself does not dim it",
     !behind([fenceAt(325, 2)]).has("5,6"));
   ctx.ok("dead ground: a wall the eye cannot see over is left to the polygon, an open door blocks nothing",
-    behind([fenceAt(300, 8)]).size === 0 && behind([fenceAt(300, 2, { type: "door", door: "open" })]).size === 0);
+    behind([fenceAt(300, 8)]).size === 0 && behind([fenceAt(300, 2, { type: "door", door: "open" })]).size === 0
+      && behind([fenceAt(300, 2, { type: "secret", door: "open" })]).size === 0 && behind([fenceAt(300, 2, { type: "secret", door: "closed" })]).has("5,7"));
   ctx.ok("dead ground: a viewer that is not a token keeps what it shows",
     deadGround({ terrain: hill, grid, viewers: [onTop, { eye: null, origin: { x: 125, y: 250 }, fov: everywhere }] }).length === 0);
   ctx.ok("dead ground: only ground a polygon shows is asked about",
