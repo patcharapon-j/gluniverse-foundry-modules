@@ -544,6 +544,16 @@ reticle's breathe and the target lines' glint, `TIMING.reticleBreathe` /
 caps what the player's own Graphics settings asked for; with adaptive shedding off
 nothing is shed. Vision, lighting correctness and fog are never shed.
 
+**Closing the view frees its WebGL context.** Loaded models stay cached for
+the session (`render/props-models.mjs`), and three.js hangs a `dispose`
+listener on every texture a renderer uploads; that listener holds the
+renderer's GL context. So `PropsLayer.dispose` calls `releaseModelGpu()`,
+which drops the cache's GPU copies and keeps the models; the next view uploads
+them again. Without it every closed view kept its context (about 180 MB of GPU
+memory each on Concourse 3) until a long session's tab ran out of memory. The
+JS heap stays flat through that leak, so watch the GPU process, not a heap
+snapshot.
+
 ### A still board draws nothing
 
 A board where nothing moves renders **zero frames** and holds no
