@@ -368,6 +368,8 @@ attribute vec3 iTint;
 attribute vec4 iInfo;
 attribute float iFade;
 attribute float iSeen;
+attribute float iBright;
+varying float vBright;
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec3 vTint;
@@ -391,6 +393,7 @@ void main() {
   vInfo = iInfo;
   vFade = iFade;
   vSeen = iSeen;
+  vBright = iBright;
   vUv = uv;
   vCenter = (modelMatrix * vec4(im[3].xyz, 1.0)).xz;
   gl_Position = projectionMatrix * viewMatrix * wp;
@@ -414,6 +417,7 @@ varying vec2 vCenter;
 varying vec2 vUv;
 varying float vFade;
 varying float vSeen;
+varying float vBright;
 void main() {
   float vis = max(max(visionAt(vWorld.xz), visionAt(vCenter)), vSeen);
   if (vis <= 0.0) discard;
@@ -422,7 +426,8 @@ void main() {
   if (vFade < 0.999 && propDither() >= vFade) discard;
   vec4 tex = uModelHasMap > 0.5 ? texture2D(uModelMap, vUv) : vec4(1.0);
   if (uModelAlphaTest > 0.0 && tex.a < uModelAlphaTest) discard;
-  vec3 c = tex.rgb * uModelColor;
+  // the prop's brightness factor: its colour before the light, never its emission
+  vec3 c = tex.rgb * uModelColor * vBright;
   if (vInfo.w > 0.5) {
     float l = dot(c, PROP_LUMA);
     c = mix(c, vTint * l / max(dot(vTint, PROP_LUMA), 0.05), 0.85);

@@ -80,6 +80,8 @@
   "GLDIO.props.field.scale": "Scale (squares per unit)",
   "GLDIO.props.field.scaleFit": "Fit the size",
   "GLDIO.props.field.rules": "Rules footprint",
+  "GLDIO.props.field.bright": "Brightness",
+  "GLDIO.props.field.brightHint": "Darken or lighten the model's colours to match the map art (1 = as made). Its glow is not changed.",
   "GLDIO.props.rules.box": "Its box",
   "GLDIO.props.rules.none": "None (scenery)",
   "GLDIO.props.roofHint": "A roof can fade away while a figure is under it, so the table sees inside.",

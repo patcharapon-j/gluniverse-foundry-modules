@@ -43,6 +43,7 @@ its keys are stored data and are never renamed.
 | `profile` | `lathe` only: 2 to 48 `[r, y]` pairs, each 0 to 1 of the half-width and the height, bottom to top |
 | `bevel` | `extrude` only: the rounded top edge, 0 to 0.5 squares |
 | `src`, `scale`, `rules` | `model` only: the `.glb` or `.gltf` path; squares per model unit, or `null` to fit inside `w × d × h`; `box` (its box is in the rules) or `none` (scenery) |
+| `bright` | `model` only: its colour × this before the light, 0.1 to 2 (default 1, saved only when not 1). Its glow is not changed |
 | `kit`, `parts` | `kit` only: its name, and its parts stored inline (up to 64), each a primitive with `shape x y w d h elev rot mat tint solid` (and an outline, path, profile or bevel where its shape keeps one), relative to the kit's centre, `elev` above the kit's base |
 
 `normalizeProp` is total: anything that is not an object, has an unknown

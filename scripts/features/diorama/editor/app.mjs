@@ -31,7 +31,7 @@ import { loadAutoOptions, promptAutoOptions, describeAuto } from "./auto-dialog.
 import { backgroundSrc, sampleColours, wallSegments, sceneInsideFn } from "./sample.mjs";
 import { PropStore } from "../terrain/props-store.mjs";
 import { GroundStore } from "../terrain/ground.mjs";
-import { PROP_MATERIALS, SIZE_MIN, MODEL_RULES, normalizeProps, propToJSON, resolveProps } from "../terrain/props.mjs";
+import { PROP_MATERIALS, SIZE_MIN, MODEL_RULES, BRIGHT_MIN, BRIGHT_MAX, normalizeProps, propToJSON, resolveProps } from "../terrain/props.mjs";
 import { PLACEABLE_SHAPES } from "./props-tool.mjs";
 import { propsBlock } from "../terrain/live.mjs";
 
@@ -407,7 +407,7 @@ function EditorApp() {
           card: p.shape === "card", img: p.img, roof: !!p.roof,
           slab: p.shape === "slab",
           cliffs: p.shape === "slab" ? CLIFF_MATERIALS.map((k) => ({ key: k, label: L(`GLDIO.material.cliff.${k}`), selected: k === p.cliff })) : [],
-          model: p.shape === "model", src: p.src ?? "", scale: p.scale ?? "",
+          model: p.shape === "model", src: p.src ?? "", scale: p.scale ?? "", bright: p.bright ?? 1, brightMin: BRIGHT_MIN, brightMax: BRIGHT_MAX,
           rulesList: p.shape === "model" ? MODEL_RULES.map((k) => ({ key: k, label: L(`GLDIO.props.rules.${k}`), selected: k === p.rules })) : [],
           kit: p.shape === "kit", kitName: p.kit || L("GLDIO.props.shape.kit"), kitParts: p.parts?.length ?? 0,
           sizeMin: round(SIZE_MIN * D), sizeStep: round(D / 4),
@@ -498,6 +498,8 @@ function EditorApp() {
         case "rules": s.updateProp(id, { rules: input.value }); break;
         // blank: fit inside w × d × h; a number: cells per model unit
         case "scale": s.updateProp(id, { scale: input.value.trim() === "" || !(n > 0) ? null : n }); break;
+        // blank: as authored
+        case "bright": s.updateProp(id, { bright: input.value.trim() === "" || !Number.isFinite(n) ? 1 : n }); break;
       }
     }
 

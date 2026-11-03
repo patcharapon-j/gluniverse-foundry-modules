@@ -133,6 +133,8 @@
               {{#each props.sel.rulesList}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
             </select></label>
         </div>
+        <label class="gldio-ed-field" data-tooltip="{{localize "GLDIO.props.field.brightHint"}}"><span class="gldio-ed-label">{{localize "GLDIO.props.field.bright"}}</span>
+          <input class="gldio-ed-num gl-numeric" type="number" min="{{props.sel.brightMin}}" max="{{props.sel.brightMax}}" step="0.05" value="{{props.sel.bright}}" data-field="prop.bright"></label>
         <p class="gldio-ed-hint">{{localize "GLDIO.props.modelHint"}}</p>
       {{/if}}
       {{#if props.sel.kit}}

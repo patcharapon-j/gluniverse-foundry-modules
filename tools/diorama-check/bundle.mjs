@@ -138,6 +138,99 @@ export default async function check(ctx) {
 
   // ── models from a bundle: the real GLTFLoader on the fixture ──
   await modelsCheck(ctx, file);
+
+  // ── a bundle has many models: landing them must not multiply the rebuilds ──
+  await manyModels(ctx);
+
+  // ── a model's brightness factor: Map Maker's unlit albedo against a night ground ──
+  await brightCheck(ctx, grid, rl.layout);
+}
+
+/**
+ * A model's `bright` scales its colour before the light and never its glow.
+ * Lost in the normaliser, it saves back as 1; lost in the bucket, every model
+ * of a file shares the first one's; folded into the emission, the runes dim too.
+ */
+async function brightCheck(ctx, grid, base) {
+  const P = await import(ctx.url("scripts/features/diorama/terrain/props.mjs"));
+  const { compileLayout } = await import(ctx.url("scripts/features/diorama/terrain/layout.mjs"));
+  const { Terrain } = await import(ctx.url("scripts/features/diorama/terrain/model.mjs"));
+  const { PropsLayer } = await import(ctx.url("scripts/features/diorama/render/props.mjs"));
+  const { createShared } = await import(ctx.url("scripts/features/diorama/render/materials.mjs"));
+  const M = await import(ctx.url("scripts/features/diorama/render/props-models.mjs"));
+  const THREE = await import(ctx.url("scripts/features/diorama/render/three.mjs"));
+  const model = (bright) => P.normalizeProp({ id: "m", shape: "model", x: 1, y: 1, src: "a.glb", bright });
+  ctx.ok("a model is as made unless told otherwise", model(undefined).bright === 1 && model("").bright === 1 && model("dim").bright === 1);
+  ctx.ok("a model's brightness is clamped to its range", model(0.55).bright === 0.55 && model(0).bright === P.BRIGHT_MIN && model(9).bright === P.BRIGHT_MAX);
+  ctx.ok("brightness saves only when it is not 1", P.propToJSON(model(0.6)).bright === 0.6 && !("bright" in P.propToJSON(model(1))));
+  ctx.ok("a box has no brightness", P.normalizeProp({ id: "b", shape: "box", x: 1, y: 1, bright: 0.5 }).bright === undefined);
+
+  const layout = (props) => compileLayout({ ...base, props }, grid);
+  const okL = layout([{ shape: "model", src: "a.glb", at: [1, 1], bright: 0.6 }]);
+  ctx.ok("a layout model keeps its brightness", !okL.errors.length && okL.props?.[0].bright === 0.6, okL.errors.join(" | "));
+  const badL = layout([{ shape: "model", src: "a.glb", at: [1, 1], bright: 5 }]);
+  ctx.ok("a layout brightness out of range is an error", badL.errors.some((e) => e.includes("\"bright\"")), badL.errors.join(" | "));
+  const boxL = layout([{ shape: "box", at: [1, 1], bright: 0.5 }]);
+  ctx.ok("a brightness on a non-model is a warning, not an error", !boxL.errors.length && boxL.warnings.some((w) => w.includes("\"bright\"")));
+
+  M.setModelLoader(() => {
+    const s = new THREE.Scene();
+    s.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()));
+    return Promise.resolve(M.bakeScene(s));
+  });
+  try {
+    const raw = [0.5, 1, 1.5].map((b, i) => ({ id: `b${i}`, shape: "model", x: 0.5 + i, y: 0.5, src: "props/same.glb", bright: b }));
+    const states = P.propStates(P.resolveProps(Terrain.blank(8, 6), P.normalizeProps(raw)).props, { isGM: true });
+    const L = new PropsLayer(createShared());
+    L.setTerrain(Terrain.blank(8, 6));
+    L.set(states);
+    await new Promise((r) => setTimeout(r, 20));
+    const b = [...L.buckets.values()].find((x) => x.bright);
+    const got = b ? Array.from(b.bright.array.slice(0, b.mesh.count)).sort().join() : "";
+    ctx.ok("each model of one file keeps its own brightness", got === "0.5,1,1.5", got);
+    L.dispose();
+  } finally {
+    M.setModelLoader(null);
+  }
+  const glsl = readFileSync(join(ctx.root, "scripts/features/diorama/render/props-glsl.mjs"), "utf8");
+  ctx.ok("brightness scales the colour, before the emission is added", /vec3 c = tex\.rgb \* uModelColor \* vBright;/.test(glsl)
+    && /lit \+= uModelEmissive/.test(glsl) && !/uModelEmissive[^;]*vBright/.test(glsl));
+}
+
+/**
+ * Concourse 3 brings 61 distinct models. Each rebuild used to add a fresh
+ * callback to every model still loading, so every landing rebuilt once per
+ * earlier rebuild: the work doubled per model and 30 models froze the tab.
+ */
+async function manyModels(ctx) {
+  const THREE = await import(ctx.url("scripts/features/diorama/render/three.mjs"));
+  const M = await import(ctx.url("scripts/features/diorama/render/props-models.mjs"));
+  const { PropsLayer } = await import(ctx.url("scripts/features/diorama/render/props.mjs"));
+  const { normalizeProps, resolveProps, propStates } = await import(ctx.url("scripts/features/diorama/terrain/props.mjs"));
+  const { Terrain } = await import(ctx.url("scripts/features/diorama/terrain/model.mjs"));
+  const { createShared } = await import(ctx.url("scripts/features/diorama/render/materials.mjs"));
+  const N = 40;
+  // each file lands on its own later tick, the way a browser's fetches do
+  M.setModelLoader((src) => new Promise((ok) => setTimeout(() => {
+    const s = new THREE.Scene();
+    s.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()));
+    ok(M.bakeScene(s));
+  }, 2 + Number(src.match(/\d+/)[0]))));
+  try {
+    const raw = Array.from({ length: N }, (_, i) => ({ id: `m${i}`, shape: "model", x: 0.5 + (i % 8), y: 0.5 + Math.floor(i / 8), src: `props/m${i}.glb` }));
+    const states = propStates(resolveProps(Terrain.blank(8, 6), normalizeProps(raw)).props, { isGM: true });
+    const L = new PropsLayer(createShared());
+    L.setTerrain(Terrain.blank(8, 6));
+    const t0 = Date.now();
+    L.set(states);
+    await new Promise((r) => setTimeout(r, N + 60));
+    const drawn = [...L.buckets.values()].reduce((n, b) => n + b.mesh.count, 0);
+    ctx.ok(`${N} models landing one by one rebuild at most once each`, L.rebuilds <= N + 1 && drawn === N,
+      `${L.rebuilds} rebuilds, ${drawn} drawn, ${Date.now() - t0} ms`);
+    L.dispose();
+  } finally {
+    M.setModelLoader(null);
+  }
 }
 
 /** A scene that records its updates and applies them the way Foundry's dotted keys do (v13 operators). */

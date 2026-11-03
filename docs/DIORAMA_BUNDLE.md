@@ -60,7 +60,7 @@ wand still sample the full art.
 
 ## Models from a bundle
 
-They are ordinary `model` props (docs/DIORAMA_PROPS.md). Two things keep them
+They are ordinary `model` props (docs/DIORAMA_PROPS.md). Three things keep them
 looking like the map:
 
 - **Crisp pixels.** A texture whose sampler magnifies with NEAREST also
@@ -71,6 +71,11 @@ looking like the map:
   `KHR_materials_emissive_strength`) is added after the light and is never
   shadowed, so a lightbox or a screen reads in the dark. As glTF says, an
   emissive texture with no `emissiveFactor` glows with nothing.
+- **Brightness.** Map Maker bakes props as unlit albedo, which can read bright
+  against a dim, night-lit ground. A layout prop's `bright` (0.1 to 2,
+  default 1) scales its colour before the scene light and leaves its glow
+  alone, so a bundle can set it per model (around 0.5 to 0.6 suits a night
+  ground). The editor shows it as Brightness.
 
 ## Checks and preview
 
