@@ -218,6 +218,10 @@ eq(M.hasAsides("no stars"), false, "hasAsides on plain words");
   eq([lead2[0].closes, lead2[0].opens], [false, true], "a leading aside only reopens");
   eq(M.quoteEdges(lead2), { opens: false, closes: true }, "a line starting on an aside has no opening mark");
   eq(M.quoteEdges(M.asideRuns("*smiles*")), { opens: false, closes: false }, "a line of one aside has no marks at all");
+  const tail = M.asideRuns("Stay back, the door is *trembling*.");
+  eq(tail.map((r) => r.text), ["Stay back, the door is", "trembling."], "a lone stop after an aside joins it, not a quoted run of its own");
+  eq(M.quoteEdges(tail), { opens: true, closes: false }, "a line ending on an aside and its stop has no closing mark");
+  eq(M.asideRuns("*sighs* ... *shrugs* Fine.").map((r) => r.text), ["sighs...", "shrugs", "Fine."], "punctuation between two asides joins the first");  eq(M.asideRuns("Wait — *ducks* — now!").map((r) => r.text), ["Wait —", "ducks", "— now!"], "punctuation beside words stays with the words");
 }
 ok(R.bubbleLineHTML({ mode: "say", name: "S", text: "Go! *runs*" }).includes(`<span class="glrp-aside" data-closes>runs</span>`), "bubbleLineHTML: a Say aside is not set apart");
 ok(!R.bubbleLineHTML({ mode: "think", name: "S", text: "*why*" }).includes("glrp-aside"), "bubbleLineHTML: stars in a thought are the writer's emphasis, not an aside");
