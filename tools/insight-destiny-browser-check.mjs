@@ -22,7 +22,8 @@ export async function runInsightDestinyMotionChecks() {
   const markup = await (await fetch('/templates/insight/notification.hbs')).text();
   let attach;
   try {
-    globalThis.game = { settings: { get: (_scope, key) => key === 'insight.animationSpeed' ? speed : key === 'insight.soundEnabled' ? false : undefined } };
+    let fateTier = 'default';
+    globalThis.game = { settings: { get: (_scope, key) => key === 'insight.animationSpeed' ? speed : key === 'insight.soundEnabled' ? false : key === 'dd.motionTier' ? fateTier : undefined } };
     globalThis.foundry = { applications: { handlebars: { renderTemplate: async (_path, data) => {
       let html = markup.replace(/\{\{!--[\s\S]*?--\}\}/g, '');
       html = html.replace(/\{\{#if (\w+)\}\}([\s\S]*?)(?:\{\{else\}\}([\s\S]*?))?\{\{\/if\}\}/g, (_m, key, yes, no) => data[key] ? yes : no ?? '');
@@ -92,14 +93,18 @@ export async function runInsightDestinyMotionChecks() {
     const completing = chat.querySelector('.glddf-fate-strip');
     await wait(1000);
     assert(!completing.classList.contains('glddf-anime-reveal') && completing.style.opacity === '', 'Destiny completed timeline cleans styles and marker');
-    chat.style.setProperty('--glddf-motion-scale', '1.4');
+    // The Animation Style setting scales this feature's arrival only (560 ms of
+    // timeline for an opportunity at Default, 784 ms at Cinematic).
+    fateTier = 'cinematic';
     fate.appliedAt = Date.now();
     attach({ ...message, id: crypto.randomUUID() }, chat);
     const cinematic = chat.querySelector('.glddf-fate-strip');
-    await wait(740);
-    assert(cinematic.classList.contains('glddf-anime-reveal'), 'Destiny cinematic local scale extends actual timeline');
-    await wait(400);
+    await wait(660);
+    assert(cinematic.classList.contains('glddf-anime-reveal'), 'Destiny cinematic tier extends actual timeline');
+    await wait(500);
     assert(!cinematic.classList.contains('glddf-anime-reveal'), 'Destiny cinematic reveal completes and cleans');
+    assert(document.body.style.getPropertyValue('--gl-motion-scale') === '1', 'Destiny tier never writes the suite scale on body');
+    fateTier = 'default';
     document.body.style.setProperty('--gl-motion-scale', '0');
     const detached = document.createElement('div');
     detached.innerHTML = '<div class="message-content"></div>';
