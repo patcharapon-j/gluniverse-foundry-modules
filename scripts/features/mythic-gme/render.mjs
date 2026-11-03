@@ -233,6 +233,7 @@ export function chatHTML(v, t, { audience = "whisper" } = {}) {
   ${v.question ? `<p class="gmyth-question">${tx(v.question, t)}</p>` : ""}
   <p class="gmyth-headline">${tx(v.headline, t)}</p>
   ${v.meta.length ? `<p class="gmyth-meta">${esc(metaText(v, t))}</p>` : ""}
+  ${v.note ? `<p class="gmyth-note">${tx(v.note, t)}</p>` : ""}
   ${v.lines.length ? `<div class="gmyth-lines">${v.lines.map((l) => lineHTML(l, t)).join("")}</div>` : ""}
 </div>`;
 }

@@ -544,7 +544,7 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
-.gmyth-root .gmyth-note { color: var(--gmyth-faint); font-size: 11px; line-height: 1.35; }
+:is(.gmyth-root, .gmyth-card) .gmyth-note { color: var(--gmyth-faint); font-size: 11px; line-height: 1.35; }
 /* One grid for every line of a card, so the values line up under the
    longest label whatever language it is in. */
 :is(.gmyth-root, .gmyth-card) .gmyth-lines {

@@ -135,6 +135,9 @@ export function entryView(e) {
       v.meta = e.meta ? [RAW(e.meta)] : [];
       v.lines = (e.subs ?? []).map((s) => ({ label: RAW(s.label), value: RAW(s.result), meta: s.meta ? RAW(s.meta) : null, tone: "word" }));
   }
+  // A Random Event's Actions read without Table 1 says so, wherever it landed.
+  const ev = e.kind === "event" ? e : e.event;
+  if (!v.note && ev?.meaning?.missing) v.note = T("GLMYTHIC.meaning.missing");
   return v;
 }
 
