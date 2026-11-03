@@ -27,6 +27,19 @@ is two rows: Raise hand and Need time, then the traffic light with the current
 answer beside it. Sound and desktop alerts are icons in the header, and the
 header collapses the panel to one 32px line.
 
+**The Dire Peril splash** is the old feature's full-screen stage, kept as it
+was apart from the type, which is the skin's `--sp-font`: a letter-by-letter
+montage, then the two words slam in over a WebGL danger field (plasma, a hex
+lattice and two shockwave rings) with corner brackets, running hazard text and a
+drifting outline marquee. It lasts `TIMING.perilStage`; every beat is a CSS
+keyframe laid out as a share of that one length, which `playPerilSplash` writes
+as `--sp-peril-stage` and unmounts at. It never takes a click. Ending the peril
+ends the splash at once. The field (`peril-field.js`) is a suite surface, built
+only on a client that can see the splash, warmed at idle, and the first thing
+the frame budget sheds (`SHED_ORDER`); each client can turn it off
+(`sp.perilWebGLEnabled`), and without it the splash plays as CSS with its own
+shockwave ring.
+
 **Spotlight is marks, not time.** Click a player's row to mark that they had the
 spotlight; mark twice for a big one; right-click to take one back. The row two
 or more marks behind everyone else is tagged Quiet.
@@ -109,8 +122,9 @@ channel.
 ## What changed from the old feature
 
 Removed: time-based spotlight tracking, the dossier card, the hand-raise sidebar,
-the appearance and theme settings, both WebGL renderers (campfire and peril), and
-the pacer's own socket handler. Kept and rebuilt: countdowns, wrap-up, ready
+the appearance and theme settings, the campfire's WebGL renderer, and the
+pacer's own socket handler. The Dire Peril splash and its WebGL field were
+brought back after the remake, in the skin's type. Kept and rebuilt: countdowns, wrap-up, ready
 check, hand raise, Need time, campfire, Dire Peril with its GM-editable text, the
 safety lights and check-in, and all three exemption lists. Added: named calls,
 reach tracking and nudges, sounds, title flash and desktop alerts, spotlight
@@ -118,7 +132,7 @@ marks, keybindings (Alt+H raise hand, Alt+W wrap up, Alt+R ready check, and an
 unbound End call), and quick-search entries.
 
 Settings carried over from the standalone module by the suite's migration: the
-four Dire Peril texts, the default countdown, reset on scene change, the bars and
+four Dire Peril texts, the peril WebGL toggle, the default countdown, reset on scene change, the bars and
 peril exemption lists, and the HUD position. Old appearance settings are left
 behind on purpose: there is one look now (docs/adr/0003-stream-pacer-skin.md).
 
@@ -131,7 +145,8 @@ node tools/pacer-preview.mjs && node tools/preview-server.mjs
 ```
 
 Then open `/.preview/pacer.html?scene=gm` (also `ready`, `player`, `checkin`,
-`peril`, `calm`; add `&live=1` to watch lanes arrive one by one). The motion
+`peril`, `calm`; add `&live=1` to watch lanes arrive one by one). `peril`
+replays the splash on a loop; `&at=<ms>` freezes it at that moment instead. The motion
 workshop's browser checks (`tools/templates/motion-preview.html`) cover the band's
 lane order and the splash. Nothing here proves the socket round trip, presence
 or the desktop notification; those need a session with a second login.

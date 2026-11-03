@@ -29,13 +29,17 @@
       "Volume": "Pacer volume",
       "VolumeHint": "On top of Foundry's interface volume.",
       "TitleFlash": "Flash the tab title",
-      "TitleFlashHint": "When a call arrives while Foundry is in the background, the tab's title flashes until you come back."
+      "TitleFlashHint": "When a call arrives while Foundry is in the background, the tab's title flashes until you come back.",
+      "PerilField": "Dire Peril WebGL effect",
+      "PerilFieldHint": "Draw the animated danger field behind the Dire Peril splash. Turn it off on a slow machine; the splash still plays without it."
     },
     "Peril": {
       "Dire": "Dire",
       "Peril": "Peril",
       "Tag": "The stakes are real",
-      "Subtitle": "Every choice counts from here"
+      "Subtitle": "Every choice counts from here",
+      "RunTop": "HAZARD CLASS [LETHAL] // PROTOCOL ENGAGED // ENCOUNTER [CRITICAL] // DEATH IS ON THE TABLE //",
+      "RunBottom": "T-0 // THREAT.LEVEL [MAX] // CASUALTY.RISK [CERTAIN] // COMMAND [ENGAGE] //"
     },
     "Band": {
       "Region": "Table signals",

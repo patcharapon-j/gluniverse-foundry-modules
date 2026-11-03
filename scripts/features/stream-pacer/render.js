@@ -227,10 +227,41 @@ export function hudHTML(vm, L) {
 
 /* ── Dire Peril splash ──────────────────────────────────────────────────── */
 
-export function perilHTML({ dire, peril, subtitle }) {
-  const word = (w, cls) => `<span class="sp-peril-word ${cls}">${Array.from(w).map((ch, i) =>
-    `<span class="sp-peril-ch" style="--i:${i}">${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`).join('')}</span>`;
-  return `<div class="sp-peril-veil"></div><div class="sp-peril-cut" aria-hidden="true"></div>`
-    + `<div class="sp-peril-type">${word(dire, 'sp-peril-a')}${word(peril, 'sp-peril-b')}`
-    + `<span class="sp-peril-sub">${esc(subtitle)}</span></div>`;
+/**
+ * The full-screen stage. Every beat is a CSS keyframe laid out as a share of
+ * the stage's length (`--sp-peril-stage`); letters carry their index as `--i`
+ * so the cascade needs no script. Every word here can be the GM's, so all of
+ * it is escaped.
+ */
+export function perilStageHTML({ dire, peril, tag, subtitle, runTop, runBottom }) {
+  const letters = (w) => Array.from(String(w ?? ''));
+  const line = (w, n) => `<div class="sp-pk-line sp-pk-line-${n}" style="--n:${letters(w).length}">`
+    + letters(w).map((ch, i) => `<span class="sp-pk-l" style="--i:${i}">${esc(ch)}</span>`).join('') + `</div>`;
+  const marquee = esc(`${dire} ${peril}`.trim());
+  const row = `<div class="sp-pk-marquee-row">${`<span>${marquee}</span>`.repeat(4)}</div>`;
+  // the centre montage: every character, spaces dropped, in order
+  const flash = letters(`${dire}${peril}`).filter((ch) => ch !== ' ')
+    .map((ch, i) => `<span class="sp-pk-pf" style="--i:${i}">${esc(ch)}</span>`).join('');
+  const stream = (run, cls, rev) => `<div class="sp-pk-stream ${cls}" aria-hidden="true">`
+    + `<div class="sp-pk-stream-track${rev ? ' sp-pk-stream-rev' : ''}"><span>${esc(run)}</span><span>${esc(run)}</span></div></div>`;
+  return `<div class="sp-pk-vignette" aria-hidden="true"></div>`
+    + `<div class="sp-pk-marquee" aria-hidden="true">${row}${row}${row}</div>`
+    + `<div class="sp-pk-sweep" aria-hidden="true"></div>`
+    + `<div class="sp-pk-shock" aria-hidden="true"></div>`
+    + `<div class="sp-pk-preflash" aria-hidden="true">${flash}</div>`
+    + `<div class="sp-pk-frame" aria-hidden="true">`
+    + `<span class="sp-pk-corner sp-pk-tl"></span><span class="sp-pk-corner sp-pk-tr"></span>`
+    + `<span class="sp-pk-corner sp-pk-bl"></span><span class="sp-pk-corner sp-pk-br"></span>`
+    + `<span class="sp-pk-edge sp-pk-edge-t"></span><span class="sp-pk-edge sp-pk-edge-b"></span></div>`
+    + stream(runTop, 'sp-pk-stream-t', false)
+    + stream(runBottom, 'sp-pk-stream-b', true)
+    + `<div class="sp-pk-reticle" aria-hidden="true"><span class="sp-pk-rh"></span><span class="sp-pk-rv"></span><span class="sp-pk-rd"></span></div>`
+    + `<div class="sp-pk-stack">`
+    + `<div class="sp-pk-tag">${esc(tag)}</div>`
+    + line(dire, 1)
+    + `<div class="sp-pk-rule"></div>`
+    + line(peril, 2)
+    + `<div class="sp-pk-sub">${esc(subtitle)}</div>`
+    + `</div>`
+    + `<div class="sp-pk-flash" aria-hidden="true"></div>`;
 }

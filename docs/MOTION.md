@@ -14,7 +14,7 @@ One system must own a given element/property while it animates. Suppress conflic
 | Stage | Visibility, slot content, layout and exit have separate cancellable channels; new actor assignments invalidate pending swaps. |
 | Initiative | Rail movement uses existing FLIP variables and round continuity; collect ghosts and per-kind splashes own cleanup. |
 | Clocks Tracker | Delving reels land on stored results before discard reveal; HUD width animation releases intrinsic sizing after settling. |
-| Stream Pacer | Each band lane owns its arrival (drop, wipe, sweep), flare and exit; a kept lane never replays its arrival. The Dire Peril splash is one owner that ends once, by its own lift or a click. Running text and the countdown hairline are CSS on the compositor. |
+| Stream Pacer | Each band lane owns its arrival (drop, wipe, sweep), flare and exit; a kept lane never replays its arrival. The Dire Peril splash is CSS keyframes sharing one length (`--sp-peril-stage`, from `TIMING.perilStage`) and one owner for its fade that ends once, by running out or by the peril ending under it. Running text and the countdown hairline are CSS on the compositor. |
 | Critical | One paused, seekable Anime.js beat sheet drives both portrait and video presentation from their existing renderer clocks; watchdogs release the queue in hidden tabs. |
 | Destiny Dice | Fresh results reveal once; repeat/historical renders remain static, with body motion tiers available before chat DOM attachment. |
 | Timer | Entrance, urgency emphasis and expiry accents are decorative. Remaining time, pause and expiry continue to derive from authoritative state. |

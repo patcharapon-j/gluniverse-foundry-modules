@@ -8,8 +8,9 @@
    no setting of its own, only ink, paper and the four signal hues. Motion and
    timing still come from the suite (`--gl-d-*`, `--gl-ease*`, `--gl-linear`).
 
-   Roots: #sp-band (the band and its aura), #stream-pacer-hud, .sp-peril, and
-   the two settings forms. Every rule below sits under one of them.
+   Roots: #sp-band (the band and its aura), #stream-pacer-hud, .sp-peril and
+   its WebGL field .sp-peril-gl, and the two settings forms. Every rule below
+   sits under one of them.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :is(.sp-root, .stream-pacer-exempt-users, .stream-pacer-peril-text) {
@@ -746,62 +747,343 @@
 
 /* ═══ Dire Peril ═══════════════════════════════════════════════════════════ */
 
+/* The full-screen stage over the WebGL field (`.sp-peril-gl`, one layer
+   below). Every beat is a keyframe laid out as a share of --sp-peril-stage,
+   which band.js writes from TIMING.perilStage, so the CSS and the unmount are
+   one length. It carries its own crimson ramp: the peril crimson
+   (--sp-red-deep, the suite's --gl-peril) and what is derived from it, mixed
+   the same way peril-field.js mixes the shader's colour bed. */
+
+.sp-peril-gl {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: calc(var(--gl-z-splash) - 1);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--gl-d-quick) var(--gl-exit);
+  will-change: opacity;
+}
+.sp-peril-gl.is-visible {
+  opacity: 1;
+  transition: opacity var(--gl-d-reveal) var(--gl-ease);
+}
+
 .sp-peril {
+  --sp-peril: var(--sp-red-deep);
+  --sp-peril-bright: color-mix(in srgb, var(--sp-red-deep) 38%, rgb(var(--gl-tint-light)));
+  --sp-peril-glow: color-mix(in srgb, color-mix(in srgb, var(--sp-red-deep) 85%, rgb(var(--gl-tint-light))) 60%, transparent);
+  --sp-peril-red: color-mix(in srgb, var(--sp-red-deep), #ff1e30);
+  --sp-peril-red-glow: color-mix(in srgb, var(--sp-peril-red) 60%, transparent);
+  --sp-peril-ghost: color-mix(in srgb, color-mix(in srgb, color-mix(in srgb, var(--sp-red-deep) 40%, #78dcff) 90%, rgb(var(--gl-tint-light))) 35%, transparent);
+  --sp-peril-strobe: steps(1);   /* a light that is on or off, never between */
+  --sp-peril-typing: steps(24);  /* the subtitle types out */
+  --sp-peril-len: var(--sp-peril-stage, var(--gl-drift));
+
   position: fixed;
   inset: 0;
   z-index: var(--gl-z-splash);
-  display: grid;
-  place-items: center;
-  pointer-events: auto;
-  cursor: pointer;
+  overflow: hidden;
+  pointer-events: none;
+  background: transparent;
+  color: rgb(var(--gl-tint-light));
+  font-family: var(--sp-font);
 }
-.sp-peril .sp-peril-veil {
+
+/* Fine scanlines across the whole stage. */
+.sp-peril::before {
+  content: '';
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(120% 90% at 50% 50%, transparent 30%, color-mix(in oklab, var(--sp-red-deep) 40%, transparent) 100%),
-    radial-gradient(80% 70% at 50% 50%, color-mix(in oklab, var(--sp-ink-0) 62%, transparent), color-mix(in oklab, var(--sp-ink-0) 94%, transparent));
+  z-index: 40;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgb(var(--gl-tint-light) / 0.018) 2px 3px);
 }
-.sp-peril .sp-peril-cut {
+
+/* Radial darkening + the crimson wash, so the field reads as danger. */
+.sp-peril .sp-pk-vignette {
   position: absolute;
-  left: 8%;
-  right: 8%;
-  top: 50%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--sp-red) 20%, var(--sp-red) 80%, transparent);
-  box-shadow: 0 0 22px 2px color-mix(in oklab, var(--sp-red) 70%, transparent);
-  transform-origin: 50% 50%;
-  rotate: -4deg;
+  inset: 0;
+  z-index: 10;
+  background:
+    radial-gradient(ellipse at 50% 50%, transparent 28%, rgb(var(--gl-tint-dark) / 0.55) 100%),
+    radial-gradient(ellipse at 50% 50%, var(--sp-peril-glow), transparent 60%);
+  opacity: 0;
+  animation: sp-pk-fade-hold var(--sp-peril-len) var(--gl-ease-inout) forwards;
 }
-.sp-peril .sp-peril-type {
-  position: relative;
+
+/* The title drifting in outline behind everything. */
+.sp-peril .sp-pk-marquee {
+  position: absolute;
+  inset: -6% 0;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  overflow: hidden;
+  opacity: 0;
+  animation: sp-pk-fade-hold var(--sp-peril-len) var(--gl-ease) forwards;
+}
+.sp-peril .sp-pk-marquee-row {
+  display: flex;
+  white-space: nowrap;
+  font-weight: var(--gl-weight-bold);
+  font-size: 12vh;
+  line-height: 1.05;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--sp-peril-ghost);
+  will-change: transform;
+}
+.sp-peril .sp-pk-marquee-row span { padding: 0 0.4em; }
+.sp-peril .sp-pk-marquee-row:nth-child(1) { animation: sp-pk-drift-l var(--gl-loop-lg) var(--gl-linear) infinite; }
+.sp-peril .sp-pk-marquee-row:nth-child(2) {
+  -webkit-text-stroke-color: var(--sp-peril-red-glow);
+  animation: sp-pk-drift-r var(--gl-loop-xl) var(--gl-linear) infinite;
+}
+.sp-peril .sp-pk-marquee-row:nth-child(3) { animation: sp-pk-drift-l var(--gl-loop-xl) var(--gl-linear) infinite; }
+
+/* Alert sweep: a bright bar scanning top to bottom on entry. */
+.sp-peril .sp-pk-sweep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 30vh;
+  z-index: 30;
+  background: linear-gradient(180deg, transparent, var(--sp-peril-red-glow) 50%, transparent);
+  opacity: 0;
+  mix-blend-mode: screen;
+  animation: sp-pk-sweep var(--sp-peril-len) var(--gl-ease) forwards;
+}
+
+/* The impact shockwave ring (also what is left when the field is off or shed). */
+.sp-peril .sp-pk-shock {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  z-index: 20;
+  border: 3px solid var(--sp-peril-red);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0;
+  box-shadow: 0 0 40px var(--sp-peril-red-glow), inset 0 0 40px var(--sp-peril-glow);
+  animation: sp-pk-shock var(--sp-peril-len) var(--gl-ease) forwards;
+}
+
+/* Tactical corner brackets + centre edge ticks. */
+.sp-peril .sp-pk-frame { position: absolute; inset: 0; z-index: 26; }
+.sp-peril .sp-pk-corner {
+  position: absolute;
+  width: 58px;
+  height: 58px;
+  border: 0 solid var(--sp-peril-red);
+  opacity: 0;
+  filter: drop-shadow(0 0 6px var(--sp-peril-red-glow));
+  animation: sp-pk-corner var(--sp-peril-len) var(--gl-ease) forwards;
+}
+.sp-peril .sp-pk-tl { top: 30px; left: 30px; border-width: 2px 0 0 2px; }
+.sp-peril .sp-pk-tr { top: 30px; right: 30px; border-width: 2px 2px 0 0; }
+.sp-peril .sp-pk-bl { bottom: 30px; left: 30px; border-width: 0 0 2px 2px; }
+.sp-peril .sp-pk-br { bottom: 30px; right: 30px; border-width: 0 2px 2px 0; }
+.sp-peril .sp-pk-edge {
+  position: absolute;
+  left: 50%;
+  width: 200px;
+  height: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, var(--sp-peril-red) 50%, transparent);
+  box-shadow: 0 0 6px var(--sp-peril-red-glow);
+  opacity: 0;
+  animation: sp-pk-fade-hold var(--sp-peril-len) var(--gl-ease) forwards;
+}
+.sp-peril .sp-pk-edge-t { top: 34px; }
+.sp-peril .sp-pk-edge-b { bottom: 34px; }
+
+/* Running data lines, top and bottom. */
+.sp-peril .sp-pk-stream {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 16px;
+  overflow: hidden;
+  white-space: nowrap;
+  z-index: 25;
+  font-family: var(--sp-font);
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--sp-peril-bright);
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
+          mask-image: linear-gradient(90deg, transparent, black 5%, black 95%, transparent);
+  opacity: 0;
+  animation: sp-pk-fade-hold var(--sp-peril-len) var(--gl-ease) forwards;
+}
+.sp-peril .sp-pk-stream-t { top: 54px; }
+.sp-peril .sp-pk-stream-b { bottom: 54px; }
+.sp-peril .sp-pk-stream-track { display: inline-flex; animation: sp-pk-stream-l var(--gl-loop-lg) var(--gl-linear) infinite; }
+.sp-peril .sp-pk-stream-rev { animation: sp-pk-stream-r var(--gl-loop-lg) var(--gl-linear) infinite; }
+.sp-peril .sp-pk-stream-track > span { padding: 0 1.4em; }
+
+/* The reticle behind the title. */
+.sp-peril .sp-pk-reticle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 660px;
+  height: 660px;
+  transform: translate(-50%, -50%);
+  z-index: 21;
+  opacity: 0;
+  animation: sp-pk-fade-hold var(--sp-peril-len) var(--gl-ease) forwards;
+}
+.sp-peril .sp-pk-rh,
+.sp-peril .sp-pk-rv {
+  position: absolute;
+  background: linear-gradient(90deg, transparent, var(--sp-peril-red-glow) 40%, var(--sp-peril-red-glow) 60%, transparent);
+}
+.sp-peril .sp-pk-rh { top: 50%; left: 0; right: 0; height: 1px; transform: translateY(-50%); }
+.sp-peril .sp-pk-rv {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, transparent, var(--sp-peril-red-glow) 40%, var(--sp-peril-red-glow) 60%, transparent);
+}
+.sp-peril .sp-pk-rd {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 120px;
+  height: 120px;
+  border: 1px solid var(--sp-peril-red-glow);
+  transform: translate(-50%, -50%) rotate(45deg);
+  animation: sp-pk-spin var(--sp-peril-len) var(--gl-linear) forwards;
+}
+
+/* The montage: each character stamps huge at centre in rapid sequence
+   before the full title assembles. */
+.sp-peril .sp-pk-preflash {
+  position: absolute;
+  inset: 0;
+  z-index: 36;
+  pointer-events: none;
+}
+.sp-peril .sp-pk-pf {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  font-weight: var(--gl-weight-bold);
+  text-transform: uppercase;
+  line-height: 1;
+  font-size: clamp(180px, 32vw, 460px);
+  color: rgb(var(--gl-tint-light));
+  text-shadow: 0 0 40px var(--sp-peril-glow), 0 0 90px var(--sp-peril-red-glow), 0 6px 16px rgb(var(--gl-tint-dark));
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(1.22);
+  animation: sp-pk-pf var(--gl-d-tap) var(--gl-ease-sharp) both;
+  animation-delay: calc(var(--gl-d-quick) + var(--i) * var(--gl-d-flash));
+}
+
+/* The title. Sharp and snappy, no bounce: tight micro-slides, rapid
+   per-character flashing and tracking that collapses each line into place,
+   then a frozen hold. The lines assemble after the montage. */
+.sp-peril .sp-pk-stack {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 24;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
   text-align: center;
+  animation: sp-pk-fade-hold var(--sp-peril-len) var(--gl-ease) forwards, sp-pk-jolt var(--sp-peril-len) var(--gl-linear) forwards;
 }
-.sp-peril .sp-peril-word {
-  display: block;
-  font-size: clamp(64px, 11vw, 176px);
-  font-weight: 850;
-  font-stretch: 128%;
-  line-height: 0.84;
-  letter-spacing: -0.035em;
+.sp-peril .sp-pk-tag {
+  font-family: var(--sp-font);
+  font-size: 13px;
+  letter-spacing: 7px;
+  color: var(--sp-peril-red);
   text-transform: uppercase;
-  color: var(--sp-text);
-}
-.sp-peril .sp-peril-b { color: var(--sp-red); text-shadow: 0 0 40px color-mix(in oklab, var(--sp-red) 45%, transparent); }
-.sp-peril .sp-peril-ch { display: inline-block; opacity: 0; }
-.sp-peril .sp-peril-sub {
-  margin-top: 18px;
-  font-size: clamp(14px, 1.4vw, 20px);
-  font-weight: 600;
-  font-stretch: 112%;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--sp-dim);
+  font-weight: var(--gl-weight-medium);
+  margin-bottom: 14px;
+  padding: 4px 14px;
+  border: 1px solid var(--sp-peril-red-glow);
+  clip-path: polygon(var(--gl-cut-sm) 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%, 0 var(--gl-cut-sm));
+  transform-origin: center;
   opacity: 0;
+  animation: sp-pk-tag var(--sp-peril-len) var(--gl-ease-sharp) forwards;
+}
+.sp-peril .sp-pk-line {
+  display: flex;
+  justify-content: center;
+  font-weight: var(--gl-weight-bold);
+  text-transform: uppercase;
+  line-height: 0.92;
+  font-size: clamp(64px, 15vw, 168px);
+  letter-spacing: 0.04em;
+  will-change: filter, letter-spacing;
+}
+/* Tracking collapse + a quick brightness strobe as each line lands. */
+.sp-peril .sp-pk-line-1 {
+  animation: sp-pk-track-1 var(--sp-peril-len) var(--gl-ease-sharp) both, sp-pk-strobe-1 var(--sp-peril-len) var(--sp-peril-strobe) both;
+}
+.sp-peril .sp-pk-line-2 {
+  animation: sp-pk-track-2 var(--sp-peril-len) var(--gl-ease-sharp) both, sp-pk-strobe-2 var(--sp-peril-len) var(--sp-peril-strobe) both;
+}
+/* Letters are anime.js (band.js): line 1 drops in, line 2 slides in from the
+   side, each out of a blur. They rest hidden until their beat. */
+.sp-peril .sp-pk-l {
+  display: inline-block;
+  white-space: pre;
+  opacity: 0;
+  color: rgb(var(--gl-tint-light));
+  text-shadow: 0 0 30px var(--sp-peril-glow), 0 0 70px var(--sp-peril-red-glow), 0 4px 10px rgb(var(--gl-tint-dark));
+}
+/* Line 2 carries an RGB-split shadow. */
+.sp-peril .sp-pk-line-2 .sp-pk-l {
+  text-shadow:
+    -3px 0 var(--sp-peril-red),
+    2px 0 var(--sp-peril-ghost),
+    0 0 30px var(--sp-peril-glow),
+    0 0 70px var(--sp-peril-red-glow),
+    0 4px 10px rgb(var(--gl-tint-dark));
+}
+.sp-peril .sp-pk-rule {
+  height: 2px;
+  width: 0;
+  margin: 10px 0;
+  background: linear-gradient(90deg, transparent, var(--sp-peril-red) 30%, var(--sp-peril) 50%, var(--sp-peril-red) 70%, transparent);
+  box-shadow: 0 0 12px var(--sp-peril-red-glow);
+  animation: sp-pk-rule var(--sp-peril-len) var(--gl-ease-sharp) forwards;
+}
+.sp-peril .sp-pk-sub {
+  font-family: var(--sp-font);
+  font-size: 13px;
+  letter-spacing: 6px;
+  color: var(--sp-peril-bright);
+  text-transform: uppercase;
+  margin-top: 14px;
+  max-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  animation: sp-pk-sub var(--sp-peril-len) var(--sp-peril-typing) forwards;
+}
+
+/* The impact flash: the declare hit, then the second line's slam. */
+.sp-peril .sp-pk-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 38;
+  background: radial-gradient(ellipse at 50% 50%, rgb(var(--gl-tint-light) / 0.95), var(--sp-peril-red-glow) 55%, transparent 75%);
+  opacity: 0;
+  mix-blend-mode: screen;
+  animation: sp-pk-flash var(--sp-peril-len) var(--sp-peril-strobe) forwards;
 }
 
 /* ═══ The two settings forms (Foundry windows; only small touches) ═════════ */
@@ -827,4 +1109,107 @@
 @keyframes sp-breathe {
   from { opacity: 0.45; }
   to { opacity: 1; }
+}
+
+/* The Dire Peril stage. Percentages are shares of --sp-peril-stage. */
+
+/* snap on, hold, fade with the stage */
+@keyframes sp-pk-fade-hold {
+  0% { opacity: 0; }
+  4% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes sp-pk-drift-l { 0% { transform: translateX(0); } 100% { transform: translateX(-25%); } }
+@keyframes sp-pk-drift-r { 0% { transform: translateX(-25%); } 100% { transform: translateX(0); } }
+@keyframes sp-pk-sweep {
+  0% { transform: translateY(-40vh); opacity: 0; }
+  3% { opacity: 0.9; }
+  20%, 100% { transform: translateY(110vh); opacity: 0; }
+}
+@keyframes sp-pk-shock {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  1% { opacity: 1; }
+  22% { transform: translate(-50%, -50%) scale(36); opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes sp-pk-corner {
+  0%, 6% { opacity: 0; transform: scale(1.18); }
+  12% { opacity: 1; transform: scale(1); }
+  82% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; }
+}
+@keyframes sp-pk-stream-l { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+@keyframes sp-pk-stream-r { 0% { transform: translateX(-50%); } 100% { transform: translateX(0); } }
+@keyframes sp-pk-spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(160deg); }
+}
+@keyframes sp-pk-pf {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.22); filter: blur(3px); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); }
+  70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.97); filter: blur(0); }
+}
+/* one sharp positional jolt as the second line lands; no scale bounce */
+@keyframes sp-pk-jolt {
+  0%, 38% { transform: translate(-50%, -50%); }
+  39% { transform: translate(calc(-50% - 6px), -50%); }
+  40% { transform: translate(calc(-50% + 7px), calc(-50% - 2px)); }
+  41% { transform: translate(calc(-50% - 4px), calc(-50% + 2px)); }
+  42% { transform: translate(calc(-50% + 2px), -50%); }
+  43%, 100% { transform: translate(-50%, -50%); }
+}
+@keyframes sp-pk-tag {
+  0%, 17% { opacity: 0; transform: scaleX(0.1); }
+  22% { opacity: 1; transform: scaleX(1); }
+  23.5% { opacity: 0.35; }
+  25% { opacity: 1; }
+  82% { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0; }
+}
+@keyframes sp-pk-track-1 {
+  0%, 20% { letter-spacing: 0.55em; }
+  30% { letter-spacing: 0.04em; }
+  100% { letter-spacing: 0.04em; }
+}
+@keyframes sp-pk-track-2 {
+  0%, 30% { letter-spacing: 0.55em; }
+  41% { letter-spacing: 0.04em; }
+  100% { letter-spacing: 0.04em; }
+}
+@keyframes sp-pk-strobe-1 {
+  0%, 28% { filter: none; }
+  29% { filter: brightness(2.4); }
+  30% { filter: none; }
+  31% { filter: brightness(1.7); }
+  32%, 100% { filter: none; }
+}
+@keyframes sp-pk-strobe-2 {
+  0%, 38% { filter: none; }
+  39% { filter: brightness(2.6); }
+  40% { filter: none; }
+  41% { filter: brightness(1.8); }
+  42%, 100% { filter: none; }
+}
+@keyframes sp-pk-rule {
+  0%, 39% { width: 0; opacity: 0; }
+  43% { width: min(440px, 60vw); opacity: 1; }
+  82% { width: min(440px, 60vw); opacity: 1; }
+  100% { width: min(440px, 60vw); opacity: 0; }
+}
+@keyframes sp-pk-sub {
+  0%, 46% { max-width: 0; }
+  56% { max-width: 620px; }
+  82% { max-width: 620px; }
+  100% { max-width: 0; }
+}
+@keyframes sp-pk-flash {
+  0%, 3% { opacity: 0; }
+  3.5% { opacity: 0.85; }
+  6% { opacity: 0; }
+  38% { opacity: 0; }
+  39% { opacity: 0.95; }
+  41% { opacity: 0; }
+  100% { opacity: 0; }
 }

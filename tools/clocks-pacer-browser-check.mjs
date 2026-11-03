@@ -2,7 +2,7 @@
 export async function runClocksPacerBrowserChecks() {
   const { DiceSlot } = await import('../scripts/features/clocks-tracker/delving/dice-slot.js');
   const { SignalBand, playPerilSplash } = await import('../scripts/features/stream-pacer/band.js');
-  const { perilHTML } = await import('../scripts/features/stream-pacer/render.js');
+  const { perilStageHTML } = await import('../scripts/features/stream-pacer/render.js');
   const checks = [];
   const assert = (condition, label) => { if (!condition) throw new Error(label); checks.push(label); };
   const capture = owner => {
@@ -37,11 +37,14 @@ export async function runClocksPacerBrowserChecks() {
     assert(settled === 1 && !host.querySelector('.glct-slot'), 'destroy is idempotent and removes overlay');
     host.remove();
   }
-  // Stream Pacer: the Dire Peril splash ends once, by click or by its own lift
+  // Stream Pacer: the Dire Peril splash mounts its stage, lets clicks through
+  // to the table, and ends once
   let done = 0;
-  const splash = playPerilSplash({ html: perilHTML({ dire: 'Dire', peril: 'Peril', subtitle: 'Sub' }), onDone: () => ++done });
-  assert(splash.el.isConnected && splash.el.querySelectorAll('.sp-peril-ch').length === 9, 'peril splash mounts one span per letter');
-  splash.el.click();
+  const splash = playPerilSplash({ html: perilStageHTML({ dire: 'Dire', peril: 'Peril', tag: 'Tag', subtitle: 'Sub', runTop: 'a', runBottom: 'b' }), onDone: () => ++done });
+  assert(splash.el.isConnected && splash.el.querySelectorAll('.sp-pk-l').length === 9, 'peril splash mounts one span per title letter');
+  assert(getComputedStyle(splash.el).pointerEvents === 'none', 'peril splash never takes a click');
+  assert(splash.el.style.getPropertyValue('--sp-peril-stage').endsWith('ms'), 'peril splash writes the stage length its keyframes share');
+  splash.finish();
   splash.finish();
   assert(done === 1 && !splash.el.isConnected, 'peril splash ends exactly once and leaves the DOM');
 

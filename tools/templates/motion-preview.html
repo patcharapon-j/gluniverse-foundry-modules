@@ -55,7 +55,9 @@ globalThis.foundry = {applications:{api:{ApplicationV2:class{},HandlebarsApplica
 const { TimerHUD } = await import('/scripts/features/timer/hud.mjs');
 const { DiceSlot } = await import('/scripts/features/clocks-tracker/delving/dice-slot.js');
 const { playPerilSplash } = await import('/scripts/features/stream-pacer/band.js');
-const { perilHTML } = await import('/scripts/features/stream-pacer/render.js');
+const { perilStageHTML } = await import('/scripts/features/stream-pacer/render.js');
+const { PerilField } = await import('/scripts/features/stream-pacer/peril-field.js');
+const perilField = new PerilField();
 const { createCinematicMotion } = await import('/scripts/features/critical/motion.mjs');
 TimerHUD.mount();
 let state={active:false,running:false,remainingMs:65000,totalMs:65000,expired:false,worldPaused:false,anchor:Date.now()};
@@ -68,7 +70,7 @@ document.querySelector('#tier').onchange=e=>document.body.style.setProperty('--g
 let dice;
 document.querySelector('#roll').onclick=()=>{dice?.destroy();const host=document.querySelector('#dice');delete host.dataset.tumbled;dice=DiceSlot.mount(host,{faces:[6,2,4,1,5],discard:2},()=>{host.textContent='6 · 2 discarded · 4 · 1 discarded · 5';delete host.dataset.tumbled})};
 let peril;
-document.querySelector('#peril').onclick=()=>{peril?.finish();peril=playPerilSplash({html:perilHTML({dire:localize('STREAM_PACER.Peril.Dire'),peril:localize('STREAM_PACER.Peril.Peril'),subtitle:localize('STREAM_PACER.Peril.Subtitle')})})};
+document.querySelector('#peril').onclick=()=>{peril?.finish();peril=playPerilSplash({field:perilField,html:perilStageHTML({dire:localize('STREAM_PACER.Peril.Dire'),peril:localize('STREAM_PACER.Peril.Peril'),tag:localize('STREAM_PACER.Peril.Tag'),subtitle:localize('STREAM_PACER.Peril.Subtitle'),runTop:localize('STREAM_PACER.Peril.RunTop'),runBottom:localize('STREAM_PACER.Peril.RunBottom')})})};
 document.querySelector('#dismiss-peril').onclick=()=>peril?.finish();
 let cinematic,raf;
 document.querySelector('#critical-play').onclick=()=>{if(raf)cancelAnimationFrame(raf);cinematic?.destroy();cinematic=createCinematicMotion(2200,{scale:Number(document.querySelector('#tier').value)});const start=performance.now();const art=document.querySelector('#critical-art'),back=document.querySelector('#critical-back');const tick=()=>{const elapsed=performance.now()-start,f=cinematic.sample(elapsed);art.style.opacity=f.imgAlpha;art.style.transform=`translateY(${f.lift}px) scale(${f.scaleMul})`;art.style.clipPath=`inset(${(1-f.wipe)*50}% 0)`;back.style.opacity=f.bgAlpha;if(elapsed<2200)raf=requestAnimationFrame(tick);else cinematic.destroy()};tick()};
