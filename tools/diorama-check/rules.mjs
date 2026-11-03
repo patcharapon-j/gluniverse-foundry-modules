@@ -343,6 +343,13 @@ export default async function check(ctx) {
     cliffsIn(tSight).length === 0 && sb.outlineFloorQ(tSight, tLive) === Math.floor(eyeQ(tok(0), grid) + (sb.SIGHT_REVEAL_DIST / grid.distance) * 4),
     String(cliffsIn(tSight).length));
   ctx.ok("reveal: lights keep the exact outline", cliffsIn(tLight).length === 4 && sb.outlineFloorQ(tLight, tLive) === Math.floor(sb.polygonEyeQ(tLight, tLive)));
+  // The GM's "view as players": a token the GM has not selected has no vision source.
+  const unsourced = new TCls(); unsourced.config = { type: "sight", source: undefined, dioToken: tok(0) }; unsourced.origin = { x: 50, y: 250, elevation: 0 };
+  unsourced._identifyEdges();
+  ctx.ok("reveal: a token with no vision source still sees from its own eye",
+    sb.polygonEyeQ(unsourced, tLive) === eyeQ(tok(0), grid) && cliffsIn(unsourced).length === 0, `${sb.polygonEyeQ(unsourced, tLive)} ${cliffsIn(unsourced).length}`);
+  ctx.ok("reveal: players' sight names its token (view/bake.mjs)",
+    /source: token\.vision \?\? undefined, dioToken: doc/.test(readFileSync(join(ctx.root, "scripts/features/diorama/view/bake.mjs"), "utf8")));
   ctx.ok("reveal: a creature behind the 10 ft block is still hidden in 3D",
     !sb.targetInClearLine(tLive, eyeQ(tok(0), grid), { x: 50, y: 250 }, { x: 550, y: 250 }, 0, 6));
   ctx.ok("reveal: the lift is a medium creature, from SIZE_HEIGHT", /SIGHT_REVEAL_DIST = SIZE_HEIGHT\.med/.test(readFileSync(join(ctx.root, "scripts/features/diorama/foundry/sight-backend.mjs"), "utf8")));

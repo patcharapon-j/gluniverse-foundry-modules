@@ -360,7 +360,8 @@ function playerSight() {
     let los = null;
     try {
       const origin = { x: c.x, y: c.y, elevation: Number(doc.elevation) || 0 };
-      los = Backend?.create?.(origin, { type: "sight", source: token.vision ?? undefined }) ?? null;
+      // dioToken: the eye, when the GM has not selected the token and Foundry gave it no source
+      los = Backend?.create?.(origin, { type: "sight", source: token.vision ?? undefined, dioToken: doc }) ?? null;
     } catch {
       los = token.vision?.los ?? null;
     }
