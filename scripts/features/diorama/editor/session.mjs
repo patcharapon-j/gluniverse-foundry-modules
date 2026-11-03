@@ -23,6 +23,7 @@
  *   colours         map colours became available (or failed)
  *   props {live}    the props draft or the selection changed (live = a drag)
  *   mode            terrain ↔ props mode
+ *   ground          the draft's 3D ground image changed (a bundle, undo, clear)
  */
 
 import { KIND, SUB, WALL_MATERIALS } from "../constants.mjs";
@@ -34,6 +35,7 @@ import {
 import { planDifficult, cellKey } from "./difficult.mjs";
 import { normalizeProps, PROP_SHAPES, PROP_MATERIALS } from "../terrain/props.mjs";
 import { makeProp, addProp, hitProp, updateProp, moveProp, removeProp, duplicateProp } from "./props-tool.mjs";
+import { normalizeGroundSrc } from "../terrain/ground.mjs";
 
 /** Editor modes: painting the ground, or placing props on it. */
 export const MODES = Object.freeze(["terrain", "props"]);
@@ -51,8 +53,9 @@ export class EditorSession {
    * @param {{size:number, cols:number, rows:number, distance:number, units:string, sceneRect:object}} o.grid
    * @param {Array<{id:string, a:number[], b:number[]}>} [o.walls]
    * @param {Array<{id:string, cells:string[], difficulty:number}>} [o.difficult]  our saved regions
+   * @param {string|null} [o.ground]  the Level's saved 3D ground image (terrain/ground.mjs)
    */
-  constructor({ terrain, grid, walls = [], difficult = [], props = [] }) {
+  constructor({ terrain, grid, walls = [], difficult = [], props = [], ground = null }) {
     this.terrain = terrain;
     this.grid = grid;
     this.walls = walls;
@@ -60,6 +63,8 @@ export class EditorSession {
     this.pending = [];
     /** The props draft (terrain/props.mjs), replaced wholesale on every edit. */
     this.props = normalizeProps(props);
+    /** The 3D ground image draft (a path, or null for the background); Save writes it. */
+    this.ground = normalizeGroundSrc(ground);
     this.mode = "terrain";
     /** Props mode: what a click places, what is selected, whether moves snap. */
     this.propTool = { shape: "box", mat: "stone", selected: null, snap: true };
@@ -78,7 +83,7 @@ export class EditorSession {
     this.mask = null;
     this.preview = null;
     this.hoverWall = null;
-    this.history = new History(terrain, { aux: { pending: [], props: this.props } });
+    this.history = new History(terrain, { aux: this.#aux([]) });
     this._stroke = null;
     this._listeners = new Set();
     /** Set by the app: called when the wand needs map colours it does not have. */
@@ -585,13 +590,17 @@ export class EditorSession {
   /** Replace the draft wholesale (auto setup, copy, clear all). Undoable. */
   replace(src, label = "replace", opts = {}) {
     this.cancelStroke();
-    // `props` (a layout's) lands in the same undo step as the terrain it stands on.
-    const { props, ...rest } = opts;
+    // `props` (a layout's) and `ground` (a bundle's) land in the same undo step as the terrain.
+    const { props, ground, ...rest } = opts;
     replaceTerrain(this.terrain, src, rest);
     if (Array.isArray(props)) {
       this.props = normalizeProps(props);
       if (!this.props.some((p) => p.id === this.propTool.selected)) this.propTool.selected = null;
       this.emit("props");
+    }
+    if (ground !== undefined && normalizeGroundSrc(ground) !== this.ground) {
+      this.ground = normalizeGroundSrc(ground);
+      this.emit("ground");
     }
     this.layer = Math.max(0, Math.min(this.terrain.palette.length - 1, this.layer));
     this.mask = null;
@@ -604,8 +613,24 @@ export class EditorSession {
 
   /* ── history ────────────────────────────────────────────────────────── */
 
+  /** Set or clear (null) the 3D ground image. Undoable. */
+  setGround(src) {
+    const next = normalizeGroundSrc(src);
+    if (next === this.ground) return false;
+    this.cancelStroke();
+    this.ground = next;
+    this.emit("ground");
+    this.emit("tool");
+    return this.commit("ground");
+  }
+
+  /** What the history keeps beside the terrain. */
+  #aux(pending = this.pending) {
+    return { pending, props: this.props, ground: this.ground };
+  }
+
   commit(label = "") {
-    const did = this.history.commit(this.terrain, label, { pending: this.pending, props: this.props });
+    const did = this.history.commit(this.terrain, label, this.#aux());
     if (did) this.emit("history", { label });
     return did;
   }
@@ -625,6 +650,8 @@ export class EditorSession {
         if (!this.props.some((q) => q.id === this.propTool.selected)) this.propTool.selected = null;
         this.emit("props");
       }
+      const ground = normalizeGroundSrc(r.aux?.ground);
+      if (ground !== this.ground) { this.ground = ground; this.emit("ground"); }
     }
     this.layer = Math.max(0, Math.min(this.terrain.palette.length - 1, this.layer));
     if (r.change.box) this.emit("terrain", { box: r.change.box });
@@ -638,7 +665,7 @@ export class EditorSession {
   saved({ difficult = this.existingDifficult } = {}) {
     this.pending = [];
     this.existingDifficult = difficult;
-    this.history.reset(this.terrain, { pending: [], props: this.props });
+    this.history.reset(this.terrain, this.#aux([]));
     this.emit("difficult");
     this.emit("history", { label: "save" });
     this.emit("tool");

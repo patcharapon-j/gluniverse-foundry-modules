@@ -149,6 +149,13 @@
   "GLDIO.editor.layout.doneTokens": "Imported the layout ({ops} shapes). Its {tokens} tokens move when you save.",
   "GLDIO.editor.layout.tokensMoved": "Moved {n} tokens to their layout positions.",
   "GLDIO.editor.layout.tokensMissing": "No token on this scene is called: {names}.",
+  "GLDIO.editor.bundle.label": "Import bundle",
+  "GLDIO.editor.bundle.hint": "Pick a Map Maker Diorama Bundle folder: its layout and models replace the draft, and the 3D view draws its ground. Undoable.",
+  "GLDIO.editor.bundle.errors": "The bundle has {n} problems. The first: {error}",
+  "GLDIO.editor.bundle.done": "Imported the bundle \"{name}\" ({props} models). Check it, then save.",
+  "GLDIO.editor.ground.label": "3D ground",
+  "GLDIO.editor.ground.hint": "The 3D view draws this image as the ground instead of the scene's background. The 2D map is unchanged.",
+  "GLDIO.editor.ground.clear": "Draw the scene's background in 3D again",
 
   "GLDIO.editor.copy.label": "Copy",
   "GLDIO.editor.copy.none": "No other scene with this map has terrain.",

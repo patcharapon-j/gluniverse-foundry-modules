@@ -21,6 +21,10 @@ exactly what Foundry runs.
 Every problem is reported as a sentence naming the op, and nothing is written
 while there is one. A shape that misses the map is a warning, not an error.
 
+A Map Maker Diorama Bundle carries a layout too, with its models beside it;
+**Import bundle** and `importBundle(folder)` read it from the folder
+(docs/DIORAMA_BUNDLE.md).
+
 ## Coordinates
 
 `[row, column]` in squares from the top-left corner of the **map** (the scene
@@ -120,6 +124,7 @@ The shapes with keys of their own:
 | `src` | `model` | required: a `.glb` or `.gltf` path, as Foundry serves it (`worlds/<world>/models/well.glb`) |
 | `scale` | `model`, `kit` | a model: squares per model unit (left out, it fits inside `w × d × h`). A kit: a size factor for every part |
 | `rules` | `model` | `"box"` (default: its `w × d × h` box is in the rules when solid) or `"none"` (scenery) |
+| `bright` | `model` | 0.1 to 2 (default 1): its colour × this before the light, never its glow. Out of range is an error; on another shape it is ignored with a warning |
 | `kit` | `kit` | the name of one of the layout's `kits`. A kit's `w`, `d` and `h` come from its parts, so use `scale` |
 
 A slab, a pipe and an extrude may still use `at` with `w × d` (a straight pipe

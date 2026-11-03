@@ -65,6 +65,21 @@ export const api = {
    * @param {object|string} layout  @param {{scene?: Scene, tokens?: boolean}} [o]
    */
   importLayout: (layout, o) => import("./editor/layout-import.mjs").then((m) => m.importLayout(layout, o)),
+  /**
+   * Import a Map Maker Diorama Bundle (docs/DIORAMA_BUNDLE.md) from a folder
+   * Foundry serves: its layout as importLayout writes one, with every model
+   * read from the folder, and the Level's 3D ground. GM only. Resolves
+   * `{ ok, errors, warnings, ground, props, moved, missing }`.
+   * @param {string} folder  @param {{scene?: Scene, tokens?: boolean}} [o]
+   */
+  importBundle: (folder, o) => import("./editor/bundle-import.mjs").then((m) => m.importBundle(folder, o)),
+  /**
+   * Set (or with null, clear) a scene Level's 3D ground image: the 3D view
+   * draws it instead of the background, over the same rect. GM only.
+   * @param {string|null} src  @param {{scene?: Scene, level?: string}} [o]
+   */
+  setGround: (src, { scene = globalThis.canvas?.scene, level = null } = {}) =>
+    import("./terrain/ground.mjs").then((m) => m.GroundStore.write(scene, src, level)),
 };
 
 /* A `button` tool fires onChange only when the active tool changes, so clicks

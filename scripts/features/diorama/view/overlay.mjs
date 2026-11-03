@@ -37,6 +37,7 @@ import { currentLines, linksOn, onLinesChanged } from "../integrations/target-li
 import { OPTIONS, resolveGraphics } from "../options.mjs";
 import { sceneEnvironment, environmentTouched, ENV_HOOKS } from "./environment-source.mjs";
 import { PropStore } from "../terrain/props-store.mjs";
+import { GroundStore, groundArtSrc } from "../terrain/ground.mjs";
 import { levelBackgroundSrc, tokenLevelId, isMultiLevel } from "../terrain/levels.mjs";
 import { cutTokens } from "./levels.mjs";
 import { readStack, stackProps, loadFloors, tokenLevelOf, releaseFloorArt, wallsOnLevel } from "./level-view.mjs";
@@ -451,7 +452,7 @@ function wireHooks() {
   for (const h of ["createTile", "updateTile", "deleteTile"]) on(h, (doc) => { if (here(doc)) mark("tiles"); });
   on("updateScene", (scene, changes) => {
     if (scene !== S.scene) return;
-    if ("levels" in changes || "background" in changes || "initialLevel" in changes) { mark("background"); mark("levels"); }
+    if ("levels" in changes || "background" in changes || "initialLevel" in changes || GroundStore.touched(changes)) { mark("background"); mark("levels"); }
     if ("environment" in changes) { S.baker?.request(); mark("environment"); }
     // a known layout (FLAG_KNOWN) is read off the document by the bake; any flag write re-bakes
     if (changes?.flags?.[SUITE_ID]) S.baker?.request();
@@ -664,8 +665,8 @@ function groundQ(x, y) {
 }
 
 async function loadBackground() {
-  // the viewed Level's own art (v14 Levels carry their own background)
-  const src = S.levelId ? levelBackgroundSrc(S.scene, S.levelId) : backgroundSrc(S.scene);
+  // the viewed Level's own art (v14 Levels carry their own background), or its 3D ground (terrain/ground.mjs)
+  const src = groundArtSrc(S.scene, S.levelId, S.levelId ? levelBackgroundSrc(S.scene, S.levelId) : backgroundSrc(S.scene));
   if (S.bg && S.bg.src === src) { S.r?.setBackground(S.bg.img, S.grid.sceneRect); S.r?.requestRender(); return; }
   const seq = ++S.bgSeq;
   const img = await loadArt(src);

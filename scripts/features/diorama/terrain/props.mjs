@@ -44,6 +44,8 @@
  *   src      model           a .glb / .gltf path
  *   scale    model           cells per model unit, or null (fit inside w × d × h)
  *   rules    model           the rules footprint: "box" (w × d at h) or "none"
+ *   bright   model           its colour × this before the light (BRIGHT_MIN..BRIGHT_MAX,
+ *                            default 1); its emission is left alone
  *
  * A slab draws like terrain (the map art on its top, a cliff on its sides);
  * everything else draws like a prop. See docs/DIORAMA_PROPS.md.
@@ -84,6 +86,8 @@ export const KIT_PART_SHAPES = Object.freeze(PROP_SHAPES.filter((s) => !["slab",
 export const RAMP_SHAPES = Object.freeze(["wedge", "stairs"]);
 /** A model's rules footprint. */
 export const MODEL_RULES = Object.freeze(["box", "none"]);
+/** A model's brightness factor range (its colour before the light; 1 = as authored). */
+export const BRIGHT_MIN = 0.1, BRIGHT_MAX = 2;
 /** Long thin shapes: the rules claim every sub-cell their centre line crosses, however thin. */
 const LINEAR = new Set(["fence", "parapet", "beam", "pipe"]);
 
@@ -359,6 +363,8 @@ function build(raw, { part = false } = {}) {
       p.scale = raw.scale === null || raw.scale === undefined || raw.scale === "" || !(Number(raw.scale) > 0)
         ? null : r3(clamp(Number(raw.scale), 0.001, 1000));
       p.rules = MODEL_RULES.includes(raw.rules) ? raw.rules : "box";
+      p.bright = raw.bright === null || raw.bright === undefined || raw.bright === "" || !Number.isFinite(Number(raw.bright))
+        ? 1 : r2(clamp(Number(raw.bright), BRIGHT_MIN, BRIGHT_MAX));
       break;
   }
   return p;
@@ -427,7 +433,7 @@ function ownToJSON(p, o) {
     case "lathe": o.profile = cloneList(p.profile); break;
     case "pipe": o.path = cloneList(p.path); o.thick = p.thick; break;
     case "kit": o.kit = p.kit; o.parts = p.parts.map(partToJSON); break;
-    case "model": o.src = p.src; o.scale = p.scale; o.rules = p.rules; break;
+    case "model": o.src = p.src; o.scale = p.scale; o.rules = p.rules; if (p.bright !== 1) o.bright = p.bright; break;
   }
   return o;
 }
@@ -772,7 +778,7 @@ export function propStates(resolved, { isGM = false } = {}) {
       ghost: !!p.hidden, label: p.label, img: p.img, seed: propSeed(p.id),
       roof: !!p.roof, floats: p.elev !== null && p.elev !== undefined, gm: !!isGM,
     };
-    for (const k of ["points", "cliff", "bevel", "profile", "path", "thick", "kit", "parts", "src", "scale", "rules"]) {
+    for (const k of ["points", "cliff", "bevel", "profile", "path", "thick", "kit", "parts", "src", "scale", "rules", "bright"]) {
       if (p[k] !== undefined) s[k] = p[k];
     }
     out.push(s);

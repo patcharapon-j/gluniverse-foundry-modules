@@ -249,6 +249,9 @@ Level its own terrain and its own props.
   nothing, and the tactics line between them uses walls only.
 - **Caches.** `live.mjs` caches per scene and Level. `createLevel`,
   `updateLevel` and `deleteLevel` drop the scene's entries.
+- **3D ground.** A Level may carry its own 3D ground image (`dio.ground`,
+  docs/DIORAMA_BUNDLE.md); the viewed floor and the floors below each draw
+  theirs instead of their background.
 
 ### Drawing the stack
 
@@ -615,6 +618,13 @@ shapes in map squares), usually by an AI agent following the
 It replaces the draft as one undoable step. Format and API:
 `docs/DIORAMA_LAYOUT.md`; offline compile and overlay: `tools/diorama-layout.mjs`.
 
+**Import bundle** takes a Map Maker Diorama Bundle folder: a layout whose
+standing props are textured models, and a ground image with those props
+painted out. The ground becomes the scene's **3D ground**: the 3D view draws
+it instead of the background, over the same rect, per Level, while the 2D
+canvas keeps the full art (`terrain/ground.mjs`, flag `dio.ground`). See
+`docs/DIORAMA_BUNDLE.md`.
+
 ## Module map
 
 ```
@@ -622,7 +632,8 @@ scripts/features/diorama/
   index.mjs              adapter + settings
   constants.mjs          ids, keys, KIND/DIR, materials, SHED_ORDER, TIMING
   main.mjs               onInit / onReady wiring, api
-  terrain/               codec, model, occlusion (pure), store, live cache
+  terrain/               codec, model, occlusion (pure), store, live cache,
+                         bundle (pure), ground (the 3D ground flag)
   rules/                 pure: path analysis, system readouts, creature height
   foundry/               sight/light backend, movement wrappers, cover, elevation sync
   render/                three.js renderer (pure: no game/canvas/foundry/ui)
@@ -717,6 +728,29 @@ two-floor stack. The preview drives the shipped renderer with a
 fabricated map; serve it (a `file://` page does not run module scripts). Nothing
 there proves the sight backend, movement or Foundry's own vision; those need a live
 v14 session.
+
+To see a real map in 3D before it goes into a world, give the preview a Foundry
+scene export:
+
+```bash
+node tools/diorama-preview.mjs --scene=<foundry-scene.json> [--map=<image>] [--layout=<layout.json>] [--tokens=<tokens.json>]
+node tools/preview-server.mjs   # /.preview/diorama-map.html?pitch=1&yaw=0&still=1&shed=0
+```
+
+It draws the map art, the scene's walls and doors through `wallState`, its
+lights through the view's own bake at the darkness the view would use (0 while
+the scene's global light is on; `dark=` overrides), and a layout compiled and
+resolved exactly as Import layout writes it, props and kits included. `view=full`
+(the default) frames the whole map; `focus=<row>,<col>&zoom=<n>` centres a
+square. `--tokens` stands named figures on map squares, a coloured disc where
+there is no art. The light polygons are swept in the page, a stand-in for
+Foundry's, with the backend's height rules once a layout is given. The tool's
+header lists every parameter.
+
+`--bundle=<folder>` draws a Map Maker Diorama Bundle the way Import bundle
+writes it: its ground as the 3D ground and its models through the real
+GLTFLoader, with `--scene` for walls and lights or the manifest's bare map
+without (docs/DIORAMA_BUNDLE.md).
 
 ## Not in v1
 

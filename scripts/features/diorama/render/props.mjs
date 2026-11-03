@@ -196,8 +196,8 @@ export const PROP_MATERIAL_FACTORIES = {
     });
   },
 
-  /** A model's part: its own base colour (map × factor), the suite's light. */
-  model(shared, { color = [1, 1, 1], map = null, alphaTest = 0, common = null } = {}) {
+  /** A model's part: its own base colour (map × factor), the suite's light, its own emission on top. */
+  model(shared, { color = [1, 1, 1], map = null, emissive = [0, 0, 0], emissiveMap = null, alphaTest = 0, common = null } = {}) {
     const c = common ?? propCommon();
     return new THREE.ShaderMaterial({
       name: "dio.prop.model",
@@ -209,6 +209,9 @@ export const PROP_MATERIAL_FACTORIES = {
         uModelHasMap: { value: map ? 1 : 0 },
         uModelColor: { value: new THREE.Vector3(color[0], color[1], color[2]) },
         uModelAlphaTest: { value: alphaTest },
+        uModelEmissive: { value: new THREE.Vector3(emissive[0], emissive[1], emissive[2]) },
+        uModelEmissiveMap: { value: emissiveMap },
+        uModelHasEmissiveMap: { value: emissiveMap ? 1 : 0 },
         uGhostColor: c.uGhostColor,
       },
       side: THREE.DoubleSide,
@@ -358,6 +361,25 @@ export class PropsLayer {
     this._sunYaw = NaN;
     this._landed = false;
     this._disposed = false;
+    /**
+     * One callback for every model this layer waits on. loadModel keeps its
+     * waiters in a Set, so the same function is held once per file however
+     * many rebuilds ask; a fresh closure per rebuild would double the rebuilds
+     * with every model that lands. Models that land together rebuild once.
+     */
+    this.rebuilds = 0;
+    this._modelQueued = false;
+    this._onModel = () => {
+      if (this._disposed || this._modelQueued) return;
+      this._modelQueued = true;
+      queueMicrotask(() => {
+        this._modelQueued = false;
+        if (this._disposed) return;
+        this._landed = true;
+        this.rebuild();
+        this.onChange?.();
+      });
+    };
     // reused by set(): no allocation per prop
     this._m = new THREE.Matrix4();
     this._p = new THREE.Vector3();
@@ -418,6 +440,7 @@ export class PropsLayer {
   /** Redraw from this.states (a model that landed, a terrain change). */
   rebuild() {
     if (this._disposed) return;
+    this.rebuilds++;
     const G = this.ensureGeometries();
     const drawn = expandStates(this.states);
 
@@ -474,16 +497,11 @@ export class PropsLayer {
 
   /** A model state: its loaded meshes, or (GM only) a placeholder while it cannot load. */
   addModel(s, add) {
-    const e = loadModel(s.src, () => {
-      if (this._disposed) return;
-      this._landed = true;
-      this.rebuild();
-      this.onChange?.();
-    });
+    const e = loadModel(s.src, this._onModel);
     if (e.state === "ready") {
       const k = modelScale(e.model.size, s);
       e.model.parts.forEach((p, i) => {
-        add(`model|${s.src}|${i}`, { src: p.geometry, factory: "model", opts: { color: p.color, map: p.map, alphaTest: p.alphaTest }, model: s.src }, s, k, k, k);
+        add(`model|${s.src}|${i}`, { src: p.geometry, factory: "model", opts: { color: p.color, map: p.map, emissive: p.emissive, emissiveMap: p.emissiveMap, alphaTest: p.alphaTest }, model: s.src }, s, k, k, k);
       });
       return;
     }
@@ -514,6 +532,9 @@ export class PropsLayer {
       geo.setAttribute("iInfo", info);
       geo.setAttribute("iFade", fade);
       geo.setAttribute("iSeen", seen);
+      // a model's brightness factor (only the model program reads it)
+      const bright = g.factory === "model" ? new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(1), 1) : null;
+      if (bright) geo.setAttribute("iBright", bright);
       const material = g.factory === "model"
         ? this.modelMaterial(g.model, key, g.opts)
         : PROP_MATERIAL_FACTORIES.prop(this.shared, { ...g.opts, common: this.common });
@@ -528,7 +549,7 @@ export class PropsLayer {
       this.group.add(mesh);
       this.casters.add(caster);
       const dyn = this.dyn.has(key.split("|")[0]) ? key.split("|")[0] : null;
-      b = { mesh, caster, tint, info, fade, seen, capacity, states: [], entries: [], geo, src, material, dyn, ownMaterial: g.factory !== "model" };
+      b = { mesh, caster, tint, info, fade, seen, bright, capacity, states: [], entries: [], geo, src, material, dyn, ownMaterial: g.factory !== "model" };
       this.buckets.set(key, b);
     }
     for (let i = 0; i < n; i++) {
@@ -538,7 +559,9 @@ export class PropsLayer {
       const t = s.tint ? this._c.setStyle(s.tint, THREE.NoColorSpace) : null;
       b.tint.setXYZ(i, t ? t.r : 1, t ? t.g : 1, t ? t.b : 1);
       b.info.setXYZW(i, num(s.seed), s.ghost ? 1 : 0, num(s.base), t ? 1 : 0);
+      b.bright?.setX(i, Number.isFinite(s.bright) ? s.bright : 1);
     }
+    if (b.bright) b.bright.needsUpdate = true;
     b.mesh.count = n;
     b.mesh.visible = n > 0;
     b.caster.count = n;

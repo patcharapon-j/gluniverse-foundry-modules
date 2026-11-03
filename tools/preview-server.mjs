@@ -14,7 +14,8 @@ const ROOT = fileURLToPath(new URL("../", import.meta.url));
 // An explicit argument wins; PORT lets a harness that assigns its own port drive
 // this without editing the launch config.
 const PORT = Number(process.argv[2] || process.env.PORT || 8931);
-const TYPES = { ".html": "text/html", ".mjs": "text/javascript", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
+const TYPES = { ".html": "text/html", ".mjs": "text/javascript", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
+  ".webp": "image/webp", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml" };
 
 createServer(async (req, res) => {
   const rel = normalize(decodeURIComponent(new URL(req.url, "http://x").pathname)).replace(/^(\.\.[/\\])+/, "");

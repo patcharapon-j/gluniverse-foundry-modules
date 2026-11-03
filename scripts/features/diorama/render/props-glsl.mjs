@@ -368,6 +368,8 @@ attribute vec3 iTint;
 attribute vec4 iInfo;
 attribute float iFade;
 attribute float iSeen;
+attribute float iBright;
+varying float vBright;
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec3 vTint;
@@ -391,6 +393,7 @@ void main() {
   vInfo = iInfo;
   vFade = iFade;
   vSeen = iSeen;
+  vBright = iBright;
   vUv = uv;
   vCenter = (modelMatrix * vec4(im[3].xyz, 1.0)).xz;
   gl_Position = projectionMatrix * viewMatrix * wp;
@@ -402,6 +405,9 @@ uniform sampler2D uModelMap;
 uniform float uModelHasMap;
 uniform vec3 uModelColor;
 uniform float uModelAlphaTest;
+uniform vec3 uModelEmissive;
+uniform sampler2D uModelEmissiveMap;
+uniform float uModelHasEmissiveMap;
 uniform vec3 uGhostColor;
 varying vec3 vWorld;
 varying vec3 vNormal;
@@ -411,6 +417,7 @@ varying vec2 vCenter;
 varying vec2 vUv;
 varying float vFade;
 varying float vSeen;
+varying float vBright;
 void main() {
   float vis = max(max(visionAt(vWorld.xz), visionAt(vCenter)), vSeen);
   if (vis <= 0.0) discard;
@@ -419,7 +426,8 @@ void main() {
   if (vFade < 0.999 && propDither() >= vFade) discard;
   vec4 tex = uModelHasMap > 0.5 ? texture2D(uModelMap, vUv) : vec4(1.0);
   if (uModelAlphaTest > 0.0 && tex.a < uModelAlphaTest) discard;
-  vec3 c = tex.rgb * uModelColor;
+  // the prop's brightness factor: its colour before the light, never its emission
+  vec3 c = tex.rgb * uModelColor * vBright;
   if (vInfo.w > 0.5) {
     float l = dot(c, PROP_LUMA);
     c = mix(c, vTint * l / max(dot(vTint, PROP_LUMA), 0.05), 0.85);
@@ -431,6 +439,8 @@ void main() {
   vec3 lit = shade(c, vWorld, n, ao, vWorld.xz + n.xz * 0.14);
   vec3 V = normalize(cameraPosition - vWorld);
   lit += lit * 0.12 * pow(1.0 - clamp(dot(n, V), 0.0, 1.0), 3.0);
+  // its own emission (glTF emissiveFactor x emissiveTexture), after the light and never shadowed
+  lit += uModelEmissive * (uModelHasEmissiveMap > 0.5 ? texture2D(uModelEmissiveMap, vUv).rgb : vec3(1.0));
   vec3 outc = dioFinish(lit, vis, vWorld);
   if (ghost) outc = mix(outc, uGhostColor, 0.45);
   gl_FragColor = vec4(outc, 1.0);

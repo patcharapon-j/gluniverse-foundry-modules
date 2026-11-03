@@ -30,7 +30,8 @@ import { autoSetupDetailed } from "./auto-setup.mjs";
 import { loadAutoOptions, promptAutoOptions, describeAuto } from "./auto-dialog.mjs";
 import { backgroundSrc, sampleColours, wallSegments, sceneInsideFn } from "./sample.mjs";
 import { PropStore } from "../terrain/props-store.mjs";
-import { PROP_MATERIALS, SIZE_MIN, MODEL_RULES, normalizeProps, propToJSON, resolveProps } from "../terrain/props.mjs";
+import { GroundStore } from "../terrain/ground.mjs";
+import { PROP_MATERIALS, SIZE_MIN, MODEL_RULES, BRIGHT_MIN, BRIGHT_MAX, normalizeProps, propToJSON, resolveProps } from "../terrain/props.mjs";
 import { PLACEABLE_SHAPES } from "./props-tool.mjs";
 import { propsBlock } from "../terrain/live.mjs";
 
@@ -102,6 +103,8 @@ function EditorApp() {
         removeLayer: DioramaEditor.#onRemoveLayer,
         autoSetup: DioramaEditor.#onAutoSetup,
         importLayout: DioramaEditor.#onImportLayout,
+        importBundle: DioramaEditor.#onImportBundle,
+        clearGround: DioramaEditor.#onClearGround,
         copyFrom: DioramaEditor.#onCopyFrom,
         clearAll: DioramaEditor.#onClearAll,
         toggleOff: DioramaEditor.#onToggleOff,
@@ -139,6 +142,7 @@ function EditorApp() {
         walls: wallSegments(scene),
         difficult: readDifficult(scene, this.levelId),
         props: PropStore.read(scene, this.levelId),
+        ground: GroundStore.read(scene, this.levelId),
       });
       /** The world's default wall material (walls with no entry in terrain.walls). */
       this.defaultWallMaterial = this.#defaultWallMaterial();
@@ -259,7 +263,7 @@ function EditorApp() {
 
     #onSession(kind, d = {}) {
       if (d.live) return;     // a slider is being dragged; re-rendering would drop it
-      if (["tool", "palette", "history", "colours", "difficult", "props", "mode"].includes(kind)) this.#render();
+      if (["tool", "palette", "history", "colours", "difficult", "props", "mode", "ground"].includes(kind)) this.#render();
     }
 
     #render() {
@@ -355,6 +359,7 @@ function EditorApp() {
         },
         copyScenes,
         canCopy: copyScenes.length > 0,
+        ground: s.ground ? { src: s.ground, name: s.ground.split("/").slice(-2).join("/") } : null,
         hasArt: !!src,
         mode: { terrain: s.mode !== "props", props: s.mode === "props" },
         props: this.#propsContext(),
@@ -402,7 +407,7 @@ function EditorApp() {
           card: p.shape === "card", img: p.img, roof: !!p.roof,
           slab: p.shape === "slab",
           cliffs: p.shape === "slab" ? CLIFF_MATERIALS.map((k) => ({ key: k, label: L(`GLDIO.material.cliff.${k}`), selected: k === p.cliff })) : [],
-          model: p.shape === "model", src: p.src ?? "", scale: p.scale ?? "",
+          model: p.shape === "model", src: p.src ?? "", scale: p.scale ?? "", bright: p.bright ?? 1, brightMin: BRIGHT_MIN, brightMax: BRIGHT_MAX,
           rulesList: p.shape === "model" ? MODEL_RULES.map((k) => ({ key: k, label: L(`GLDIO.props.rules.${k}`), selected: k === p.rules })) : [],
           kit: p.shape === "kit", kitName: p.kit || L("GLDIO.props.shape.kit"), kitParts: p.parts?.length ?? 0,
           sizeMin: round(SIZE_MIN * D), sizeStep: round(D / 4),
@@ -493,6 +498,8 @@ function EditorApp() {
         case "rules": s.updateProp(id, { rules: input.value }); break;
         // blank: fit inside w × d × h; a number: cells per model unit
         case "scale": s.updateProp(id, { scale: input.value.trim() === "" || !(n > 0) ? null : n }); break;
+        // blank: as authored
+        case "bright": s.updateProp(id, { bright: input.value.trim() === "" || !Number.isFinite(n) ? 1 : n }); break;
       }
     }
 
@@ -546,6 +553,7 @@ function EditorApp() {
         const stored = JSON.stringify(PropStore.read(this.scene, this.levelId).map(propToJSON));
         const draft = JSON.stringify(normalizeProps(s.props).map(propToJSON));
         if (draft !== stored) await PropStore.write(this.scene, s.props, this.levelId);
+        if (s.ground !== GroundStore.read(this.scene, this.levelId)) await GroundStore.write(this.scene, s.ground, this.levelId);
         if (s.pending.length) {
           const plan = planDifficult(s.existingDifficult, s.pending);
           await writeDifficult(this.scene, plan, {
@@ -768,6 +776,60 @@ function EditorApp() {
       }));
       if (res.warnings.length) ui.notifications.warn(L("GLDIO.editor.layout.warnings", { n: res.warnings.length, warning: res.warnings[0] }));
     }
+
+    /**
+     * Pick a Map Maker Diorama Bundle folder (docs/DIORAMA_BUNDLE.md): its
+     * layout and models replace the draft, and its ground becomes the draft's
+     * 3D ground, as one undoable step. Save writes them.
+     */
+    static async #onImportBundle() {
+      const FP = foundry.applications?.apps?.FilePicker?.implementation ?? globalThis.FilePicker;
+      if (!FP || this._busy) return;
+      const folder = await new Promise((done) => {
+        const fp = new FP({ type: "folder", current: this._bundleDir ?? "", callback: (path) => done(path) });
+        // a picker closed without a choice never calls back; nothing is held while it is open
+        fp.render(true);
+      });
+      if (!folder) return;
+      this._bundleDir = folder;
+      this._busy = "bundle";
+      this.#render();
+      try {
+        const { loadBundle } = await import("./bundle-import.mjs");
+        const b = await loadBundle(folder, { scene: this.scene });
+        if (!b.ok) {
+          console.warn("GLUniverse Suite | diorama bundle problems:", b.errors);
+          ui.notifications.error(L("GLDIO.editor.bundle.errors", { n: b.errors.length, error: b.errors[0] }));
+          return;
+        }
+        const { compileForScene } = await import("./layout-import.mjs");
+        const s = this.session;
+        const res = compileForScene(this.scene, b.layout, s.terrain);
+        if (!res.terrain) {
+          console.warn("GLUniverse Suite | diorama bundle layout problems:", res.errors);
+          ui.notifications.error(L("GLDIO.editor.layout.errors", { n: res.errors.length, error: res.errors[0] }));
+          return;
+        }
+        const warnings = [...b.warnings, ...res.warnings];
+        if (warnings.length) console.warn("GLUniverse Suite | diorama bundle warnings:", warnings);
+        s.replace(res.terrain, "bundle", { ...(Array.isArray(res.props) ? { props: res.props } : {}), ground: b.ground });
+        this._layoutTokens = res.tokens;
+        ui.notifications.info(L("GLDIO.editor.bundle.done", {
+          name: b.manifest.name || folder.split("/").pop(),
+          props: (res.props ?? []).filter((p) => p.shape === "model").length,
+        }));
+        if (warnings.length) ui.notifications.warn(L("GLDIO.editor.layout.warnings", { n: warnings.length, warning: warnings[0] }));
+      } catch (e) {
+        console.error("GLUniverse Suite | diorama bundle import failed", e);
+        ui.notifications.error(L("GLDIO.editor.bundle.errors", { n: 1, error: e.message }));
+      } finally {
+        this._busy = null;
+        this.#render();
+      }
+    }
+
+    /** Draw the scene's background in 3D again (undoable; Save writes it). */
+    static #onClearGround() { this.session.setGround(null); }
 
     static #onCopyFrom() {
       const other = game.scenes.get(this._copyId);

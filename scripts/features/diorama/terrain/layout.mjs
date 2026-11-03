@@ -30,7 +30,7 @@ import { SUB, KIND, KIND_KEYS, CLIFF_MATERIALS, Q_PER_CELL } from "../constants.
 import { Terrain, sanitizePaletteEntry, distToQ } from "./model.mjs";
 import {
   PROP_SHAPES, PROP_MATERIALS, SHAPE_DEFAULTS, PROP_LIMIT, SIZE_MIN, SIZE_MAX, H_MIN, ELEV_LIMIT, IMG_MAX, normalizeProps,
-  normalizeProp, scaleProp, KIT_PART_SHAPES, KIT_PARTS_MAX, KIT_NAME_MAX, MODEL_RULES, POINTS_MAX, PATH_MAX, PROFILE_MAX, BEVEL_MAX,
+  normalizeProp, scaleProp, KIT_PART_SHAPES, KIT_PARTS_MAX, KIT_NAME_MAX, MODEL_RULES, BRIGHT_MIN, BRIGHT_MAX, POINTS_MAX, PATH_MAX, PROFILE_MAX, BEVEL_MAX,
 } from "./props.mjs";
 
 export const LAYOUT_FORMAT = "gluniverse-diorama-layout";
@@ -366,7 +366,7 @@ function tokenPlacements(list, { errors, toFt, off }) {
 /* ── props ── */
 
 const PROP_KEYS = new Set(["id", "shape", "at", "w", "d", "h", "elev", "rot", "mat", "tint", "solid", "hidden", "label", "img", "mirror",
-  "points", "path", "thick", "profile", "bevel", "cliff", "roof", "src", "scale", "rules", "kit"]);
+  "points", "path", "thick", "profile", "bevel", "cliff", "roof", "src", "scale", "rules", "bright", "kit"]);
 /** What a kit's part may carry (its `at` and outlines are relative to the kit's origin). */
 const PART_KEYS = new Set(["shape", "at", "w", "d", "h", "elev", "rot", "mat", "tint", "solid", "points", "path", "thick", "profile", "bevel"]);
 /** Shapes that keep an outline, a path or a profile. */
@@ -539,8 +539,9 @@ function propPlacements(list, { errors, warnings, off, map, mirror, toCells, kit
       if (typeof p.src !== "string" || !/\.(glb|gltf)(\?|#|$)/i.test(p.src)) failed = bad(`a model needs "src": a .glb or .gltf file path.`);
       else if (p.src.length > IMG_MAX) failed = bad(`"src" is longer than ${IMG_MAX} characters.`);
       if (p.rules !== undefined && !MODEL_RULES.includes(p.rules)) failed = bad(`"rules" must be one of ${MODEL_RULES.join(", ")}.`);
+      if (p.bright !== undefined && (!isNum(p.bright) || p.bright < BRIGHT_MIN || p.bright > BRIGHT_MAX)) failed = bad(`"bright" must be a number from ${BRIGHT_MIN} to ${BRIGHT_MAX}.`);
     } else {
-      for (const k of ["src", "rules"]) if (p[k] !== undefined) warnings.push(`${where}: only a model keeps "${k}"; it was ignored.`);
+      for (const k of ["src", "rules", "bright"]) if (p[k] !== undefined) warnings.push(`${where}: only a model keeps "${k}"; it was ignored.`);
     }
     if (p.scale !== undefined && (!isNum(p.scale) || p.scale <= 0 || p.scale > 1000)) failed = bad(`"scale" must be a number above 0.`);
     if (p.scale !== undefined && p.shape !== "model" && p.shape !== "kit") warnings.push(`${where}: only a model or a kit takes "scale"; it was ignored.`);
@@ -587,6 +588,7 @@ function propPlacements(list, { errors, warnings, off, map, mirror, toCells, kit
       src: p.shape === "model" ? p.src : undefined,
       scale: p.shape === "model" ? p.scale ?? null : undefined,
       rules: p.shape === "model" ? p.rules : undefined,
+      bright: p.shape === "model" ? p.bright : undefined,
       kit: p.shape === "kit" ? p.kit : undefined,
     };
     /** The middle of a list of map points: what "sits on its own axis" is measured by. */

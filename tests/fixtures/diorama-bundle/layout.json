@@ -1,0 +1,45 @@
+{
+  "format": "gluniverse-diorama-layout",
+  "version": 1,
+  "name": "Fixture yard",
+  "map": {
+    "cols": 8,
+    "rows": 6
+  },
+  "palette": [
+    {
+      "name": "Floor",
+      "h": 0,
+      "kind": "floor",
+      "material": "stone",
+      "color": "#6e7680"
+    }
+  ],
+  "ops": [],
+  "props": [
+    {
+      "shape": "model",
+      "src": "props/crate.glb",
+      "x": 2.5,
+      "y": 1.5,
+      "rot": 0,
+      "w": 1,
+      "d": 1,
+      "h": 5,
+      "solid": true,
+      "label": "Crate"
+    },
+    {
+      "shape": "model",
+      "src": "props/rune-pillar.glb",
+      "x": 5.5,
+      "y": 4.5,
+      "rot": 30,
+      "w": 1,
+      "d": 1,
+      "h": 10,
+      "solid": true,
+      "label": "Rune pillar"
+    }
+  ]
+}
