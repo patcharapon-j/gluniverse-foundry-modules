@@ -31,7 +31,7 @@
 import { classify } from "../pf2e-aoe/classifier.mjs";
 import { CONDITIONS } from "./conditions.mjs";
 import { FUNCTIONS, MATERIALS, TRADITIONS } from "./constants.mjs";
-import { STYLE_OF, actionDelivery, flavorOf, inVocab, motifOf, nameElement, propsOf, strikeDelivery } from "./depict.mjs";
+import { BASE_GROUP, STYLE_OF, actionDelivery, baseItemOf, flavorOf, inVocab, motifOf, nameElement, propsOf, strikeDelivery } from "./depict.mjs";
 
 const MATERIAL_SET = new Set(MATERIALS);
 const FUNCTION_SET = new Set(FUNCTIONS);
@@ -525,16 +525,20 @@ const RANGED_GROUPS = new Set(["bow", "crossbow", "firearm", "sling", "projectil
 function strikeOf(item, opts = {}) {
   const sys = sysOf(item);
   const traits = traitsOf(item);
-  const rangeTrait = [...traits].some((t) => /^range(-increment)?-\d+$/.test(t));
-  const group = slugify(sys.group);
+  // PF2e reads an NPC strike's range from its data or its range/thrown trait
+  const rangeTrait = [...traits].some((t) => /^(range(-increment)?|thrown)-\d+$/.test(t));
+  const linked = opts.weapon && typeof opts.weapon === "object" ? opts.weapon : null;
   const isNpc = item?.type === "melee";
+  const ownGroup = slugify(sys.group) || slugify(sysOf(linked).group) || BASE_GROUP[baseItemOf(item)?.base] || "";
+  const group = ownGroup;
+  const rangedOnly = (RANGED_GROUPS.has(group) || group === "bomb") && !traits.has("combination");
   const itemRanged = isNpc
-    ? !!(num(sys.range?.increment) || num(sys.range?.max) || rangeTrait)
-    : (num(sys.range) ?? 0) > 0 || RANGED_GROUPS.has(group) || group === "bomb";
+    ? !!(num(sys.range?.increment) || num(sys.range?.max) || rangeTrait || rangedOnly)
+    : (num(sys.range) ?? 0) > 0 || rangedOnly;
   const ranged = typeof opts.ranged === "boolean" ? opts.ranged : itemRanged;
   const heavy = !ranged && (slugify(sys.usage?.value) === "held-in-two-hands" || [...traits].some((t) => /^two-hand-d\d+$/.test(t)));
   const splash = group === "bomb" || traits.has("bomb") || traits.has("splash") || (num(sys.splashDamage?.value) ?? 0) > 0;
-  const d = strikeDelivery(item, { ranged, damage: damageOf(item), traits });
+  const d = strikeDelivery(item, { ranged, damage: damageOf(item), traits, linked });
   const style = STYLE_OF[d.delivery] ?? (ranged ? "ranged" : "unarmed");
   return { weapon: { style, ranged, splash, heavy }, delivery: d.delivery, src: d.src, base: d.base, group: d.group };
 }
@@ -590,6 +594,7 @@ function depictSpec(item, spec, ctx) {
  *   actorLevel   the acting creature's level
  *   targetUndead the (first) target is undead — flips heal/harm
  *   hazard       the actor is a hazard
+ *   weapon       an NPC strike's linked weapon item (MeleePF2e#linkedWeapon): its group and base item
  *   description  override the description text
  */
 export function describeItem(item, opts = {}) {
@@ -640,7 +645,7 @@ function describeItemUnsafe(item, opts) {
   const done = (spec) => depictSpec(item, spec, ctx);
 
   if (isStrike) {
-    const strike = strikeOf(item, { ranged: opts.ranged });
+    const strike = strikeOf(item, { ranged: opts.ranged, weapon: opts.weapon });
     const weapon = strike.weapon;
     ctx.strikeInfo = strike;
     const { material, accent, src } = pickMaterial(item, ctx);

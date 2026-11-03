@@ -37,6 +37,9 @@ const IRREGULAR = Object.freeze({
   missiles: "missile", tentacles: "tentacle", mandibles: "mandible", spittles: "spittle", needles: "needle", bristles: "bristle",
   nettles: "nettle", eyes: "eye", shuriken: "shuriken", series: "series", species: "species", chaos: "chaos", aegis: "aegis",
   iris: "iris", abyss: "abyss", cutlasses: "cutlass", mass: "mass", hydraulics: "hydraulic", pincers: "pincer", wings: "wing",
+  pliers: "pliers", scissors: "scissors", shears: "shears", tresses: "tress", entrails: "entrails", guts: "guts", manacles: "manacle",
+  fumes: "fume", ashes: "ash", lancers: "lancer", crows: "crow", ravens: "raven", bats: "bat", rats: "rat", wasps: "wasp", bees: "bee",
+  spores: "spore", seeds: "seed", words: "word", notes: "note", chords: "chord",
 });
 const NO_SINGULAR = /(ss|us|is|ys|os)$/;
 
@@ -63,6 +66,17 @@ export function nameTokens(name) {
  * front unless `order` is "first".
  */
 function lookup(tokens, table, { order = "last", skip = null } = {}) {
+  // "Staff of Fire": the head noun is the one before "of"
+  const of = order === "last" ? tokens.indexOf("of") : -1;
+  if (of > 0) {
+    // a phrase that spans the "of" ("Flame of Justice") is read whole
+    const whole = lookup(tokens, table, { order: "whole", skip });
+    if (whole && whole.i < of && whole.i + whole.n > of) return whole;
+    const head = lookup(tokens.slice(0, of), table, { order, skip });
+    if (head) return head;
+    const tail = lookup(tokens.slice(of + 1), table, { order, skip });
+    if (tail) return { ...tail, i: tail.i + of + 1 };
+  }
   const hits = [];
   for (let n = 4; n >= 1; n--) {
     for (let i = 0; i + n <= tokens.length; i++) {
@@ -72,8 +86,19 @@ function lookup(tokens, table, { order = "last", skip = null } = {}) {
     }
     if (hits.length) break;
   }
+  // a compound word ends in a known noun: "Electrowhip", "Dreamscythe", "Gearblade"
+  if (!hits.length) {
+    for (let i = 0; i < tokens.length; i++) {
+      for (let k = 3; k <= tokens[i].length - 4; k++) {
+        const key = singular(tokens[i].slice(k));
+        const v = table[key];
+        if (v && !(skip && skip(v))) { hits.push({ v, i, n: 1, key }); break; }
+      }
+    }
+  }
   if (!hits.length) return null;
   hits.sort((a, b) => (order === "first" ? a.i - b.i : (b.i + b.n) - (a.i + a.n)));
+  if (order === "whole") return hits.find((h) => h.key.split(" ").includes("of")) ?? hits[0];
   return hits[0];
 }
 
@@ -134,8 +159,13 @@ const SF2E_BASE_BY_GROUP = Object.freeze({
   spear: "atomic-spear plasma-pike singing-spear syringe-skewer",
   sword: "dueling-sword grindblade nano-edge-rapier phase-cutlass plasma-sword puzzleblade quantum-reaver",
 });
-export const BASE_GROUP = Object.freeze(Object.fromEntries([BASE_BY_GROUP, SF2E_BASE_BY_GROUP].flatMap((t) => Object.entries(t).flatMap(([g, s]) => s.split(" ").map((b) => [b, g])))));
-const BASE_TOKENS = Object.freeze(Object.fromEntries(Object.keys(BASE_GROUP).map((b) => [b.split("-").map(singular).join(" "), b])));
+/** SF2e base items that are also plain words: read from data, never from a name ("Talon" is a claw). */
+const DATA_ONLY_BASE = Object.freeze({ grenade: "grenade", baton: "club", knife: "knife", talon: "knife", hammer: "hammer" });
+export const BASE_GROUP = Object.freeze({
+  ...Object.fromEntries([BASE_BY_GROUP, SF2E_BASE_BY_GROUP].flatMap((t) => Object.entries(t).flatMap(([g, s]) => s.split(" ").map((b) => [b, g])))),
+  ...DATA_ONLY_BASE,
+});
+const BASE_TOKENS = Object.freeze(Object.fromEntries(Object.keys(BASE_GROUP).filter((b) => !DATA_ONLY_BASE[b]).map((b) => [b.split("-").map(singular).join(" "), b])));
 
 /** A base item whose shape is not its group's. */
 const BASE_DELIVERY = Object.freeze({
@@ -166,10 +196,10 @@ export function baseItemOf(item) {
   const sys = sysOf(item);
   for (const v of [sys.baseItem, sys.slug]) {
     const s = slugify(v);
-    if (s && BASE_GROUP[s]) return { base: s, src: "structure" };
+    if (s && BASE_GROUP[s]) return { base: s, src: "structure", span: null };
   }
   const hit = lookup(nameTokens(item?.name), BASE_TOKENS);
-  return hit ? { base: hit.v, src: "name" } : null;
+  return hit ? { base: hit.v, src: "name", span: [hit.i, hit.i + hit.n] } : null;
 }
 
 /* ── deliveries ────────────────────────────────────────────────────────── */
@@ -201,21 +231,24 @@ const RANGED_GROUPS = new Set(["bow", "crossbow", "firearm", "sling", "projectil
 const STRIKE_NOUNS = lex({
   rake: "claw talon rake scratch nail hook grasping_claw fingernail razor_claw tail_claw",
   jaws: "jaw bite fang beak mandible maw tooth mouth snout gnash chomp muzzle sucker gullet lamprey nibble gnaw tusked_jaw",
-  lash: "tail tentacle tongue tendril vine whip frond stalk lash tress hair beard feeler cilium cilia rope noose scarf sash ribbon streamer root creeper ivy tail_lash cord tether strand thread wire leash chain_lash flagellum hairs",
+  lash: "tail tentacle tongue tendril vine whip frond stalk lash tress hair beard feeler cilium cilia rope noose scarf sash ribbon streamer root creeper ivy tail_lash cord tether strand thread wire leash chain_lash flagellum hairs entrails guts gut intestine",
   gore: "horn tusk antler gore horned_crown crest ram_horn",
   sting: "stinger sting barb spine quill needle proboscis spike thorn splinter syringe bristle ovipositor stake",
   stomp: "hoof foot leg stomp kick boot paw trample heel talon_foot",
   buffet: "wing pinion feather",
-  slam: "slam body pseudopod limb branch arm headbutt head forehead trunk shell carapace knuckle elbow knee punch fist slap bulk mass blow wave_slam stump hand_slam rock_fist shoulder hip rump belly butt",
+  slam: "slam body pseudopod limb branch arm headbutt head forehead trunk shell carapace knuckle elbow knee punch fist slap bulk mass blow wave_slam stump hand_slam rock_fist shoulder hip rump belly butt appendage wheel incorporeal_wheel " +
+    // an elemental's or a spirit's blow: the body of the thing hitting
+    "wave gust wind crash surge shock spark flame fire sunfire thunderbolt discharge power crushing_power tornado lunge charge shove ram tackle",
   pincer: "pincer nipper chela claw_pincer pliers",
-  grasp: "hand touch grasp caress finger grip clutch palm kiss ghostly_hand spectral_hand shadow_hand",
-  squeeze: "constrict coil crush embrace engulf envelop wrap squeeze hug enfold smother",
-  swing: "sword blade saber sabre cutlass edge falchion",
+  grasp: "hand touch grasp caress finger grip clutch palm kiss ghostly_hand spectral_hand shadow_hand web",
+  squeeze: "constrict coil crush embrace engulf envelop wrap squeeze hug enfold smother manacle",
+  swing: "sword blade saber sabre cutlass edge falchion leaf flame_of_justice polearm scissors shears",
   chop: "axe cleaver hatchet",
-  smash: "hammer mace club cudgel maul mallet gavel baton rod staff cane pipe wrench bat stick pan shovel broom book mug bottle tankard ladle rolling_pin crutch log plank lute tome",
-  thrust: "spear pike trident lance pitchfork fork harpoon bayonet",
+  smash: "hammer mace club cudgel maul mallet gavel baton rod staff cane pipe wrench bat stick pan shovel broom book mug bottle tankard ladle rolling_pin crutch log plank lute tome " +
+    "rock stone meat hunk door torch flagon pin bowling_pin anchor paddle sleeve table furniture gun long_gun comet bell cobblestone",
+  thrust: "spear pike trident lance pitchfork fork harpoon bayonet bowsprit pen fountain_pen quill_pen",
   sweep: "scythe glaive halberd",
-  stab: "dagger knife stiletto dirk scalpel shiv athame jambiya scissors shear chisel corkscrew awl icepick dagger_finger",
+  stab: "dagger knife stiletto dirk scalpel shiv athame jambiya scissor shear chisel corkscrew awl icepick dagger_finger shard bone_shard tube",
   peck: "pick",
   flail: "flail chain",
   bash: "shield shield_bash",
@@ -224,26 +257,26 @@ const STRIKE_NOUNS = lex({
 const RANGED_NOUNS = lex({
   arrow: "arrow bow longbow shortbow",
   bolt: "crossbow ballista",
-  bullet: "gun pistol rifle musket firearm bullet cannon revolver carbine shot pepperbox blaster handgun",
-  pellets: "scattergun shotgun blunderbuss scatter_gun buckshot",
+  bullet: "gun pistol rifle musket firearm bullet cannon revolver carbine shot pepperbox blaster handgun cannon_blast long_gun arm_cannon",
+  pellets: "scattergun shotgun blunderbuss scatter_gun buckshot pellet flak flak_thrower shrapnel",
   slug: "sniper longrifle railgun coilgun",
   stone: "sling slingstone pebble",
-  dart: "dart shuriken needle quill spine thorn stinger barb spike splinter shard bristle seed",
-  thrown: "javelin throw toss fling hurl debris fruit coal chair table bottle mug furniture pot teacup spear axe knife dagger hatchet hammer coin card harrow_card",
-  rock: "rock boulder cobblestone rubble brick stone_chunk",
-  bomb: "bomb flask vial bottled_lightning thunderstone tanglefoot_bag goblinfire alchemist_fire acid_flask frost_vial smoke_bomb blight_bomb skunk_bomb",
+  dart: "dart shuriken needle quill spine thorn stinger barb spike splinter shard bristle seed pinion feather icicle swarm swarm_strike",
+  thrown: "javelin throw toss fling hurl hurled debris fruit coal chair table bottle mug furniture pot teacup spear axe knife dagger hatchet hammer coin card harrow_card object telekinetic_object corpse pitch chakram disc discus blade",
+  rock: "rock boulder cobblestone rubble brick stone_chunk meteor_fragment chunk",
+  bomb: "bomb flask vial bottled_lightning thunderstone tanglefoot_bag goblinfire alchemist_fire acid_flask frost_vial smoke_bomb blight_bomb skunk_bomb pod spore_pod seedpod explosive_pod",
   grenade: "grenade",
-  laser: "laser",
+  laser: "laser laser_beam laser_rifle laser_pistol",
   plasma: "plasma",
-  zap: "shock spark arc zap electrocution",
-  sonicwave: "shriek screech scream sonic refrain reverberation song wail howl",
-  jet: "jet spray stream squirt flamethrower geyser hose spout",
-  mindbeam: "mental_blast thoughtbarb mind_spike psychic_blast",
-  spit: "spit spittle glob globule vomit spew bile phlegm splatter",
+  zap: "shock spark arc zap electrocution lightning thunderbolt discharge electrical_discharge static live_wire volt",
+  sonicwave: "shriek screech scream sonic refrain reverberation song wail howl chord note pulse ultrasonic bell word squeal vocalization snap",
+  jet: "jet spray stream squirt flamethrower geyser hose spout wave gust wind crash torch",
+  mindbeam: "mental_blast thoughtbarb mind_spike psychic_blast thought psychic_lance",
+  spit: "spit spittle glob globule vomit spew bile phlegm splatter venom cough guts spore wad blob sludge",
   net: "web net snare bola_web lasso",
   missile: "missile rocket",
-  ray: "beam ray eye_beam eye_ray gaze",
-  orb: "orb ball mote wisp foxfire sphere globe bolt blast",
+  ray: "beam ray eye_beam eye_ray gaze eye sunfire",
+  orb: "orb ball mote wisp foxfire sphere globe bolt blast flame fire firebolt flare glyph star",
 });
 
 /** Spell and ability names that refine a harm delivery. */
@@ -268,8 +301,11 @@ const ABILITY_NOUNS = lex({
   breath: "breath_weapon breath exhale",
   stomp: "trample stomp stampede",
   squeeze: "constrict greater_constrict crush engulf envelop wrap_in_coil tighten_coil squirming_embrace smother coil",
-  rake: "rend eager_rend rip_and_tear eviscerate claw_flurry frenzied_slash furious_claw",
-  jaws: "swallow_whole fast_swallow bite gnaw savage_jaw lunging_bite wicked_bite avenging_bite ferocious_gnaw worry blood_drain drink_blood suck_blood feast",
+  rake: "rend eager_rend rip_and_tear eviscerate claw_flurry frenzied_slash furious_claw rip_flesh savage flense",
+  jaws: "swallow_whole fast_swallow bite gnaw savage_jaw lunging_bite wicked_bite avenging_bite ferocious_gnaw worry blood_drain drink_blood suck_blood feast death_roll",
+  thrust: "skewer impale pierce_armor",
+  grasp: "seize capture efficient_capture cling attach drag_below drag grab",
+  slam: "powerful_charge stampeding_shove sudden_shove charge shove",
   spit: "spit spray_acid acid_spit spew vomit",
   gaze: "gaze glance focus_gaze stare",
   voice: "roar shriek howl scream screech moan croak cry wail bellow utterance proclamation laugh whisper",
@@ -297,13 +333,18 @@ const strikeDamage = (damage) => damage.find((e) => ["bludgeoning", "piercing", 
  * a melee weapon thrown).
  * @returns {{ delivery, src, base, group }}
  */
-export function strikeDelivery(item, { ranged = false, damage = [], traits = new Set() } = {}) {
+export function strikeDelivery(item, { ranged = false, damage = [], traits = new Set(), linked = null } = {}) {
   const sys = sysOf(item);
+  const lsys = linked ? sysOf(linked) : {};
   const isNpc = item?.type === "melee";
   const tokens = nameTokens(item?.name);
-  const based = baseItemOf(item);
-  let group = slugify(sys.group) || (based ? BASE_GROUP[based.base] : null);
-  const groupSrc = slugify(sys.group) ? "structure" : based?.src ?? null;
+  // an NPC strike's linked weapon (flags.pf2e.linkedWeapon) knows its group
+  const linkedBase = slugify(lsys.baseItem);
+  const based = baseItemOf(item) ?? (linkedBase && BASE_GROUP[linkedBase] ? { base: linkedBase, src: "structure" } : null);
+  const ownGroup = slugify(sys.group) || slugify(lsys.group);
+  const group = ownGroup || (based ? BASE_GROUP[based.base] : null);
+  const groupSrc = ownGroup ? "structure" : based?.src ?? null;
+  for (const t of asArray(lsys.traits?.value)) traits = new Set([...traits, slugify(t)]);
   const physical = strikeDamage(damage);
   const scatter = [...traits].some((t) => /^scatter(-\d+)?$/.test(t));
   const out = (delivery, src) => ({ delivery, src, base: based?.base ?? null, group: group || null });
@@ -337,8 +378,8 @@ export function strikeDelivery(item, { ranged = false, damage = [], traits = new
   // melee
   if (natural) {
     const n = lookup(tokens, STRIKE_NOUNS);
-    // a base weapon named in full ("Hook Sword") outranks one of its words
-    if (n && !(based && BASE_TOKENS_LEN(based) > n.n && !NATURAL.has(n.v))) {
+    // a base weapon named in full ("Hook Sword", "Hand Adze") outranks one of its words
+    if (n && !(based && BASE_TOKENS_LEN(based) >= Math.max(2, n.n))) {
       // a character's own unarmed blow is a fist, not a creature's slam
       return out(!isNpc && n.v === "slam" ? "fist" : n.v, "name");
     }
@@ -353,6 +394,8 @@ export function strikeDelivery(item, { ranged = false, damage = [], traits = new
   }
   const n = lookup(tokens, STRIKE_NOUNS);
   if (n) return out(n.v, "name");
+  // "False Weapon", "Ghostly Weapon": a weapon, shaped by what it deals
+  if (tokens.some((t) => t === "weapon" || t === "armament")) return out(physical === "piercing" ? "thrust" : physical === "bludgeoning" ? "smash" : "swing", "name");
   if (group && GROUP_DELIVERY[group]) {
     // a ranged weapon swung in melee (a gun-sword's blade, a bow's limb)
     return out(physical === "slashing" ? "swing" : physical === "piercing" ? "stab" : "smash", groupSrc);
@@ -400,6 +443,8 @@ export function actionDelivery(item, ctx) {
       return { delivery: a.v, src: "name" };
     }
   }
+  const wallName = /^wall-of-|-wall$/.test(slugify(item?.name)) || !!named(HARM_NOUNS, (v) => v === "wall");
+  if (wallName) return { delivery: "wall", src: "name" };
   if (!harm) {
     if (traits.has("aura") || (area?.shape === "emanation" && ability && sys.actionType?.value === "passive")) return { delivery: "aura", src: "trait" };
     if (named(HARM_NOUNS, (v) => v === "gaze")) return { delivery: "gaze", src: "name" };
@@ -419,7 +464,6 @@ export function actionDelivery(item, ctx) {
       if (auditory && named(HARM_NOUNS, (v) => v === "voice")) return { delivery: "voice", src: "name" };
       return { delivery: "emanation", src: "structure" };
     }
-    if (/^wall-of-|-wall$/.test(slugify(item?.name)) || named(HARM_NOUNS, (v) => v === "wall")) return { delivery: "wall", src: "name" };
     if (isFallName(tokens)) return { delivery: "fall", src: "name" };
     const ranged = !!range && !/^(touch|self|varies|--?)$/.test(range.trim()) && !/emanation/.test(range);
     if (ranged && ctx.isSpell) return { delivery: "lob", src: "structure" };
@@ -441,48 +485,50 @@ export function actionDelivery(item, ctx) {
     if (s) return { delivery: s.v, src: "name" };
   }
   if (kind === "save") return { delivery: "bloom", src: "structure" };
+  // a harm spell with no range and no target is worn: a body of fire, a mantle
+  if (ctx.isSpell && !range.trim() && !String(sys.target?.value ?? "").trim()) return { delivery: "aura", src: "structure" };
   return { delivery: ctx.hazard ? "burst" : "bloom", src: "default" };
 }
 
 /* ── motifs ────────────────────────────────────────────────────────────── */
 
 const MOTIF_NOUNS = lex({
-  blade: "blade sword saber sabre knife dagger sickle scythe razor cutlass edge glaive scimitar katana falchion cleaver",
+  blade: "blade sword saber sabre knife dagger sickle scythe razor cutlass edge glaive scimitar katana falchion cleaver saw buzz_saw",
   weapon: "weapon armament arm_of armory arsenal",
-  spear: "spear lance javelin pike trident harpoon",
+  spear: "spear lance javelin pike trident harpoon lancer",
   arrow: "arrow quarrel",
   hammer: "hammer mallet maul gavel",
   chain: "chain shackle fetter manacle",
-  whip: "whip",
-  needle: "needle pin dart",
-  hand: "hand palm finger grasp grip",
+  whip: "whip rope lasso",
+  needle: "needle pin dart sting stinger",
+  hand: "hand palm finger grasp grip grasping",
   fist: "fist punch knuckle",
   claw: "claw talon",
   jaws: "jaw maw fang tooth bite mouth",
   eye: "eye gaze glance stare",
   heart: "heart",
   skull: "skull",
-  bones: "bone skeleton ossuary",
-  blood: "blood vein",
+  bones: "bone bony skeleton skeletal ossuary",
+  blood: "blood vein bloody",
   wing: "wing",
   feather: "feather plume pinion",
-  storm: "storm tempest thunderstorm",
+  storm: "storm tempest thunderstorm stormburst blizzard",
   cloud: "cloud",
   rain: "rain hail downpour deluge",
   wind: "wind gust gale breeze zephyr",
   tornado: "tornado whirlwind cyclone vortex twister maelstrom whirlpool",
   lightning: "lightning thunderbolt",
-  sun: "sun solar sunburst sunlight dawn daylight sunbeam sunfire",
-  moon: "moon lunar moonlight moonbeam",
-  star: "star starlight constellation nova starfall",
+  sun: "sun solar sunburst sunlight dawn daylight sunbeam sunfire eclipse",
+  moon: "moon lunar moonlight moonbeam moonburst",
+  star: "star starlight constellation nova starfall stellar firework skyrocket asterism",
   comet: "comet meteor meteorite",
-  stone: "stone rock boulder pebble rubble gravel",
-  crystal: "crystal gem diamond prism glass",
-  spike: "spike stake",
-  wave: "wave tide tsunami surge flood torrent hydraulic",
-  bubble: "bubble foam froth",
-  mist: "mist fog vapor vapour steam",
-  smoke: "smoke soot smog",
+  stone: "stone rock boulder pebble rubble gravel earth quake earthquake fissure scree sand",
+  crystal: "crystal gem diamond prism glass prismatic shard coral",
+  spike: "spike stake icicle skewer",
+  wave: "wave tide tsunami surge flood torrent hydraulic geyser fountain",
+  bubble: "bubble foam froth slime muck",
+  mist: "mist fog vapor vapour steam haze",
+  smoke: "smoke soot smog fume ash fumarole",
   vine: "vine creeper ivy tendril",
   thorn: "thorn briar bramble",
   root: "root",
@@ -490,14 +536,14 @@ const MOTIF_NOUNS = lex({
   leaf: "leaf foliage",
   tree: "tree oak",
   spore: "spore mushroom fungus mold pollen",
-  ghost: "ghost phantom spectre specter wraith apparition",
+  ghost: "ghost ghostly spectral phantom spectre specter wraith apparition poltergeist",
   rune: "rune runic",
-  glyph: "glyph sigil symbol seal",
-  word: "word utterance decree edict",
-  note: "song note melody music chord hymn tune refrain anthem ballad lullaby dirge cacophony",
+  glyph: "glyph sigil symbol seal brand mark sign",
+  word: "word utterance decree edict insult retort invective rebuke referendum",
+  note: "song note melody music chord hymn tune refrain anthem ballad lullaby dirge cacophony aria choir canticle lament",
   bell: "bell chime toll gong",
   mirror: "mirror reflection",
-  door: "door portal gate gateway",
+  door: "door portal gate gateway rift",
   mask: "mask",
   crown: "crown tiara diadem",
   coin: "coin",
@@ -505,14 +551,13 @@ const MOTIF_NOUNS = lex({
   serpent: "serpent snake viper asp cobra",
   dragon: "dragon drake wyrm draconic",
   beast: "beast wolf bear lion hound",
-  swarm: "swarm locust insect bee hornet wasp vermin",
+  swarm: "swarm locust insect bee hornet wasp vermin crow raven bat rat murmuration",
   web: "web cobweb",
-  flame: "flame blaze",
-  orb: "orb ball sphere globe mote wisp",
+  flame: "flame blaze ember coal",
+  orb: "orb ball sphere globe mote wisp fireball snowball",
   ray: "ray beam",
   shield: "shield aegis bulwark",
   wall: "wall rampart barricade",
-  chain_lightning: "chain_lightning",
 });
 
 const PHRASE_MOTIF = Object.freeze({ "chain lightning": "chain", "ghostly hand": "hand", "spiritual armament": "weapon", "spiritual weapon": "weapon", "hydraulic push": "wave" });
@@ -529,7 +574,10 @@ const TRAIT_MOTIF = Object.freeze({ fungus: "spore" });
  * @param {{ delivery, group, base, strike, traits }} ctx
  */
 export function motifOf(item, ctx = {}) {
-  const tokens = nameTokens(item?.name);
+  let tokens = nameTokens(item?.name);
+  // the words of a base weapon's name are the weapon, not a motif ("Hand Crossbow")
+  const span = ctx.strike ? baseItemOf(item)?.span : null;
+  if (span) tokens = [...tokens.slice(0, span[0]), ...tokens.slice(span[1])];
   const joined = tokens.join(" ");
   for (const [p, m] of Object.entries(PHRASE_MOTIF)) if (new RegExp(`\\b${p}\\b`).test(joined)) return { motif: m, src: "name" };
   const redundant = DELIVERY_MOTIF[ctx.delivery];
