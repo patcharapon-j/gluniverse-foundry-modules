@@ -96,8 +96,9 @@ etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
   docs/adr/0005-creaturedex-skin.md, PF2e Odds' ink skin,
   docs/adr/0006-odds-and-line-skin.md, the stream view's skin,
   docs/adr/0007-stream-view-skin.md, the Stage and Theatre GM console,
-  docs/adr/0008-stage-theatre-console.md, and the Mythic GME panel,
-  docs/adr/0009-mythic-gme-skin.md — each lives only under its features' own
+  docs/adr/0008-stage-theatre-console.md, the Mythic GME panel,
+  docs/adr/0009-mythic-gme-skin.md, and Flatfinder's ink skin,
+  docs/adr/0010-flatfinder-skin.md — each lives only under its features' own
   roots and never on `:root`); `styles/gl-tokens.css` is the single source of truth and
   `styles/gl-motion.css` the single keyframe pool. Use the `--gl-*` tokens and
   the `.gl-*` utilities. The non-negotiables:
@@ -1343,6 +1344,30 @@ identifier or token, and apply goes through PF2e's own `applyDamage` with IWR,
 never the flat path. To see it: `node tools/pf2e-saves-preview.mjs && node
 tools/preview-server.mjs`, then `/.preview/saves.html`. See
 `docs/SAVE_RESOLUTION.md`.
+
+**When touching Flatfinder** (`features/flatfinder/`, `styles/flatfinder.css`,
+`lang/flatfinder.en.json`), re-run its check, plus `recall-check` (Recall
+Knowledge's `BAND_KEYS` copies the competence bands) and
+`pf2e-variant-rules-check` (the boss seams):
+
+```bash
+node tools/flatfinder-check.mjs
+```
+
+Zero problems required. It drives the real rules against PF2e's own bundle when
+one is installed. Four things fail silently there. **Elite/Weak and a boss's
+level are never written to the actor**: pf2e-flatten subtracts the stored level,
+so Flatfinder's ±2 counts from `details.level.base` and lives only in its maths.
+**A boss reaches the budget through `bossXpFactor` alone**, never its level
+bump, and **counts once**: its extra turns are real Combatants with its own
+actor, so `combatParticipants` refuses `isExtraTurn` and de-duplicates by uuid.
+**The rating is the mildest budget that holds the XP** (PF2e's
+`calculateEncounterRating`). **PWoL is pf2e-flatten's modifier**, never PF2e's
+`variants.pwol`. `rules.mjs`, `encounter-model.mjs`, `view.mjs` and
+`planner-store.mjs` stay pure; `computeEncounter` keeps `severity`, `totalXp`
+and `budget[severity]` for Combat Intro. To see it:
+`node tools/flatfinder-preview.mjs && node tools/preview-server.mjs 8982`, then
+`/.preview/flatfinder.html`. See `docs/FLATFINDER.md`.
 
 **When touching Spotlight Roll** (`features/spotlight-roll/`, `styles/spotlight-roll*.css`,
 `templates/spotlight-roll/`, `core/pf2e-degree.mjs`), re-run its check. Everything it
