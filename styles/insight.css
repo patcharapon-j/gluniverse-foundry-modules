@@ -458,6 +458,60 @@
   .insight-compose .insight-compose-all:hover { color: var(--gl-text-bright); }
 }
 
+/* quick picks: ways to tick several chips at once. Each adds to what is
+   ticked, which the "+" says; the text buttons' own padding is pulled back so
+   the first one lines up with the chips. */
+.insight-compose-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 2px -6px;
+}
+.insight-compose-picks .insight-compose-all::before { content: "+ "; }
+
+/* "show who else got it": a square tick in the chips' language */
+.insight-compose-shared {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gl-text-dim);
+  cursor: pointer;
+  transition: color var(--gl-d-quick) var(--gl-ease), opacity var(--gl-d-quick) var(--gl-ease);
+}
+.insight-compose-shared input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.insight-compose-shared-box {
+  position: relative;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  box-shadow: inset 0 0 0 1px var(--insight-line-strong);
+  transition: background-color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.insight-compose-shared:has(input:checked) { color: var(--gl-text-bright); }
+.insight-compose-shared:has(input:checked) .insight-compose-shared-box {
+  background: var(--gl-accent);
+  box-shadow: inset 0 0 0 1px var(--gl-accent);
+}
+.insight-compose-shared:has(input:checked) .insight-compose-shared-box::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  background: var(--insight-on-accent);
+}
+.insight-compose-shared:has(input:focus-visible) { outline: 2px solid var(--gl-text); outline-offset: 2px; }
+.insight-compose-shared:has(input:disabled) { opacity: 0.45; cursor: default; }
+@media (hover: hover) and (pointer: fine) {
+  .insight-compose-shared:not(:has(input:disabled)):hover { color: var(--gl-text); }
+}
+
 .insight-compose-form :is(input[type="text"], textarea) {
   box-sizing: border-box;
   width: 100%;
@@ -488,7 +542,9 @@
 
 .insight-compose-foot {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .insight-compose .insight-send-btn {
   appearance: none;

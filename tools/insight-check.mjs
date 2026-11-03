@@ -35,6 +35,10 @@
  * 14. The stylesheet keeps the suite's rules: no :root, no foundation token
  *     declared, no raw duration or easing, no white veil, blur written against
  *     --gl-glass-k; and every duration the renderer passes is tier-scaled.
+ * 15. Sending one card to several people: the quick picks tick only connected
+ *     players who own the tokens, a shared card names the others from the
+ *     receiver's own user list (never from the payload), an unshared one still
+ *     says "Only you", and every compose button has a handler.
  */
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -56,6 +60,7 @@ const sound = await read(FEATURE + "sound.mjs");
 const themes = await read(FEATURE + "themes.mjs");
 const socketSrc = await read(FEATURE + "socket.mjs");
 const composeSrc = await read(FEATURE + "compose-dialog.mjs");
+const recipientsSrc = await read(FEATURE + "recipients.mjs");
 const preview = await read("tools/insight-preview.mjs");
 const template = await read("templates/insight/notification.hbs");
 const composeTpl = await read("templates/insight/compose-dialog.hbs");
@@ -65,6 +70,7 @@ const lang = JSON.parse(await read("lang/insight.en.json"));
 const runtime = await load(FEATURE + "notification.mjs");
 const body = await load(FEATURE + "body.mjs");
 const socket = await load(FEATURE + "socket.mjs");
+const recipients = await load(FEATURE + "recipients.mjs");
 
 const classTokens = (markup) => {
   const out = new Set();
@@ -286,7 +292,7 @@ for (const t of ["--gl-glow", "--gl-bloom", "--gl-accent-soft", "--gl-accent-fai
 {
   const used = new Set();
   for (const src of [template, composeTpl]) for (const m of src.matchAll(/localize "([A-Z][\w.]+)"/g)) used.add(m[1]);
-  for (const src of [notification, composeSrc, await read("scripts/features/insight/insight.mjs"), settings]) {
+  for (const src of [notification, composeSrc, recipientsSrc, await read("scripts/features/insight/insight.mjs"), settings]) {
     for (const m of src.matchAll(/"(INSIGHT\.[A-Za-z]+)"/g)) used.add(m[1]);
   }
   ok(used.size > 20, "the i18n scan found too few keys (the scan is broken)");
@@ -307,6 +313,46 @@ for (const t of ["--gl-glow", "--gl-bloom", "--gl-accent-soft", "--gl-accent-fai
   for (const m of notification.matchAll(/duration:\s*([^,}]+)/g)) {
     ok(/^(?:ms\(|breathe\b)/.test(m[1].trim()), `notification.mjs passes an unscaled duration (${m[1].trim()}); it would ignore the speed setting and the motion tier`);
   }
+}
+
+/* ── 15. one card, several people ──────────────────────────────────────── */
+{
+  const { sharedWith, validPayload, MESSAGE_TYPE } = socket;
+  const { actorsOf, playerOwners, sharedLabel, NAMED_MAX } = recipients;
+  const base = { type: MESSAGE_TYPE, id: "insight-2", targets: ["p1", "p2", "p3", "p2"], body: "<p>x</p>" };
+
+  ok(sharedWith(base, "p1").length === 0, "an unshared card tells its recipients who else got it");
+  ok(sharedWith({ ...base, shared: true }, "p1").join() === "p2,p3", "a shared card names the wrong people (itself, or someone twice)");
+  ok(validPayload({ ...base, shared: true }) && validPayload({ ...base, shared: false }), "validPayload refuses a boolean `shared`");
+  ok(!validPayload({ ...base, shared: "yes" }), "validPayload accepts a `shared` that is not a boolean");
+  ok(/shared:\s*data\.shared === true/.test(socketSrc), "sendNotification no longer carries `shared` as a strict boolean");
+  ok(/sharedWith\(payload, game\.user\.id\)\.map\(\(id\) => game\.users\.get\(id\)\?\.name\)/.test(socketSrc),
+    "a shared card's names no longer come from the receiver's own user list; a payload could name anyone");
+
+  const fmt = (k, d) => (lang[k] ?? k).replace(/\{(\w+)\}/g, (_m, n) => d[n]);
+  ok(sharedLabel([], fmt) === null && sharedLabel([undefined], fmt) === null, "a card with nobody else on it stops saying \"Only you\"");
+  ok(sharedLabel(["Kai"], fmt, "en") === "With Kai", `one other recipient reads ${JSON.stringify(sharedLabel(["Kai"], fmt, "en"))}`);
+  ok(sharedLabel(["Kai", "Mira"], fmt, "en") === "With Kai and Mira", "two other recipients are not listed by name");
+  const many = Array.from({ length: NAMED_MAX + 1 }, (_, i) => `P${i}`);
+  ok(sharedLabel(many, fmt, "en") === `With ${many.length} others`, "a long recipient list is named in full and overruns the card's head");
+  ok(/\{names\}/.test(lang["INSIGHT.SharedWith"] ?? "") && /\{count\}/.test(lang["INSIGHT.SharedWithCount"] ?? ""),
+    "INSIGHT.SharedWith / SharedWithCount lost their placeholder");
+  ok(/\{\{#if shared\}\}\{\{shared\}\}\{\{else\}\}\{\{localize "INSIGHT\.Private"\}\}\{\{\/if\}\}/.test(template),
+    "the card's private tag no longer falls back to \"Only you\"");
+
+  const own = (ids) => ({ testUserPermission: (u, level) => level === "OWNER" && ids.includes(u.id) });
+  const a1 = own(["p1"]); const a2 = own(["p2", "gm"]);
+  const users = [
+    { id: "gm", active: true, isGM: true }, { id: "p1", active: true }, { id: "p2", active: false }, { id: "p3", active: true },
+  ];
+  ok(actorsOf([{ actor: a1 }, { actor: a1 }, { actor: null }, null, { actor: a2 }]).length === 2, "actorsOf keeps an actor twice or a token without one");
+  const owners = playerOwners([a1, a2], users);
+  ok(owners.join() === "p1", `the token quick picks tick ${JSON.stringify(owners)}; only connected players who own one should be ticked`);
+
+  const handlers = new Set([...composeSrc.matchAll(/^\s+(\w+): InsightComposeDialog\.#\w+,/gm)].map((m) => m[1]));
+  for (const m of composeTpl.matchAll(/data-action="(\w+)"/g)) ok(handlers.has(m[1]), `compose button data-action="${m[1]}" has no handler; it does nothing`);
+  ok(/name="shared"/.test(composeTpl) && /data\.get\("shared"\)/.test(composeSrc), "the compose window's \"who else\" switch is not read on send");
+  ok(/targets\.length > 1 && data\.get\("shared"\)/.test(composeSrc), "a card to one person can be sent as shared");
 }
 
 /* ── report ───────────────────────────────────────────────────────────── */

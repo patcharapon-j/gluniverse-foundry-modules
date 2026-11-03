@@ -3,9 +3,16 @@
     <legend class="insight-compose-heading">
       <span>{{localize "INSIGHT.ComposeTarget"}}</span>
       {{#if hasPlayers}}
-      <button type="button" class="insight-compose-all" data-action="pickPlayers">{{localize "INSIGHT.ComposeAllPlayers"}}</button>
+      <button type="button" class="insight-compose-all" data-action="pickNone">{{localize "INSIGHT.ComposePickNone"}}</button>
       {{/if}}
     </legend>
+    {{#if hasPlayers}}
+    <div class="insight-compose-picks">
+      <button type="button" class="insight-compose-all" data-action="pickPlayers">{{localize "INSIGHT.ComposeAllPlayers"}}</button>
+      <button type="button" class="insight-compose-all" data-action="pickSelected" data-tooltip="{{localize "INSIGHT.ComposePickSelectedHint"}}">{{localize "INSIGHT.ComposePickSelected"}}</button>
+      <button type="button" class="insight-compose-all" data-action="pickTargets" data-tooltip="{{localize "INSIGHT.ComposePickTargetsHint"}}">{{localize "INSIGHT.ComposePickTargets"}}</button>
+    </div>
+    {{/if}}
     {{#if people.length}}
     <div class="insight-compose-people">
       {{#each people}}
@@ -33,6 +40,11 @@
   </label>
 
   <footer class="insight-compose-foot">
-    <button type="button" class="insight-send-btn" data-action="send">{{localize "INSIGHT.ComposeSend"}}</button>
+    <label class="insight-compose-shared" data-tooltip="{{localize "INSIGHT.ComposeSharedHint"}}">
+      <input type="checkbox" name="shared" {{#if shared}}checked{{/if}} {{#if soloPick}}disabled{{/if}}>
+      <span class="insight-compose-shared-box" aria-hidden="true"></span>
+      <span>{{localize "INSIGHT.ComposeShared"}}</span>
+    </label>
+    <button type="button" class="insight-send-btn" data-action="send">{{sendLabel}}</button>
   </footer>
 </form>
