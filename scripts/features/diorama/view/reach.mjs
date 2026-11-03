@@ -20,7 +20,7 @@
  * still goes through TokenDocument#move, which decides.
  */
 
-import { DIAGONALS, occupancy, reachBand, reachBudgets, solveReach, wallIndex } from "../rules/reach.mjs";
+import { DIAGONALS, occupancy, preferReach, reachBand, reachBudgets, solveReach, wallIndex } from "../rules/reach.mjs";
 import { DAGGERHEART, PF2E } from "../rules/systems.mjs";
 import { altitude, heightDist, seams, speed as speedOf } from "./seams.mjs";
 import { movesOverWall, wallDocOf, wallSpanQ } from "../terrain/wall-top.mjs";
@@ -184,10 +184,23 @@ export function reachOf({ tok, scene, grid, terrain, action, seen = null }) {
     mover: { w, h, disposition: doc.disposition, tiny: isTiny(tok.actor, systemId), alt: altitude(doc), height },
     others: occupantsOf(tok, size, systemId, seen),
   });
-  const solved = solveReach({
+  const base = {
     start, budget: budgets.at(-1), gridDistance: grid.distance, diagonals, bounds,
-    enter: difficultyFn(scene, act, Number(src.elevation) || 0, size, w, h), blocked, occupied,
-  });
+    enter: difficultyFn(scene, act, Number(src.elevation) || 0, size, w, h), occupied,
+  };
+  const any = solveReach({ ...base, blocked });
+  // A drop off a ledge is a legal move (shown, never applied), but nobody walks
+  // off the side of a flight to save a few feet: a square the walker can reach
+  // without dropping takes that route, and only the rest take the jump.
+  const drops = (fi, fj, ti, tj) => {
+    for (let di = 0; di < h; di++) for (let dj = 0; dj < w; dj++) {
+      try { if (terrain.step(fi + di, fj + dj, ti + di, tj + dj).fall) return true; } catch { /* off the map */ }
+    }
+    return false;
+  };
+  const solved = cliffs
+    ? preferReach(solveReach({ ...base, blocked: (fi, fj, ti, tj) => blocked(fi, fj, ti, tj) || drops(fi, fj, ti, tj) }), any)
+    : any;
   const cells = [];
   for (const c of solved.cells) {
     if (c.i === start.i && c.j === start.j) continue;

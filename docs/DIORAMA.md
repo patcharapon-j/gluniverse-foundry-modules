@@ -127,7 +127,11 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   one, two and three Strides (PF2e; Close for Daggerheart), counting walls and
   one-way walls (`canvas.edges`), difficult terrain (movement-cost Regions, at the
   token's elevation) and cliffs. Solver: `rules/reach.mjs` (pure Dijkstra with the
-  scene's diagonal rule); world adapter: `view/reach.mjs`. Per player
+  scene's diagonal rule); world adapter: `view/reach.mjs`. A drop off a ledge
+  is a legal step, but the route never takes one to save a few feet: it is
+  solved twice, without drops and with them, and a square the first reaches
+  keeps that route (`preferReach`), so a walker goes down the stairs and jumps
+  only where that is the only way down. Per player
   (`dio.reach`): when selected, only while moving, or never.
   Other creatures count too. A mover may pass through an ally's squares but not
   end there, and may not pass through an enemy's, so those squares show as out
