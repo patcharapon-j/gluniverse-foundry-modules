@@ -195,6 +195,8 @@ function finish(desc, { id, seedKey, caster = null, targets = [], area = null, o
     outcome, rank: desc.rank ?? 1, tradition: desc.tradition ?? null,
     weapon: desc.weapon ?? null, caster, targets, area, condition: desc.condition ?? null, look: null,
     craft: desc.craft ?? null,
+    // the look axes (docs/SPELLSPRITE_LOOK.md)
+    delivery: desc.delivery ?? null, motif: desc.motif ?? null, props: desc.props ?? [], flavor: desc.flavor ?? null,
   };
   if (!spec.caster && !spec.targets.length && !spec.area) return null;
   return applyLook(spec, lookFor(slug ?? desc.slug, actor, item));
@@ -496,6 +498,17 @@ function onSave(message, ctx, origin) {
   if (allSaved(rec)) arm(rec, 0);
 }
 
+/** An NPC strike's linked weapon (PF2e and SF2e keep it under their own flag scope). */
+function linkedWeapon(item) {
+  try {
+    if (item?.type !== "melee") return null;
+    const own = item.linkedWeapon;
+    if (own) return own;
+    const id = item.flags?.[game.system.id]?.linkedWeapon ?? item.flags?.pf2e?.linkedWeapon;
+    return id ? item.actor?.items?.get(id) ?? null : null;
+  } catch { return null; }
+}
+
 /** Whether the attacker has a powered swing toggled on (PF2e: `actor.rollOptions.damage`). */
 function poweredSwing(actor) {
   try {
@@ -518,7 +531,7 @@ async function onAttack(message, ctx, origin) {
   const ranged = domains.includes?.("ranged-attack-roll") || options.includes?.("item:ranged");
   const desc = isSpell
     ? describeItem(item, { use: "cast", castRank: origin?.castRank, tradition: message.flags?.pf2e?.casting?.tradition ?? null, actorLevel: message.actor?.level, targetUndead: isUndead(targetToken?.actor) })
-    : describeItem(item, { use: "strike", ranged, actorLevel: message.actor?.level });
+    : describeItem(item, { use: "strike", ranged, actorLevel: message.actor?.level, weapon: linkedWeapon(item) });
   if (!desc || desc.silent) return;
   await diceDone(message);
   if (nowS() - received > TIMING.stale) return;
@@ -531,7 +544,10 @@ async function onAttack(message, ctx, origin) {
   // Vicious Swing (Power Attack before the remaster) is a damage-domain toggle,
   // so the attack roll never carries it: read the toggle off the attacker.
   const power = !isSpell && desc.weapon && !desc.weapon.ranged && poweredSwing(message.actor);
-  if (power) desc.weapon = { ...desc.weapon, power: true };
+  if (power) {
+    desc.weapon = { ...desc.weapon, power: true };
+    desc.props = [...new Set([...(desc.props ?? []), "power"])].sort();
+  }
   const spec = finish({ ...desc, kind: isSpell ? "attack" : "strike" }, {
     id: `msg:${message.id}`, seedKey: message.id, caster, targets, area, outcome,
     slug: slugOf(item), actor: message.actor, item,
