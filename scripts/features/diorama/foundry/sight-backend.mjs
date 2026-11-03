@@ -35,9 +35,10 @@ import { warn } from "../../../core/const.mjs";
 import { registerWrapper } from "../../../core/wrapper.mjs";
 import { cliffEdges, rayBlocked, rayPoint } from "../terrain/occlusion.mjs";
 import { distToQ } from "../terrain/model.mjs";
+import { movesOverWall, wallDocOf, wallSpanQ } from "../terrain/wall-top.mjs";
 import { creatureHeightDist, eyeQ } from "../rules/creature.mjs";
 import { SIZE_HEIGHT } from "../constants.mjs";
-import { activeContext, t } from "./context.mjs";
+import { wallContext, t } from "./context.mjs";
 import { tokenLevelId } from "../terrain/levels.mjs";
 
 /** A light sits at least this far above the ground under it (q). */
@@ -91,6 +92,87 @@ export function outlineFloorQ(poly, live) {
   if (eye === null || !Number.isFinite(eye)) return null;
   const lift = poly.config.type === "sight" ? distToQ(SIGHT_REVEAL_DIST, live.grid.distance) : 0;
   return Math.floor(eye + lift);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Wall tops                                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The top (q, the Level's frame) of the wall behind an edge, the one the 3D
+ * view draws (terrain/wall-top.mjs), or null when the edge is not a wall
+ * document's (scene bounds, cliffs, another module's edges): those always block.
+ */
+export function edgeWallTopQ(edge, live) {
+  const doc = wallDocOf(edge);
+  if (!doc) return null;
+  return wallSpanQ(doc, live.terrain, live.grid.size, live.grid.distance, Number(live.baseQ) || 0)?.topQ ?? null;
+}
+
+/** Where a segment crosses another, as t along the first, or null. */
+function crossT(ax, ay, bx, by, cx, cy, dx, dy) {
+  const rx = bx - ax, ry = by - ay, sx = dx - cx, sy = dy - cy;
+  const den = rx * sy - ry * sx;
+  if (Math.abs(den) < 1e-9) return null;
+  const qx = cx - ax, qy = cy - ay;
+  const t = (qx * sy - qy * sx) / den, u = (qx * ry - qy * rx) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : null;
+}
+
+/**
+ * Drop the wall edges an eye can see over. A polygon (no ray) drops a wall whose
+ * top is below the eye; a point test drops one the 3D ray crosses above its top.
+ * @param {Set<object>} edges  the polygon's edge set, edited in place
+ * @param {{terrain:object, grid:object, baseQ?:number}} live
+ * @param {number} eyeQ  Level frame
+ * @param {{ax:number,ay:number,bx:number,by:number,zB:number}|null} [ray]
+ * @returns {number} how many were dropped
+ */
+export function dropWallsSeenOver(edges, live, eyeQ, ray = null) {
+  let n = 0;
+  for (const e of [...edges]) {
+    const top = edgeWallTopQ(e, live);
+    if (top === null) continue;
+    let over;
+    if (!ray) over = eyeQ > top;
+    else {
+      const t = crossT(ray.ax, ray.ay, ray.bx, ray.by, e.a.x, e.a.y, e.b.x, e.b.y);
+      over = t !== null && eyeQ + (ray.zB - eyeQ) * t > top;
+    }
+    if (over) { edges.delete(e); n++; }
+  }
+  return n;
+}
+
+/**
+ * Drop the wall edges a move gets past (terrain/wall-top.mjs movesOverWall):
+ * its feet where it crosses are within the terrain's step of the wall's top.
+ * @param {Set<object>} edges  the polygon's edge set, edited in place
+ * @param {{terrain:object, grid:object, baseQ?:number}} live
+ * @param {{ax:number,ay:number,bx:number,by:number,fromQ:number,toQ:number}} move  feet in q, the Level's frame
+ * @returns {number} how many were dropped
+ */
+export function dropWallsMovedOver(edges, live, move) {
+  const stepQ = Number(live.terrain?.stepHeight) || 0;
+  let n = 0;
+  for (const e of [...edges]) {
+    const top = edgeWallTopQ(e, live);
+    if (top === null) continue;
+    const t = crossT(move.ax, move.ay, move.bx, move.by, e.a.x, e.a.y, e.b.x, e.b.y);
+    if (t === null) continue;
+    if (movesOverWall(top, move.fromQ + (move.toQ - move.fromQ) * t, stepQ)) { edges.delete(e); n++; }
+  }
+  return n;
+}
+
+/**
+ * A move collision test's feet, in q in the Level's frame. Foundry tests a move
+ * from the token's movement origin, which sits half its depth above its feet
+ * (TokenDocument#getMovementOrigin).
+ */
+export function moveFeetQ(elevation, tokenDoc, live) {
+  const half = ((Number(tokenDoc?.depth) || Number(tokenDoc?.width) || 1) * live.grid.distance) / 2;
+  return distToQ((Number(elevation) || 0) - half, live.grid.distance) - (Number(live.baseQ) || 0);
 }
 
 /* ------------------------------------------------------------------ */
@@ -170,13 +252,24 @@ export function createHeightSweepClass(Base, { Edge, Vertex, context }) {
   return class HeightSweepPolygon extends Base {
     /** True while a collision test runs: the 2D cliff outline stays out. */
     _dioNoCliffs = false;
+    /** A point test's ray, for dropping the walls it passes over. */
+    _dioRay = null;
+    /** A move collision test's segment and feet, for dropping the walls it gets past. */
+    _dioMove = null;
 
     /** @override */
     _identifyEdges() {
       super._identifyEdges();
-      if (this._dioNoCliffs) return;
       const live = context(this);
       if (!live) return;
+      if (this._dioMove) { dropWallsMovedOver(this.edges, live, this._dioMove); return; }
+      // An eye above a wall's top sees over it: the polygon by the eye, a point test by its ray.
+      const eye = polygonEyeQ(this, live);
+      if (eye !== null && Number.isFinite(eye)) {
+        if (!this._dioNoCliffs) dropWallsSeenOver(this.edges, live, eye);
+        else if (this._dioRay) dropWallsSeenOver(this.edges, live, eye, this._dioRay);
+      }
+      if (this._dioNoCliffs) return;
       const floorQ = outlineFloorQ(this, live);
       if (floorQ === null) return;
       const list = cliffEdgeObjects(live.terrain, floorQ, live.grid.size, Edge);
@@ -196,21 +289,38 @@ export function createHeightSweepClass(Base, { Edge, Vertex, context }) {
     /** @override */
     _testCollision(ray, mode, destination, tMin, tMax) {
       this._dioNoCliffs = true;
+      this._dioRay = null;
+      this._dioMove = null;
       let hit = null;
-      const live = _detecting ? null : context(this);
-      if (live && tMin < tMax) {
+      const live = context(this);
+      if (live && tMin < tMax && this.config?.type === "move") {
+        // A move gets past a wall its feet clear within a step (flying over, a low rail).
+        const doc = this.config.source?.object?.document ?? null;
+        this._dioMove = {
+          ax: ray.A?.x ?? this.origin.x, ay: ray.A?.y ?? this.origin.y,
+          bx: ray.B?.x ?? destination.x, by: ray.B?.y ?? destination.y,
+          fromQ: moveFeetQ(this.origin.elevation, doc, live),
+          toQ: moveFeetQ(destination?.elevation ?? this.origin.elevation, doc, live),
+        };
+      }
+      else if (live && tMin < tMax) {
         const eye = polygonEyeQ(this, live);
         if (eye !== null && Number.isFinite(eye)) {
           const { terrain, grid } = live;
           const ox = ray.A?.x ?? this.origin.x, oy = ray.A?.y ?? this.origin.y;
           const bx = ray.B?.x ?? destination.x, by = ray.B?.y ?? destination.y;
           const zB = distToQ(Number(destination?.elevation ?? this.origin.elevation) || 0, grid.distance) - (Number(live.baseQ) || 0);
-          const at = (s) => rayPoint(ox + (bx - ox) * s, oy + (by - oy) * s, eye + (zB - eye) * s, grid.size);
-          const s = rayBlocked(terrain, at(tMin), at(tMax));
-          if (s !== null) {
-            if (mode === "any") return true;
-            const tt = tMin + s * (tMax - tMin);
-            hit = { x: ox + (bx - ox) * tt, y: oy + (by - oy) * tt, t: tt };
+          // Walls this ray passes over are dropped when super collects the edges.
+          this._dioRay = { ax: ox, ay: oy, bx, by, zB };
+          // The detection wrapper has already marched the ground for this ray.
+          if (!_detecting) {
+            const at = (s) => rayPoint(ox + (bx - ox) * s, oy + (by - oy) * s, eye + (zB - eye) * s, grid.size);
+            const s = rayBlocked(terrain, at(tMin), at(tMax));
+            if (s !== null) {
+              if (mode === "any") return true;
+              const tt = tMin + s * (tMax - tMin);
+              hit = { x: ox + (bx - ox) * tt, y: oy + (by - oy) * tt, t: tt };
+            }
           }
         }
       }
@@ -231,7 +341,8 @@ export function createHeightSweepClass(Base, { Edge, Vertex, context }) {
 function defaultContext(poly) {
   let scene, level;
   try { scene = poly.scene; level = poly.level ?? poly.config?.level ?? null; } catch { return null; }
-  return activeContext(scene, level?.id ?? level);
+  // Flat saved terrain included: its ground adds nothing, but its walls have tops.
+  return wallContext(scene, level?.id ?? level);
 }
 
 let _cls = null;
@@ -257,13 +368,22 @@ export function heightSweepClass() {
  * @returns {boolean} true when at least one sample is in clear 3D line
  */
 export function targetInClearLine(live, eyeQv, from, point, footDist, heightDist) {
+  return clearSampleHeights(live, eyeQv, from, point, footDist, heightDist).length > 0;
+}
+
+/**
+ * The sampled heights of a target (distance units, the Level's frame) the
+ * ground leaves in clear 3D line, feet first.
+ */
+export function clearSampleHeights(live, eyeQv, from, point, footDist, heightDist) {
   const { terrain, grid } = live;
   const A = rayPoint(from.x, from.y, eyeQv, grid.size);
+  const out = [];
   for (const f of TARGET_SAMPLES) {
-    const z = distToQ(footDist + f * heightDist, grid.distance);
-    if (rayBlocked(terrain, A, rayPoint(point.x, point.y, z, grid.size)) === null) return true;
+    const d = footDist + f * heightDist;
+    if (rayBlocked(terrain, A, rayPoint(point.x, point.y, distToQ(d, grid.distance), grid.size)) === null) out.push(d);
   }
-  return false;
+  return out;
 }
 
 /** MIXED wrapper for DetectionMode#_testLOS. */
@@ -275,7 +395,7 @@ function testLOSWrapper(wrapped, visionSource, mode, target, test) {
   if (visionSource.level !== test.level) return wrapped(visionSource, mode, target, test);
   // Same Level (Foundry's own cross-Level test is left to Foundry): that Level's ground.
   const lvl = visionSource.level ?? test.level ?? null;
-  const live = activeContext(src.parent, lvl?.id ?? lvl ?? tokenLevelId(src));
+  const live = wallContext(src.parent, lvl?.id ?? lvl ?? tokenLevelId(src));
   if (!live || !visionSource.los) return wrapped(visionSource, mode, target, test);
 
   // Foundry caches only on its own angle-constrained branch; keep that.
@@ -288,13 +408,21 @@ function testLOSWrapper(wrapped, visionSource, mode, target, test) {
   const eye = eyeQ(src, live.grid) - (Number(live.baseQ) || 0);
   const foot = (Number(tgt.elevation) || 0) - (Number(live.base) || 0);
   const h = creatureHeightDist(tgt.actor ?? null, tgt);
-  if (targetInClearLine(live, eye, visionSource.origin, test.point, foot, h)) {
+  const clear = clearSampleHeights(live, eye, visionSource.origin, test.point, foot, h);
+  if (clear.length) {
     const cfg = { ...visionSource.los.config };
     delete cfg.boundingBox; // recomputed for the ray, not the whole LOS
     if (!this.angle) cfg.angle = 360;
+    const base = Number(live.base) || 0;
     _detecting++;
-    try { has = !this.constructor._testCollision(visionSource, test, cfg); }
-    finally { _detecting--; }
+    try {
+      // Walls have a top, so each height the ground left clear is its own ray:
+      // a low wall can hide the feet and not the head.
+      for (const d of clear) {
+        const point = { ...test.point, elevation: base + d };
+        if (!this.constructor._testCollision(visionSource, { ...test, point }, cfg)) { has = true; break; }
+      }
+    } finally { _detecting--; }
   }
   if (cacheable) test.los.set(visionSource, has);
   return has;
@@ -312,11 +440,14 @@ export function backendConflicts() { return [..._conflicts]; }
 
 /** Say which backends we stood down for. Called at ready, once i18n is loaded. */
 export function reportBackendConflicts() {
-  for (const type of _conflicts) warn(t("GLDIO.rules.backendConflict", { type }));
+  for (const type of _conflicts) {
+    warn(t(type === "move" ? "GLDIO.rules.backendConflictMove" : "GLDIO.rules.backendConflict", { type }));
+  }
 }
 
 /**
- * Install the backend for sight and light, and the detection wrapper.
+ * Install the backend for sight, light and movement, and the detection wrapper.
+ * Movement uses it only for walls: a wall's top lets a move over it.
  * Stands down per type when another module already replaced Foundry's class.
  * @returns {string[]} the backend types installed
  */
@@ -327,7 +458,7 @@ export function installSightBackend() {
   const backends = CONFIG.Canvas.polygonBackends;
   const cls = heightSweepClass();
   const done = [];
-  for (const type of ["sight", "light"]) {
+  for (const type of ["sight", "light", "move"]) {
     if (backends[type] === base) {
       backends[type] = cls;
       done.push(type);

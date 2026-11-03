@@ -294,7 +294,7 @@ export function segmentsCross(px, py, qx, qy, ax, ay, bx, by) {
 /**
  * A wall index for fast "does this step cross a wall" tests: segments bucketed
  * by the squares their bounding box covers.
- * @param {{ax:number,ay:number,bx:number,by:number, ignoresFrom?:(x:number,y:number)=>boolean}[]} walls  px
+ * @param {{ax:number,ay:number,bx:number,by:number, ignoresFrom?:(x:number,y:number)=>boolean, topQ?:number|null}[]} walls  px
  * @param {number} size  grid px
  */
 export function wallIndex(walls, size) {
@@ -312,8 +312,11 @@ export function wallIndex(walls, size) {
     }
   });
   return {
-    /** Does the step from px point p to q cross a wall that blocks it? */
-    crosses(px, py, qx, qy) {
+    /**
+     * Does the step from px point p to q cross a wall that blocks it?
+     * `passes(wall)` true lets the step over that wall (its top is within reach).
+     */
+    crosses(px, py, qx, qy, passes = null) {
       const seen = new Set();
       const i0 = Math.floor(Math.min(py, qy) / S), i1 = Math.floor(Math.max(py, qy) / S);
       const j0 = Math.floor(Math.min(px, qx) / S), j1 = Math.floor(Math.max(px, qx) / S);
@@ -323,7 +326,7 @@ export function wallIndex(walls, size) {
           seen.add(n);
           const w = walls[n];
           if (w.ignoresFrom?.(px, py)) continue;
-          if (segmentsCross(px, py, qx, qy, w.ax, w.ay, w.bx, w.by)) return true;
+          if (segmentsCross(px, py, qx, qy, w.ax, w.ay, w.bx, w.by) && !passes?.(w)) return true;
         }
       }
       return false;

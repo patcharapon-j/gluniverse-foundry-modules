@@ -316,6 +316,22 @@ below the edited one.
   creature standing there would be seen, not only where the floor itself is. Point tests (`testCollision`, used by token
   detection) instead march the real 3D segment over the height field, because they
   have real target heights; feet, centre and head are tested.
+  Ground below the eye is never outlined, so high ground sees down; a creature
+  pressed against the foot of the viewer's own cliff stays hidden by the lip.
+- **Walls have a top.** It is the one the 3D view draws (`terrain/wall-top.mjs`):
+  the highest ground beside the wall plus the scene's wall height, or the Wall
+  Height module's `top`. A polygon whose eye is above that top drops the wall, and
+  a point test drops it when its 3D ray crosses above the top, so a lookout on a
+  tower sees over a fence below while a creature tucked behind the fence stays
+  hidden. Each target height the ground leaves clear is tested against the walls
+  on its own. Scene bounds and other modules' edges always block, and the
+  tactics line passes over a wall the same way. Movement uses the same top: the
+  backend is also installed for `move`, and a move gets past a wall only when the
+  token's feet where it crosses are within the step height of the top (flying
+  over it, or a low rail). Climbing does not pass a wall: anyone can pick Climb,
+  and a room wall has no ceiling above it here. The reach overlay applies the
+  same rule (`movesOverWall`). Wall tops apply on any scene with saved terrain,
+  flat included (`wallContext`); a scene with none stays plain Foundry.
   See [ADR 0002](adr/0002-height-sight-backend.md).
 - **Cover** from terrain: five rays from the attacker's eye to the target (feet,
   middle, head, both flanks). Some blocked = standard, most = greater. Shown on

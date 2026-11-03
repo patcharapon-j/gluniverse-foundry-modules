@@ -64,6 +64,17 @@ export function activeContext(scene, level = null) {
   return live;
 }
 
+/**
+ * Like activeContext, but a flat saved terrain counts too: its walls still have
+ * the top the 3D view draws, so sight and movement can get over them. A scene
+ * with no saved terrain stays plain Foundry.
+ */
+export function wallContext(scene, level = null) {
+  if (!_rulesOn || !scene) return null;
+  const live = anyContext(scene, level);
+  return live?.saved ? live : null;
+}
+
 /** The active context of the Level a token stands on (v14 TokenDocument#level). */
 export function tokenContext(doc, level = null) {
   const d = doc?.document ?? doc;

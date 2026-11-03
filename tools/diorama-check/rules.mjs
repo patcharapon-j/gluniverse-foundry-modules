@@ -263,7 +263,7 @@ export default async function check(ctx) {
   };
   class StubEdge {
     constructor(a, b, o = {}) {
-      this.id = o.id; this.type = o.type ?? "wall";
+      this.id = o.id; this.type = o.type ?? "wall"; this.object = o.object ?? null;
       for (const k of ["sight", "light", "move", "sound", "darkness"]) this[k] = o[k] ?? 0;
       this.a = { x: a.x, y: a.y }; this.b = { x: b.x, y: b.y };
       const se = b.x === a.x ? b.y > a.y : b.x > a.x;
@@ -380,4 +380,97 @@ export default async function check(ctx) {
     rayBlocked(lip, rayPoint(50, 300, eye, 100), rayPoint(550, 300, (0.1 * 6) / 5 * 4, 100)) !== null);
   ctx.ok("detection: the head over the lip is seen", sb.targetInClearLine(lipLive, eye, { x: 50, y: 300 }, { x: 550, y: 300 }, 0, 6));
   ctx.ok("detection: behind the block nothing is seen", !sb.targetInClearLine(live, eye, { x: 50, y: 250 }, { x: 550, y: 250 }, 0, 6));
+
+  // High ground: an eye on a 20 ft plateau sees down onto the low ground, but
+  // not a creature pressed against the foot of its own cliff.
+  const hill = Terrain.blank(6, 6);
+  for (let row = 0; row < 12; row++) for (let col = 0; col < 4; col++) hill.set(row, col, { h: 16 });
+  const hillLive = { terrain: hill, grid };
+  const HCls = sb.createHeightSweepClass(StubBase, { Edge: StubEdge, Vertex: () => StubVertex, context: () => hillLive });
+  const top = new HCls();
+  top.config = { type: "sight", source: { object: { document: tok(20) } } };
+  top.origin = { x: 125, y: 250, elevation: 20 };
+  top._identifyEdges();
+  ctx.ok("high ground: sight from the plateau gets no cliff edges", cliffsIn(top).length === 0, String(cliffsIn(top).length));
+  const topEye = eyeQ(tok(20), grid);
+  ctx.ok("high ground: a creature on the low ground below is seen, feet included",
+    sb.clearSampleHeights(hillLive, topEye, { x: 125, y: 250 }, { x: 550, y: 250 }, 0, 6).length === sb.TARGET_SAMPLES.length);
+  ctx.ok("high ground: a creature at the foot of the cliff is hidden by the lip",
+    !sb.targetInClearLine(hillLive, topEye, { x: 125, y: 250 }, { x: 260, y: 250 }, 0, 6));
+  ctx.ok("high ground: from below, the creature on the plateau's edge is seen",
+    sb.targetInClearLine(hillLive, eyeQ(tok(0), grid), { x: 550, y: 250 }, { x: 175, y: 250 }, 20, 6));
+
+  // Walls have the top the 3D view draws: an eye above it sees over.
+  const wallDoc = (c, flags = {}) => ({ documentName: "Wall", id: "w", c, flags });
+  const fence = () => new StubEdge({ x: 300, y: 0 }, { x: 300, y: 150 }, { id: "wall.f", sight: 20, light: 20, object: wallDoc([300, 0, 300, 150]) });
+  const bound = () => new StubEdge({ x: 300, y: 0 }, { x: 300, y: 150 }, { id: "bound", sight: 20, light: 20 });
+  ctx.ok("walls: a wall's top is the view's (ground + the terrain's wall height)",
+    sb.edgeWallTopQ(fence(), live) === block.wallHeight, String(sb.edgeWallTopQ(fence(), live)));
+  ctx.ok("walls: an edge with no wall document has no top", sb.edgeWallTopQ(bound(), live) === null);
+  const hasFence = (p) => [...p.edges].some((x) => x.id === "wall.f");
+  const ground = make("sight", { origin: { x: 50, y: 50, elevation: 0 }, walls: [fence(), bound()] });
+  ground._identifyEdges();
+  ctx.ok("walls: an eye below the top keeps the wall", hasFence(ground));
+  const raised = make("sight", { doc: tok(10), origin: { x: 50, y: 50, elevation: 10 }, walls: [fence(), bound()] });
+  raised._identifyEdges();
+  ctx.ok("walls: an eye above the top sees over it", !hasFence(raised));
+  ctx.ok("walls: scene bounds and other edges always block", [...raised.edges].some((x) => x.id === "bound"));
+  const tall = make("sight", { doc: tok(10), origin: { x: 50, y: 50, elevation: 10 },
+    walls: [new StubEdge({ x: 300, y: 0 }, { x: 300, y: 150 }, { id: "wall.f", sight: 20, light: 20, object: wallDoc([300, 0, 300, 150], { "wall-height": { top: 30 } }) })] });
+  tall._identifyEdges();
+  ctx.ok("walls: a Wall Height top is honoured", hasFence(tall));
+  const torch = make("light", { doc: null, origin: { x: 50, y: 50, elevation: 15 }, walls: [fence()] });
+  torch._identifyEdges();
+  ctx.ok("walls: a light above the top lights over it", !hasFence(torch));
+  const fRay = { A: { x: 50, y: 50 }, B: { x: 550, y: 50 } };
+  const pOver = make("sight", { doc: tok(10), origin: { x: 50, y: 50, elevation: 10 }, walls: [fence()] });
+  pOver._testCollision(fRay, "any", { x: 550, y: 50, elevation: 10 }, 0, 1);
+  ctx.ok("walls: a point test whose ray passes over the top drops the wall", !hasFence(pOver));
+  const pDown = make("sight", { doc: tok(10), origin: { x: 50, y: 50, elevation: 10 }, walls: [fence()] });
+  pDown._testCollision(fRay, "any", { x: 550, y: 50, elevation: 0 }, 0, 1);
+  ctx.ok("walls: a ray that dips under the top still hits the wall", hasFence(pDown));
+  const pLow = make("sight", { origin: { x: 50, y: 50, elevation: 0 }, walls: [fence()] });
+  pLow._testCollision(fRay, "any", { x: 550, y: 50, elevation: 0 }, 0, 1);
+  ctx.ok("walls: a low ray hits the wall", hasFence(pLow));
+
+  // Movement: a wall's top lets a move over it when the feet clear it within a
+  // step. Foundry tests a move from the token's centre, half its depth up.
+  const half = grid.distance / 2;
+  const moveOver = (feet, walls, toFeet = feet) => {
+    const p = make("move", { doc: tok(feet), origin: { x: 50, y: 50, elevation: feet + half }, walls });
+    p._testCollision(fRay, "any", { x: 550, y: 50, elevation: toFeet + half }, 0, 1);
+    return p;
+  };
+  ctx.ok("move: walking into a wall is still blocked", hasFence(moveOver(0, [fence()])));
+  ctx.ok("move: flying with the feet above the top passes over", !hasFence(moveOver(12, [fence()])));
+  ctx.ok("move: flying lower than the top is blocked", hasFence(moveOver(4, [fence()])));
+  ctx.ok("move: dropping from above to the ground meets the wall where the feet dip under its top", hasFence(moveOver(12, [fence()], 0)));
+  const rail = () => new StubEdge({ x: 300, y: 0 }, { x: 300, y: 150 }, { id: "wall.f", sight: 20, light: 20, move: 20,
+    object: wallDoc([300, 0, 300, 150], { "wall-height": { top: 1.5 } }) });
+  ctx.ok("move: a rail within the step height is stepped over", !hasFence(moveOver(0, [rail()])));
+  ctx.ok("move: scene bounds always block a move", [...moveOver(30, [bound()]).edges].some((x) => x.id === "bound"));
+  const movePoly = make("move", { origin: { x: 50, y: 50, elevation: half }, walls: [fence()] });
+  movePoly._identifyEdges();
+  ctx.ok("move: a movement polygon (no ray) keeps every wall and gets no cliffs", hasFence(movePoly) && cliffsIn(movePoly).length === 0);
+  const WT = await import(ctx.url("scripts/features/diorama/terrain/wall-top.mjs"));
+  ctx.ok("move: climbing does not pass a wall, and a wall with no top never passes",
+    WT.movesOverWall.length === 3 && !WT.movesOverWall(null, 100, 2) && WT.movesOverWall(8, 6, 2) && !WT.movesOverWall(8, 5, 2));
+  const R = await import(ctx.url("scripts/features/diorama/rules/reach.mjs"));
+  const idx = R.wallIndex([{ ax: 300, ay: 0, bx: 300, by: 600, topQ: 8 }], 100);
+  ctx.ok("move: the reach overlay steps over a wall only when the step says so",
+    idx.crosses(250, 50, 350, 50) && idx.crosses(250, 50, 350, 50, () => false) && !idx.crosses(250, 50, 350, 50, (w) => w.topQ === 8));
+  const src = readFileSync(join(ctx.root, "scripts/features/diorama/foundry/sight-backend.mjs"), "utf8");
+  ctx.ok("move: the backend is installed for movement too", /for \(const type of \["sight", "light", "move"\]\)/.test(src));
+  const reachSrc = readFileSync(join(ctx.root, "scripts/features/diorama/view/reach.mjs"), "utf8");
+  ctx.ok("walls: a flat saved terrain still gives walls their tops (wallContext, not activeContext)",
+    /function defaultContext[\s\S]*?return wallContext\(/.test(src) && /function testLOSWrapper[\s\S]*?wallContext\(/.test(src));
+  ctx.ok("move: the reach overlay reads the same wall top and rule", /wallSpanQ\(/.test(reachSrc) && /movesOverWall\(/.test(reachSrc));
+  ctx.ok("move: the reach overlay gives walls tops only where the move backend does (wallContext)",
+    /wallContext\(scene, tokenLevelId\(doc\)\)/.test(reachSrc) && /blockingWalls\(wallLive \? terrain : null/.test(reachSrc));
+  ctx.ok("move: the reach overlay reads Wall Height tops in its absolute terrain, with no Level base taken off",
+    /blockingWalls\(wallLive \? terrain : null, grid\)/.test(reachSrc) && !/wallSpanQ\([^)]*levelBase/i.test(reachSrc));
+  ctx.ok("walls: detection tests each clear height against the walls, not only the feet",
+    /function testLOSWrapper[\s\S]*clearSampleHeights\([\s\S]*for \(const d of clear\)/.test(src));
+  ctx.ok("walls: the view and sight read one wall top",
+    /wallSpanQ\(/.test(readFileSync(join(ctx.root, "scripts/features/diorama/view/snapshot.mjs"), "utf8")) && /wallSpanQ\(/.test(src));
 }

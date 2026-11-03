@@ -99,6 +99,15 @@ export default async function check(ctx) {
     { walls: [{ ax: 450, ay: 0, bx: 450, by: 1000 }] });
   ctx.ok("sight: a sight wall across the line blocks every ray", !walled.lineOfSight && walled.blocked === 5
     && walled.line.spans.length === 1 && Math.abs((walled.line.spans[0].t0 + walled.line.spans[0].t1) / 2 - 0.5) < 1e-6);
+  // a wall with a top: an eye on high ground looks over a fence below it
+  const fence = [{ ax: 450, ay: 0, bx: 450, by: 1000, topQ: 8 }];
+  const overFence = L.lineOfSight(open, { x: 150, y: 450, eyeQ: 20 }, { x: 750, y: 450, footQ: 0, heightQ: 6, radiusPx: 50 }, 100, { walls: fence });
+  ctx.ok("sight: an eye high above a wall's top sees over it", overFence.lineOfSight && overFence.blocked === 0 && overFence.line.clear,
+    JSON.stringify(overFence.rays));
+  const underFence = L.lineOfSight(open, { x: 150, y: 450, eyeQ: 5 }, { x: 750, y: 450, footQ: 0, heightQ: 6, radiusPx: 50 }, 100, { walls: fence });
+  ctx.ok("sight: an eye below a wall's top is blocked by it", !underFence.lineOfSight && underFence.blocked === 5);
+  ctx.ok("sight: a wall with no top blocks at any height",
+    L.wallCrossings([{ ax: 450, ay: 0, bx: 450, by: 1000 }], 150, 450, 750, 450, 100, 100).length === 1);
   // a ridge between two creatures on open ground: the centre line runs into it
   const ridge = Terrain.blank(10, 10);
   for (let si = 0; si < ridge.sh; si++) for (let sj = 8; sj < 10; sj++) ridge.set(si, sj, { h: 16 });
