@@ -71,6 +71,19 @@ export const DELIVERY_VOCAB = Object.freeze([
   "form", "condition", "tick",
 ]);
 
+/**
+ * Which renderer table owns each delivery (compile.mjs routes by it, fx-check
+ * requires an entry for every one): `strikes.mjs` STRIKES for melee and
+ * natural, `ranged.mjs` RANGED, `deliveries.mjs` HARM.
+ */
+export const DELIVERY_GROUPS = Object.freeze({
+  melee: Object.freeze(["swing", "chop", "smash", "thrust", "sweep", "stab", "peck", "flail", "lash", "fist", "bash"]),
+  natural: Object.freeze(["rake", "jaws", "gore", "sting", "stomp", "buffet", "slam", "pincer", "grasp", "squeeze"]),
+  ranged: Object.freeze(["arrow", "bolt", "bullet", "pellets", "slug", "stone", "dart", "thrown", "rock", "bomb", "grenade", "laser", "plasma", "zap", "sonicwave", "jet", "mindbeam", "spit", "net", "missile"]),
+  harm: Object.freeze(["ray", "orb", "darts", "lob", "fall", "burst", "cone", "line", "emanation", "wall", "touch", "gaze", "voice", "breath", "aura", "bloom"]),
+  other: Object.freeze(["form", "condition", "tick"]),
+});
+
 /** What object it depicts. */
 export const MOTIF_VOCAB = Object.freeze([
   "blade", "weapon", "spear", "arrow", "hammer", "chain", "whip", "needle",

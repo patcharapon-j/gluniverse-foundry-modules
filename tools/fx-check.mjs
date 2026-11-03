@@ -13,7 +13,13 @@ import { readFile, readdir } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import {
   FAMILIES, FUNCTIONS, MATERIALS, OUTCOMES, SETTINGS, SHED_ORDER, TIMING, WEAPON_STYLES,
+  DELIVERY_GROUPS, DELIVERY_VOCAB, MOTIF_VOCAB, FLAVOR_VOCAB, PROP_VOCAB,
 } from "../scripts/features/pf2e-fx/constants.mjs";
+import { STRIKES } from "../scripts/features/pf2e-fx/strikes.mjs";
+import { RANGED } from "../scripts/features/pf2e-fx/ranged.mjs";
+import { HARM } from "../scripts/features/pf2e-fx/deliveries.mjs";
+import { MOTIFS } from "../scripts/features/pf2e-fx/motif-art.mjs";
+import { FLAVORS } from "../scripts/features/pf2e-fx/flavors.mjs";
 import { compile } from "../scripts/features/pf2e-fx/compile.mjs";
 import { FAMILY_MODULES } from "../scripts/features/pf2e-fx/families/index.mjs";
 import { FORMS } from "../scripts/features/pf2e-fx/forms.mjs";
@@ -141,6 +147,53 @@ for (const m of MATERIALS) {
 for (const style of WEAPON_STYLES) for (const o of OUTCOMES) {
   run(`strike:${style}/${o}`, base("kinetic", o, { kind: "strike", weapon: { style, ranged: style === "ranged" || style === "thrown" }, targets: [target(o)] }));
   run(`strike:${style}+fire/${o}`, base("fire", o, { kind: "strike", accent: "fire", weapon: { style }, targets: [target(o)] }), 3, false);
+}
+
+/* The look axes (docs/SPELLSPRITE_LOOK.md). Every delivery needs a renderer in
+   the table its group names, or it plays a fallback that ignores what the
+   action is; every motif and every flavor needs an entry, or the name and the
+   class are read and then thrown away. `--only=melee,natural` limits the
+   missing-renderer check to some groups (a branch that owns only those). */
+{
+  const only = (process.argv.find((a) => a.startsWith("--only=")) ?? "").slice(7).split(",").filter(Boolean);
+  const want = (g) => !only.length || only.includes(g);
+  const TABLE = { melee: STRIKES, natural: STRIKES, ranged: RANGED, harm: HARM };
+  for (const [g, list] of Object.entries(DELIVERY_GROUPS)) {
+    if (g === "other") continue;
+    for (const d of list) {
+      if (!DELIVERY_VOCAB.includes(d)) problems.push(`delivery ${d} (group ${g}) is not in DELIVERY_VOCAB`);
+      if (want(g) && typeof TABLE[g][d] !== "function") problems.push(`delivery ${d}: no renderer in ${g === "harm" ? "deliveries.mjs HARM" : g === "ranged" ? "ranged.mjs RANGED" : "strikes.mjs STRIKES"}`);
+    }
+  }
+  for (const d of DELIVERY_VOCAB) if (!Object.values(DELIVERY_GROUPS).some((l) => l.includes(d))) problems.push(`delivery ${d} has no group in DELIVERY_GROUPS`);
+  if (want("motif")) for (const m of MOTIF_VOCAB) {
+    const e = MOTIFS[m];
+    if (!e || !["carrier", "impact", "conjure", "residue"].some((h) => typeof e[h] === "function")) problems.push(`motif ${m}: no hook in motif-art.mjs MOTIFS`);
+  }
+  if (want("flavor")) for (const f of FLAVOR_VOCAB) if (typeof FLAVORS[f] !== "function") problems.push(`flavor ${f}: no wind-up in flavors.mjs FLAVORS`);
+
+  const harmSpec = (d, o, m = "fire") => {
+    const area = ["lob", "burst", "fall"].includes(d) ? { shape: "burst", x: 6.4, y: 4.4, r: 2 }
+      : ["cone", "breath"].includes(d) ? { shape: "cone", x: 2, y: 4, r: 3, len: 3, dir: 0 }
+      : ["line", "wall"].includes(d) ? { shape: "line", x: 2, y: 4, len: 6, width: 1, dir: 0 }
+      : ["emanation", "aura"].includes(d) ? { shape: "emanation", x: 2, y: 4, r: 2 } : null;
+    return base(m, o, { kind: area ? "area" : d === "ray" || d === "touch" ? "attack" : "save", delivery: d, area });
+  };
+  for (const o of OUTCOMES) {
+    for (const g of ["melee", "natural", "ranged"]) for (const d of DELIVERY_GROUPS[g]) {
+      run(`strike:${d}/${o}`, base("kinetic", o, { kind: "strike", delivery: d, weapon: { style: g === "ranged" ? "ranged" : "slash", ranged: g === "ranged" }, targets: [target(o)] }), 3, o === "hit");
+    }
+    for (const d of DELIVERY_GROUPS.harm) run(`harm:${d}/${o}`, harmSpec(d, o), 4, o === "hit");
+  }
+  for (const m of MOTIF_VOCAB) {
+    run(`motif:${m}/harm`, { ...harmSpec("orb", "hit", "arcane"), motif: m }, 3, false);
+    run(`motif:${m}/form`, base("arcane", "hit", { kind: "auto", func: "support", motif: m }), 3, false);
+  }
+  for (const f of FLAVOR_VOCAB) {
+    run(`flavor:${f}/harm`, { ...harmSpec("ray", "hit"), flavor: f }, 3, false);
+    run(`flavor:${f}/strike`, base("kinetic", "hit", { kind: "strike", delivery: "swing", flavor: f, weapon: { style: "slash" }, targets: [target("hit")] }), 3, false);
+  }
+  for (const p of PROP_VOCAB) run(`prop:${p}`, base("kinetic", "crit", { kind: "strike", delivery: "bullet", props: [p], weapon: { style: "ranged", ranged: true }, targets: [target("crit")] }), 3, false);
 }
 
 /* Something drew: a fireball burst must put pixels in both layers. */

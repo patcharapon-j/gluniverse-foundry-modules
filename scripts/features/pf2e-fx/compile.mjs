@@ -32,6 +32,10 @@ import { ART_PER_SQUARE, FAMILY_OF } from "./constants.mjs";
 import { familyModule } from "./families/index.mjs";
 import { CRAFTS, FORMS } from "./forms.mjs";
 import { STRIKES } from "./strikes.mjs";
+import { RANGED } from "./ranged.mjs";
+import { HARM } from "./deliveries.mjs";
+import { MOTIFS } from "./motif-art.mjs";
+import { FLAVORS } from "./flavors.mjs";
 import { CONDITIONS } from "./conditions.mjs";
 import { areaFX, areaMetric, extentOf } from "./area.mjs";
 
@@ -149,16 +153,63 @@ function areaCentroid(area) {
   return [area.x, area.y];
 }
 
+/* ── the look axes (docs/SPELLSPRITE_LOOK.md) ──────────────────────────── */
+
+/** The spec's motif hooks, or null: a delivery calls the hooks that exist. */
+const motifOf = (s) => MOTIFS[s.spec.motif] ?? null;
+
+/**
+ * The caster's wind-up: the spec's flavor when it has one, else `fallback`
+ * (the generic charge for a spell, nothing for a Strike). True when a flavor drew it.
+ */
+function windUp(s, M, caster, hand, at, dur, fallback = null) {
+  const fl = caster ? FLAVORS[s.spec.flavor] : null;
+  if (fl) { fl(s, M, { caster, hand, at, dur }); s.phases.push(`wind-up: ${s.spec.flavor}`); return true; }
+  fallback?.();
+  return false;
+}
+
+/** Everything a strike-shaped timeline needs (strikes.mjs, ranged.mjs). */
+function strikeCtx(s, outcomeOf) {
+  const sp = s.spec;
+  return {
+    caster: sp.caster ? bodyOf(sp.caster) : null, targets: sp.targets.map(bodyOf), outcome: outcomeOf,
+    release, linger, fire, handOf, POW, motif: motifOf(s),
+    windUp: (M, caster, hand, at, dur) => windUp(s, M, caster, hand, at, dur),
+  };
+}
+
+/** Everything a harm delivery needs (deliveries.mjs). */
+function harmCtx(s, M) {
+  const sp = s.spec, caster = sp.caster ? bodyOf(sp.caster) : null, targets = sp.targets.map(bodyOf);
+  const aim = sp.area ?? targets[0] ?? null;
+  return {
+    caster, targets, area: sp.area, hand: caster ? handOf(caster, aim) : null,
+    outcomeOf: (T) => T.outcome ?? sp.outcome ?? "neutral",
+    release, linger, fire, spray, areaFX, areaMetric, areaCentroid, equivRadius, spotIn, lobSize, charge, projectile, handOf,
+    POW, SAVE_POW, motif: motifOf(s),
+    windUp: (caster2, hand2, at, dur, opts) => windUp(s, M, caster2, hand2, at, dur, () => charge(s, M, hand2, caster2, at, at + dur, opts)),
+  };
+}
+
+/** A strike-shaped delivery's timeline (a Strike, or a Rend or a Trample that is not one). */
+const strikeTimeline = (d) => STRIKES[d] ?? RANGED[d] ?? null;
+
 /* ── the timelines ───────────────────────────────────────────────────── */
 
 function buildHarm(s, M) {
-  const sp = s.spec, P = s.phases, caster = sp.caster ? bodyOf(sp.caster) : null, targets = sp.targets.map(bodyOf);
+  const sp = s.spec, P = s.phases;
+  const delivery = HARM[sp.delivery];
+  if (delivery) { delivery(s, M, harmCtx(s, M)); return; }
+  const asStrike = sp.targets.length && !sp.area ? strikeTimeline(sp.delivery) : null;
+  if (asStrike) { asStrike(s, M, strikeCtx(s, sp.kind === "auto" ? () => "hit" : (T) => T.outcome ?? sp.outcome ?? "neutral")); return; }
+  const caster = sp.caster ? bodyOf(sp.caster) : null, targets = sp.targets.map(bodyOf);
   const outcomeOf = (T) => T.outcome ?? sp.outcome ?? "neutral";
   const aim = sp.area ?? targets[0] ?? null;
   const hand = caster ? handOf(caster, aim) : null;
   const lobbed = sp.area && !["cone", "line", "emanation", "aura"].includes(sp.area.shape);
   const chargeEnd = caster ? (lobbed ? 0.5 : 0.4) : 0;
-  if (caster) { charge(s, M, hand, caster, 0, chargeEnd, { size: lobbed ? lobSize(Math.max(0.5, sp.area.r ?? 1)) : null }); P.push("charge"); }
+  if (caster) { windUp(s, M, caster, hand, 0, chargeEnd, () => charge(s, M, hand, caster, 0, chargeEnd, { size: lobbed ? lobSize(Math.max(0.5, sp.area.r ?? 1)) : null })); P.push("charge"); }
 
   if (sp.area) {
     const A = sp.area, rad = Math.max(0.5, A.r ?? 1);
@@ -217,9 +268,9 @@ function buildHarm(s, M) {
 }
 
 function buildStrike(s, M) {
-  const sp = s.spec, caster = sp.caster ? bodyOf(sp.caster) : null, targets = sp.targets.map(bodyOf);
-  const style = STRIKES[sp.weapon?.style] ?? STRIKES.slash;
-  style(s, M, { caster, targets, outcome: (T) => T.outcome ?? sp.outcome ?? "neutral", release, linger, fire, handOf, POW });
+  const sp = s.spec;
+  const style = strikeTimeline(sp.delivery) ?? STRIKES[sp.weapon?.style] ?? STRIKES.slash;
+  style(s, M, strikeCtx(s, (T) => T.outcome ?? sp.outcome ?? "neutral"));
 }
 
 function buildForm(s, M) {
@@ -231,12 +282,20 @@ function buildForm(s, M) {
   const craft = CRAFTS[sp.craft];
   if (craft) { craft(s, M, { caster, targets: targets.length ? targets : caster ? [caster] : [], area: null, hand, t0: 0, release, linger, fire, self }); return; }
   const chargeEnd = caster && !self ? 0.4 : caster ? 0.3 : 0;
-  if (caster) { charge(s, M, hand, caster, 0, chargeEnd); s.phases.push("charge"); }
+  if (caster) { windUp(s, M, caster, hand, 0, chargeEnd, () => charge(s, M, hand, caster, 0, chargeEnd)); s.phases.push("charge"); }
   /* A helpful or controlling area still reads as its whole footprint: the
      indicator, a soft flash and the wave, without the scar or the eruptions. */
   if (sp.area) areaFX(s, M, sp.area, { tele0: 0, hitAt: Math.max(chargeEnd, 0.3), pow: 1, gentle: sp.func !== "hinder" && sp.func !== "control", erupt: false, linger: 1.4 });
   const form = FORMS[sp.func] ?? FORMS.neutral;
-  form(s, M, { caster, targets: self && caster ? [caster] : targets, area: sp.area, hand, t0: chargeEnd, release, linger, fire, self });
+  const on = self && caster ? [caster] : targets;
+  form(s, M, { caster, targets: on, area: sp.area, hand, t0: chargeEnd, release, linger, fire, self });
+  // the named object appears where the form lands: a Spiritual Armament's weapon, a Shield's shield
+  const conjure = motifOf(s)?.conjure;
+  if (conjure) {
+    const spots = on.length ? on : sp.area ? [{ x: sp.area.x, y: sp.area.y, h: 1 }] : [];
+    for (const T of spots) conjure(s, M, { x: T.x, y: T.y, z: 0, h: T.h ?? 1, at: chargeEnd, life: Math.max(1, (s.period ?? 2) - chargeEnd) });
+    s.phases.push(`motif: ${sp.motif}`);
+  }
 }
 
 function buildCondition(s, M) {
@@ -293,6 +352,7 @@ export function compile(spec) {
   };
   full.targets = (full.targets ?? []).filter((T) => Number.isFinite(T?.x) && Number.isFinite(T?.y));
   const s = new Sim(full, full.seed ?? 1);
+  s.props = new Set(full.props ?? []);
   if (Number.isInteger(full.look?.layout)) s.take = full.look.layout % 3;
   s.m = 0.55 + 0.09 * clamp(full.rank ?? 1, 1, 10);
   const M = resolveMaterial(full);
