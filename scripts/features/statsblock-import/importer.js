@@ -1848,9 +1848,7 @@ function parseHazardStealth(value) {
   if (/^[-+]?\d/.test(text)) return modifier(text);
   const dc = text.match(/^DC\s*(\d+)\s*[;,]?\s*([\s\S]*)$/i);
   if (!dc) return modifier(text);
-  const rest = dc[2].trim();
-  if (/^[-+]\d/.test(rest)) return modifier(rest);
-  return { value: Number(dc[1]) - 10, details: rest };
+  return { value: Number(dc[1]) - 10, details: dc[2].trim() };
 }
 
 function parseSignedInt(value) {
