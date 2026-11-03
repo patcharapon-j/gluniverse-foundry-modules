@@ -317,6 +317,18 @@ export default async function check(ctx) {
     (ovsrc.match(/MATERIALS\.ribbon\(this\.shared, \{ mask: true \}\)/g) ?? []).length >= 2 && /MATERIALS\.ribbon\(this\.shared, \{ mask: hug \}\)/.test(ovsrc)
     && reachOrder < fogOrder, `range ${reachOrder}, fog ${fogOrder}`);
 
+  // A square on a flight lies on its steps, not at the top one's height.
+  const { createShared } = await import(ctx.url(`${DIO}/render/materials.mjs`));
+  const { OverlaysLayer } = await import(ctx.url(`${DIO}/render/overlays.mjs`));
+  const ov = new OverlaysLayer(createShared());
+  // one square whose near half (z < 0.5) is a step 1 cell up, its far half the floor
+  ov.setGround({ ground: (_x, z) => (z % 1 < 0.5 ? 1 : 0), cellTopQ: () => 4 });
+  const rm = ov.reachMesh({ cells: [{ i: 0, j: 0, band: 1 }] });
+  const ys = rm.geometry.getAttribute("position").array.filter((_v, k) => k % 3 === 1);
+  ctx.ok("reach: a square over a step follows the ground under each half",
+    ys.some((y) => y > 0.9 && y < 1.1) && ys.some((y) => y > -0.01 && y < 0.1), [...new Set(ys.map((y) => y.toFixed(3)))].join(","));
+  rm.geometry.dispose(); rm.material.dispose(); ov.dispose();
+
   /* ---------------- viewing as the players: nothing of a hidden token ---------------- */
   const seqsrc = stripComments(readFileSync(join(ctx.root, `${DIO}/integrations/sequencer.mjs`), "utf8"));
   ctx.ok("players' view: an effect on, from or to a token off their board is not drawn",
