@@ -34,13 +34,12 @@ slot.destroy(); slot.destroy();
 assert.equal(settled, 1, 'settle exactly once under interruption');
 assert.equal(roll.reverted, true);
 assert.equal(host.classList.contains('dx-tumbling'), false);
-// Stream Pacer's Dire Peril splash: one beat, lifted exactly once whether it
-// finishes, is clicked away, or both. Its timings come from const.js.
+// Stream Pacer's Dire Peril splash: one beat, ended exactly once whether it
+// runs out or the peril ends under it. Its timings come from const.js, and the
+// WebGL field it was handed stops with it.
 {
   const { MOTION, TIMING } = await import('../scripts/features/stream-pacer/const.js');
   Object.assign(ctx, { MOTION, TIMING });
-  const tweens = [];
-  ctx.animate = (target, options) => { const t = timeline(); t.target = target; t.options = options; tweens.push(t); return t; };
   const source = (await fs.readFile(new URL('../scripts/features/stream-pacer/band.js', import.meta.url), 'utf8'))
     .replace(/^import [\s\S]*?;\r?\n/gm, '')
     .replace('export class SignalBand', 'globalThis.SignalBand = class SignalBand')
@@ -48,31 +47,39 @@ assert.equal(host.classList.contains('dx-tumbling'), false);
   vm.runInContext(source, ctx);
   const splashNode = () => {
     const n = node();
-    n.listeners = {};
+    n.props = {};
+    n.style = { setProperty: (k, v) => { n.props[k] = v; } };
     n.setAttribute = () => {};
     n.querySelector = () => node();
     n.querySelectorAll = () => [node(), node()];
-    n.addEventListener = (type, fn) => { n.listeners[type] = fn; };
+    n.addEventListener = () => { throw new Error('the splash takes no input'); };
     return n;
   };
-  for (const end of ['finish', 'click', 'both']) {
-    tweens.length = 0;
+  for (const end of ['runs out', 'peril ends', 'both']) {
     ctx.document.createElement = splashNode;
     const parent = node();
     let done = 0;
-    const { el } = ctx.playPerilSplash({ html: '<i></i>', parent, onDone: () => done++ });
+    const field = { played: null, stopped: 0, play(ms) { this.played = ms; return true; }, stop() { this.stopped++; } };
+    const { el, finish, timeline: tl } = ctx.playPerilSplash({ html: '<i></i>', field, parent, onDone: () => done++ });
     assert.equal(parent.children[0], el, 'the splash mounts into its parent');
-    const lift = tweens.at(-1);
-    assert.equal(lift.target, el, 'the last tween is the lift of the whole splash');
-    assert.equal(lift.options.delay, TIMING.perilHold, 'the splash holds for TIMING.perilHold');
-    assert.equal(lift.options.duration, TIMING.perilLift, 'the splash lifts over TIMING.perilLift');
-    if (end !== 'click') lift.options.onComplete();
-    if (end !== 'finish') el.listeners.click();
+    assert.equal(el.props['--sp-peril-stage'], `${TIMING.perilStage}ms`, 'the stage length the CSS reads is TIMING.perilStage');
+    assert.equal(field.played, TIMING.perilStage, 'the field plays for the stage length');
+    const [line1, line2, fade] = tl.adds;
+    assert.equal(tl.adds.length, 3, 'two title lines and the stage fade, on one timeline');
+    assert.deepEqual([line1[2], line2[2]], [MOTION.perilLine1At, MOTION.perilLine2At], 'the title lines land at MOTION.perilLine1At and perilLine2At');
+    assert.ok([line1, line2].every((a) => a[1].duration === MOTION.perilLetter && a[1].duration > 0), 'a title letter lands over MOTION.perilLetter');
+    assert.equal(fade[0], el, 'the last tween is the fade of the whole stage');
+    assert.equal(fade[1].duration, TIMING.perilFade, 'the stage fades over TIMING.perilFade');
+    assert.equal(fade[2] + fade[1].duration, TIMING.perilStage, 'the fade ends exactly at TIMING.perilStage');
+    const unmount = tl.calls.at(-1);
+    assert.equal(unmount.at, TIMING.perilStage, 'the stage unmounts at TIMING.perilStage');
+    if (end !== 'peril ends') unmount.fn();
+    if (end !== 'runs out') finish();
     assert.equal(done, 1, `the splash ends exactly once (${end})`);
+    assert.equal(field.stopped, 1, `the field stops with it (${end})`);
     assert.equal(el.removed, true, `the splash leaves the DOM (${end})`);
-    assert.ok(tweens.every((t) => t.reverted), `every splash tween is released (${end})`);
+    assert.ok(tl.reverted, `the splash timeline is released (${end})`);
   }
-  for (const t of tweens) assert.ok(!Number.isFinite(t.options.duration) || t.options.duration > 0, 'no zero-length beat at the default tier');
 }
 // a Windows checkout may carry CRLF; the slice below is written against LF
 const hudSource = (await fs.readFile(new URL('../scripts/features/clocks-tracker/apps/hud.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');

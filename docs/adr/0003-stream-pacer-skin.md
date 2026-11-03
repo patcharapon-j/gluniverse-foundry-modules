@@ -23,7 +23,10 @@ Stream Pacer carries a scoped skin, the third after the initiative rail and
 Combat Intro.
 
 - Every rule lives under the feature's own roots: `.sp-root` (the band, the HUD,
-  the Dire Peril splash) and its two settings forms. Nothing is written on
+  the Dire Peril splash and its WebGL field) and its two settings forms. The
+  splash carries a crimson ramp of its own (`--sp-peril-*`), derived from the
+  skin's `--sp-red-deep` and the alert red the shader's bed leans toward
+  (`--sp-peril-alert`, `ALERT_RED` in `peril-field.js`). Nothing is written on
   `:root`, and no foundation `--gl-*` token is redeclared.
 - The skin's tokens are `--sp-*`: a black-leaning neutral ink ramp, paper text,
   and five tones (amber, red, ember, green, steel) taken from the suite's own

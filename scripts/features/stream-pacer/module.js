@@ -23,8 +23,10 @@ import {
   captureLocalSafetyExemption
 } from './settings.js';
 import * as M from './model.js';
-import { perilHTML } from './render.js';
+import { perilStageHTML } from './render.js';
 import { SignalBand, playPerilSplash } from './band.js';
+import { PerilField } from './peril-field.js';
+import { warmAtIdle } from '../../core/warmup.mjs';
 import { PacerHud } from './hud.js';
 import { Reach, playCue, desktopState, toggleDesktop } from './alerts.js';
 import { SafetyDesk } from './safety.js';
@@ -135,7 +137,19 @@ class Controller {
     this._handAt = {};
     this._nudgeAt = {};
     this._splash = null;
+    // The Dire Peril field is built only on a client that can ever see the
+    // splash, and only while this client wants it; its context is compiled at
+    // idle so the first declare of a session does not stall on the driver.
+    this.field = null;
+    if (!isPerilSurfaceExempt && get('sp.perilWebGLEnabled', true)) warmAtIdle('stream-pacer.peril', () => this._field()?.warm());
     this.api = this._api();
+  }
+
+  /** The Dire Peril field, built on first use while this client wants it. */
+  _field() {
+    if (this.isPerilSurfaceExempt || !get('sp.perilWebGLEnabled', true)) return null;
+    this.field ??= new PerilField();
+    return this.field;
   }
 
   start() {
@@ -238,17 +252,24 @@ class Controller {
       this.reach?.alert({ cue, title, body: L('STREAM_PACER.Notify.Body') });
     }
     if (a.perilSplash && !this.isPerilSurfaceExempt) this._playPeril();
+    // Ending the peril ends its splash at once: a GM who declared by mistake
+    // does not wait out the presentation.
+    else if (this._splash && next.mood?.kind !== MOOD.PERIL) this._splash.finish();
   }
 
   _playPeril() {
     this._splash?.finish();
-    const text = (key, fallback) => (get(key, '') || L(fallback));
+    const text = (key, fallback) => (get(key, '').trim() || L(fallback));
     this._splash = playPerilSplash({
-      html: perilHTML({
+      html: perilStageHTML({
         dire: text('sp.perilTextDire', 'STREAM_PACER.Peril.Dire'),
         peril: text('sp.perilTextPeril', 'STREAM_PACER.Peril.Peril'),
-        subtitle: text('sp.perilTextSubtitle', 'STREAM_PACER.Peril.Subtitle')
+        tag: text('sp.perilTextTag', 'STREAM_PACER.Peril.Tag'),
+        subtitle: text('sp.perilTextSubtitle', 'STREAM_PACER.Peril.Subtitle'),
+        runTop: L('STREAM_PACER.Peril.RunTop'),
+        runBottom: L('STREAM_PACER.Peril.RunBottom')
       }),
+      field: this._field(),
       onDone: () => { this._splash = null; }
     });
   }

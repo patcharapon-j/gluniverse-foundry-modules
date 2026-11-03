@@ -15,7 +15,11 @@
  *   ?scene=ready     the GM's ready check, half answered
  *   ?scene=player    a player asked by name to wrap up, during a campfire
  *   ?scene=checkin   a player's private check-in, over Dire Peril
- *   ?scene=peril     the Dire Peril splash (capture ~1.4s in)
+ *   ?scene=peril     the Dire Peril splash over its WebGL field, replayed on a loop
+ *   &at=<ms>         (peril) play once and freeze at that moment: CSS animations,
+ *                    the field's clock and anime.js all stop there, for stills
+ *   &tag= &sub=      (peril) override the tag and subtitle wording
+ *   &field=0         (peril) the splash without its WebGL field
  *   ?scene=calm      the GM after everyone saw it: lanes at rest; Rue left with a hand up
  *   &live=1          lanes arrive one by one, so the motion can be watched
  *
@@ -73,6 +77,9 @@ try {
   const M = await import('/scripts/features/stream-pacer/model.js');
   const R = await import('/scripts/features/stream-pacer/render.js');
   const { SignalBand, playPerilSplash } = await import('/scripts/features/stream-pacer/band.js');
+  const { PerilField } = await import('/scripts/features/stream-pacer/peril-field.js');
+  const C = await import('/scripts/features/stream-pacer/const.js');
+  const { Budget } = await import('/scripts/core/budget.mjs');
   const { PacerHud } = await import('/scripts/features/stream-pacer/hud.js');
   const lang = await (await fetch('/lang/stream-pacer.en.json')).json();
   const L = (key, data) => {
@@ -173,10 +180,60 @@ try {
     hud.update(M.hudModel(s, { desktop: 'off', sound: true }));
   };
 
+  // The splash exactly as module.js plays it: the shipped markup, the shipped
+  // field, the shipped entry point.
+  const field = params.get('field') === '0' ? null : new PerilField();
+  field?.warm(); // as module.js does at idle, so the compile is not inside the splash
+  let splash = null;
+  let replay = 0;
+  const peril = () => {
+    splash?.finish();
+    const start = performance.now();
+    splash = playPerilSplash({
+      html: R.perilStageHTML({
+        dire: L('STREAM_PACER.Peril.Dire'),
+        peril: L('STREAM_PACER.Peril.Peril'),
+        tag: params.get('tag') ?? L('STREAM_PACER.Peril.Tag'),
+        subtitle: params.get('sub') ?? L('STREAM_PACER.Peril.Subtitle'),
+        runTop: L('STREAM_PACER.Peril.RunTop'),
+        runBottom: L('STREAM_PACER.Peril.RunBottom')
+      }),
+      field,
+      onDone: () => { splash = null; }
+    });
+    return start;
+  };
+  // Freeze everything at \`t\` ms into the splash: the CSS beats, the field's
+  // wall clock (performance.now) and anime.js's (Date.now).
+  const freeze = (start, t) => {
+    const perf = (field?._running ? field._start : start) + t;
+    const wall = Date.now() - (performance.now() - perf);
+    performance.now = () => perf;
+    Date.now = () => wall;
+    for (const a of document.getAnimations()) { a.pause(); a.currentTime = t; }
+    splash?.timeline.pause();
+    splash?.timeline.seek(t);
+    document.documentElement.dataset.frozen = String(t);
+  };
+
   const set = (name) => {
     scene = name;
+    clearInterval(replay);
     if (name === 'peril') {
-      playPerilSplash({ html: R.perilHTML({ dire: L('STREAM_PACER.Peril.Dire'), peril: L('STREAM_PACER.Peril.Peril'), subtitle: L('STREAM_PACER.Peril.Subtitle') }) });
+      const at = params.get('at');
+      if (at !== null) {
+        // A still is not a frame-rate measurement: a headless or software-GL
+        // page runs every frame over budget, and the field is then shed
+        // (correctly) and the still shows the CSS alone. Lax thresholds keep it.
+        Budget.setPolicy({ targetFps: 10 });
+        document.fonts.ready.then(() => {
+          const start = peril();
+          requestAnimationFrame(() => requestAnimationFrame(() => freeze(start, Number(at))));
+        });
+      } else {
+        peril();
+        replay = setInterval(peril, C.TIMING.perilStage + 1200);
+      }
     }
     if (params.get('live')) {
       let n = 0;
@@ -186,7 +243,7 @@ try {
   };
   set(scene);
   setInterval(() => { clock += 1000; band.tick(clock); }, 1000);
-  window.__pacer = { set, snapshot, band, hud, M, R };
+  window.__pacer = { set, snapshot, band, hud, M, R, peril, field };
 } catch (e) { report(e); }
 </script>
 </body></html>

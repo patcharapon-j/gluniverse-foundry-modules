@@ -8,7 +8,7 @@
 //
 // Reads no `game`: the preview page drives this file as shipped.
 
-import { animate, createMotionOwner, motionDuration } from '../../core/motion.mjs';
+import { animate, createMotionOwner, createTimeline, motionDuration, stagger } from '../../core/motion.mjs';
 import { laneInnerHTML, laneClass, laneSignature } from './render.js';
 import { clockText } from './model.js';
 import { MOTION, TIMING } from './const.js';
@@ -192,34 +192,61 @@ export class SignalBand {
   }
 }
 
-/** The Dire Peril splash: one beat, then it lifts and the band's peril lane stays. */
-export function playPerilSplash({ html, onDone, parent = document.body }) {
+/** The two title lines: when each starts landing, and the axis it slides on. */
+const PERIL_LINES = [
+  ['.sp-pk-line-1 .sp-pk-l', 'perilLine1At', 'y', -18],
+  ['.sp-pk-line-2 .sp-pk-l', 'perilLine2At', 'x', 18]
+];
+
+/**
+ * The Dire Peril splash: one full-screen beat over the WebGL field, then it
+ * fades and the band's peril lane stays. The scenery is the stylesheet's:
+ * every keyframe is a share of `--sp-peril-stage`, which is written here from
+ * TIMING.perilStage so the CSS and the unmount below are one length. The title
+ * letters are anime.js, one authored rhythm whatever the words' lengths. The
+ * stage never takes a click; the table keeps playing under it.
+ *
+ * @param {object} o
+ * @param {string} o.html                 perilStageHTML()
+ * @param {{play:(ms:number)=>boolean, stop:()=>void}|null} [o.field]  the WebGL backdrop, if any
+ * @param {() => void} [o.onDone]
+ * @param {HTMLElement} [o.parent]
+ */
+export function playPerilSplash({ html, field = null, onDone, parent = document.body }) {
   const el = document.createElement('div');
   el.className = 'sp-root sp-peril gl-type';
   el.setAttribute('aria-hidden', 'true');
-  el.innerHTML = html;
   parent.appendChild(el);
-  const owner = createMotionOwner();
   const d = (ms) => motionDuration(ms, el);
+  const stage = d(TIMING.perilStage);
+  const fade = Math.min(stage, d(TIMING.perilFade));
+  el.style.setProperty('--sp-peril-stage', `${stage}ms`);
+  el.innerHTML = html;
+  field?.play(stage);
+  const owner = createMotionOwner();
   let done = false;
   const finish = () => {
     if (done) return;
     done = true;
     owner.clear();
+    field?.stop();
     el.remove();
     onDone?.();
   };
-  owner.add(animate(el.querySelector('.sp-peril-veil'), { opacity: [0, 1], duration: d(MOTION.perilVeil), ease: 'outQuad' }));
-  owner.add(animate(el.querySelector('.sp-peril-cut'), { scaleX: [0, 1], opacity: [0, 1], duration: d(MOTION.perilCut), delay: d(MOTION.perilCutDelay), ease: EASE_OUT }));
-  owner.add(animate(el.querySelectorAll('.sp-peril-ch'), {
-    opacity: [0, 1], translateY: ['0.35em', '0em'], filter: ['blur(10px)', 'blur(0px)'],
-    duration: d(MOTION.perilChar), delay: (_, i) => d(MOTION.perilCharDelay + i * MOTION.perilCharStagger), ease: EASE_OUT
-  }));
-  owner.add(animate(el.querySelector('.sp-peril-sub'), { opacity: [0, 1], translateY: ['8px', '0px'], duration: d(MOTION.perilSub), delay: d(MOTION.perilSubDelay), ease: EASE_OUT }));
-  owner.add(animate(el, {
-    opacity: [1, 0], duration: d(TIMING.perilLift), delay: d(TIMING.perilHold), ease: EASE_EXIT,
-    onComplete: finish
-  }));
-  el.addEventListener('click', finish, { once: true });
-  return { el, finish };
+  // one timeline, positioned from the declare: the title, the fade, the unmount
+  const timeline = owner.add(createTimeline({ autoplay: false }));
+  for (const [selector, at, axis, offset] of PERIL_LINES) {
+    const letters = el.querySelectorAll(selector);
+    if (!letters.length) continue;
+    timeline.add(letters, {
+      opacity: [0, 1], [axis]: [offset, 0], filter: ['blur(5px)', 'blur(0px)'],
+      delay: stagger(d(Math.min(MOTION.perilLetterStagger, MOTION.perilLetterSpread / letters.length))),
+      duration: d(MOTION.perilLetter), ease: 'outExpo'
+    }, d(MOTION[at]));
+  }
+  timeline.add(el, { opacity: [1, 0], duration: fade, ease: 'inOutSine' }, stage - fade);
+  timeline.call(finish, stage);
+  timeline.play();
+  // `timeline` lets the preview seek the splash for stills; nothing else uses it
+  return { el, finish, timeline };
 }

@@ -370,8 +370,12 @@ players who are online.
 **The model and the renderer are pure.** `model.js`, `render.js` and `const.js`
 reach no world and no DOM; text leaves the model as `{ k, d }` refs so the check
 can resolve every key, including the runtime-built families (`Band.Call.*`,
-`Band.SafetyLight.*`, `State.*`, `Light.*`, `Status.*`, `Notify.*`). `band.js`
-and `hud.js` touch the DOM and no `game`. That is what the preview drives:
+`Band.SafetyLight.*`, `State.*`, `Light.*`, `Status.*`, `Notify.*`). `band.js`,
+`hud.js` and `peril-field.js` (the Dire Peril splash's WebGL backdrop, a
+`Surfaces` context shed through `SHED_ORDER`) touch the DOM and no `game`. The
+splash's beats are CSS keyframes sharing one length, `--sp-peril-stage`, which
+`playPerilSplash` writes from `TIMING.perilStage` and unmounts at; a beat timed
+on anything else drifts from the unmount. That is what the preview drives:
 `node tools/pacer-preview.mjs && node tools/preview-server.mjs`, then
 `/.preview/pacer.html?scene=gm|ready|player|checkin|peril|calm`.
 

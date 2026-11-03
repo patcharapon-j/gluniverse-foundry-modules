@@ -269,6 +269,13 @@ export function registerSettings() {
     scope: 'client', config: true, type: Number, default: 0.7,
     range: { min: 0, max: 1, step: 0.05 }
   });
+  // The WebGL field behind the Dire Peril splash. Off, the splash plays as its
+  // CSS alone; the frame budget also sheds it under load.
+  game.settings.register(MODULE_ID, 'sp.perilWebGLEnabled', {
+    name: 'STREAM_PACER.Settings.PerilField',
+    hint: 'STREAM_PACER.Settings.PerilFieldHint',
+    scope: 'client', config: true, type: Boolean, default: true
+  });
   game.settings.register(MODULE_ID, 'sp.titleFlash', {
     name: 'STREAM_PACER.Settings.TitleFlash',
     hint: 'STREAM_PACER.Settings.TitleFlashHint',

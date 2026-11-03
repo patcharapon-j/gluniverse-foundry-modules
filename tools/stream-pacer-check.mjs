@@ -27,6 +27,11 @@
  *   · The arrivals: a late join is quiet, a hand sounds once, a reconnect with a
  *     hand still up does not, a bars-exempt capture login still gets the Dire
  *     Peril splash, an answer counts as the call having arrived.
+ *   · The Dire Peril splash: every stage beat shares --sp-peril-stage, which
+ *     playPerilSplash writes from TIMING.perilStage and unmounts at; every class
+ *     it draws is styled and every --sp-peril-* it reads is declared; it is set
+ *     in --sp-font; its WebGL field is a Surfaces context bound to SHED_ORDER and
+ *     built only for a client that can see the splash.
  *   · The stylesheet keeps the design system's rules: prefixed keyframes, no raw
  *     durations, no OS reduced-motion query, no `:root`, no white veils.
  *
@@ -49,7 +54,7 @@ const M = await load("model.js");
 const R = await load("render.js");
 
 const SRC = Object.fromEntries(
-  ["const.js", "model.js", "render.js", "band.js", "hud.js", "alerts.js", "safety.js", "settings.js", "module.js", "index.mjs"]
+  ["const.js", "model.js", "render.js", "band.js", "hud.js", "peril-field.js", "alerts.js", "safety.js", "settings.js", "module.js", "index.mjs"]
     .map((f) => [f, read(`${DIR}/${f}`)])
 );
 const FORM = read("templates/stream-pacer/exempt-users.hbs");
@@ -181,7 +186,7 @@ for (const f of ["const.js", "model.js", "render.js"]) {
   expect(!WORLD.test(code), `${f} reaches the world (${code.match(WORLD)?.[0]}); it must stay pure so the check and the preview drive it as shipped.`);
   expect(!/\bdocument\b|\bwindow\b/.test(code), `${f} touches the DOM; markup leaves render.js as a string.`);
 }
-for (const f of ["band.js", "hud.js"]) {
+for (const f of ["band.js", "hud.js", "peril-field.js"]) {
   const code = stripStrings(stripComments(SRC[f]));
   expect(!/\b(game|canvas|Hooks)\b|\bui\./.test(code), `${f} reaches the world; the preview page drives it as shipped.`);
   expect(!/duration:\s*\d/.test(code), `${f} has a literal duration; every one comes from MOTION/TIMING through motionDuration().`);
@@ -378,8 +383,61 @@ for (const c of playable) expect(c in C.SOUNDS, `cue "${c}" can be played but SO
   const hostile = M.normalizeSnapshot({ ...s, users: s.users.map((u) => (u.id === "a" ? { ...u, name: evil } : u)), text: { perilTag: evil, perilSubtitle: evil } });
   const withAll = M.normalizeSnapshot({ ...hostile, users: hostile.users.map((u) => (u.id === "a" ? { ...u, pacer: { status: "hand", at: T0, seen: null, answer: null } } : u)), mood: { id: "pr", kind: "peril", at: T0 } });
   const html = M.lanes(withAll).map((l) => R.laneInnerHTML(l, L, T0)).join("") + R.hudHTML(M.hudModel(withAll), L)
-    + R.perilHTML({ dire: evil, peril: evil, subtitle: evil });
+    + R.perilStageHTML({ dire: evil, peril: evil, tag: evil, subtitle: evil, runTop: evil, runBottom: evil });
   expect(!html.includes("<img"), "A player name or the GM's Dire Peril text reaches the markup unescaped.");
+}
+
+/* ── 9b. The Dire Peril splash ────────────────────────────────────────── */
+
+// The splash is CSS keyframes laid out as shares of one length. That length is
+// written by band.js from TIMING.perilStage, and the same call unmounts the
+// stage at it; a keyframe that reads --gl-drift (or any other length) directly
+// drifts away from the unmount the moment either one changes.
+{
+  const css = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+  const stageRules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => /\.sp-peril\b(?!-gl)/.test(m[1]));
+  const splash = playBody();
+  function playBody() {
+    // the body, not the destructured parameter object before it
+    const at = SRC["band.js"].indexOf("export function playPerilSplash");
+    return at === -1 ? "" : blockAfter(SRC["band.js"], SRC["band.js"].indexOf(") {", at) + 1);
+  }
+  expect(splash !== "", "band.js no longer exports playPerilSplash; module.js and the preview call it.");
+  expect(/setProperty\('--sp-peril-stage'/.test(splash) && /TIMING\.perilStage/.test(splash), "playPerilSplash must write --sp-peril-stage from TIMING.perilStage: it is the one length every keyframe of the stage is a share of.");
+  expect(/TIMING\.perilFade/.test(splash) && /\.call\(finish,\s*stage\)/.test(splash), "the stage must fade over TIMING.perilFade and unmount at the stage length, on the same timeline.");
+  expect(C.TIMING.perilStage > C.TIMING.perilFade && C.TIMING.perilFade > 0, "TIMING.perilFade must be a positive share of TIMING.perilStage.");
+  expect(!/addEventListener\(\s*['"]click/.test(splash), "the splash takes a click; it is pointer-events: none so the table keeps playing under it.");
+  expect(/--sp-peril-len:\s*var\(--sp-peril-stage/.test(css), "the stage's length must read --sp-peril-stage (with a token fallback).");
+  for (const m of stageRules) {
+    for (const a of m[2].matchAll(/animation\s*:\s*([^;]+);/g)) {
+      expect(!/--gl-drift/.test(a[1]), `"${m[1].trim()}" times a stage beat on --gl-drift; use --sp-peril-len, the length band.js unmounts at.`);
+    }
+    for (const f of m[2].matchAll(/font-family\s*:\s*([^;]+);/g)) {
+      expect(f[1].trim() === "var(--sp-font)", `"${m[1].trim()}" sets font-family ${f[1].trim()}; the splash is set in --sp-font.`);
+    }
+  }
+  expect(!/--gl-(display|tech)\b/.test(css), "the stylesheet reads --gl-display or --gl-tech; the whole skin is set in --sp-font.");
+  // every class the markup draws has a rule, and every --sp-peril-* read is declared
+  const html = R.perilStageHTML({ dire: "Dire", peril: "Peril", tag: "t", subtitle: "s", runTop: "a", runBottom: "b" });
+  for (const cls of new Set([...html.matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/)))) {
+    expect(new RegExp(`\\.${cls}(?![\\w-])`).test(css), `the splash draws .${cls}, which no rule in stream-pacer.css styles.`);
+  }
+  expect((html.match(/class="sp-pk-pf"/g) ?? []).length === 9 && (html.match(/class="sp-pk-l"/g) ?? []).length === 9, "the montage and the title must carry one span per letter of the two words.");
+  for (const m of css.matchAll(/var\((--sp-peril-[\w-]+)/g)) {
+    if (m[1] === "--sp-peril-stage") continue; // written by band.js, read with a fallback
+    expect(new RegExp(`${m[1]}\\s*:`).test(css), `${m[1]} is read and never declared; it resolves to nothing.`);
+  }
+  // the field: a registered, shed-able surface the frame budget can take away
+  const field = stripComments(SRC["peril-field.js"]);
+  expect(/Surfaces\.register\(/.test(field) && /\.use\(\)/.test(field) && /\.touch\(\)/.test(field), "peril-field.js must register its context with Surfaces and mark it used while it draws.");
+  expect(/Budget\.ladder\([^)]*SHED_ORDER\)/.test(field) && /allows\('perilField'\)/.test(field) && C.SHED_ORDER.includes("perilField"), "the field must be bound to Budget.ladder(SHED_ORDER) and ask it before it plays.");
+  const loop = field.slice(field.indexOf("_loop() {"), field.indexOf("stop() {"));
+  expect(/if \(!this\.allowed\)\s*\{\s*this\.stop\(\)/.test(loop), "the field's loop must ask the ladder every frame and stop when shed; asked only in play(), the load the splash itself causes can never shed it.");
+  for (const u of field.matchAll(/uniform\s+\w+\s+(u_\w+)/g)) expect(new RegExp(`'${u[1]}'`).test(field), `the field's shader declares ${u[1]} and the renderer never looks it up; it holds the driver's initial value.`);
+  // a client that may never see the splash never builds the field
+  const fieldBody = bodyOf(MODULE, "_field") ?? "";
+  expect(/isPerilSurfaceExempt/.test(fieldBody) && /sp\.perilWebGLEnabled/.test(fieldBody), "module.js must build the field only for a client that can see the splash and wants the field.");
+  checks++;
 }
 
 /* ── 10. The stylesheet ───────────────────────────────────────────────── */

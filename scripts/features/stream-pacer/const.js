@@ -103,8 +103,10 @@ export const TIMING = Object.freeze({
   presenceDebounce: 400,  // presence reports coalesce
   titleFlash: 1100,       // document title alternation period
   lateQuiet: 20000,       // a call older than this when we load arrives without a sound
-  perilHold: 2600,        // the Dire Peril splash, start to lift
-  perilLift: 700,         // the lift itself
+  perilStage: 4200,       // the Dire Peril splash, declare to unmount; every CSS beat is a share of it
+  perilFade: 300,         // the stage's own fade, ending exactly at perilStage
+  perilFieldFade: 600,    // the WebGL field starts its CSS fade this long before the stage ends
+  perilFieldTail: 50,     // and its loop stops this long after
   tickFrom: 5,            // countdown ticks in its last N seconds (seconds, not ms)
   urgentFrom: 10,         // countdown turns urgent in its last N seconds (seconds)
   nudgeCooldown: 2500,    // a GM cannot knock on one player faster than this
@@ -115,8 +117,10 @@ export const TIMING = Object.freeze({
 });
 
 /**
- * Every animation length in the band and the splash, in ms at motion scale 1.
- * They pass through motionDuration() on use; nothing in band.js writes a literal.
+ * Every animation length in the band and the Dire Peril title, in ms at
+ * motion scale 1. They pass through motionDuration() on use; nothing in
+ * band.js writes a literal. The rest of the splash is CSS keyframes laid out
+ * as shares of TIMING.perilStage.
  */
 export const MOTION = Object.freeze({
   laneIn: 540,        // a lane drops in
@@ -128,15 +132,28 @@ export const MOTION = Object.freeze({
   flarePulse: 420,
   laneOut: 260,
   aura: 1400,         // the aura's flare behind the band
-  perilVeil: 420,
-  perilCut: 520,
-  perilCutDelay: 160,
-  perilChar: 620,
-  perilCharDelay: 260,
-  perilCharStagger: 38,
-  perilSub: 520,
-  perilSubDelay: 900
+  // the Dire Peril title: one authored rhythm, whatever the words' lengths
+  perilLine1At: 820,       // "Dire" starts landing
+  perilLine2At: 1220,      // "Peril" starts landing
+  perilLetter: 380,        // one letter's slide out of blur
+  perilLetterStagger: 45,  // the gap between letters,
+  perilLetterSpread: 420   // squeezed so a long word lands within this
 });
+
+/**
+ * The Dire Peril field (the WebGL backdrop behind the splash), in seconds of
+ * its own clock. The shader's second slam ring is pinned to the title's impact
+ * inside the FRAG source; these are the envelope the JS drives.
+ */
+export const PERIL_FIELD = Object.freeze({
+  burst: 0.9,          // the impact ring crosses the screen in this long
+  burstMax: 1.2,       // and is pushed off screen past it
+  intensityFloor: 0.45, // the sustained energy after the spike
+  intensityDecay: 2.2  // how fast the spike falls to it
+});
+
+/** The field sheds before anything else: without it the splash is its CSS alone. */
+export const SHED_ORDER = Object.freeze(['perilField']);
 
 /** Marks are drawn as pips up to this many, then as a number. */
 export const PIP_CAP = 5;
