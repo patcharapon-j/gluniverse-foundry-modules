@@ -76,7 +76,7 @@ export class Sim {
   at(t, fn) { this.cues.push({ at: t, fn }); this.cues.sort((a, b) => a.at - b.at); }
   emit(from, to, fn) { this.emitters.push({ from, to, fn }); }
 
-  site(id, x, y) { this.sites.push({ id: String(id), x, y }); return this; }
+  site(id, x, y) { if (!this.sites.some((s) => s.id === String(id))) this.sites.push({ id: String(id), x, y }); return this; }
   siteOf(x, y) {
     let best = null, bd = Infinity;
     for (const s of this.sites) { const d = (s.x - x) ** 2 + (s.y - y) ** 2; if (d < bd) { bd = d; best = s; } }

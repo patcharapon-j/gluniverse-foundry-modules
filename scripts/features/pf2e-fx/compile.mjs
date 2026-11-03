@@ -297,7 +297,8 @@ export function compile(spec) {
   s.m = 0.55 + 0.09 * clamp(full.rank ?? 1, 1, 10);
   const M = resolveMaterial(full);
   s.M = M;
-  if (full.caster) s.site("caster", full.caster.x, full.caster.y);
+  // named for the caster's token, so a 3D host can hide its billboard from a viewer who cannot see it
+  if (full.caster) s.site(full.caster.id ?? "caster", full.caster.x, full.caster.y);
   for (const T of full.targets) s.site(T.id ?? `t${s.sites.length}`, T.x, T.y);
   if (full.area) { const [cx, cy] = areaCentroid(full.area); s.site("area", cx, cy); }
   if (!s.sites.length) s.site("origin", 0, 0);
