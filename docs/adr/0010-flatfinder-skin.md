@@ -1,4 +1,4 @@
-# 0009 · A scoped ink skin for Flatfinder
+# 0010 · A scoped ink skin for Flatfinder
 
 Status: accepted (2026-11-03)
 

@@ -63,7 +63,7 @@ the strip hides them while it is drawn.
 `constants.js` are pure: no `game`, no DOM. `encounter.js`, `competence.js`,
 `adjustments.js`, `incapacitation.js` and `flatten.js` read the world;
 `planner.mjs` is the window; `flatfinder.js` wires the hooks. The skin is
-`styles/flatfinder.css` (docs/adr/0009-flatfinder-skin.md).
+`styles/flatfinder.css` (docs/adr/0010-flatfinder-skin.md).
 
 ## Checks
 
