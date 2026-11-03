@@ -1,205 +1,99 @@
-import { applyFateToMessage, canUserAddFate, isPcCheckMessage } from "./fate-result.mjs";
+/**
+ * Where a fate comes from in PF2e: the Fated Roll switch in the check dialog, a
+ * hero point reroll, and "Add Fate Die" on a chat card.
+ *
+ * ONE road writes. Both automatic sources are read off the posted message itself
+ * (its `flags.pf2e.context.options`) in `createChatMessage`, on the author's
+ * client only, and go through `applyFate`.
+ *
+ * The old version also replaced `game.pf2e.Check.roll` and
+ * `Check.rerollFromMessage` with wrappers of its own, and listened to
+ * `pf2e.reroll`, so a fated check had two roads to a fate (the callback and the
+ * hook) and a hero point reroll had three. They were held apart only by an
+ * in-flight set. The wrappers are gone: PF2e already writes
+ * `check:reroll:hero-points` onto a hero point reroll, and the switch's option
+ * survives into the message because PF2e copies `context.options` there. Not
+ * patching `Check.roll` also keeps this feature off the target Spotlight Roll
+ * and Combat Intro wrap through libWrapper.
+ */
 
-const FATED_CONTEXT_KEY = "glddfFated";
-const FATED_OPTION = "glddf:fated-roll";
-const pendingHeroRerolls = [];
+import { FATED_OPTION } from "./constants.mjs";
+import { applyFate, autoSource, canAddFate, isPcCheckMessage } from "./apply.mjs";
+import { renderFatedToggle } from "./view.mjs";
+import { t } from "./settings.mjs";
+
+const CONTEXT_ENTRY = "GLDDF.Context.AddFateDie";
 
 export function registerPF2eIntegration() {
-  Hooks.on("renderCheckModifiersDialog", injectFatedRollToggle);
-  Hooks.on("getChatMessageContextOptions", addChatContextOptions);
+  Hooks.on("renderCheckModifiersDialog", injectFatedToggle);
+  Hooks.on("getChatMessageContextOptions", addContextOption);
   Hooks.on("createChatMessage", onCreateChatMessage);
-  Hooks.on("pf2e.reroll", onPF2eReroll);
 }
 
-export { patchPF2eCheckMethods };
-
-function patchPF2eCheckMethods() {
-  const Check = game.pf2e?.Check;
-  if (!Check?.roll || Check.roll._glddfPatched) {
-    if (!Check?.roll) console.warn("GLUniverse Destiny Dice | PF2e Check API not found; Fate Die integration disabled.");
-    return;
+/* PF2e reads `context.options` by reference (it captured the Set before the
+   dialog opened), so the option is added to the very collection it holds, never
+   to a replacement: swapping an Array for a new Set here would lose it. */
+export function setFated(context, fated) {
+  if (!context) return;
+  context.options ??= new Set();
+  const o = context.options;
+  if (o instanceof Set) {
+    if (fated) o.add(FATED_OPTION);
+    else o.delete(FATED_OPTION);
+  } else if (Array.isArray(o)) {
+    const at = o.indexOf(FATED_OPTION);
+    if (fated && at < 0) o.push(FATED_OPTION);
+    if (!fated && at >= 0) o.splice(at, 1);
   }
-
-  const originalRoll = Check.roll;
-  Check.roll = async function wrappedFatedCheckRoll(check, context = {}, event = null, callback = null) {
-    const wrappedCallback = async (roll, outcome, message, callbackEvent) => {
-      if (callback) await callback(roll, outcome, message, callbackEvent);
-      if (context?.[FATED_CONTEXT_KEY] && message?.id) await applyFateToMessage(message, { source: "dialog" });
-    };
-
-    return originalRoll.call(this, check, context, event, wrappedCallback);
-  };
-  Check.roll._glddfPatched = true;
-
-  if (Check.rerollFromMessage && !Check.rerollFromMessage._glddfPatched) {
-    const originalReroll = Check.rerollFromMessage;
-    Check.rerollFromMessage = async function wrappedFatedReroll(message, options = {}) {
-      const isHeroPoint = options?.resource === "hero-points";
-      if (isHeroPoint && isPcCheckMessage(message)) {
-        const actor = message.actor ?? message.speakerActor;
-        pendingHeroRerolls.push({
-          actorUuid: actor?.uuid,
-          userId: game.user.id,
-          createdAt: Date.now(),
-        });
-      }
-
-      try {
-        return await originalReroll.call(this, message, options);
-      } finally {
-        cleanupPendingHeroRerolls();
-      }
-    };
-    Check.rerollFromMessage._glddfPatched = true;
-  }
-
-  console.log("GLUniverse Destiny Dice | PF2e check integration registered");
 }
 
-function injectFatedRollToggle(app, html) {
-  const element = normalizeHtml(html);
-  const form = element?.querySelector?.("form.check-modifiers-content");
-  if (!form || form.querySelector(".glddf-fated-roll-toggle")) return;
+export function isFated(context) {
+  const o = context?.options;
+  return o instanceof Set ? o.has(FATED_OPTION) : Array.isArray(o) ? o.includes(FATED_OPTION) : false;
+}
 
-  const actor = app?.context?.actor ?? app?.context?.origin?.actor ?? app?.context?.target?.actor;
+function injectFatedToggle(app, html) {
+  const element = html instanceof HTMLElement ? html : html?.[0] ?? null;
+  const form = element?.querySelector?.("form") ?? (element?.tagName === "FORM" ? element : null);
+  if (!form || form.querySelector(".glddf-fated-roll-row")) return;
+  const actor = app?.context?.actor ?? app?.context?.origin?.actor;
   if (!actor?.isOfType?.("character")) return;
+  // Initiative is not fateable (see apply.mjs), so it gets no switch.
+  if (app.context?.type === "initiative") return;
 
   const row = document.createElement("div");
   row.className = "glddf-fated-roll-row";
-  row.dataset.tooltip = "GLDDF.Dialog.FatedRollHint";
-  row.innerHTML = `<label class="glddf-fated-roll-toggle"><span>${game.i18n.localize("GLDDF.Dialog.FatedRoll")}</span><input type="checkbox" /></label>`;
-
+  row.innerHTML = renderFatedToggle({ checked: isFated(app.context), t });
   const input = row.querySelector("input");
-  input.checked = !!app.context?.[FATED_CONTEXT_KEY] || hasContextOption(app.context, FATED_OPTION);
-  input.addEventListener("change", () => {
-    setFatedContext(app.context, input.checked);
-  });
+  input.addEventListener("change", () => setFated(app.context, input.checked));
 
-  // PF2e v14-dev renamed the roll button to a generic submit button and the
-  // fate radios from `.fate` to `.roll-twice`; keep the legacy selectors as
-  // fallbacks for older PF2e versions.
-  const rollButton = form.querySelector("button.roll, button[type='submit']");
-  rollButton?.addEventListener("click", () => {
-    if (!input.checked) return;
-    setFatedContext(app.context, true);
-  });
-
-  const divider = document.createElement("hr");
   const anchor = form.querySelector(".roll-twice, .fate");
-  if (anchor) anchor.after(divider, row);
-  else if (rollButton) rollButton.before(row, divider);
-  else form.append(divider, row);
-
-  window.setTimeout(() => {
-    app.setPosition?.({ height: (app.position?.height ?? form.closest(".window-content")?.offsetHeight ?? 0) + 36 });
-  }, 0);
+  const submit = form.querySelector("button[type='submit'], button.roll");
+  const rule = document.createElement("hr");
+  if (anchor) anchor.after(rule, row);
+  else if (submit) submit.before(row, rule);
+  else form.append(rule, row);
+  app.setPosition?.({ height: "auto" });
 }
 
-function addChatContextOptions(_html, options) {
-  if (options.some((option) => option.name === "GLDDF.Context.AddFateDie")) return;
-
+function addContextOption(_app, options) {
+  if (options.some((o) => o.name === CONTEXT_ENTRY)) return;
   options.push({
-    name: "GLDDF.Context.AddFateDie",
-    icon: '<i class="fa-solid fa-sparkles"></i>',
-    condition: (li) => {
-      const message = messageFromLi(li);
-      return canUserAddFate(message);
-    },
-    callback: async (li) => {
-      const message = messageFromLi(li);
-      await safeApplyFateToMessage(message, { source: "context" });
-    },
+    name: CONTEXT_ENTRY,
+    icon: '<i class="fa-solid fa-dice-d6"></i>',
+    condition: (li) => canAddFate(messageOf(li)),
+    callback: (li) => applyFate(messageOf(li), { source: "context" }),
   });
-}
-
-function onPF2eReroll(_oldRoll, _newRoll, resource) {
-  if (resource?.slug !== "hero-points") return;
-
-  pendingHeroRerolls.push({
-    userId: game.user.id,
-    createdAt: Date.now(),
-  });
-  cleanupPendingHeroRerolls();
 }
 
 function onCreateChatMessage(message, _options, userId) {
-  if (userId !== game.user.id) return;
-  if (!isPcCheckMessage(message)) return;
-
-  const context = message.flags?.pf2e?.context;
-  if (context?.[FATED_CONTEXT_KEY] || hasContextOption(context, FATED_OPTION)) {
-    window.setTimeout(() => safeApplyFateToMessage(message, { source: "dialog" }), 100);
-    return;
-  }
-
-  if (isHeroPointRerollMessage(message)) {
-    window.setTimeout(() => safeApplyFateToMessage(message, { source: "hero-point-reroll" }), 100);
-    return;
-  }
-
-  const actor = message.actor ?? message.speakerActor;
-  const isReroll = !!context?.isReroll;
-  const pendingHero = findPendingRoll(pendingHeroRerolls, actor?.uuid, userId);
-  if (isReroll && pendingHero) {
-    pendingHeroRerolls.splice(pendingHeroRerolls.indexOf(pendingHero), 1);
-    window.setTimeout(() => safeApplyFateToMessage(message, { source: "hero-point-reroll" }), 100);
-  }
+  if (userId !== game.user.id || !isPcCheckMessage(message)) return;
+  const source = autoSource(message);
+  if (source) applyFate(message, { source, wait: true });
 }
 
-function setFatedContext(context, fated) {
-  if (!context) return;
-  context[FATED_CONTEXT_KEY] = fated;
-  context.options ??= new Set();
-  if (Array.isArray(context.options)) context.options = new Set(context.options);
-  if (fated) context.options.add(FATED_OPTION);
-  else context.options.delete(FATED_OPTION);
-}
-
-function hasContextOption(context, option) {
-  const options = context?.options;
-  return options instanceof Set ? options.has(option) : Array.isArray(options) ? options.includes(option) : false;
-}
-
-function isHeroPointRerollMessage(message) {
-  const context = message.flags?.pf2e?.context;
-  return !!context?.isReroll && hasContextOption(context, "check:reroll:hero-points");
-}
-
-function messageFromLi(li) {
-  const id = li?.dataset?.messageId ?? li?.attr?.("data-message-id");
+function messageOf(li) {
+  const el = li instanceof HTMLElement ? li : li?.[0];
+  const id = el?.dataset?.messageId ?? el?.closest?.("[data-message-id]")?.dataset?.messageId;
   return id ? game.messages.get(id) : null;
 }
-
-function normalizeHtml(html) {
-  if (html instanceof HTMLElement) return html;
-  if (html?.[0] instanceof HTMLElement) return html[0];
-  return null;
-}
-
-function findPendingRoll(pendingRolls, actorUuid, userId) {
-  const now = Date.now();
-  return pendingRolls.find((pending) => {
-    if (now - pending.createdAt >= 15000) return false;
-    if (pending.actorUuid && actorUuid) return pending.actorUuid === actorUuid;
-    return pending.userId === userId;
-  });
-}
-
-async function safeApplyFateToMessage(message, options) {
-  try {
-    return await applyFateToMessage(message, options);
-  } catch (error) {
-    console.error("GLUniverse Destiny Dice | Failed to apply Fate Die", error);
-    ui.notifications.error(game.i18n.localize("GLDDF.Notify.RollFailed"));
-    return null;
-  }
-}
-
-function cleanupPendingHeroRerolls() {
-  const cutoff = Date.now() - 30000;
-  for (let index = pendingHeroRerolls.length - 1; index >= 0; index -= 1) {
-    if (pendingHeroRerolls[index].createdAt < cutoff) pendingHeroRerolls.splice(index, 1);
-  }
-}
-
-export { FATED_CONTEXT_KEY };
