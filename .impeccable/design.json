@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-04T18:00:00+07:00",
+  "title": "Design System: GLUniverse Suite",
+  "extensions": {
+    "colorMeta": {
+      "ink-0": { "role": "neutral", "displayName": "Void", "token": "--gl-is-ink-0", "tonalRamp": ["#05060a", "#0a0b11", "#0f1017", "#15171f", "#1c1e28", "#272a36", "#353846", "#4a4d5c"] },
+      "ink-1": { "role": "neutral", "displayName": "Night", "token": "--gl-is-ink-1" },
+      "ink-2": { "role": "neutral", "displayName": "Slate Plate", "token": "--gl-is-ink-2" },
+      "ink-3": { "role": "neutral", "displayName": "Raised Slate", "token": "--gl-is-ink-3" },
+      "ink-4": { "role": "neutral", "displayName": "Lit Slate", "token": "--gl-is-ink-4" },
+      "ink-5": { "role": "neutral", "displayName": "Rule Slate", "token": "--gl-is-ink-5", "note": "Tracks and meters. Not a text ground." },
+      "ink-6": { "role": "neutral", "displayName": "Edge Slate", "token": "--gl-is-ink-6", "note": "Strongest neutral fill. Not a text ground." },
+      "text": { "role": "neutral", "displayName": "Bright Paper", "token": "--gl-is-text" },
+      "paper": { "role": "primary", "displayName": "Paper", "token": "--gl-is-paper", "canonical": "oklch(94.7% 0.007 277)", "tonalRamp": ["#0b0b0c", "#252526", "#424243", "#616163", "#818285", "#a4a5a8", "#c8c9cd", "#edeef3"] },
+      "dim": { "role": "neutral", "displayName": "Dim", "token": "--gl-is-dim", "note": "Passes 4.5:1 on every ink step." },
+      "faint": { "role": "neutral", "displayName": "Faint", "token": "--gl-is-faint", "note": "Passes 4.5:1 on ink-0 to ink-3 only (4.7 to 5.3:1)." },
+      "steel": { "role": "tertiary", "displayName": "Steel", "token": "--gl-is-steel", "canonical": "oklch(65.9% 0.022 276)", "tonalRamp": ["#0a0b0f", "#23252b", "#40414a", "#5e606c", "#7f818f", "#a1a4b2", "#c6c8d5", "#ebeef9"] },
+      "on-slab": { "role": "neutral", "displayName": "On Slab", "token": "--gl-is-on-slab", "note": "Text on a filled tone slab or a primary button." },
+      "signal-amber": { "role": "secondary", "displayName": "Call Amber", "token": "--gl-is-amber", "canonical": "oklch(81.3% 0.165 75)", "tonalRamp": ["#150800", "#371f00", "#5c3a00", "#845700", "#ae7503", "#da9514", "#ffb836", "#ffe17c"] },
+      "signal-red": { "role": "secondary", "displayName": "Alarm Red", "token": "--gl-is-red", "canonical": "oklch(67.5% 0.213 21)", "tonalRamp": ["#260000", "#4f0009", "#7d0c1d", "#ad2634", "#e03e4b", "#ff646b", "#ff9697", "#ffc5c3"] },
+      "signal-green": { "role": "secondary", "displayName": "Clear Green", "token": "--gl-is-green", "canonical": "oklch(68.9% 0.152 156)", "tonalRamp": ["#001202", "#003013", "#00512a", "#037443", "#1e9a5e", "#44c07d", "#7ee2a6", "#b2ffd0"] },
+      "signal-ember": { "role": "tertiary", "displayName": "Ember", "token": "--gl-is-ember", "canonical": "oklch(75.0% 0.167 50)", "tonalRamp": ["#1c0300", "#411700", "#692f02", "#954913", "#c36526", "#f38238", "#ffaa69", "#ffd59d"] },
+      "signal-info": { "role": "tertiary", "displayName": "Info Blue", "token": "--gl-is-info", "canonical": "oklch(70.4% 0.160 252)", "note": "A neutral shift or a fact with no verdict." }
+    },
+    "paperGround": {
+      "selector": ".gl-is-paper",
+      "purpose": "The same roles for a host known to be light. Hairlines and veils are restated from the dark tint channel.",
+      "values": {
+        "ink-0": "#f7f7f9", "ink-1": "#eeeff3", "ink-2": "#e5e6ec", "ink-3": "#dbdce4", "ink-4": "#cfd0da", "ink-5": "#bcbeca", "ink-6": "#a6a9b7",
+        "text": "#15161c", "paper": "#1d1f27", "dim": "#454856", "faint": "#5b5e6b", "steel": "#5d6070", "on-slab": "#f7f7f9",
+        "signal-amber": "#8f5600", "signal-red": "#b81c2d", "signal-green": "#11714a", "signal-ember": "#a64808", "signal-info": "#185fbb"
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "token": "--gl-is-t-display", "purpose": "The one name or answer a panel is about. Width 104%." },
+      "title": { "displayName": "Title", "token": "--gl-is-t-title", "purpose": "Window and section titles." },
+      "lead": { "displayName": "Lead", "token": "--gl-is-t-lead", "purpose": "Row names and the line a plate leads with." },
+      "body": { "displayName": "Body", "token": "--gl-is-t-body", "purpose": "Rows, descriptions, card text." },
+      "control": { "displayName": "Control", "token": "--gl-is-t-body", "purpose": "Button and switch labels at 600. Every control is sized by its own sheet." },
+      "label": { "displayName": "Meta", "token": "--gl-is-t-meta", "purpose": "Uppercase group labels, counts, notes and timestamps. The floor: nothing is set smaller." },
+      "number": { "displayName": "Number", "token": "--gl-is-num", "purpose": "Counts, totals, DCs and timers, tabular figures." }
+    },
+    "states": [
+      { "name": "hover", "value": "rgb(255 255 255 / 0.05)", "token": "--gl-is-hover", "purpose": "Row veil on hover. Controls step up one ink and lift instead." },
+      { "name": "selected", "value": "rgb(255 255 255 / 0.09)", "token": "--gl-is-selected", "purpose": "Row veil when selected, with the tone edge." },
+      { "name": "press", "value": "0.97", "token": "--gl-is-press", "purpose": "Scale on :active." },
+      { "name": "disabled", "value": "0.32", "token": "--gl-is-disabled", "purpose": "Opacity on :disabled, no lift." },
+      { "name": "focus", "value": "2px solid paper, 1px offset", "token": "--gl-is-focus-ring", "purpose": "Outline on :focus-visible, offset --gl-is-focus-offset." }
+    ],
+    "shadows": [
+      { "name": "hairline", "value": "inset 0 0 0 1px rgb(255 255 255 / 0.08)", "purpose": "Outline of a plate or control at rest. In CSS: var(--gl-is-line)." },
+      { "name": "hairline-strong", "value": "inset 0 0 0 1px rgb(255 255 255 / 0.16)", "purpose": "Hover, selection, fields, separating neighbours. var(--gl-is-line-strong)." },
+      { "name": "tone-edge", "value": "inset 2px 0 0 var(--tone)", "purpose": "The meaningful edge of a row or plate." },
+      { "name": "float", "value": "0 24px 64px rgb(0 0 0 / 0.55)", "purpose": "Only under a surface floating over the canvas. var(--gl-is-shade)." }
+    ],
+    "motion": [
+      { "name": "ease", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Default: decelerate to rest (--gl-ease)." },
+      { "name": "d-tap", "value": "120ms x motion scale", "purpose": "Press feedback (--gl-d-tap)." },
+      { "name": "d-quick", "value": "180ms x motion scale", "purpose": "Tint and focus (--gl-d-quick)." },
+      { "name": "d-brisk", "value": "260ms x motion scale", "purpose": "Control hover and colour changes (--gl-d-brisk)." },
+      { "name": "d-swift", "value": "340ms x motion scale", "purpose": "Card and row transitions, plate entrances (--gl-d-swift)." },
+      { "name": "lift", "value": "-1px", "purpose": "Hover lift on rows and controls (--gl-lift)." }
+    ],
+    "shapes": [
+      { "name": "cut-lg", "value": "10px chamfer, bottom-right", "token": "--gl-is-cut-lg", "purpose": "Slabs, answer plates, window-sized cards." },
+      { "name": "cut", "value": "8px chamfer, bottom-right", "token": "--gl-is-cut", "purpose": "Panels and plates." },
+      { "name": "cut-sm", "value": "5px chamfer, bottom-right", "token": "--gl-is-cut-sm", "purpose": "Buttons and controls." },
+      { "name": "cut-xs", "value": "3px chamfer", "token": "--gl-is-cut-xs", "purpose": "Tags and pips." },
+      { "name": "wedge", "value": "115 degree slant", "purpose": "Tags." },
+      { "name": "hairline-radius", "value": "2px", "token": "--gl-is-radius", "purpose": "Only where a radius is unavoidable." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "The default control: raised slate, paper text, the control cut. Primary is a paper slab, one per panel.",
+      "html": "<button class=\"ds-btn\">Ask the oracle</button> <button class=\"ds-btn ds-btn-primary\">Roll</button> <button class=\"ds-btn\" disabled>Locked</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border: 0; background: #15171f; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08); color: #f4f4f7; font: 600 12px/1.1 'Google Sans Flex', 'Segoe UI', system-ui, sans-serif; cursor: pointer; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%); transition: background-color 260ms cubic-bezier(0.16, 1, 0.3, 1), translate 260ms cubic-bezier(0.16, 1, 0.3, 1), scale 120ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn:hover { background: #1c1e28; translate: 0 -1px; } .ds-btn:active { scale: 0.97; } .ds-btn:disabled { opacity: 0.32; translate: none; background: #15171f; cursor: default; } .ds-btn:focus-visible { outline: 2px solid #ecedf2; outline-offset: 1px; clip-path: none; } .ds-btn-primary { background: #ecedf2; color: #05060a; box-shadow: none; } .ds-btn-primary:hover { background: #ffffff; }"
+    },
+    {
+      "name": "Tone Tag",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "A slab in the element's tone with on-slab text, cut with the wedge. The tone is the state.",
+      "html": "<span class=\"ds-tag\" style=\"--tone:#ffb020\">Call</span> <span class=\"ds-tag\" style=\"--tone:#ff4d5a\">Danger</span> <span class=\"ds-tag\" style=\"--tone:#4aa3ff\">Shift</span> <span class=\"ds-tag\" style=\"--tone:#ecedf2\">Hand</span>",
+      "css": ".ds-tag { display: inline-flex; align-items: center; min-height: 20px; padding: 0 14px 0 8px; background: var(--tone, #ecedf2); color: #05060a; font: 700 11px/1 'Google Sans Flex', 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }"
+    },
+    {
+      "name": "Plate",
+      "kind": "card",
+      "refersTo": "plate",
+      "description": "A section on slate with the tone edge on the left and the plate cut.",
+      "html": "<section class=\"ds-plate\" style=\"--tone:#2fb672\"><p class=\"ds-label\">Defense</p><p class=\"ds-plate-body\">AC 22 · Fort +14 · Ref +10 · Will +12</p></section>",
+      "css": ".ds-plate { padding: 12px 14px 12px 16px; background: #0f1017; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08), inset 2px 0 0 var(--tone, #ecedf2); color: #f4f4f7; font: 500 12px/1.4 'Google Sans Flex', 'Segoe UI', system-ui, sans-serif; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%); } .ds-plate p { margin: 0; } .ds-plate-body { margin-top: 6px; font-size: 13px; font-weight: 600; } .ds-label { color: #7f8291; font-weight: 700; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1; }"
+    },
+    {
+      "name": "Answer",
+      "kind": "custom",
+      "refersTo": "plate",
+      "description": "The loudest thing on a panel: display type in the answer's tone over quiet chrome, on the large cut.",
+      "html": "<div class=\"ds-answer\" style=\"--tone:#2fb672\"><span class=\"ds-answer-label\">Fate · Likely</span><strong>Exceptional yes</strong></div>",
+      "css": ".ds-answer { display: grid; gap: 6px; padding: 14px 16px; background: #0a0b11; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08), inset 2px 0 0 var(--tone); font-family: 'Google Sans Flex', 'Segoe UI', system-ui, sans-serif; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%); } .ds-answer-label { color: #7f8291; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; } .ds-answer strong { color: var(--tone); font-size: 22px; font-weight: 750; font-stretch: 104%; letter-spacing: -0.01em; line-height: 1.1; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Void fill, strong hairline inset, square; focus adds the paper ring.",
+      "html": "<input class=\"ds-input\" placeholder=\"Ask a yes or no question\">",
+      "css": ".ds-input { min-height: 32px; padding: 0 10px; border: 0; background: #05060a; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.16); color: #f4f4f7; font: 500 12px/1.2 'Google Sans Flex', 'Segoe UI', system-ui, sans-serif; } .ds-input::placeholder { color: #7f8291; } .ds-input:focus-visible { outline: 2px solid #ecedf2; outline-offset: 1px; }"
+    },
+    {
+      "name": "Segmented Picker",
+      "kind": "nav",
+      "refersTo": "button",
+      "description": "Flat ink cells; the selected cell steps up to lit slate with paper text, never a glow.",
+      "html": "<div class=\"ds-seg\"><button>Unlikely</button><button aria-pressed=\"true\">50/50</button><button>Likely</button></div>",
+      "css": ".ds-seg { display: inline-flex; gap: 2px; padding: 2px; background: #05060a; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08); } .ds-seg button { min-height: 28px; padding: 0 12px; border: 0; background: none; color: #b3b5c2; font: 600 12px/1 'Google Sans Flex', 'Segoe UI', system-ui, sans-serif; cursor: pointer; transition: background-color 260ms cubic-bezier(0.16, 1, 0.3, 1), color 260ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-seg button:hover { background: rgb(255 255 255 / 0.05); color: #f4f4f7; } .ds-seg button[aria-pressed=true] { background: #1c1e28; color: #f4f4f7; } .ds-seg button:focus-visible { outline: 2px solid #ecedf2; outline-offset: 1px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Ink and Signal",
+    "overview": "The suite is migrating from Etched Glass (cool tinted glass, the blue accent, glows, a display face) to Ink and Signal. Ten feature sheets were rebuilt on it in the remakes merged on 2026-11-03: Stream Pacer, Resource Trackers, the Creaturedex, PF2e Odds, the stream view, Stage's Director, Theatre's apps, Mythic GME, Flatfinder and Destiny Dice (`docs/adr/0003` to `0011`). Since 2026-11-04 the system's values live once in core as the `--gl-is-*` family, and those ten sheets alias them (`docs/adr/0012`). Every other surface still runs Etched Glass and moves over feature by feature. **New work uses Ink and Signal. Etched Glass is legacy.** The one surface that keeps its own look when the migration ends is the Aegis campaign skin of the initiative rail and Combat Intro (`docs/adr/0001`).\n\nThe chrome is black ink, so it sits on a fantasy map, a horror one-shot or a sci-fi deck without picking a setting. Text is paper. Hue is a signal and nothing else: amber for a call, red for danger, green for good, ember for heat, info blue for a neutral shift, steel for the quiet and the negative. Because the chrome says nothing, the one thing that matters on a panel (the answer, the hand, the clock about to fill) can be the loudest thing on it without shouting. It still reads as GLUniverse through three things it keeps from the old system: the cut corner, the type, and the motion.\n\nDensity is a GM console's: small, tight, scannable, and everything a player or the stream reads mid-scene must still read at a glance.",
+    "keyCharacteristics": [
+      "A black-leaning neutral ink ramp (seven steps) with paper text.",
+      "Hue only where it means something, routed through one per-element tone variable.",
+      "Flat plates separated by tone steps and 1px inset hairlines, not borders or glows.",
+      "The chamfered bottom-right corner on plates and controls, the 115° wedge on tags.",
+      "Google Sans Flex for everything, a tabular technical face for numbers.",
+      "Five type sizes, nothing under 11px.",
+      "Motion from the suite's duration and easing tokens, always on."
+    ],
+    "rules": [
+      { "name": "The Signal Rule", "body": "A hue appears only when it means something. If removing the colour loses no information, the element is ink or paper.", "section": "colors" },
+      { "name": "The One Tone Rule", "body": "An element's hue is set once, through its feature's `--<prefix>-tone` on a scoped class or `data-tone`. Its edge, fill, text and chat card all read that one variable, so a retone is one class swap.", "section": "colors" },
+      { "name": "The No Violet Rule", "body": "Violet, cyan and the holographic accents of Etched Glass do not appear in Ink and Signal. They read as one setting, and violet for \"unknown\" spent a hue on the absence of information.", "section": "colors" },
+      { "name": "The Alias Rule", "body": "A feature skin aliases `--gl-is-*`; it never restates a ramp, tone or signal value. A hex in a skin that equals a core value is drift.", "section": "colors" },
+      { "name": "The Size-It-Yourself Rule", "body": "`.gl-btn` and Foundry leave a button's size to its host, so every control a feature ships declares its own font size. A button that inherits it renders at 14px in a chat log and larger on a sheet.", "section": "typography" },
+      { "name": "The Floor Rule", "body": "Nothing is set under 11px. Labels included. A player or the stream reads these panels mid-scene, and 9 or 10px text over a moving map is noise. Only icon glyphs may go smaller.", "section": "typography" },
+      { "name": "The No Glow Rule", "body": "Nothing glows at rest. Zero-offset coloured shadows, radial halos and bloom belong to Etched Glass and to the cinematic beats, not to panels.", "section": "elevation" }
+    ],
+    "dos": [
+      "**Do** build new UI in Ink and Signal, under the feature's own roots and prefix, never on `:root`.",
+      "**Do** alias `--gl-is-*` in a skin and read sizes, cuts and states straight from core (The Alias Rule).",
+      "**Do** route hue through one `--<prefix>-tone` per element (The One Tone Rule).",
+      "**Do** take every duration and easing from `--gl-d-*` and `--gl-ease*`, prefix your own keyframes with the feature's prefix, and write any blur against `--gl-glass-k`.",
+      "**Do** size every control in its own sheet, and size hairlines in device pixels.",
+      "**Do** keep faint text on `ink-0` to `ink-3`, and signal or steel text on `ink-0` to `ink-4`.",
+      "**Do** check new tokens on the specimen page (`/.preview/ink-signal.html`) on both grounds."
+    ],
+    "donts": [
+      "**Don't** start new work in Etched Glass, or mix its glass, glows and blue accent into a migrated surface.",
+      "**Don't** restate a core value in a skin, or set text under 11px (The Floor Rule).",
+      "**Don't** use violet, cyan or holographic accents (The No Violet Rule).",
+      "**Don't** put a hue on something that carries no meaning (The Signal Rule).",
+      "**Don't** glow at rest: no zero-offset coloured shadows, no radial halos on panels.",
+      "**Don't** nest plates.",
+      "**Don't** redeclare a foundation `--gl-*` token, add `@font-face`, or add a network `@import`.",
+      "**Don't** add `prefers-reduced-motion` handling. Motion always plays; the in-app motion tier is the user's control.",
+      "**Don't** rename an existing class prefix or i18n key while migrating a feature.",
+      "**Don't** migrate the Aegis skin. The initiative rail and Combat Intro keep it (ADR 0001)."
+    ]
+  }
+}
