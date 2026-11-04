@@ -16,22 +16,22 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :is(.glod-lines, .glod-badge, .glod-tag, .glod-inline, .glod-dialog, .glod-save-odds, .glod-dice-layer, .glod-obs-root, .glod-dexhint) {
-  /* the neutral ramp (design system: color.neutral, as Stream Pacer's skin) */
-  --glod-ink-0: #05060a;
-  --glod-ink-1: #0a0b11;
-  --glod-ink-3: #15171f;
-  --glod-ink-5: #272a36;
-  --glod-paper: #ecedf2;
-  --glod-dim: #b3b5c2;
-  --glod-faint: #6a6d7c;
-  --glod-rule: rgb(var(--gl-tint-light) / 0.1);
-  --glod-rule-strong: rgb(var(--gl-tint-light) / 0.18);
+  /* the neutral ramp, aliased from core Ink and Signal (docs/adr/0012) */
+  --glod-ink-0: var(--gl-is-ink-0);
+  --glod-ink-1: var(--gl-is-ink-1);
+  --glod-ink-3: var(--gl-is-ink-3);
+  --glod-ink-5: var(--gl-is-ink-5);
+  --glod-paper: var(--gl-is-paper);
+  --glod-dim: var(--gl-is-dim);
+  --glod-faint: var(--gl-is-faint);
+  --glod-rule: var(--gl-is-line);
+  --glod-rule-strong: var(--gl-is-line-strong);
 
   /* the four degrees */
-  --glod-c: #ffb020;
+  --glod-c: var(--gl-is-amber);
   --glod-s: var(--glod-paper);
   --glod-f: #5b5e6c;
-  --glod-cf: #ff4d5a;
+  --glod-cf: var(--gl-is-red);
   /* nothing known yet: a faint hatch, not a hue */
   --glod-x: color-mix(in oklab, var(--glod-paper) 38%, transparent);
 
@@ -42,12 +42,12 @@
   --glod-h-cf: 3px;
 
   /* chip tones */
-  --glod-good: #2fb672;
-  --glod-warn: #ff8a3d;
+  --glod-good: var(--gl-is-green);
+  --glod-warn: var(--gl-is-ember);
   --glod-bad: var(--glod-cf);
 
-  --glod-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
-  --glod-cut: 9px;
+  --glod-font: var(--gl-is-font);
+  --glod-cut: var(--gl-is-cut);
   /* `--glod-line` is NOT declared here: the badge layer sets it on each
      `.glod-line` from the line's own colour, and a declaration on `.glod-tag`
      (one of these roots) would override what it inherits. Read it with a
@@ -126,11 +126,11 @@
   color: var(--glod-paper);
   background: color-mix(in oklab, var(--glod-ink-1) 92%, transparent);
   box-shadow: inset 2px 0 0 var(--glod-line, var(--glod-paper)), 0 0 0 1px rgb(var(--gl-tint-dark) / 0.55), 0 2px 8px rgb(var(--gl-tint-dark) / 0.45);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-sm)), calc(100% - var(--gl-is-cut-sm)) 100%, 0 100%);
 }
 
 .glod-tag-n {
-  font-size: 13.5px;
+  font-size: var(--gl-is-t-lead);
   font-weight: 760;
   font-stretch: 112%;
   font-variant-numeric: tabular-nums;
@@ -138,7 +138,7 @@
 }
 
 .glod-tag-w {
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   color: var(--glod-dim);
 }
@@ -160,7 +160,7 @@
   place-items: center;
   padding: 0 6px;
   opacity: 0;
-  font-size: 11.5px;
+  font-size: var(--gl-is-t-body);
   font-weight: 760;
   font-stretch: 112%;
   color: var(--glod-ink-0);
@@ -228,7 +228,7 @@
   align-items: baseline;
   gap: 6px;
   min-width: 0;
-  font-size: 11.5px;
+  font-size: var(--gl-is-t-body);
   line-height: 1.1;
   white-space: nowrap;
 }
@@ -245,7 +245,7 @@
 
 .glod-ord {
   flex: none;
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   color: var(--glod-faint);
 }
@@ -286,7 +286,7 @@
 
 .glod-pct small {
   margin-left: 1px;
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   font-weight: 600;
   font-stretch: 100%;
   letter-spacing: 0;
@@ -299,7 +299,7 @@
 
 /* A range is two numbers: it steps down a size so the defence keeps its column. */
 .glod-badge[data-state="range"] .glod-pct { font-size: 23px; letter-spacing: -0.03em; }
-.glod-badge[data-state="range"] .glod-dc { font-size: 15px; }
+.glod-badge[data-state="range"] .glod-dc { font-size: var(--gl-is-t-title); }
 
 .glod-deg {
   display: flex;
@@ -307,7 +307,7 @@
   gap: 3px;
   min-width: 0;
   padding-bottom: 1px;
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 650;
   line-height: 1.05;
 }
@@ -333,7 +333,7 @@
 }
 
 .glod-dc small {
-  font-size: 10px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   font-stretch: 100%;
   color: var(--glod-faint);
@@ -408,7 +408,7 @@
   grid-template-columns: repeat(20, 1fr);
   gap: 2px;
   margin-top: -3px;
-  font-size: 9px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   line-height: 1;
   text-align: center;
@@ -422,7 +422,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 3px 10px;
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   line-height: 1.2;
 }
@@ -455,7 +455,7 @@
   gap: 2px 10px;
   padding-top: 7px;
   border-top: 1px dashed var(--glod-rule-strong);
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   line-height: 1.2;
   color: var(--glod-faint);
@@ -477,7 +477,7 @@
 }
 
 .glod-oor {
-  font-size: 11.5px;
+  font-size: var(--gl-is-t-body);
   font-weight: 600;
   color: var(--glod-faint);
 }
@@ -523,7 +523,7 @@
   gap: 2px;
   min-width: 26px;
   font-family: var(--glod-font);
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 720;
   line-height: 1;
   font-variant-numeric: tabular-nums;
