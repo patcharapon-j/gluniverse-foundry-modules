@@ -20,6 +20,26 @@ is about and the buttons that answer it. Highest priority first:
 | Mine | a player | Your own hand or hold, and your place in line. |
 | Campfire | everyone | A slow scene. Take your time. |
 
+Priority is drawn as scale, not only as order. The first lane that is not calm
+**leads**: it breaks out past the others, stands 64px tall and carries a wash of
+its tone. It does not run its text, it states it: a still headline (the title,
+and under it the count or the first phrase), with a countdown's clock moved into
+it as a 40px numeral and the whole plate filled with the tone and draining left
+to right. Every lane under it is a slim 38px row of the queue that keeps its
+running text. `band.js` sets `is-lead`; a leaving lead keeps it, so it exits at
+its own size. A calm lane (the campfire) never leads, except a call everyone
+answered, which keeps the stage with its Move on. When the clock, faces and
+actions leave a queue row's text too little room to read, the text hides and
+the tag and clock say it alone.
+
+The lead arrives as one hard wipe with its light on the edge and its headline
+rising out of it; a queue row only drops into its slot, and every lane opens and
+closes its slot so the stack slides instead of jumping. A few moments are played
+on the transition, never on arrival (a late joiner sees the state, not a
+celebration of it): a tally that moves knocks its number, everyone answering
+locks the faces in one after another, a countdown's clock knocks once a second
+in its last ten, and time up lands as a hit. Every length is in `MOTION`.
+
 **The HUD** is a small draggable panel. The GM's has the calls, the room (campfire
 and Dire Peril), the table with spotlight marks, and a footer to check in, lower
 every hand and reset the marks. A player's sits over the map all session, so it
@@ -147,8 +167,9 @@ node tools/clocks-pacer-motion-check.mjs
 node tools/pacer-preview.mjs && node tools/preview-server.mjs
 ```
 
-Then open `/.preview/pacer.html?scene=gm` (also `ready`, `player`, `checkin`,
-`peril`, `calm`; add `&live=1` to watch lanes arrive one by one). `peril`
+Then open `/.preview/pacer.html?scene=gm` (also `countdown`, `ready`, `player`,
+`checkin`, `peril`, `calm`; add `&live=1` to watch lanes arrive one by one).
+`moments` plays a 24 s GM session that runs every band moment once. `peril`
 replays the splash on a loop; `&at=<ms>` freezes it at that moment instead. The motion
 workshop's browser checks (`tools/templates/motion-preview.html`) cover the band's
 lane order and the splash. Nothing here proves the socket round trip, presence

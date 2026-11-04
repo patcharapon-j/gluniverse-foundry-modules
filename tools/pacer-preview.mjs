@@ -12,6 +12,7 @@
  * SERVE it: a file:// page does not execute its module script.
  *
  *   ?scene=gm        the GM mid-countdown: a red light, two hands, a hold
+ *   ?scene=countdown the GM mid-countdown with no lights raised: the clock leads the band
  *   ?scene=ready     the GM's ready check, half answered
  *   ?scene=player    a player asked by name to wrap up, during a campfire
  *   ?scene=checkin   a player's private check-in, over Dire Peril
@@ -22,6 +23,9 @@
  *   &field=0         (peril) the splash without its WebGL field
  *   ?scene=calm      the GM after everyone saw it: lanes at rest; Rue left with a hand up
  *   &live=1          lanes arrive one by one, so the motion can be watched
+ *   ?scene=moments   a scripted 24s GM session that plays every moment once: the
+ *                    tally knock, everyone locking in, the lead's wipe, the clock's
+ *                    knock and time-up hit, and a queue row promoted to lead
  *
  * `window.__pacer` exposes { set(scene), snapshot, band, hud } for headless use.
  */
@@ -90,6 +94,7 @@ try {
 
   const T0 = 1_000_000;
   let clock = T0;
+  const story = { call: 'ready', ready: ['seri', 'ash'], hands: [], cdAt: 0, cdEnds: 0 };
   const P = (status, at = 0, extra = {}) => ({ status, at, ...extra });
   const people = [
     { id: 'gm', name: 'Patch', isGM: true, active: true, color: '#e0e0e8' },
@@ -113,6 +118,16 @@ try {
       call: { id: 'cd', kind: 'countdown', at: T0 - 78000, ends: T0 + 42000 },
       presence: { kai: 'away', mo: 'idle' },
       safety: { show: true, lights: { kai: { light: 'red' }, ash: { light: 'yellow' } } }
+    }),
+    countdown: () => ({
+      me: { id: 'gm', isGM: true },
+      users: users({
+        seri: P('hand', T0 - 40000, { seen: { call: 'cd2', ack: true } }),
+        mo: P('hand', T0 - 9000, { seen: { call: 'cd2', ack: false } })
+      }),
+      call: { id: 'cd2', kind: 'countdown', at: T0 - 78000, ends: T0 + 42000 },
+      presence: { kai: 'away' },
+      safety: { show: true, lights: {} }
     }),
     ready: () => ({
       me: { id: 'gm', isGM: true },
@@ -145,6 +160,19 @@ try {
       mood: { id: 'pr', kind: 'peril', at: T0 },
       safety: { show: true }
     }),
+    // a scripted GM session that plays every moment once (see 'moments' in set)
+    moments: () => {
+      const ans = (id) => (story.ready.includes(id) ? { answer: { call: 'rc3', value: 'ready' } } : {});
+      const hand = (id) => (story.hands.includes(id) ? P('hand', T0 + story.hands.indexOf(id) * 1000) : P('engaged', 0, ans(id)));
+      return {
+        me: { id: 'gm', isGM: true },
+        users: users({ seri: hand('seri'), ash: hand('ash'), kai: hand('kai'), mo: hand('mo') }),
+        call: story.call === 'ready' ? { id: 'rc3', kind: 'ready', at: T0 }
+          : story.call === 'countdown' ? { id: 'cd3', kind: 'countdown', at: story.cdAt, ends: story.cdEnds }
+          : null,
+        safety: { show: true, lights: {} }
+      };
+    },
     calm: () => ({
       me: { id: 'gm', isGM: true },
       users: users({
@@ -216,9 +244,12 @@ try {
     document.documentElement.dataset.frozen = String(t);
   };
 
+  let beatTimers = [];
   const set = (name) => {
     scene = name;
     clearInterval(replay);
+    for (const t of beatTimers) clearTimeout(t);
+    beatTimers = [];
     if (name === 'peril') {
       const at = params.get('at');
       if (at !== null) {
@@ -235,6 +266,23 @@ try {
         replay = setInterval(peril, C.TIMING.perilStage + 1200);
       }
     }
+    if (name === 'moments') {
+      // The ready check fills (the tally knocks, then everyone locks in), a
+      // countdown takes the lead with a hand under it, knocks through its last
+      // seconds and hits zero, then the GM ends it and the hand is promoted.
+      Object.assign(story, { call: 'ready', ready: ['seri', 'ash'], hands: [] });
+      const beats = [
+        [1600, () => story.ready.push('kai')],
+        [3200, () => story.ready.push('mo')],
+        [5600, () => Object.assign(story, { call: 'countdown', cdAt: clock - 49000, cdEnds: clock + 11000 })],
+        [7200, () => story.hands.push('seri')],
+        [19200, () => { story.call = null; }],
+        [21600, () => story.hands.push('kai')]
+      ];
+      for (const [at, fn] of beats) beatTimers.push(setTimeout(() => { fn(); draw(); }, at));
+      draw();
+      return;
+    }
     if (params.get('live')) {
       let n = 0;
       const step = () => { draw(++n); if (n < 6) setTimeout(step, 900); };
@@ -242,7 +290,9 @@ try {
     } else draw();
   };
   set(scene);
-  setInterval(() => { clock += 1000; band.tick(clock); }, 1000);
+  // the controller redraws as the clock crosses a threshold (urgent, time up);
+  // the moments scene stands in for it with a redraw every second
+  setInterval(() => { clock += 1000; if (scene === 'moments') draw(); else band.tick(clock); }, 1000);
   window.__pacer = { set, snapshot, band, hud, M, R, peril, field };
 } catch (e) { report(e); }
 </script>
