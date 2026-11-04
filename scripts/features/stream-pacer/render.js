@@ -71,9 +71,22 @@ export function laneInnerHTML(lane, L, now = 0) {
   const progress = lane.clock && lane.clock.ends > lane.clock.at
     ? `<div class="sp-lane-progress" aria-hidden="true"><i data-sp-progress style="--sp-total:${lane.clock.ends - lane.clock.at}ms"></i></div>`
     : '';
+  // The lead's still headline, shown in place of the running text when this
+  // lane leads (the stylesheet picks one): the title, a subline (the count, or
+  // the first phrase) and, on a countdown, the clock itself. The lead hides the
+  // side's clock and count, so these stay readable; only the title is hidden,
+  // since the screen-reader span above already says it.
+  const sub = lane.count
+    ? `<small class="sp-lane-head-sub is-count">${esc(text(lane.count, L))}</small>`
+    : (lane.ticker[0] ? `<small class="sp-lane-head-sub">${esc(text(lane.ticker[0], L))}</small>` : '');
+  const headClock = lane.clock
+    ? `<span class="sp-lane-head-clock" data-sp-clock data-ends="${esc(lane.clock.ends)}">${esc(clockText(Math.ceil((lane.clock.ends - now) / 1000)))}</span>`
+    : '';
+  const headline = `<span class="sp-lane-headline${lane.clock ? ' has-clock' : ''}">${headClock}`
+    + `<span class="sp-lane-head-text"><b class="sp-lane-head-title" aria-hidden="true">${esc(title)}</b>${sub}</span></span>`;
   return `<div class="sp-lane-plate">`
     + `<div class="sp-lane-tag"><i class="${esc(lane.icon)}" aria-hidden="true"></i><span class="sp-lane-label">${esc(label)}</span></div>`
-    + `<div class="sp-lane-body"><span class="sp-sr">${esc(title)}</span>${tickerHTML(phrases)}</div>`
+    + `<div class="sp-lane-body"><span class="sp-sr">${esc(title)}</span>${headline}${tickerHTML(phrases)}</div>`
     + `<div class="sp-lane-side">${clock}${count}${people}</div>`
     + actions
     + `<i class="sp-lane-sweep" aria-hidden="true"></i>`

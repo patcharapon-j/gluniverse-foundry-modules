@@ -169,6 +169,10 @@
 #sp-band .sp-lane {
   position: relative;
   pointer-events: auto;
+  /* a lane promoted to lead grows into place rather than jumping. Sides only:
+     band.js moves margin-bottom itself as a lane opens or closes its slot, and
+     a transition on it would chase every frame of that. */
+  transition: margin-left var(--gl-d-swift) var(--gl-ease), margin-right var(--gl-d-swift) var(--gl-ease);
 }
 #sp-band .sp-lane.is-leaving { pointer-events: none; }
 
@@ -177,8 +181,9 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: stretch;
-  min-height: 46px;
+  min-height: 38px;
   overflow: hidden;
+  transition: min-height var(--gl-d-swift) var(--gl-ease);
   background:
     linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.045), transparent 60%),
     color-mix(in oklab, var(--sp-ink-1) 94%, transparent);
@@ -203,19 +208,19 @@
 #sp-band .sp-lane-tag {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 0 calc(var(--sp-wedge) + 12px) 0 16px;
+  gap: 8px;
+  padding: 0 calc(var(--sp-wedge) + 10px) 0 14px;
   background: var(--sp-tone);
   color: var(--sp-on);
   clip-path: polygon(0 0, 100% 0, calc(100% - var(--sp-wedge)) 100%, 0 100%);
-  font-size: var(--gl-is-t-body);
+  font-size: var(--gl-is-t-meta);
   font-weight: 750;
   font-stretch: 116%;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   white-space: nowrap;
 }
-#sp-band .sp-lane-tag i { font-size: var(--gl-is-t-title); }
+#sp-band .sp-lane-tag i { font-size: var(--gl-is-t-body); }
 
 /* the running text */
 #sp-band .sp-lane-body {
@@ -227,7 +232,14 @@
   overflow: hidden;
   mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent);
 }
+#sp-band .sp-lane-body { container: sp-body / inline-size; }
 #sp-band .sp-ticker { width: 100%; overflow: hidden; }
+/* A sliver of running text reads as broken, not as running. When the clock,
+   faces and actions leave the text less room than one short phrase, the lane
+   says it with its tag and its clock alone. The text stays for screen readers. */
+@container sp-body (width < 140px) {
+  #sp-band .sp-ticker { visibility: hidden; }
+}
 #sp-band .sp-ticker-track {
   display: flex;
   width: max-content;
@@ -235,8 +247,8 @@
 }
 #sp-band .sp-ticker-copy { display: flex; align-items: center; flex: none; }
 #sp-band .sp-tick {
-  padding: 0 16px;
-  font-size: 16px;
+  padding: 0 14px;
+  font-size: var(--gl-is-t-title);
   font-weight: 650;
   font-stretch: 104%;
   letter-spacing: 0.005em;
@@ -245,15 +257,17 @@
 }
 #sp-band .sp-tick-sep {
   flex: none;
-  width: 7px;
-  height: 12px;
+  width: 6px;
+  height: 10px;
   background: var(--sp-tone);
   transform: skewX(-25deg);
   opacity: 0.85;
 }
 #sp-band .sp-lane.is-calm .sp-tick { color: var(--sp-dim); }
 #sp-band .sp-lane.is-calm .sp-tick-sep { opacity: 0.4; }
-#sp-band .sp-lane.is-calm .sp-lane-tag { background: color-mix(in oklab, var(--sp-tone) 72%, var(--sp-ink-3)); }
+/* softened, never past 4.5:1 for the dark label on it: 86% is the floor for
+   the darkest tones (red 4.9:1, steel 5.0:1) */
+#sp-band .sp-lane.is-calm .sp-lane-tag { background: color-mix(in oklab, var(--sp-tone) 86%, var(--sp-ink-3)); }
 
 /* clock, count, faces */
 #sp-band .sp-lane-side {
@@ -265,7 +279,7 @@
 #sp-band .sp-lane-side:empty { display: none; }
 #sp-band .sp-lane-clock {
   min-width: 3.4ch;
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 760;
   font-stretch: 120%;
   font-variant-numeric: tabular-nums;
@@ -274,7 +288,7 @@
   text-align: right;
 }
 #sp-band .sp-lane-count {
-  font-size: var(--gl-is-t-body);
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   font-stretch: 112%;
   letter-spacing: 0.05em;
@@ -283,6 +297,7 @@
   white-space: nowrap;
 }
 #sp-band .sp-people { display: flex; gap: 4px; }
+#sp-band .sp-people .sp-face { width: 20px; height: 20px; font-size: var(--gl-is-t-meta); }
 
 /* actions */
 #sp-band .sp-lane-actions {
@@ -326,23 +341,133 @@
   animation-delay: calc(var(--sp-elapsed, 0ms) * -1);
 }
 
+/* ── the lead lane ──
+   Priority is scale, not only order. Every lane above is drawn as a slim row
+   of the queue; the lead (band.js sets `is-lead` on the first lane that is not
+   calm) is the one thing the table must read right now. It breaks out past the
+   queue, stands taller, runs its text at display size, shows its clock as a
+   numeral you can read across a room, and drains a bar you can see. A stack of
+   four then reads as one call and its queue, not a wall of equal bars. A calm
+   lane (the campfire) never leads, so it stays quiet even when it is alone. */
+#sp-band .sp-lane.is-lead {
+  /* up to 40px past the queue a side, never past the 16px viewport gutter */
+  --sp-lead-out: min(40px, max(0px, (100vw - 872px) / 2));
+  margin: 0 calc(var(--sp-lead-out) * -1) 4px;
+}
+/* Filled: the lead carries its tone across the plate, strongest behind the
+   headline and gone by the actions, and its top edge is lit in it. */
+#sp-band .sp-lane.is-lead .sp-lane-plate {
+  min-height: 64px;
+  border-top-color: color-mix(in oklab, var(--sp-tone) 70%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--sp-tone) 20%, transparent), color-mix(in oklab, var(--sp-tone) 7%, transparent) 55%, transparent 90%),
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.045), transparent 60%),
+    color-mix(in oklab, var(--sp-ink-1) 94%, transparent);
+}
+#sp-band .sp-lane.is-lead .sp-lane-tag {
+  gap: 11px;
+  padding: 0 calc(var(--sp-wedge) + 16px) 0 20px;
+  font-size: var(--gl-is-t-lead);
+}
+#sp-band .sp-lane.is-lead .sp-lane-tag i { font-size: 18px; }
+#sp-band .sp-lane.is-lead .sp-lane-side { gap: 14px; padding-left: 16px; }
+#sp-band .sp-lane.is-lead .sp-btn { height: 34px; padding: 0 15px; font-size: var(--gl-is-t-body); }
+#sp-band .sp-lane.is-lead .sp-btn i { font-size: var(--gl-is-t-body); }
+#sp-band .sp-lane.is-lead .sp-people .sp-face { width: 24px; height: 24px; font-size: var(--gl-is-t-body); }
+
+/* The lead does not run its text: it states it. A still headline (the title,
+   and under it the count or the first phrase) takes the running text's place,
+   and a countdown's clock moves into it, so the number and what it is for are
+   read together. The queue keeps running its text. */
+#sp-band .sp-lane-headline { display: none; }
+#sp-band .sp-lane.is-lead .sp-lane-body { mask-image: none; }
+#sp-band .sp-lane.is-lead .sp-ticker,
+#sp-band .sp-lane.is-lead .sp-lane-side :is(.sp-lane-clock, .sp-lane-count) { display: none; }
+#sp-band .sp-lane.is-lead .sp-lane-headline {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 0 12px 0 calc(var(--sp-wedge) * 0.5 + 16px);
+}
+#sp-band .sp-lane-head-clock {
+  flex: none;
+  font-size: 40px;
+  font-weight: 780;
+  font-stretch: 120%;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--sp-tone);
+}
+#sp-band .sp-lane-head-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+#sp-band .sp-lane-head-title,
+#sp-band .sp-lane-head-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#sp-band .sp-lane-head-title {
+  font-size: var(--gl-is-t-display);
+  font-weight: 700;
+  font-stretch: 104%;
+  letter-spacing: -0.005em;
+  line-height: 1.1;
+  color: var(--sp-text);
+}
+/* beside a clock the number is the headline; the title says what it counts */
+#sp-band .sp-lane-headline.has-clock .sp-lane-head-title { font-size: var(--gl-is-t-title); }
+#sp-band .sp-lane-head-sub {
+  font-size: var(--gl-is-t-body);
+  font-weight: 550;
+  line-height: 1.3;
+  color: var(--sp-dim);
+}
+#sp-band .sp-lane-head-sub.is-count {
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  font-stretch: 112%;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sp-text);
+}
+/* too narrow for words: the clock (or nothing) and the tag carry it */
+@container sp-body (width < 120px) {
+  #sp-band .sp-lane-head-text { display: none; }
+}
+
+/* A countdown drains the whole lead, not a hairline: the plate is filled with
+   its tone and the fill runs out left to right, over a 4px edge you can still
+   read when the wash is faint. One element, so it still drains on the compositor. */
+#sp-band .sp-lane.is-lead .sp-lane-progress {
+  inset: 0;
+  height: auto;
+  background: none;
+  pointer-events: none;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--sp-cut)), calc(100% - var(--sp-cut)) 100%, 0 100%);
+}
+#sp-band .sp-lane.is-lead .sp-lane-progress i {
+  background: linear-gradient(0deg, var(--sp-tone) 0 4px, color-mix(in oklab, var(--sp-tone) 15%, transparent) 4px);
+}
+
 /* ═══ Buttons (lanes) ══════════════════════════════════════════════════════ */
 
 #sp-band .sp-btn {
-  height: 30px;
-  padding: 0 13px;
-  font-size: var(--gl-is-t-body);
+  height: 26px;
+  padding: 0 11px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   font-stretch: 112%;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
 }
-#sp-band .sp-btn i { font-size: var(--gl-is-t-body); }
+#sp-band .sp-btn i { font-size: var(--gl-is-t-meta); }
 #sp-band .sp-btn-primary {
   background: var(--sp-tone);
   color: var(--sp-on);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-sm)), calc(100% - var(--gl-is-cut-sm)) 100%, 0 100%);
 }
 #sp-band .sp-btn-ghost {
   color: var(--sp-dim);
@@ -362,7 +487,9 @@
   color: var(--sp-dim);
   box-shadow: inset 0 0 0 1px var(--sp-line-strong);
 }
-#sp-band .sp-btn-lamp .sp-lamp-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--sp-lamp); box-shadow: 0 0 10px var(--sp-lamp); }
+#sp-band .sp-btn-lamp .sp-lamp-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--sp-lamp); }
+/* only the lamp that is on is lit */
+#sp-band .sp-btn-lamp.is-pressed .sp-lamp-dot { box-shadow: 0 0 10px var(--sp-lamp); }
 #sp-band .sp-btn-lamp.is-pressed { background: color-mix(in oklab, var(--sp-lamp) 22%, var(--sp-ink-2)); color: var(--sp-text); box-shadow: inset 0 0 0 1px var(--sp-lamp); }
 @media (hover: hover) and (pointer: fine) {
   #sp-band .sp-btn-lamp:hover { color: var(--sp-text); box-shadow: inset 0 0 0 1px var(--sp-lamp); }
@@ -636,11 +763,11 @@
   height: 9px;
   border-radius: 50%;
   background: var(--sp-l);
-  box-shadow: 0 0 8px var(--sp-l);
 }
 #stream-pacer-hud .sp-light-green { --sp-l: var(--sp-green); }
 #stream-pacer-hud .sp-light-yellow { --sp-l: var(--sp-amber); }
-#stream-pacer-hud .sp-light-red { --sp-l: var(--sp-red); animation: sp-breathe var(--gl-d-slow) var(--gl-ease-inout) infinite alternate; }
+/* a red light is the one that glows: it is urgent, and it breathes */
+#stream-pacer-hud .sp-light-red { --sp-l: var(--sp-red); box-shadow: 0 0 8px var(--sp-l); animation: sp-breathe var(--gl-d-slow) var(--gl-ease-inout) infinite alternate; }
 
 #stream-pacer-hud .sp-presence {
   width: 6px;

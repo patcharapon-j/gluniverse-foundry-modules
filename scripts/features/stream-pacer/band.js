@@ -9,13 +9,20 @@
 // Reads no `game`: the preview page drives this file as shipped.
 
 import { animate, createMotionOwner, createTimeline, motionDuration, stagger } from '../../core/motion.mjs';
-import { laneInnerHTML, laneClass, laneSignature } from './render.js';
+import { laneInnerHTML, laneClass, laneSignature, text } from './render.js';
 import { clockText } from './model.js';
 import { MOTION, TIMING } from './const.js';
 
 const EASE_OUT = 'outExpo';
 // exits are short and decelerate too: an ease-in exit reads as a stall
 const EASE_EXIT = 'outCubic';
+
+/** A call everyone answered: the ready check all ready, the check-in all in. */
+const isComplete = (lane) => (lane.kind === 'call' && lane.call === 'ready' && lane.tone === 'green')
+  || (lane.kind === 'checkin' && lane.calm);
+const leadOf = (lanes) => lanes.find((l) => !l.calm || isComplete(l)) ?? null;
+// the flex gap between lanes (#sp-band .sp-lanes); a lane opening or closing its slot moves by its height plus this
+const LANE_GAP = 6;
 
 export class SignalBand {
   /**
@@ -51,6 +58,12 @@ export class SignalBand {
   /** Draw these lanes. `now` is server time (ms). */
   update(lanes, now) {
     const seen = new Set();
+    const fresh = new Set();
+    // The lead is the first lane that is not calm: the one thing the table must
+    // read right now, drawn taller than the queue under it. A calm lane never
+    // leads, except a call everyone answered: that is the payoff, and "Move on"
+    // is the GM's next click, so it keeps the stage it earned.
+    const lead = leadOf(lanes)?.key ?? null;
     let before = null;
     // walk in reverse so each lane can be inserted before the one after it
     for (let i = lanes.length - 1; i >= 0; i--) {
@@ -60,7 +73,8 @@ export class SignalBand {
       const sig = laneSignature(lane, this.L);
       if (!item || item.leaving) {
         if (item?.leaving) this._drop(lane.key);
-        item = this._create(lane, now, sig);
+        item = this._create(lane, now, sig, lane.key === lead);
+        fresh.add(lane.key);
       } else {
         if (item.sig !== sig) {
           item.el.className = laneClass(lane);
@@ -78,7 +92,48 @@ export class SignalBand {
       before = item.el;
     }
     for (const [key, item] of this.items) if (!seen.has(key) && !item.leaving) this._leave(key);
-    this._aura(lanes);
+    // `is-lead` is set after any re-render (which rewrites className), and never
+    // on a leaving lane, so a lane exits at the size it had. `item.lead`
+    // remembers it across that rewrite, so a promotion is told from a re-render.
+    for (const [key, item] of this.items) {
+      if (item.leaving) continue;
+      const leads = key === lead;
+      item.el.classList.toggle('is-lead', leads);
+      if (leads && !item.lead && !fresh.has(key)) this._promote(item);
+      item.lead = leads;
+    }
+    // the moments, each played on the transition and never on arrival: a late
+    // joiner sees the state, not a celebration of something that happened
+    // before they looked
+    for (const lane of lanes) {
+      const item = this.items.get(lane.key);
+      if (!item || item.leaving) continue;
+      const expired = !!lane.clock && now >= lane.clock.ends;
+      const done = isComplete(lane);
+      const count = lane.count ? text(lane.count, this.L) : '';
+      if (!fresh.has(lane.key)) {
+        if (expired && !item.expired) this._hit(item);
+        if (done && !item.done) this._lockIn(item);
+        else if (count && item.count && count !== item.count) this._countKnock(item);
+      }
+      item.expired = expired;
+      item.done = done;
+      item.count = count;
+    }
+    // A new lane opens its slot rather than shoving the lanes under it down in
+    // one frame: it starts with its height pulled out of the flow and lets it go.
+    // Skipped when it is the only lane, where nothing would move.
+    if (fresh.size && this.items.size > fresh.size) {
+      for (const key of fresh) {
+        const el = this.items.get(key).el;
+        const rest = getComputedStyle(el).marginBottom;
+        this.items.get(key).motion.add(animate(el, {
+          marginBottom: [`${-(el.offsetHeight + LANE_GAP)}px`, rest], duration: motionDuration(MOTION.slot, this.root), ease: EASE_OUT,
+          onComplete: () => el.style.removeProperty('margin-bottom')
+        }));
+      }
+    }
+    this._aura(lanes, lead);
     this.tick(now);
   }
 
@@ -87,7 +142,14 @@ export class SignalBand {
     for (const el of this.list.querySelectorAll('[data-sp-clock]')) {
       const ends = Number(el.dataset.ends);
       const t = clockText(Math.ceil((ends - now) / 1000));
-      if (el.textContent !== t) el.textContent = t;
+      if (el.textContent === t) continue;
+      el.textContent = t;
+      // in its last seconds the clock knocks once a second, the beat the tick
+      // sound plays on (the second turning, not a loop of its own)
+      const laneEl = el.closest('.sp-lane');
+      if (!laneEl?.classList.contains('is-urgent') || laneEl.classList.contains('is-leaving') || ends <= now) continue;
+      const item = this.items.get(laneEl.dataset.key);
+      item?.motion.add(animate(el, { scale: [1.16, 1], duration: motionDuration(MOTION.knock, this.root), ease: EASE_EXIT }));
     }
   }
 
@@ -112,32 +174,83 @@ export class SignalBand {
 
   /* ── internals ── */
 
-  _create(lane, now, sig) {
+  _create(lane, now, sig, lead) {
     const el = document.createElement('section');
     el.className = laneClass(lane);
+    if (lead) el.classList.add('is-lead');
     el.dataset.key = lane.key;
     el.setAttribute('role', 'status');
     el.innerHTML = laneInnerHTML(lane, this.L, now);
-    const item = { el, sig, stamp: lane.stamp, motion: createMotionOwner(), leaving: false };
+    const item = { el, sig, stamp: lane.stamp, motion: createMotionOwner(), leaving: false, lead };
     this.items.set(lane.key, item);
     this._syncProgress(el, lane, now);
-    // arrival: the lane drops out of the top edge and wipes open left to right.
-    // The wipe clips the lane root, never the plate: the plate's chamfer is a
-    // clip-path of its own, and the finished wipe leaves no clip behind.
     const d = (ms) => motionDuration(ms, this.root);
-    item.motion.add(animate(el, {
-      opacity: { to: [0, 1], duration: d(MOTION.laneIn) },
-      translateY: { to: ['-18px', '0px'], duration: d(MOTION.laneIn) },
-      clipPath: { to: ['inset(0% 100% 0% 0%)', 'inset(0% 0% 0% 0%)'], duration: d(MOTION.laneWipe) },
-      ease: EASE_OUT,
-      onComplete: () => el.style.removeProperty('clip-path')
-    }));
     const tag = el.querySelector('.sp-lane-tag');
-    if (tag) item.motion.add(animate(tag, { translateX: ['-24px', '0px'], duration: d(MOTION.laneIn), delay: d(MOTION.laneTagDelay), ease: EASE_OUT }));
     const sweep = el.querySelector('.sp-lane-sweep');
-    if (sweep) item.motion.add(animate(sweep, { translateX: ['-120%', '420%'], opacity: [0, 1, 0], duration: d(MOTION.sweep), delay: d(MOTION.sweepDelay), ease: 'inOutQuad' }));
-    this._auraFlare();
+    if (lead) {
+      // The lead arrives as one hard wipe, left to right, with its light riding
+      // the open edge, then its headline rises out of it. The wipe clips the
+      // lane root, never the plate: the plate's chamfer is a clip-path of its
+      // own, and the finished wipe leaves no clip behind.
+      item.motion.add(animate(el, {
+        opacity: { to: [0, 1], duration: d(MOTION.leadWipe) / 2 },
+        clipPath: { to: ['inset(0% 100% 0% 0%)', 'inset(0% 0% 0% 0%)'], duration: d(MOTION.leadWipe) },
+        ease: EASE_OUT,
+        onComplete: () => el.style.removeProperty('clip-path')
+      }));
+      if (tag) item.motion.add(animate(tag, { translateX: ['-24px', '0px'], duration: d(MOTION.laneIn), ease: EASE_OUT }));
+      if (sweep) item.motion.add(animate(sweep, { translateX: ['-120%', '420%'], opacity: [1, 1, 0], duration: d(MOTION.leadWipe) * 1.4, ease: EASE_OUT }));
+      this._rise(item, d(MOTION.leadRiseDelay));
+      this._auraFlare();
+    } else {
+      // a queue row only drops into its slot: the lead has the stage
+      item.motion.add(animate(el, { opacity: [0, 1], translateY: ['-10px', '0px'], duration: d(MOTION.queueIn), ease: EASE_OUT }));
+    }
     return item;
+  }
+
+  /** The headline rises into place: on a lead's arrival and on a promotion. */
+  _rise(item, delay = 0) {
+    const head = item.el.querySelector('.sp-lane-headline');
+    if (head) item.motion.add(animate(head, { opacity: [0, 1], translateY: ['10px', '0px'], duration: motionDuration(MOTION.leadRise, this.root), delay, ease: EASE_OUT }));
+  }
+
+  /** A queue row that becomes the lead: it grows into place (CSS), its headline rises and its light crosses once. */
+  _promote(item) {
+    this._rise(item);
+    const sweep = item.el.querySelector('.sp-lane-sweep');
+    if (sweep) item.motion.add(animate(sweep, { translateX: ['-120%', '420%'], opacity: [0, 1, 0], duration: motionDuration(MOTION.promote, this.root) * 2, ease: 'inOutQuad' }));
+    this._auraFlare();
+  }
+
+  /** Time up: the clock reaches zero and the lane takes the hit, once. */
+  _hit(item) {
+    const d = (ms) => motionDuration(ms, this.root);
+    const plate = item.el.querySelector('.sp-lane-plate');
+    if (plate) item.motion.add(animate(plate, { translateX: ['0px', '-7px', '6px', '-3px', '0px'], duration: d(MOTION.hit), ease: 'outQuad' }));
+    for (const clock of item.el.querySelectorAll('[data-sp-clock]')) item.motion.add(animate(clock, { scale: [1.3, 1], duration: d(MOTION.hit), ease: EASE_OUT }));
+    this.flare(item.el.dataset.key);
+  }
+
+  /**
+   * Everyone answered: the faces lock in left to right, the way the answers
+   * came together, the new mark on the tag lands, and the light crosses once.
+   * Sized for something that happens a few times a session, not every click.
+   */
+  _lockIn(item) {
+    const d = (ms) => motionDuration(ms, this.root);
+    const faces = item.el.querySelectorAll('.sp-people .sp-face');
+    if (faces.length) item.motion.add(animate(faces, { scale: [1, 1.28, 1], translateY: ['0px', '-3px', '0px'], duration: d(MOTION.lockIn), delay: stagger(d(MOTION.lockInStagger)), ease: 'outQuad' }));
+    const icon = item.el.querySelector('.sp-lane-tag i');
+    if (icon) item.motion.add(animate(icon, { scale: [0.4, 1.2, 1], rotate: ['-30deg', '0deg'], duration: d(MOTION.lockIn), ease: EASE_OUT }));
+    this.flare(item.el.dataset.key);
+  }
+
+  /** A tally that moved: the number knocks, so a glance catches the change. */
+  _countKnock(item) {
+    for (const el of item.el.querySelectorAll('.sp-lane-count, .sp-lane-head-sub.is-count')) {
+      item.motion.add(animate(el, { scale: [1.14, 1], duration: motionDuration(MOTION.countKnock, this.root), ease: EASE_EXIT }));
+    }
   }
 
   _leave(key) {
@@ -145,8 +258,12 @@ export class SignalBand {
     if (!item) return;
     item.leaving = true;
     item.el.classList.add('is-leaving');
+    const d = (ms) => motionDuration(ms, this.root);
+    item.motion.add(animate(item.el, { opacity: [1, 0], translateY: ['0px', '-12px'], duration: d(MOTION.laneOut), ease: EASE_EXIT }));
+    // and closes its slot, so the lanes under it slide up instead of jumping
     item.motion.add(animate(item.el, {
-      opacity: [1, 0], translateY: ['0px', '-12px'], duration: motionDuration(MOTION.laneOut, this.root), ease: EASE_EXIT,
+      marginBottom: [getComputedStyle(item.el).marginBottom, `${-(item.el.offsetHeight + LANE_GAP)}px`],
+      duration: d(MOTION.slot), ease: EASE_EXIT,
       onComplete: () => this._drop(key)
     }));
   }
@@ -167,8 +284,8 @@ export class SignalBand {
     bar.style.setProperty('--sp-elapsed', `${elapsed}ms`);
   }
 
-  _aura(lanes) {
-    const top = lanes.find((l) => !l.calm) ?? lanes[0] ?? null;
+  _aura(lanes, leadKey = null) {
+    const top = lanes.find((l) => l.key === leadKey) ?? lanes[0] ?? null;
     const a = this.aura;
     const tone = top ? top.tone : 'none';
     if (a.dataset.tone !== tone) {

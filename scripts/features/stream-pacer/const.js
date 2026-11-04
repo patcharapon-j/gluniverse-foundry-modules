@@ -123,15 +123,24 @@ export const TIMING = Object.freeze({
  * as shares of TIMING.perilStage.
  */
 export const MOTION = Object.freeze({
-  laneIn: 540,        // a lane drops in
-  laneWipe: 620,      // and wipes open along the cut
-  laneTagDelay: 60,
-  sweep: 1100,        // the light that crosses a new lane once
-  sweepDelay: 180,
-  flareSweep: 900,    // the same light, on a flare
+  laneIn: 540,        // the lead's tag slides in behind its wipe
+  flareSweep: 900,    // the light that crosses a lane on a flare
   flarePulse: 420,
   laneOut: 260,
+  slot: 380,          // a lane opening or closing its slot in the stack
   aura: 1400,         // the aura's flare behind the band
+  // the lead: it arrives as one hard wipe with its light riding the edge; a
+  // queue row only slides in
+  leadWipe: 420,
+  leadRise: 460,      // the headline rises out of the wipe
+  leadRiseDelay: 120,
+  queueIn: 320,
+  promote: 420,       // a queue row that becomes the lead
+  knock: 280,         // the clock's knock, once a second in its last seconds
+  hit: 480,           // time up: the lead takes the hit
+  lockIn: 560,        // everyone answered: the faces lock in one after another
+  lockInStagger: 70,
+  countKnock: 320,    // a tally that moves (2/4 to 3/4)
   // the Dire Peril title: one authored rhythm, whatever the words' lengths
   perilLine1At: 820,       // "Dire" starts landing
   perilLine2At: 1220,      // "Peril" starts landing

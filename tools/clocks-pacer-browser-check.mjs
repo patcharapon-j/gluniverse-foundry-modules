@@ -61,6 +61,30 @@ export async function runClocksPacerBrowserChecks() {
   assert(order().join() === 'b,d,c', 'band inserts, keeps and drops lanes in order');
   band.update([lane('e', 'safety'), lane('c', 'hands'), lane('b', 'call')], 0);
   assert(order().join() === 'e,c,b', 'band reorders kept lanes');
+  // The lead is drawn taller than the queue. Exactly one live lane leads, a
+  // re-render (which rewrites className) keeps it, a leaving lead exits at its
+  // size, and a calm lane never leads, even alone.
+  const leads = () => Array.from(band.list.querySelectorAll('.sp-lane.is-lead:not(.is-leaving)'), (el) => el.dataset.key);
+  assert(leads().join() === 'e', 'band leads with the first lane');
+  band.update([{ ...lane('e', 'safety'), title: { raw: 'e2' } }, lane('c', 'hands'), lane('b', 'call')], 0);
+  assert(leads().join() === 'e', 'band keeps the lead across a re-render');
+  const calm = { ...lane('f', 'mood'), calm: true };
+  band.update([lane('c', 'hands'), calm], 0);
+  assert(band.items.get('e').el.classList.contains('is-lead'), 'band lets a leaving lead exit at its size');
+  assert(leads().join() === 'c', 'band promotes the next lane to lead');
+  band.update([calm], 0);
+  assert(leads().length === 0, 'band never leads with a calm lane');
+  // except a call everyone answered: the payoff keeps the stage it earned
+  const answered = { ...lane('g', 'call'), call: 'ready', tone: 'green', calm: true };
+  band.update([answered, calm], 0);
+  assert(leads().join() === 'g', 'band leads with a call everyone answered');
+  // the lead states its title instead of running it, and its clock moves into the headline
+  const clocked = { ...lane('h', 'call'), call: 'countdown', clock: { at: 0, ends: 60000 }, count: { raw: '2/4' } };
+  band.update([clocked, calm], 0);
+  const lead = band.items.get('h').el;
+  assert(getComputedStyle(lead.querySelector('.sp-ticker')).display === 'none' && getComputedStyle(lead.querySelector('.sp-lane-headline')).display !== 'none', 'band lead shows its headline, not its ticker');
+  assert(lead.querySelector('.sp-lane-headline [data-sp-clock]')?.textContent === '1:00', 'band lead carries its clock in the headline');
+  assert(getComputedStyle(band.items.get('f').el.querySelector('.sp-lane-headline')).display === 'none', 'band queue rows keep their running text');
   band.destroy();
   assert(!document.getElementById('sp-band'), 'band destroy removes its root');
   return checks;
