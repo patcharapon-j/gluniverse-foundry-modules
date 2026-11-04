@@ -14,22 +14,22 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :is(.glddf-fate-strip, .glddf-fated-roll-row, .glddf-cfg) {
-  --glddf-ink-0: #05060a;
-  --glddf-ink-1: #0a0b11;
-  --glddf-ink-2: #101219;
-  --glddf-ink-3: #15171f;
-  --glddf-ink-5: #272a36;
-  --glddf-paper: #ecedf2;
-  --glddf-dim: #b3b5c2;
-  --glddf-faint: #6a6d7c;
-  --glddf-rule: rgb(var(--gl-tint-light) / 0.1);
-  --glddf-rule-strong: rgb(var(--gl-tint-light) / 0.18);
+  --glddf-ink-0: var(--gl-is-ink-0);
+  --glddf-ink-1: var(--gl-is-ink-1);
+  --glddf-ink-2: var(--gl-is-ink-2);
+  --glddf-ink-3: var(--gl-is-ink-3);
+  --glddf-ink-5: var(--gl-is-ink-5);
+  --glddf-paper: var(--gl-is-paper);
+  --glddf-dim: var(--gl-is-dim);
+  --glddf-faint: var(--gl-is-faint);
+  --glddf-rule: var(--gl-is-line);
+  --glddf-rule-strong: var(--gl-is-line-strong);
   --glddf-tone: var(--glddf-dim);
   --glddf-commit: var(--gl-signal);
-  --glddf-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
+  --glddf-font: var(--gl-is-font);
   --glddf-num: var(--gl-display);
-  --glddf-cut: 8px;
-  --glddf-cut-sm: 5px;
+  --glddf-cut: var(--gl-is-cut);
+  --glddf-cut-sm: var(--gl-is-cut-sm);
 }
 
 /* The preset's tones. Every tone a preset names in constants.mjs has a rule
@@ -107,7 +107,7 @@
 }
 
 .glddf-fate-kicker {
-  font-size: 10px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -120,7 +120,7 @@
   align-items: baseline;
   gap: 6px;
   min-width: 0;
-  font-size: 15px;
+  font-size: var(--gl-is-t-title);
   font-weight: 600;
   color: var(--glddf-paper);
   overflow: hidden;
@@ -133,7 +133,7 @@
   align-items: center;
   gap: 5px;
   margin-top: 2px;
-  font-size: 11.5px;
+  font-size: var(--gl-is-t-body);
   color: var(--glddf-dim);
   white-space: nowrap;
 }
@@ -177,7 +177,7 @@
 .glddf-fate-strip.glddf-refused { --glddf-tone: var(--glddf-faint); background: var(--glddf-ink-1); }
 .glddf-fate-strip.glddf-refused .glddf-fate-name { color: var(--glddf-faint); text-decoration: line-through; }
 .glddf-fate-tag {
-  font-size: 9.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -204,7 +204,7 @@
   padding: 4px 10px 4px 6px;
   box-sizing: border-box;
   font-family: var(--glddf-font);
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   font-weight: 600;
   color: var(--glddf-dim);
   background: var(--glddf-ink-1);
@@ -279,7 +279,7 @@
   gap: 10px;
   padding: 14px 16px 14px;
   font-family: var(--glddf-font);
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   color: var(--glddf-paper);
   background: var(--glddf-ink-0);
 }
@@ -293,7 +293,7 @@
 .glddf-cfg-head p { margin: 0; color: var(--glddf-dim); line-height: 1.45; max-width: 46ch; }
 
 .glddf-cfg-label {
-  font-size: 10px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -321,7 +321,7 @@
 .glddf-cfg-face { display: flex; align-items: center; gap: 8px; }
 .glddf-cfg-num {
   font-family: var(--glddf-num);
-  font-size: 15px;
+  font-size: var(--gl-is-t-title);
   font-weight: 600;
   color: var(--glddf-dim);
   font-variant-numeric: tabular-nums;
@@ -335,7 +335,7 @@
 .glddf-cfg-kind span {
   display: block;
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   font-weight: 600;
   color: var(--glddf-faint);
   white-space: nowrap;
@@ -357,7 +357,7 @@
   padding: 0 8px;
   box-sizing: border-box;
   font-family: var(--glddf-font);
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   color: var(--glddf-paper);
   background: var(--glddf-ink-0);
   border: 1px solid var(--glddf-ink-5);
@@ -384,7 +384,7 @@
   padding: 0 12px;
   box-sizing: border-box;
   font-family: var(--glddf-font);
-  font-size: 12.5px;
+  font-size: var(--gl-is-t-lead);
   font-weight: 600;
   line-height: 1;
   color: var(--glddf-dim);
@@ -395,7 +395,7 @@
   cursor: pointer;
   transition: color var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
 }
-.glddf-cfg-icon { flex: 0 0 28px; width: 28px; padding: 0; font-size: 12px; }
+.glddf-cfg-icon { flex: 0 0 28px; width: 28px; padding: 0; font-size: var(--gl-is-t-body); }
 .glddf-cfg-icon:hover,
 .glddf-cfg-btn:hover { color: var(--glddf-paper); border-color: var(--glddf-rule-strong); }
 
@@ -406,13 +406,13 @@
   gap: 6px 14px;
   padding: 2px 2px 0;
   color: var(--glddf-dim);
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
 }
 .glddf-cfg-count { display: inline-flex; align-items: baseline; gap: 5px; }
-.glddf-cfg-count b { font-family: var(--glddf-num); font-size: 15px; color: var(--glddf-tone); }
+.glddf-cfg-count b { font-family: var(--glddf-num); font-size: var(--gl-is-t-title); color: var(--glddf-tone); }
 .glddf-cfg-mean { margin-left: auto; color: var(--glddf-paper); font-variant-numeric: tabular-nums; }
 
-.glddf-cfg-note { margin: 0; font-size: 11.5px; color: var(--glddf-faint); line-height: 1.4; }
+.glddf-cfg-note { margin: 0; font-size: var(--gl-is-t-body); color: var(--glddf-faint); line-height: 1.4; }
 
 .glddf-cfg-foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; border-top: 1px solid var(--glddf-rule); }
 .glddf-cfg-foot .glddf-cfg-btn { margin-top: 8px; }

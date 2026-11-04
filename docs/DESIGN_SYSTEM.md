@@ -7,6 +7,60 @@ rather than hardcoded into 30 stylesheets.
 If you are adding or porting a feature, read this alongside
 [`FEATURE_CONTRACT.md`](FEATURE_CONTRACT.md).
 
+> **The suite is migrating to Ink and Signal.** Etched Glass is legacy; new work
+> uses Ink and Signal (`DESIGN.md` at the repo root). Its values live in
+> `gl-tokens.css` as the `--gl-is-*` family, described in the next section
+> (ADR 0012). Everything after it describes Etched Glass and the tokens both
+> systems share (motion, tint channels, glass strength, fonts).
+
+---
+
+## Ink and Signal: the `--gl-is-*` family
+
+Declared once on `:root` in `gl-tokens.css`, in the block headed INK AND SIGNAL.
+A feature skin never restates one of these values. It aliases them under its own
+prefix on its own roots, and reads sizes, cuts and states straight from core:
+
+```css
+.gmyth-root {
+  --gmyth-ink-2: var(--gl-is-ink-2);
+  --gmyth-faint: var(--gl-is-faint);
+  --gmyth-bad: var(--gl-is-red);
+}
+.gmyth-row-key { font-size: var(--gl-is-t-meta); }
+.gmyth-btn:disabled { opacity: var(--gl-is-disabled); }
+```
+
+| Group | Tokens |
+|---|---|
+| Ink ramp | `--gl-is-ink-0` … `--gl-is-ink-6` (`#05060a` to `#353846`) |
+| Tones | `--gl-is-text`, `-paper`, `-dim`, `-faint`, `-steel`, `-on-slab` |
+| Signals | `--gl-is-amber`, `-red`, `-green`, `-ember`, `-info` |
+| Hairlines | `--gl-is-line` (0.08), `-line-strong` (0.16), `-shade` |
+| States | `--gl-is-hover` (0.05 veil), `-selected` (0.09 veil), `-press` (0.97), `-disabled` (0.32), `-focus-ring`, `-focus-offset` |
+| Type | `--gl-is-t-meta` 11px, `-t-body` 12px, `-t-lead` 13px, `-t-title` 15px, `-t-display` 22px; `--gl-is-font`, `--gl-is-num` |
+| Shape | `--gl-is-cut-lg` 10px, `-cut` 8px, `-cut-sm` 5px, `-cut-xs` 3px, `-radius` 2px |
+
+Three rules on top of the ones below:
+
+- **Nothing under 11px.** `--gl-is-t-meta` is the floor, labels included. Only
+  icon glyphs go smaller.
+- **Contrast is per ground.** Faint passes 4.5:1 on `ink-0` to `ink-3`; signals
+  and steel as text pass on `ink-0` to `ink-4`; `ink-5` and `ink-6` are fills,
+  not text grounds.
+- **Paper ground.** `.gl-is-paper` restates every role for a host known to be
+  light, hairlines and veils included, because a `var()` resolves where it is
+  declared. Put it on an ancestor of the skin's root (or on the root itself) and
+  the skin's aliases follow.
+
+The family is `--gl-is-*` rather than `--gl-ink-*` because Etched Glass already
+owns `--gl-ink-0` to `-3`. `scripts/core/theme.mjs` does not mirror it yet; a
+canvas or WebGL consumer that needs these colours reads them with `cssVar()`.
+
+To see every value read back from the shipped CSS, with a contrast grid for both
+grounds: `node tools/ink-signal-preview.mjs && node tools/preview-server.mjs`,
+then `/.preview/ink-signal.html`.
+
 ---
 
 ## Where things live

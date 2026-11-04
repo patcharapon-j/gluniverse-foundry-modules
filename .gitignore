@@ -5,3 +5,9 @@ node_modules/
 
 # Local preview output (tools/*-preview.mjs)
 .preview/
+
+# Impeccable: the engine binary is downloaded per machine by its launcher,
+# and per-developer config and live-mode state stay local.
+.claude/skills/impeccable/scripts/bin/
+.impeccable/config.local.json
+.impeccable/live/

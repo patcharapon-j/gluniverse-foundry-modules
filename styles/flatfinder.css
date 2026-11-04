@@ -15,28 +15,28 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :is(.ff-root, .flatfinder-planner-app) {
-  /* the neutral ramp (design system: color.neutral, as Stream Pacer's skin) */
-  --ff-ink-0: #05060a;
-  --ff-ink-1: #0a0b11;
-  --ff-ink-2: #0f1017;
-  --ff-ink-3: #15171f;
-  --ff-ink-4: #1c1e28;
-  --ff-ink-5: #272a36;
-  --ff-paper: #ecedf2;
-  --ff-dim: #b3b5c2;
-  --ff-faint: #6a6d7c;
-  --ff-rule: rgb(var(--gl-tint-light) / 0.08);
-  --ff-rule-strong: rgb(var(--gl-tint-light) / 0.16);
-  --ff-hover: rgb(var(--gl-tint-light) / 0.05);
+  /* the neutral ramp, aliased from core Ink and Signal (docs/adr/0012) */
+  --ff-ink-0: var(--gl-is-ink-0);
+  --ff-ink-1: var(--gl-is-ink-1);
+  --ff-ink-2: var(--gl-is-ink-2);
+  --ff-ink-3: var(--gl-is-ink-3);
+  --ff-ink-4: var(--gl-is-ink-4);
+  --ff-ink-5: var(--gl-is-ink-5);
+  --ff-paper: var(--gl-is-paper);
+  --ff-dim: var(--gl-is-dim);
+  --ff-faint: var(--gl-is-faint);
+  --ff-rule: var(--gl-is-line);
+  --ff-rule-strong: var(--gl-is-line-strong);
+  --ff-hover: var(--gl-is-hover);
 
   /* the meaning hues */
-  --ff-amber: #ffb020;
-  --ff-ember: #ff8a3d;
-  --ff-red: #ff4d5a;
-  --ff-steel: #8e91a0;
+  --ff-amber: var(--gl-is-amber);
+  --ff-ember: var(--gl-is-ember);
+  --ff-red: var(--gl-is-red);
+  --ff-steel: var(--gl-is-steel);
 
-  --ff-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
-  --ff-cut: 9px;
+  --ff-font: var(--gl-is-font);
+  --ff-cut: var(--gl-is-cut);
 
   /* what a reading means; tiers and ratings below set it */
   --ff-tone: var(--ff-paper);
@@ -82,16 +82,16 @@
   transition: background-color var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease),
     border-color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease);
 }
-.ff-root button:active:not(:disabled) { scale: 0.97; }
-.ff-root button:disabled { opacity: 0.35; cursor: default; }
-.ff-root button:focus-visible { outline: 2px solid var(--ff-paper); outline-offset: 2px; }
+.ff-root button:active:not(:disabled) { scale: var(--gl-is-press); }
+.ff-root button:disabled { opacity: var(--gl-is-disabled); cursor: default; }
+.ff-root button:focus-visible { outline: var(--gl-is-focus-ring); outline-offset: 2px; }
 .ff-root :is(ol, ul) { list-style: none; margin: 0; padding: 0; }
 .ff-root img { border: 0; }
 .ff-root i[class*="fa-"] { font-size: 0.9em; }
 
 /* The etched micro-label every surface opens with. */
 .ff-root .ff-caption {
-  font: 600 9px/1 var(--ff-font);
+  font: 600 var(--gl-is-t-meta)/1 var(--ff-font);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ff-faint);
@@ -102,7 +102,7 @@
 .ff-root .ff-btn {
   padding: 5px 9px;
   border: 1px solid var(--ff-rule-strong);
-  font: 600 11px/1 var(--ff-font);
+  font: 600 var(--gl-is-t-meta)/1 var(--ff-font);
   color: var(--ff-dim);
   white-space: nowrap;
 }
@@ -119,7 +119,7 @@
   row-gap: 5px;
   margin: 6px 0 0;
   padding: 7px 11px 7px 10px;
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
 }
 
 /* The ladder: eight bars, each a step taller, lit up to the band. It says how
@@ -149,7 +149,7 @@
 
 .ff-comp .ff-label {
   justify-self: end;
-  font: 700 15px/1 var(--ff-font);
+  font: 700 var(--gl-is-t-title)/1 var(--ff-font);
   letter-spacing: 0.01em;
   color: var(--ff-tone);
   white-space: nowrap;
@@ -164,7 +164,7 @@
 .ff-comp .ff-shift {
   padding: 2px 6px;
   border: 1px solid var(--ff-rule-strong);
-  font: 600 10px/1.1 var(--ff-font);
+  font: 600 var(--gl-is-t-meta)/1.1 var(--ff-font);
   color: var(--ff-dim);
 }
 .ff-comp .ff-shift.is-up::before { content: "\25B2"; margin-right: 4px; font-size: 7px; color: var(--ff-paper); vertical-align: 1px; }
@@ -215,7 +215,7 @@
 .ff-root[data-severity="none"] { --ff-tone: var(--ff-ink-5); }
 
 .ff-root .ff-enc-rating {
-  font: 700 14px/1 var(--ff-font);
+  font: 700 var(--gl-is-t-title)/1 var(--ff-font);
   color: var(--ff-tone);
   white-space: nowrap;
 }
@@ -226,8 +226,8 @@
   justify-self: end;
   white-space: nowrap;
 }
-.ff-root .ff-enc-xp b { font: 700 14px/1 var(--ff-font); color: var(--ff-paper); }
-.ff-root .ff-enc-xp span { font: 500 10px/1 var(--ff-font); color: var(--ff-faint); }
+.ff-root .ff-enc-xp b { font: 700 var(--gl-is-t-title)/1 var(--ff-font); color: var(--ff-paper); }
+.ff-root .ff-enc-xp span { font: 500 var(--gl-is-t-meta)/1 var(--ff-font); color: var(--ff-faint); }
 
 /* The meter: the fight's XP against the five budgets. A tick the fill has
    passed is cut dark into it, so the budgets stay readable on any tone. */
@@ -268,7 +268,7 @@
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  font: 500 10.5px/1.25 var(--ff-font);
+  font: 500 var(--gl-is-t-meta)/1.25 var(--ff-font);
   color: var(--ff-dim);
 }
 .ff-root .ff-enc-note .ff-enc-next { color: var(--ff-paper); white-space: nowrap; }
@@ -292,7 +292,7 @@
 .ff-root .ff-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .ff-root .ff-row-name {
   overflow: hidden;
-  font: 600 12px/1.15 var(--ff-font);
+  font: 600 var(--gl-is-t-body)/1.15 var(--ff-font);
   color: var(--ff-paper);
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -302,7 +302,7 @@
 .ff-root .ff-row-tags:empty { display: none; }
 .ff-root .ff-tag {
   padding: 1px 4px;
-  font: 600 9px/1.2 var(--ff-font);
+  font: 600 var(--gl-is-t-meta)/1.2 var(--ff-font);
   letter-spacing: 0.02em;
   color: var(--ff-dim);
   background: rgb(var(--gl-tint-light) / 0.06);
@@ -311,15 +311,15 @@
 .ff-root .ff-tag.is-down { color: var(--ff-faint); }
 .ff-root .ff-tag.is-boss { color: var(--ff-ink-0); background: var(--ff-amber); }
 .ff-root .ff-tag.is-level { color: var(--ff-faint); background: none; padding-left: 0; }
-.ff-root .ff-row-diff { font: 500 11px/1 var(--ff-font); color: var(--ff-dim); text-align: right; }
-.ff-root .ff-row-xp { font: 700 12px/1 var(--ff-font); color: var(--ff-paper); text-align: right; }
+.ff-root .ff-row-diff { font: 500 var(--gl-is-t-meta)/1 var(--ff-font); color: var(--ff-dim); text-align: right; }
+.ff-root .ff-row-xp { font: 700 var(--gl-is-t-body)/1 var(--ff-font); color: var(--ff-paper); text-align: right; }
 .ff-root .ff-row.is-zero :is(.ff-row-name, .ff-row-xp) { color: var(--ff-faint); }
 
 /* ═══ The threat strip (top of the combat tracker, GM only) ═════════════════ */
 
 .ff-root.ff-enc {
   margin: 6px 8px 4px;
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
 }
 .ff-enc .ff-enc-head {
   display: grid;
@@ -333,7 +333,7 @@
 .ff-enc .ff-enc-head:hover { background: var(--ff-hover); }
 .ff-enc .ff-chev {
   align-self: center;
-  font-size: 9px;
+  font-size: var(--gl-is-t-meta);
   color: var(--ff-faint);
   transition: rotate var(--gl-d-brisk) var(--gl-ease);
 }
@@ -357,7 +357,7 @@
   gap: 8px;
   padding: 6px 10px 7px;
   border-top: 1px solid var(--ff-rule);
-  font: 500 10.5px/1.2 var(--ff-font);
+  font: 500 var(--gl-is-t-meta)/1.2 var(--ff-font);
   color: var(--ff-dim);
 }
 
@@ -369,7 +369,7 @@
 }
 .ff-enc.is-empty .ff-enc-empty-text {
   flex: 1;
-  font: 500 11px/1.2 var(--ff-font);
+  font: 500 var(--gl-is-t-meta)/1.2 var(--ff-font);
   color: var(--ff-faint);
 }
 
@@ -387,7 +387,7 @@
   min-height: 100%;
   color: var(--ff-paper);
   font-family: var(--ff-font);
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   font-variant-numeric: tabular-nums;
   background: var(--ff-ink-0);
 }
@@ -402,7 +402,7 @@
 }
 .ff-planner .ff-stepper { display: flex; flex-direction: column; gap: 5px; }
 .ff-planner .ff-stepper-label {
-  font: 600 9px/1 var(--ff-font);
+  font: 600 var(--gl-is-t-meta)/1 var(--ff-font);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ff-faint);
@@ -410,14 +410,14 @@
 .ff-planner .ff-stepper-row { display: inline-flex; align-items: center; border: 1px solid var(--ff-rule-strong); }
 .ff-planner .ff-stepper-value {
   min-width: 30px;
-  font: 700 15px/26px var(--ff-font);
+  font: 700 var(--gl-is-t-title)/26px var(--ff-font);
   text-align: center;
   color: var(--ff-paper);
 }
 .ff-planner .ff-step {
   width: 24px;
   height: 26px;
-  font-size: 10px;
+  font-size: var(--gl-is-t-meta);
   color: var(--ff-dim);
 }
 .ff-planner .ff-step:hover:not(:disabled) { color: var(--ff-paper); background: var(--ff-hover); }
@@ -427,7 +427,7 @@
   align-items: flex-end;
   gap: 3px;
   min-width: 0;
-  font: 500 10.5px/1.2 var(--ff-font);
+  font: 500 var(--gl-is-t-meta)/1.2 var(--ff-font);
   color: var(--ff-faint);
   text-align: right;
 }
@@ -447,13 +447,13 @@
   align-items: baseline;
   column-gap: 10px;
 }
-.ff-planner .ff-plan-rating .ff-enc-rating { font-size: 22px; }
+.ff-planner .ff-plan-rating .ff-enc-rating { font-size: var(--gl-is-t-display); }
 .ff-planner.is-empty .ff-plan-rating .ff-enc-rating { color: var(--ff-faint); }
 .ff-planner .ff-plan-rating .ff-enc-xp b { font-size: 20px; }
-.ff-planner .ff-plan-rating .ff-enc-xp span { font-size: 11px; }
+.ff-planner .ff-plan-rating .ff-enc-xp span { font-size: var(--gl-is-t-meta); }
 
 /* The planner's meter names each rating under its segment, with its budget. */
-.ff-planner .ff-meter.has-labels { height: 8px; margin-bottom: 28px; }
+.ff-planner .ff-meter.has-labels { height: 8px; margin-bottom: 31px; }
 .ff-planner .ff-seg-label {
   position: absolute;
   top: calc(100% + 7px);
@@ -463,7 +463,7 @@
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  font: 500 9.5px/1 var(--ff-font);
+  font: 500 var(--gl-is-t-meta)/1 var(--ff-font);
   color: var(--ff-faint);
   white-space: nowrap;
 }
@@ -483,7 +483,7 @@
   min-width: 52px;
   padding: 4px 6px;
   border: 1px solid var(--ff-rule-strong);
-  font: 600 10px/1 var(--ff-font);
+  font: 600 var(--gl-is-t-meta)/1 var(--ff-font);
   color: var(--ff-dim);
 }
 .ff-planner .ff-adj:hover { color: var(--ff-paper); border-color: var(--ff-dim); }
@@ -492,13 +492,13 @@
 .ff-planner .ff-adj.is-fixed { min-width: 52px; border: 0; }
 
 .ff-planner .ff-count { display: inline-flex; align-items: center; border: 1px solid var(--ff-rule); }
-.ff-planner .ff-count output { min-width: 20px; font: 700 12px/22px var(--ff-font); text-align: center; }
-.ff-planner .ff-count .ff-step { width: 20px; height: 22px; font-size: 9px; }
+.ff-planner .ff-count output { min-width: 20px; font: 700 var(--gl-is-t-body)/22px var(--ff-font); text-align: center; }
+.ff-planner .ff-count .ff-step { width: 20px; height: 22px; font-size: var(--gl-is-t-meta); }
 
 .ff-planner .ff-remove {
   width: 22px;
   height: 22px;
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   color: var(--ff-faint);
 }
 .ff-planner .ff-remove:hover { color: var(--ff-red); }
@@ -515,8 +515,8 @@
     color var(--gl-d-quick) var(--gl-ease);
 }
 .ff-planner .ff-drop > i { font-size: 16px; }
-.ff-planner .ff-drop span { display: flex; flex-direction: column; gap: 3px; font: 500 10.5px/1.25 var(--ff-font); }
-.ff-planner .ff-drop b { font: 600 12px/1.2 var(--ff-font); color: var(--ff-dim); }
+.ff-planner .ff-drop span { display: flex; flex-direction: column; gap: 3px; font: 500 var(--gl-is-t-meta)/1.25 var(--ff-font); }
+.ff-planner .ff-drop b { font: 600 var(--gl-is-t-body)/1.2 var(--ff-font); color: var(--ff-dim); }
 .ff-planner.is-empty .ff-drop { flex: 1; min-height: 120px; justify-content: center; text-align: left; }
 .ff-planner.is-dragging .ff-drop {
   border-color: var(--ff-paper);

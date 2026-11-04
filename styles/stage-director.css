@@ -1,11 +1,11 @@
 /* ==========================================================================
    Stage — the Director (GM control panel). Prefix glstage-dir-.
 
-   The console skin (docs/adr/0008-stage-theatre-console.md): the design
-   system's neutral ramp and status hues, mirrored as feature-local
-   `--glstage-*` tokens on this window's own root and never on :root. Theatre's
-   apps carry the same values as `--glth-*`; theatre-check holds the two ramps
-   equal. Black slabs, paper type, and one red: what the players can see right
+   The console skin (docs/adr/0008-stage-theatre-console.md): the core Ink and
+   Signal tokens (`--gl-is-*`, docs/adr/0012-ink-and-signal-core.md), aliased
+   as feature-local `--glstage-*` tokens on this window's own root and never on
+   :root. Theatre's apps alias the same tokens as `--glth-*`; theatre-check
+   holds the two ramps equal. Black slabs, paper type, and one red: what the players can see right
    now (the stage up, the comms up, the close-up on screen, the speaker).
    Motion and timing come from the suite (`--gl-d-*`, `--gl-ease*`).
 
@@ -16,30 +16,30 @@
 
 .glstage-dir-app {
   /* the neutral ramp */
-  --glstage-ink-0: #05060a;
-  --glstage-ink-1: #0a0b11;
-  --glstage-ink-2: #0f1017;
-  --glstage-ink-3: #15171f;
-  --glstage-ink-4: #1c1e28;
-  --glstage-ink-5: #272a36;
-  --glstage-ink-6: #353846;
-  --glstage-text: #f4f4f7;
-  --glstage-dim: #b3b5c2;
-  --glstage-faint: #6a6d7c;
-  --glstage-line: rgb(var(--gl-tint-light) / 0.08);
-  --glstage-line-strong: rgb(var(--gl-tint-light) / 0.16);
-  --glstage-hover: rgb(var(--gl-tint-light) / 0.05);
-  --glstage-shade: rgb(var(--gl-tint-dark) / 0.55);
+  --glstage-ink-0: var(--gl-is-ink-0);
+  --glstage-ink-1: var(--gl-is-ink-1);
+  --glstage-ink-2: var(--gl-is-ink-2);
+  --glstage-ink-3: var(--gl-is-ink-3);
+  --glstage-ink-4: var(--gl-is-ink-4);
+  --glstage-ink-5: var(--gl-is-ink-5);
+  --glstage-ink-6: var(--gl-is-ink-6);
+  --glstage-text: var(--gl-is-text);
+  --glstage-dim: var(--gl-is-dim);
+  --glstage-faint: var(--gl-is-faint);
+  --glstage-line: var(--gl-is-line);
+  --glstage-line-strong: var(--gl-is-line-strong);
+  --glstage-hover: var(--gl-is-hover);
+  --glstage-shade: var(--gl-is-shade);
   /* the signal hues */
-  --glstage-paper: #ecedf2;
-  --glstage-live: #ff4d5a;
-  --glstage-cue: #2fb672;
-  --glstage-amber: #ffb020;
-  --glstage-steel: #8e91a0;
+  --glstage-paper: var(--gl-is-paper);
+  --glstage-live: var(--gl-is-red);
+  --glstage-cue: var(--gl-is-green);
+  --glstage-amber: var(--gl-is-amber);
+  --glstage-steel: var(--gl-is-steel);
   /* type and shape */
-  --glstage-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
-  --glstage-radius: 2px;
-  --glstage-cut: 8px;
+  --glstage-font: var(--gl-is-font);
+  --glstage-radius: var(--gl-is-radius);
+  --glstage-cut: var(--gl-is-cut);
   /* layout */
   --glstage-dir-ib: 26px;
   --glstage-dir-thumb: 32px;
@@ -58,7 +58,7 @@
   border-bottom: 1px solid var(--glstage-line);
   color: var(--glstage-dim);
   font-family: var(--glstage-font);
-  font-size: var(--gl-fs-md);
+  font-size: var(--gl-is-t-lead);
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -79,7 +79,7 @@
   min-height: 0;
   color: var(--glstage-text);
   font-family: var(--glstage-font);
-  font-size: var(--gl-fs-sm);
+  font-size: var(--gl-is-t-body);
   line-height: 1.35;
   container: glstage-dir / inline-size;
 }
@@ -108,9 +108,9 @@
   transition: background-color var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease),
     border-color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease);
 }
-.glstage-dir button:active:not(:disabled) { scale: 0.97; }
-.glstage-dir button:disabled { opacity: 0.32; cursor: default; }
-.glstage-dir :is(button, input, select):focus-visible { outline: 2px solid var(--glstage-paper); outline-offset: 1px; box-shadow: none; }
+.glstage-dir button:active:not(:disabled) { scale: var(--gl-is-press); }
+.glstage-dir button:disabled { opacity: var(--gl-is-disabled); cursor: default; }
+.glstage-dir :is(button, input, select):focus-visible { outline: var(--gl-is-focus-ring); outline-offset: var(--gl-is-focus-offset); box-shadow: none; }
 .glstage-dir button > i { font-size: 0.95em; }
 .glstage-dir-app.is-drop .glstage-dir { outline: 1px dashed var(--glstage-paper); outline-offset: -6px; }
 
@@ -119,16 +119,16 @@
   align-items: baseline;
   gap: 8px;
   color: var(--glstage-faint);
-  font-size: var(--gl-fs-2xs);
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 .glstage-dir-kicker-count { color: var(--glstage-dim); font-weight: 500; letter-spacing: 0.02em; text-transform: none; font-variant-numeric: tabular-nums; }
-.glstage-dir-label { color: var(--glstage-dim); font-size: var(--gl-fs-xs); font-weight: 500; }
-.glstage-dir-hint { color: var(--glstage-faint); font-size: var(--gl-fs-xs); line-height: 1.45; }
+.glstage-dir-label { color: var(--glstage-dim); font-size: var(--gl-is-t-meta); font-weight: 500; }
+.glstage-dir-hint { color: var(--glstage-faint); font-size: var(--gl-is-t-meta); line-height: 1.45; }
 .glstage-dir-hint > i { margin-right: 6px; }
-.glstage-dir-empty { color: var(--glstage-faint); font-size: var(--gl-fs-xs); padding: 10px 2px; }
+.glstage-dir-empty { color: var(--glstage-faint); font-size: var(--gl-is-t-meta); padding: 10px 2px; }
 .glstage-dir-empty--box {
   padding: 22px 12px;
   text-align: center;
@@ -166,8 +166,8 @@
   transition: background-color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
 }
 .glstage-dir-tally-text { display: flex; flex-direction: column; gap: 3px; }
-.glstage-dir-tally-name { font-size: var(--gl-fs-md); font-weight: 650; color: var(--glstage-text); }
-.glstage-dir-tally-state { font-size: var(--gl-fs-2xs); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--glstage-faint); }
+.glstage-dir-tally-name { font-size: var(--gl-is-t-lead); font-weight: 650; color: var(--glstage-text); }
+.glstage-dir-tally-state { font-size: var(--gl-is-t-meta); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--glstage-faint); }
 .glstage-dir .glstage-dir-tally.is-live { border-color: color-mix(in srgb, var(--glstage-live) 55%, transparent); background: color-mix(in srgb, var(--glstage-live) 12%, var(--glstage-ink-2)); }
 .glstage-dir-tally.is-live .glstage-dir-lamp { background: var(--glstage-live); box-shadow: 0 0 0 3px color-mix(in srgb, var(--glstage-live) 22%, transparent), 0 0 10px var(--glstage-live); }
 .glstage-dir-tally.is-live .glstage-dir-tally-state { color: var(--glstage-live); }
@@ -181,8 +181,8 @@
   padding-left: 12px;
   border-left: 1px solid var(--glstage-line);
 }
-.glstage-dir-shot-main { font-size: var(--gl-fs-lg); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.glstage-dir-shot-sub { color: var(--glstage-faint); font-size: var(--gl-fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.glstage-dir-shot-main { font-size: var(--gl-is-t-title); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.glstage-dir-shot-sub { color: var(--glstage-faint); font-size: var(--gl-is-t-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .glstage-dir-shot.is-close .glstage-dir-shot-main::before {
   content: "";
   display: inline-block;
@@ -207,7 +207,7 @@
   gap: 8px;
   padding: 10px 12px 11px;
   color: var(--glstage-faint);
-  font-size: var(--gl-fs-sm);
+  font-size: var(--gl-is-t-body);
   font-weight: 600;
   border: 0;
   border-radius: 0;
@@ -257,12 +257,12 @@
   background: var(--glstage-ink-4);
   border-color: var(--glstage-line-strong);
   color: var(--glstage-text);
-  font-size: var(--gl-fs-sm);
+  font-size: var(--gl-is-t-body);
   font-weight: 600;
   white-space: nowrap;
 }
 .glstage-dir .glstage-dir-btn:hover:not(:disabled) { background: var(--glstage-ink-5); }
-.glstage-dir .glstage-dir-btn--sm { height: 24px; padding: 0 9px; font-size: var(--gl-fs-xs); }
+.glstage-dir .glstage-dir-btn--sm { height: 24px; padding: 0 9px; font-size: var(--gl-is-t-meta); }
 .glstage-dir .glstage-dir-btn--primary { background: var(--glstage-paper); border-color: var(--glstage-paper); color: var(--glstage-ink-0); }
 .glstage-dir .glstage-dir-btn--primary:hover:not(:disabled) { background: var(--glstage-text); }
 .glstage-dir .glstage-dir-btn--danger { background: transparent; color: var(--glstage-dim); }
@@ -275,13 +275,13 @@
   width: var(--glstage-dir-ib);
   height: var(--glstage-dir-ib);
   color: var(--glstage-dim);
-  font-size: var(--gl-fs-xs);
+  font-size: var(--gl-is-t-meta);
 }
 .glstage-dir .glstage-dir-ib:hover:not(:disabled) { background: var(--glstage-hover); color: var(--glstage-text); border-color: var(--glstage-line); }
 .glstage-dir .glstage-dir-ib.is-on { background: var(--glstage-paper); border-color: var(--glstage-paper); color: var(--glstage-ink-0); }
 .glstage-dir .glstage-dir-ib--danger:hover:not(:disabled) { color: var(--glstage-live); border-color: color-mix(in srgb, var(--glstage-live) 40%, transparent); }
 .glstage-dir .glstage-dir-ib--field { width: 30px; height: 30px; background: var(--glstage-ink-3); border-color: var(--glstage-line-strong); }
-.glstage-dir .glstage-dir-link { padding: 0; color: var(--glstage-text); font-weight: 600; font-size: var(--gl-fs-xs); border: 0; }
+.glstage-dir .glstage-dir-link { padding: 0; color: var(--glstage-text); font-weight: 600; font-size: var(--gl-is-t-meta); border: 0; }
 .glstage-dir .glstage-dir-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 .glstage-dir-seg {
@@ -292,7 +292,7 @@
   border: 1px solid var(--glstage-line);
   border-radius: var(--glstage-radius);
 }
-.glstage-dir .glstage-dir-seg-btn { height: 24px; padding: 0 10px; color: var(--glstage-dim); font-size: var(--gl-fs-xs); font-weight: 600; border: 0; }
+.glstage-dir .glstage-dir-seg-btn { height: 24px; padding: 0 10px; color: var(--glstage-dim); font-size: var(--gl-is-t-meta); font-weight: 600; border: 0; }
 .glstage-dir .glstage-dir-seg-btn:hover:not(.is-active) { color: var(--glstage-text); background: var(--glstage-hover); }
 .glstage-dir .glstage-dir-seg-btn.is-active { background: var(--glstage-ink-5); color: var(--glstage-text); }
 /* icon-only segments keep their label for the tooltip and screen readers */
@@ -312,7 +312,7 @@
   border-radius: var(--glstage-radius);
   color: var(--glstage-text);
   font: inherit;
-  font-size: var(--gl-fs-sm);
+  font-size: var(--gl-is-t-body);
   box-shadow: none;
   transition: border-color var(--gl-d-quick) var(--gl-ease);
 }
@@ -320,7 +320,7 @@
 .glstage-dir .glstage-dir-input:focus { border-color: var(--glstage-paper); outline: none; box-shadow: none; }
 .glstage-dir .glstage-dir-input::placeholder { color: var(--glstage-faint); }
 .glstage-dir select.glstage-dir-input option { background: var(--glstage-ink-2); color: var(--glstage-text); }
-.glstage-dir .glstage-dir-input--name { height: 34px; font-size: var(--gl-fs-lg); font-weight: 650; }
+.glstage-dir .glstage-dir-input--name { height: 34px; font-size: var(--gl-is-t-title); font-weight: 650; }
 .glstage-dir-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .glstage-dir-inline { display: flex; gap: 6px; align-items: center; }
 .glstage-dir-pair { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 10px; }
@@ -357,7 +357,7 @@
   border: 0;
   color: var(--glstage-text);
   font: inherit;
-  font-size: var(--gl-fs-sm);
+  font-size: var(--gl-is-t-body);
   box-shadow: none;
   outline: none;
 }
@@ -377,8 +377,8 @@
   cursor: default;
 }
 .glstage-dir-dial.is-off { opacity: 0.4; }
-.glstage-dir-dial-label { color: var(--glstage-dim); font-size: var(--gl-fs-xs); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.glstage-dir-dial-out { color: var(--glstage-text); font-size: var(--gl-fs-xs); font-weight: 600; font-variant-numeric: tabular-nums; }
+.glstage-dir-dial-label { color: var(--glstage-dim); font-size: var(--gl-is-t-meta); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.glstage-dir-dial-out { color: var(--glstage-text); font-size: var(--gl-is-t-meta); font-weight: 600; font-variant-numeric: tabular-nums; }
 .glstage-dir .glstage-dir-range {
   grid-column: 1 / -1;
   appearance: none;
@@ -421,7 +421,7 @@
 .glstage-dir .glstage-dir-range:active::-webkit-slider-thumb { scale: 1.25; }
 
 /* checks and switches */
-.glstage-dir-check { display: inline-flex; align-items: center; gap: 7px; color: var(--glstage-dim); font-size: var(--gl-fs-xs); cursor: pointer; }
+.glstage-dir-check { display: inline-flex; align-items: center; gap: 7px; color: var(--glstage-dim); font-size: var(--gl-is-t-meta); cursor: pointer; }
 .glstage-dir-check input { margin: 0; accent-color: var(--glstage-paper); }
 .glstage-dir-switches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; }
 .glstage-dir-switch { position: relative; display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
@@ -449,7 +449,7 @@
 }
 .glstage-dir-switch input:checked + .glstage-dir-switch-track { background: var(--glstage-paper); }
 .glstage-dir-switch input:checked + .glstage-dir-switch-track::after { translate: 12px 0; background: var(--glstage-ink-0); }
-.glstage-dir-switch input:focus-visible + .glstage-dir-switch-track { outline: 2px solid var(--glstage-paper); outline-offset: 2px; }
+.glstage-dir-switch input:focus-visible + .glstage-dir-switch-track { outline: var(--gl-is-focus-ring); outline-offset: 2px; }
 .glstage-dir-switch-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 
 /* ── people: thumbs, rows, tags ───────────────────────────────────────── */
@@ -464,8 +464,8 @@
 }
 .glstage-dir-thumb { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; border: 0; }
 .glstage-dir-who { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; text-align: left; }
-.glstage-dir-name { color: var(--glstage-text); font-weight: 600; font-size: var(--gl-fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.glstage-dir-sub { color: var(--glstage-faint); font-size: var(--gl-fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.glstage-dir-name { color: var(--glstage-text); font-weight: 600; font-size: var(--gl-is-t-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.glstage-dir-sub { color: var(--glstage-faint); font-size: var(--gl-is-t-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .glstage-dir-list { display: flex; flex-direction: column; gap: 1px; }
 .glstage-dir-row {
   display: flex;
@@ -479,12 +479,12 @@
 .glstage-dir-row.is-on .glstage-dir-thumb-box { opacity: 0.55; }
 .glstage-dir .glstage-dir-row--pick { width: 100%; justify-content: flex-start; border: 1px solid transparent; }
 .glstage-dir .glstage-dir-row--pick.is-active { background: var(--glstage-ink-4); border-color: var(--glstage-line-strong); }
-.glstage-dir-row-icon { color: var(--glstage-faint); font-size: var(--gl-fs-2xs); }
+.glstage-dir-row-icon { color: var(--glstage-faint); font-size: var(--gl-is-t-meta); }
 .glstage-dir-tag {
   flex: none;
   padding: 3px 6px;
   color: var(--glstage-faint);
-  font-size: var(--gl-fs-3xs);
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -563,7 +563,7 @@
   padding: 2px 6px;
   background: var(--glstage-ink-0);
   color: var(--glstage-dim);
-  font-size: var(--gl-fs-3xs);
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -594,7 +594,7 @@
   display: grid;
   place-items: center;
   color: var(--glstage-faint);
-  font-size: var(--gl-fs-sm);
+  font-size: var(--gl-is-t-body);
 }
 .glstage-dir-strip-count, .glstage-dir-strip-hint {
   position: absolute;
@@ -603,7 +603,7 @@
   padding: 3px 7px;
   background: rgb(var(--gl-tint-dark) / 0.55);
   color: var(--glstage-dim);
-  font-size: var(--gl-fs-3xs);
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   letter-spacing: 0.04em;
   border-radius: var(--glstage-radius);
@@ -689,7 +689,7 @@
   border-top: 1px dashed var(--glstage-line-strong);
   pointer-events: none;
 }
-.glstage-dir-guide > span { position: absolute; right: 6px; bottom: 2px; color: var(--glstage-faint); font-size: var(--gl-fs-3xs); font-variant-numeric: tabular-nums; }
+.glstage-dir-guide > span { position: absolute; right: 6px; bottom: 2px; color: var(--glstage-faint); font-size: var(--gl-is-t-meta); font-variant-numeric: tabular-nums; }
 .glstage-dir-lu { flex: none; width: var(--glstage-dir-lu-w); height: 100%; display: flex; align-items: flex-end; justify-content: center; }
 .glstage-dir-lu-box { position: relative; width: 100%; display: flex; justify-content: center; }
 .glstage-dir-lu-box img { height: 100%; width: 100%; object-fit: contain; object-position: 50% 100%; border: 0; }
@@ -700,7 +700,7 @@
 /* ── light ────────────────────────────────────────────────────────────── */
 
 .glstage-dir-scene { display: flex; flex-direction: column; gap: 3px; }
-.glstage-dir-scene-name { color: var(--glstage-text); font-size: var(--gl-fs-lg); font-weight: 650; }
+.glstage-dir-scene-name { color: var(--glstage-text); font-size: var(--gl-is-t-title); font-weight: 650; }
 .glstage-dir-moods { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
 .glstage-dir .glstage-dir-mood {
   flex-direction: column;
@@ -727,7 +727,7 @@
   border-radius: 50%;
   background: var(--glstage-paper);
 }
-.glstage-dir-mood-name { padding: 6px 8px; font-size: var(--gl-fs-xs); font-weight: 600; text-align: left; color: var(--glstage-dim); }
+.glstage-dir-mood-name { padding: 6px 8px; font-size: var(--gl-is-t-meta); font-weight: 600; text-align: left; color: var(--glstage-dim); }
 .glstage-dir-mood.is-active .glstage-dir-mood-name { color: var(--glstage-text); }
 .glstage-dir-angle { display: flex; flex-direction: column; gap: 8px; }
 

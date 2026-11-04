@@ -625,7 +625,8 @@ for (const cls of classes) {
 
 // Every button a surface draws is sized by the feature. Foundry and `.gl-btn`
 // both leave a button's type to its host: 14px in a chat card, more on a sheet.
-const sizedReset = /:is\(\.gldex-root, \.gldex-lie-root\) :is\(button, input, select\) \{[^}]*font-size:\s*\d+px/.test(css);
+// A fixed size is a px literal or a step of the core type scale (`--gl-is-t-*`).
+const sizedReset = /:is\(\.gldex-root, \.gldex-lie-root\) :is\(button, input, select\) \{[^}]*font-size:\s*(\d+px|var\(--gl-is-t-[a-z]+\))/.test(css);
 if (!sizedReset) fail("styles: the controls reset no longer sizes buttons, so every one takes its host's type");
 for (const m of drawn.matchAll(/<button\b[^>]*>/g)) {
   if (/\bgl-btn\b/.test(m[0])) fail("render: a `.gl-btn` is drawn; it carries no size of its own, so it inflates in a chat card");

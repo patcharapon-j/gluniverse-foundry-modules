@@ -131,6 +131,105 @@
 }
 
 /* ════════════════════════════════════════════════════════════════════════
+   INK AND SIGNAL — the system the suite is migrating to
+   ════════════════════════════════════════════════════════════════════════
+   DESIGN.md is the spec; docs/adr/0012-ink-and-signal-core.md is why these sit
+   in core. Black ink chrome, paper text, hue only as a signal. A migrated
+   feature aliases these under its own prefix on its own roots
+   (`--sp-ink-2: var(--gl-is-ink-2)`), never re-states a value, and never
+   writes on :root. Etched Glass keeps its own `--gl-ink-*` above until the
+   migration ends, which is why this family is `--gl-is-*`. */
+:root {
+  /* ── The ink ramp, leaning black (well → window → plate → control → hover → track) ── */
+  --gl-is-ink-0: #05060a;
+  --gl-is-ink-1: #0a0b11;
+  --gl-is-ink-2: #0f1017;
+  --gl-is-ink-3: #15171f;
+  --gl-is-ink-4: #1c1e28;
+  --gl-is-ink-5: #272a36;
+  --gl-is-ink-6: #353846;
+
+  /* ── Text and the neutral tones ──
+     Faint passes 4.5:1 on ink-0 to ink-3 only; on ink-4 and lighter use dim. */
+  --gl-is-text: #f4f4f7;
+  --gl-is-paper: #ecedf2;
+  --gl-is-dim: #b3b5c2;
+  --gl-is-faint: #7f8291;
+  --gl-is-steel: #8e91a0;
+  /* What is written on a paper or signal slab. */
+  --gl-is-on-slab: #05060a;
+
+  /* ── Signals: one job each ── */
+  --gl-is-amber: #ffb020;   /* a call, a countdown, an event */
+  --gl-is-red: #ff4d5a;     /* danger, failure, a safety signal */
+  --gl-is-green: #2fb672;   /* good, success, a live cue */
+  --gl-is-ember: #ff8a3d;   /* heat, escalation short of danger */
+  --gl-is-info: #4aa3ff;    /* a shift, deferred, informational */
+
+  /* ── Hairlines and shade ── */
+  --gl-is-line: rgb(var(--gl-tint-light) / 0.08);
+  --gl-is-line-strong: rgb(var(--gl-tint-light) / 0.16);
+  --gl-is-shade: rgb(var(--gl-tint-dark) / 0.55);
+
+  /* ── States: one statement per state ── */
+  --gl-is-hover: rgb(var(--gl-tint-light) / 0.05);
+  --gl-is-selected: rgb(var(--gl-tint-light) / 0.09);
+  --gl-is-press: 0.97;          /* scale on :active */
+  --gl-is-disabled: 0.32;       /* opacity */
+  --gl-is-focus-ring: 2px solid var(--gl-is-paper);
+  --gl-is-focus-offset: 1px;
+
+  /* ── Type: one face, five sizes, nothing under 11px ── */
+  --gl-is-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
+  --gl-is-num: var(--gl-tech);
+  --gl-is-t-meta: 11px;         /* eyebrows, counts, captions, meta */
+  --gl-is-t-body: 12px;         /* rows, controls, body */
+  --gl-is-t-lead: 13px;         /* row names, emphasised body */
+  --gl-is-t-title: 15px;        /* window and section titles */
+  --gl-is-t-display: 22px;      /* the one name or answer a panel is about */
+
+  /* ── Shape: the cut, proportional to what it cuts ── */
+  --gl-is-cut-lg: 10px;         /* slabs, bands, answer plates */
+  --gl-is-cut: 8px;             /* plates, sections, cards */
+  --gl-is-cut-sm: 5px;          /* buttons, controls, chips */
+  --gl-is-cut-xs: 3px;          /* tags, pips */
+  --gl-is-radius: 2px;          /* only where a radius is unavoidable */
+}
+
+/* ── The paper ground ──
+   The same roles on a light ground, for a surface whose host is light (a
+   journal page, an item sheet). Hairlines and states are re-struck here rather
+   than inherited: a `var()` resolves where it is declared, so the :root
+   values above would keep the light tint. Signals step darker so text in a
+   signal hue still passes 4.5:1 on paper-1 to paper-3. */
+.gl-is-paper {
+  --gl-is-ink-0: #f7f7f9;
+  --gl-is-ink-1: #eeeff3;
+  --gl-is-ink-2: #e5e6ec;
+  --gl-is-ink-3: #dbdce4;
+  --gl-is-ink-4: #cfd0da;
+  --gl-is-ink-5: #bcbeca;
+  --gl-is-ink-6: #a6a9b7;
+  --gl-is-text: #15161c;
+  --gl-is-paper: #1d1f27;
+  --gl-is-dim: #454856;
+  --gl-is-faint: #5b5e6b;
+  --gl-is-steel: #5d6070;
+  --gl-is-on-slab: #f7f7f9;
+  --gl-is-amber: #8f5600;
+  --gl-is-red: #b81c2d;
+  --gl-is-green: #11714a;
+  --gl-is-ember: #a64808;
+  --gl-is-info: #185fbb;
+  --gl-is-line: rgb(var(--gl-tint-dark) / 0.1);
+  --gl-is-line-strong: rgb(var(--gl-tint-dark) / 0.2);
+  --gl-is-shade: rgb(var(--gl-tint-dark) / 0.18);
+  --gl-is-hover: rgb(var(--gl-tint-dark) / 0.05);
+  --gl-is-selected: rgb(var(--gl-tint-dark) / 0.08);
+  --gl-is-focus-ring: 2px solid var(--gl-is-paper);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
    L1 — THEME CONTRACT
    The complete set of tokens a theme may override. Nothing outside this block
    (plus the L0 ramps above) should ever be rewritten to change the look.

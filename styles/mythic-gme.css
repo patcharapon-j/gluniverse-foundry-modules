@@ -19,35 +19,35 @@
 
 :is(.gmyth, .gmyth-root, .gmyth-card) {
   /* the neutral ramp, leaning black (design system: color.neutral) */
-  --gmyth-ink-0: #05060a;
-  --gmyth-ink-1: #0a0b11;
-  --gmyth-ink-2: #0f1017;
-  --gmyth-ink-3: #15171f;
-  --gmyth-ink-4: #1c1e28;
-  --gmyth-ink-5: #272a36;
-  --gmyth-text: #f4f4f7;
-  --gmyth-dim: #b3b5c2;
-  --gmyth-faint: #6a6d7c;
-  --gmyth-paper: #ecedf2;
-  --gmyth-steel: #8e91a0;
-  --gmyth-line: rgb(var(--gl-tint-light) / 0.08);
-  --gmyth-line-strong: rgb(var(--gl-tint-light) / 0.16);
-  --gmyth-hover: rgb(var(--gl-tint-light) / 0.05);
-  --gmyth-shade: rgb(var(--gl-tint-dark) / 0.55);
+  --gmyth-ink-0: var(--gl-is-ink-0);
+  --gmyth-ink-1: var(--gl-is-ink-1);
+  --gmyth-ink-2: var(--gl-is-ink-2);
+  --gmyth-ink-3: var(--gl-is-ink-3);
+  --gmyth-ink-4: var(--gl-is-ink-4);
+  --gmyth-ink-5: var(--gl-is-ink-5);
+  --gmyth-text: var(--gl-is-text);
+  --gmyth-dim: var(--gl-is-dim);
+  --gmyth-faint: var(--gl-is-faint);
+  --gmyth-paper: var(--gl-is-paper);
+  --gmyth-steel: var(--gl-is-steel);
+  --gmyth-line: var(--gl-is-line);
+  --gmyth-line-strong: var(--gl-is-line-strong);
+  --gmyth-hover: var(--gl-is-hover);
+  --gmyth-shade: var(--gl-is-shade);
 
-  /* meaning: the suite's semantic hues */
-  --gmyth-good: var(--gl-good);
-  --gmyth-bad: var(--gl-hazard);
-  --gmyth-event: var(--gl-warn);
-  --gmyth-shift: var(--gl-info);
+  /* meaning: the core signal hues */
+  --gmyth-good: var(--gl-is-green);
+  --gmyth-bad: var(--gl-is-red);
+  --gmyth-event: var(--gl-is-amber);
+  --gmyth-shift: var(--gl-is-info);
   --gmyth-tone: var(--gmyth-paper);
 
   /* type and shape */
-  --gmyth-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
-  --gmyth-num: var(--gl-tech);
-  --gmyth-cut: 10px;
-  --gmyth-cut-sm: var(--gl-cut-sm);
-  --gmyth-cut-xs: var(--gl-cut-xs);
+  --gmyth-font: var(--gl-is-font);
+  --gmyth-num: var(--gl-is-num);
+  --gmyth-cut: var(--gl-is-cut-lg);
+  --gmyth-cut-sm: var(--gl-is-cut-sm);
+  --gmyth-cut-xs: var(--gl-is-cut-xs);
 
   font-family: var(--gmyth-font);
   color: var(--gmyth-text);
@@ -84,7 +84,7 @@
   font: inherit;
   /* `.gl-btn` and Foundry both leave a button's size to its host; every
      control here is sized by this sheet. */
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   line-height: 1.1;
 }
 .gmyth-root button {
@@ -104,12 +104,12 @@
     translate var(--gl-d-quick) var(--gl-ease),
     scale var(--gl-d-tap) var(--gl-ease);
 }
-.gmyth-root button i { font-size: 11px; }
-.gmyth-root button:disabled { opacity: 0.32; cursor: default; }
-.gmyth-root button:active:not(:disabled) { scale: 0.97; }
+.gmyth-root button i { font-size: var(--gl-is-t-meta); }
+.gmyth-root button:disabled { opacity: var(--gl-is-disabled); cursor: default; }
+.gmyth-root button:active:not(:disabled) { scale: var(--gl-is-press); }
 #gmyth-panel .gmyth-root :is(button, input):focus-visible {
-  outline: 2px solid var(--gmyth-paper);
-  outline-offset: 1px;
+  outline: var(--gl-is-focus-ring);
+  outline-offset: var(--gl-is-focus-offset);
 }
 .gmyth-root [hidden] { display: none !important; }
 :where(.gmyth-root, .gmyth-card) :where(h3, p, ol, ul, q) { margin: 0; padding: 0; border: 0; font: inherit; color: inherit; list-style: none; }
@@ -124,7 +124,7 @@
 
 .gmyth-root .gmyth-eyebrow {
   color: var(--gmyth-faint);
-  font-size: 10px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   letter-spacing: 0.1em;
   line-height: 1;
@@ -153,7 +153,7 @@
 }
 .application.gmyth .window-header .window-title {
   font-family: var(--gmyth-font);
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -172,7 +172,7 @@
   height: 100%;
   min-height: 0;
   background: var(--gmyth-ink-1);
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   line-height: 1.35;
 }
 
@@ -193,7 +193,7 @@
 .gmyth-root .gmyth-chaos-text { display: flex; flex-direction: column; gap: 5px; }
 .gmyth-root .gmyth-chaos-tier {
   color: var(--gmyth-chaos);
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   font-weight: 650;
   line-height: 1;
   transition: color var(--gl-d-brisk) var(--gl-ease);
@@ -242,7 +242,7 @@
   height: 32px;
   padding: 0 10px;
   color: var(--gmyth-faint);
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -287,7 +287,7 @@
   background: var(--gmyth-ink-0);
   box-shadow: inset 0 0 0 1px var(--gmyth-line);
   color: var(--gmyth-text);
-  font-size: 12.5px;
+  font-size: var(--gl-is-t-lead);
   transition: box-shadow var(--gl-d-quick) var(--gl-ease);
 }
 .gmyth-root .gmyth-input::placeholder { color: var(--gmyth-faint); }
@@ -297,7 +297,7 @@
   position: absolute;
   left: 10px;
   color: var(--gmyth-faint);
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   pointer-events: none;
 }
 .gmyth-root .gmyth-search .gmyth-input { padding-left: 28px; }
@@ -309,14 +309,14 @@
   background: var(--gmyth-ink-3);
   box-shadow: inset 0 0 0 1px var(--gmyth-line);
   color: var(--gmyth-text);
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   font-weight: 600;
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gmyth-cut-sm)), calc(100% - var(--gmyth-cut-sm)) 100%, 0 100%);
 }
 .gmyth-root .gmyth-btn:hover:not(:disabled) { background: var(--gmyth-ink-4); translate: 0 var(--gl-lift); }
 .gmyth-root .gmyth-btn-meta {
   color: var(--gmyth-faint);
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 500;
 }
 .gmyth-root .gmyth-btn-wide {
@@ -325,11 +325,11 @@
   gap: 4px;
   min-height: 56px;
   padding: 10px 14px;
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
 }
 .gmyth-root .gmyth-btn-wide > i { display: none; }
 .gmyth-root .gmyth-btn-quiet { background: none; align-self: flex-start; color: var(--gmyth-dim); }
-.gmyth-root .gmyth-btn-small { min-height: 24px; padding: 0 8px; font-size: 11px; }
+.gmyth-root .gmyth-btn-small { min-height: 24px; padding: 0 8px; font-size: var(--gl-is-t-meta); }
 .gmyth-root .gmyth-icon {
   flex: none;
   width: 24px;
@@ -363,7 +363,7 @@
 .gmyth-root .gmyth-odd.is-last { box-shadow: inset 0 0 0 1px var(--gmyth-line-strong); }
 .gmyth-root .gmyth-odd-name {
   color: var(--gmyth-dim);
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   line-height: 1.15;
 }
@@ -375,7 +375,7 @@
   font-weight: 600;
   line-height: 1;
 }
-.gmyth-root .gmyth-odd-yes small { margin-left: 1px; color: var(--gmyth-faint); font-size: 10px; }
+.gmyth-root .gmyth-odd-yes small { margin-left: 1px; color: var(--gmyth-faint); font-size: var(--gl-is-t-meta); }
 .gmyth-root .gmyth-odd:hover .gmyth-odd-name { color: var(--gmyth-text); }
 
 /* ── Scene ── */
@@ -395,7 +395,7 @@
   padding: 4px 4px 4px 10px;
   box-shadow: inset 0 0 0 1px var(--gmyth-line);
   color: var(--gmyth-faint);
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   background-image: repeating-linear-gradient(135deg, var(--gmyth-hover) 0 1px, transparent 1px 6px);
   transition: box-shadow var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease);
 }
@@ -410,11 +410,11 @@
   padding: 0 8px;
   background: var(--gmyth-ink-3);
   color: var(--gmyth-dim);
-  font-size: 11.5px;
+  font-size: var(--gl-is-t-body);
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gmyth-cut-xs)), calc(100% - var(--gmyth-cut-xs)) 100%, 0 100%);
 }
 .gmyth-root .gmyth-chip:hover { background: var(--gmyth-ink-5); color: var(--gmyth-text); translate: 0 var(--gl-lift); }
-.gmyth-root .gmyth-none { color: var(--gmyth-faint); font-size: 12px; }
+.gmyth-root .gmyth-none { color: var(--gmyth-faint); font-size: var(--gl-is-t-body); }
 
 /* ── Lists ── */
 .gmyth-root .gmyth-list { display: flex; flex-direction: column; gap: 6px; flex: none; }
@@ -429,7 +429,7 @@
   padding: 0 0 0 8px;
   border-bottom: 1px solid var(--gmyth-line);
 }
-.gmyth-root .gmyth-list-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.gmyth-root .gmyth-list-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--gl-is-t-lead); }
 .gmyth-root .gmyth-weight { gap: 2px; height: 24px; padding: 0 5px; }
 .gmyth-root .gmyth-weight:hover { background: var(--gmyth-hover); }
 .gmyth-root .gmyth-wpip {
@@ -439,11 +439,11 @@
   clip-path: polygon(30% 0, 100% 0, 70% 100%, 0 100%);
 }
 .gmyth-root .gmyth-wpip.is-on { background: var(--gmyth-dim); }
-.gmyth-root .gmyth-list-empty { padding: 4px 0; color: var(--gmyth-faint); font-size: 11.5px; }
+.gmyth-root .gmyth-list-empty { padding: 4px 0; color: var(--gmyth-faint); font-size: var(--gl-is-t-body); }
 .gmyth-root .gmyth-add { display: flex; gap: 2px; }
-.gmyth-root .gmyth-add .gmyth-input { height: 28px; font-size: 12px; }
+.gmyth-root .gmyth-add .gmyth-input { height: 28px; font-size: var(--gl-is-t-body); }
 .gmyth-root .gmyth-add .gmyth-icon { width: 28px; height: 28px; background: var(--gmyth-ink-3); }
-.gmyth-root .gmyth-foot { color: var(--gmyth-faint); font-size: 10.5px; }
+.gmyth-root .gmyth-foot { color: var(--gmyth-faint); font-size: var(--gl-is-t-meta); }
 
 /* ═══ The log ══════════════════════════════════════════════════════════════ */
 
@@ -470,7 +470,7 @@
   overflow-y: auto;
   scrollbar-width: thin;
 }
-.gmyth-root .gmyth-empty { padding: 18px 4px; color: var(--gmyth-faint); font-size: 12px; text-align: center; }
+.gmyth-root .gmyth-empty { padding: 18px 4px; color: var(--gmyth-faint); font-size: var(--gl-is-t-body); text-align: center; }
 
 /* ── the newest answer, as a plate ── */
 :is(.gmyth-root .gmyth-hero, .gmyth-card) {
@@ -498,12 +498,12 @@
   min-height: 20px;
   color: var(--gmyth-faint);
 }
-:is(.gmyth-hero-head, .gmyth-card-head) > i { font-size: 10px; }
+:is(.gmyth-hero-head, .gmyth-card-head) > i { font-size: var(--gl-is-t-meta); }
 :is(.gmyth-root, .gmyth-card) .gmyth-hero-title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   letter-spacing: 0.09em;
   text-overflow: ellipsis;
@@ -515,7 +515,7 @@
   padding: 3px 6px;
   background: color-mix(in oklab, var(--gmyth-event) 16%, transparent);
   color: var(--gmyth-event);
-  font-size: 9.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   letter-spacing: 0.1em;
   line-height: 1;
@@ -523,7 +523,7 @@
 }
 :is(.gmyth-root, .gmyth-card) .gmyth-question {
   color: var(--gmyth-dim);
-  font-size: 12.5px;
+  font-size: var(--gl-is-t-lead);
   line-height: 1.3;
 }
 :is(.gmyth-root, .gmyth-card) .gmyth-question::before { content: "\201C"; }
@@ -541,10 +541,10 @@
 :is(.gmyth-root, .gmyth-card) .gmyth-meta {
   color: var(--gmyth-faint);
   font-family: var(--gmyth-num);
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   font-variant-numeric: tabular-nums;
 }
-:is(.gmyth-root, .gmyth-card) .gmyth-note { color: var(--gmyth-faint); font-size: 11px; line-height: 1.35; }
+:is(.gmyth-root, .gmyth-card) .gmyth-note { color: var(--gmyth-faint); font-size: var(--gl-is-t-meta); line-height: 1.35; }
 /* One grid for every line of a card, so the values line up under the
    longest label whatever language it is in. */
 :is(.gmyth-root, .gmyth-card) .gmyth-lines {
@@ -564,18 +564,18 @@
 }
 :is(.gmyth-root, .gmyth-card) .gmyth-line-label {
   color: var(--gmyth-faint);
-  font-size: 9.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-:is(.gmyth-root, .gmyth-card) .gmyth-line-value { color: var(--gmyth-text); font-size: 13.5px; font-weight: 600; }
+:is(.gmyth-root, .gmyth-card) .gmyth-line-value { color: var(--gmyth-text); font-size: var(--gl-is-t-lead); font-weight: 600; }
 :is(.gmyth-root, .gmyth-card) .gmyth-line[data-tone="event"] .gmyth-line-value { color: var(--gmyth-event); }
 :is(.gmyth-root, .gmyth-card) .gmyth-line[data-tone="quiet"] .gmyth-line-value { color: var(--gmyth-faint); font-weight: 500; }
 :is(.gmyth-root, .gmyth-card) .gmyth-line-meta {
   color: var(--gmyth-faint);
   font-family: var(--gmyth-num);
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-variant-numeric: tabular-nums;
 }
 
@@ -594,22 +594,22 @@
   padding: 5px 0 5px 4px;
   border-bottom: 1px solid var(--gmyth-line);
 }
-.gmyth-root .gmyth-row > i { color: var(--gmyth-faint); font-size: 10px; text-align: center; }
+.gmyth-root .gmyth-row > i { color: var(--gmyth-faint); font-size: var(--gl-is-t-meta); text-align: center; }
 .gmyth-root .gmyth-row-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .gmyth-root .gmyth-row-title {
   overflow: hidden;
   color: var(--gmyth-faint);
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .gmyth-root .gmyth-row-title q { color: var(--gmyth-dim); quotes: "\201C" "\201D"; }
-.gmyth-root .gmyth-row-headline { color: var(--gmyth-tone); font-size: 13px; font-weight: 650; line-height: 1.2; }
+.gmyth-root .gmyth-row-headline { color: var(--gmyth-tone); font-size: var(--gl-is-t-lead); font-weight: 650; line-height: 1.2; }
 .gmyth-root .gmyth-row[data-tone="yes"] .gmyth-row-headline { color: var(--gmyth-text); }
 .gmyth-root .gmyth-row-sub {
   overflow: hidden;
   color: var(--gmyth-dim);
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -658,7 +658,7 @@
 /* ═══ The chat card ════════════════════════════════════════════════════════ */
 
 .gmyth-card {
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   line-height: 1.35;
 }
 .gmyth-card .gmyth-headline { font-size: 21px; }

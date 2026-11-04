@@ -14,31 +14,31 @@
 
 .glct-trk-skin {
   /* the neutral ramp, leaning black */
-  --trk-ink-0: #05060a;
-  --trk-ink-1: #0a0b11;
-  --trk-ink-2: #0f1017;
-  --trk-ink-3: #15171f;
-  --trk-ink-4: #1c1e28;
-  --trk-ink-5: #272a36;
-  --trk-ink-6: #353846;
-  --trk-text: #f4f4f7;
-  --trk-dim: #b3b5c2;
-  --trk-faint: #6a6d7c;
-  --trk-line: rgb(var(--gl-tint-light) / 0.08);
-  --trk-line-strong: rgb(var(--gl-tint-light) / 0.16);
-  --trk-hover: rgb(var(--gl-tint-light) / 0.045);
-  --trk-shade: rgb(var(--gl-tint-dark) / 0.55);
+  --trk-ink-0: var(--gl-is-ink-0);
+  --trk-ink-1: var(--gl-is-ink-1);
+  --trk-ink-2: var(--gl-is-ink-2);
+  --trk-ink-3: var(--gl-is-ink-3);
+  --trk-ink-4: var(--gl-is-ink-4);
+  --trk-ink-5: var(--gl-is-ink-5);
+  --trk-ink-6: var(--gl-is-ink-6);
+  --trk-text: var(--gl-is-text);
+  --trk-dim: var(--gl-is-dim);
+  --trk-faint: var(--gl-is-faint);
+  --trk-line: var(--gl-is-line);
+  --trk-line-strong: var(--gl-is-line-strong);
+  --trk-hover: var(--gl-is-hover);
+  --trk-shade: var(--gl-is-shade);
 
   /* the hues: paper is the default, the rest say something */
-  --trk-paper: #ecedf2;
-  --trk-red: #ff4d5a;
-  --trk-green: #2fb672;
-  --trk-amber: #ffb020;
+  --trk-paper: var(--gl-is-paper);
+  --trk-red: var(--gl-is-red);
+  --trk-green: var(--gl-is-green);
+  --trk-amber: var(--gl-is-amber);
 
   /* type and shape */
-  --trk-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
-  --trk-radius: 2px;
-  --trk-cut: 8px;
+  --trk-font: var(--gl-is-font);
+  --trk-radius: var(--gl-is-radius);
+  --trk-cut: var(--gl-is-cut);
   --trk-panel: var(--trk-ink-1);
 
   /* a row's tone; [data-tone] sets it */
@@ -77,7 +77,7 @@
     opacity var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease);
 }
 .glct-trk-skin :is(.trk-btn, .trk-icon, .trk-empty, .trk-menu-item, .trk-ed-type):active:not(:disabled) { scale: 0.96; }
-.glct-trk-skin :is(button, .trk-row):focus-visible { outline: 2px solid var(--trk-paper); outline-offset: -2px; }
+.glct-trk-skin :is(button, .trk-row):focus-visible { outline: var(--gl-is-focus-ring); outline-offset: -2px; }
 .glct-trk-skin [hidden] { display: none !important; }
 
 /* ═══ The dock ═════════════════════════════════════════════════════════════ */
@@ -115,7 +115,7 @@
   backdrop-filter: blur(calc(16px * var(--gl-glass-k)));
   /* the suite's cut, lower right */
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--trk-cut)), calc(100% - var(--trk-cut)) 100%, 0 100%);
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   user-select: none;
 }
 #glct-tracker-hud:has(.trk-add) .trk-dock { width: 292px; }
@@ -142,7 +142,7 @@
 .glct-trk-skin .trk-head-title {
   flex: 1;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 750;
   font-stretch: 118%;
   letter-spacing: 0.1em;
@@ -153,7 +153,7 @@
 }
 .glct-trk-skin .is-compact .trk-head-hidden { display: none; }
 .glct-trk-skin .trk-head-count {
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   color: var(--trk-faint);
@@ -164,7 +164,7 @@
   gap: 4px;
   height: 18px;
   padding: 0 5px;
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   color: var(--trk-faint);
   box-shadow: inset 0 0 0 1px var(--trk-line);
 }
@@ -173,7 +173,7 @@
   flex: none;
   width: 24px;
   height: 24px;
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   color: var(--trk-faint);
 }
 .glct-trk-skin .trk-add { color: var(--trk-dim); }
@@ -191,14 +191,14 @@
   width: calc(100% - 12px);
   margin: 6px;
   padding: 10px;
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   line-height: 1.3;
   text-align: left;
   color: var(--trk-faint);
   box-shadow: inset 0 0 0 1px var(--trk-line);
   background-image: repeating-linear-gradient(-55deg, transparent 0 7px, rgb(var(--gl-tint-light) / 0.025) 7px 8px);
 }
-.glct-trk-skin .trk-empty i { font-size: 11px; }
+.glct-trk-skin .trk-empty i { font-size: var(--gl-is-t-meta); }
 .glct-trk-skin .trk-empty.is-static { cursor: default; }
 @media (hover: hover) and (pointer: fine) {
   .glct-trk-skin button.trk-empty:hover { color: var(--trk-text); background-color: var(--trk-hover); }
@@ -238,13 +238,13 @@
   align-items: center;
   gap: 5px;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   font-weight: 650;
   font-stretch: 104%;
   line-height: 1.2;
 }
 .glct-trk-skin .trk-name-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.glct-trk-skin .trk-eye { flex: none; font-size: 10px; color: var(--trk-faint); }
+.glct-trk-skin .trk-eye { flex: none; font-size: var(--gl-is-t-meta); color: var(--trk-faint); }
 .glct-trk-skin .trk-row.is-hidden .trk-name-text { color: var(--trk-dim); }
 
 .glct-trk-skin .trk-subline {
@@ -253,7 +253,7 @@
   gap: 6px;
   min-width: 0;
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   line-height: 1.25;
   color: var(--trk-faint);
 }
@@ -261,7 +261,7 @@
 .glct-trk-skin .trk-tag {
   flex: none;
   padding: 2px 5px 1px;
-  font-size: 9.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 750;
   font-stretch: 116%;
   letter-spacing: 0.1em;
@@ -299,7 +299,7 @@
 }
 .glct-trk-skin .trk-strip > span { display: block; height: 1em; line-height: 1; text-align: center; }
 .glct-trk-skin .trk-cap {
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--trk-faint);
@@ -311,7 +311,7 @@
   position: absolute;
   right: 0;
   bottom: 100%;
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 750;
   font-variant-numeric: tabular-nums;
   color: var(--trk-paper);
@@ -324,7 +324,7 @@
 .glct-trk-skin .trk-btn {
   width: 20px;
   height: 20px;
-  font-size: 10px;
+  font-size: var(--gl-is-t-meta);
   color: var(--trk-faint);
 }
 @media (hover: hover) and (pointer: fine) {
@@ -336,11 +336,11 @@
 .glct-trk-skin .trk-btn-roll {
   width: 26px;
   height: 22px;
-  font-size: 11.5px;
+  font-size: var(--gl-is-t-body);
   color: var(--trk-text);
   background: var(--trk-ink-4);
   box-shadow: inset 0 0 0 1px var(--trk-line-strong);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-sm)), calc(100% - var(--gl-is-cut-sm)) 100%, 0 100%);
 }
 .glct-trk-skin .trk-btn-roll:disabled { color: var(--trk-faint); box-shadow: inset 0 0 0 1px var(--trk-line); background: none; cursor: default; }
 @media (hover: hover) and (pointer: fine) {
@@ -422,7 +422,7 @@
 .glct-trk-skin .trk-sep-line { flex: 1; height: 1px; background: var(--trk-line-strong); }
 .glct-trk-skin .trk-sep-line:first-of-type { flex: 0 0 8px; }
 .glct-trk-skin .trk-sep-label {
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   font-stretch: 114%;
   letter-spacing: 0.09em;
@@ -441,9 +441,9 @@
   background: linear-gradient(90deg, color-mix(in oklab, var(--trk-tone) 7%, transparent), transparent 70%);
   box-shadow: inset 3px 0 0 var(--trk-tone);
 }
-.glct-trk-skin .trk-row.is-prominent .trk-name { font-size: 15px; font-weight: 700; }
+.glct-trk-skin .trk-row.is-prominent .trk-name { font-size: var(--gl-is-t-title); font-weight: 700; }
 .glct-trk-skin .trk-row.is-prominent .trk-num { font-size: 30px; font-stretch: 112%; }
-.glct-trk-skin .trk-row.is-prominent .trk-cap { font-size: 13px; }
+.glct-trk-skin .trk-row.is-prominent .trk-cap { font-size: var(--gl-is-t-lead); }
 .glct-trk-skin .trk-row.is-prominent .trk-dial { margin-right: 11px; }
 .glct-trk-skin .trk-row.is-prominent .trk-cell { height: 10px; }
 .glct-trk-skin .trk-row.is-prominent .trk-meter-bar { height: 4px; }
@@ -463,9 +463,9 @@
 }
 .glct-trk-skin .is-compact .trk-row.is-prominent { min-height: 34px; background: none; }
 .glct-trk-skin .is-compact :is(.trk-subline, .trk-meter, .trk-tools, .trk-btn-roll) { display: none; }
-.glct-trk-skin .is-compact .trk-name { font-size: 12px; }
-.glct-trk-skin .is-compact .trk-row.is-prominent .trk-name { font-size: 13px; }
-.glct-trk-skin .is-compact .trk-num { font-size: 14px; }
+.glct-trk-skin .is-compact .trk-name { font-size: var(--gl-is-t-body); }
+.glct-trk-skin .is-compact .trk-row.is-prominent .trk-name { font-size: var(--gl-is-t-lead); }
+.glct-trk-skin .is-compact .trk-num { font-size: var(--gl-is-t-title); }
 .glct-trk-skin .is-compact .trk-row.is-prominent .trk-num { font-size: 18px; }
 .glct-trk-skin .is-compact .trk-dial { margin-right: 7px; }
 .glct-trk-skin .is-compact .trk-pie { width: 18px; height: 18px; }
@@ -531,7 +531,7 @@
   border: 1px solid var(--trk-line-strong);
   border-radius: var(--trk-radius);
   box-shadow: 0 16px 40px var(--trk-shade);
-  font-size: 12.5px;
+  font-size: var(--gl-is-t-lead);
   animation: glct-trk-menu var(--gl-d-quick) var(--gl-ease) both;
 }
 .glct-trk-skin .trk-menu-item {
@@ -545,7 +545,7 @@
   text-align: left;
   color: var(--trk-dim);
 }
-.glct-trk-skin .trk-menu-item i { width: 13px; font-size: 11px; color: var(--trk-faint); text-align: center; }
+.glct-trk-skin .trk-menu-item i { width: 13px; font-size: var(--gl-is-t-meta); color: var(--trk-faint); text-align: center; }
 .glct-trk-skin .trk-menu-item:is(:hover, :focus-visible) { background: var(--trk-ink-4); color: var(--trk-text); outline: none; }
 .glct-trk-skin .trk-menu-item:is(:hover, :focus-visible) i { color: var(--trk-text); }
 .glct-trk-skin .trk-menu-item.is-danger:is(:hover, :focus-visible) { background: color-mix(in oklab, var(--trk-red) 20%, var(--trk-ink-2)); }
@@ -591,7 +591,7 @@
   background: var(--trk-ink-4);
   box-shadow: inset 0 0 0 1px var(--trk-line);
   color: var(--trk-text);
-  font: 650 12.5px/1 var(--trk-font);
+  font: 650 var(--gl-is-t-lead)/1 var(--trk-font);
 }
 .glct-trk-dialog.glct-trk-skin .form-footer button[data-action="save"],
 .glct-trk-dialog.glct-trk-skin .form-footer button[data-action="yes"] {
@@ -600,7 +600,7 @@
   box-shadow: none;
 }
 .glct-trk-dialog.glct-trk-skin .form-footer button[data-action="yes"] { background: var(--trk-red); }
-.glct-trk-dialog.glct-trk-skin .trk-confirm { margin: 0; font-size: 13px; color: var(--trk-dim); }
+.glct-trk-dialog.glct-trk-skin .trk-confirm { margin: 0; font-size: var(--gl-is-t-lead); color: var(--trk-dim); }
 
 .glct-trk-skin .glct-trk-editor { display: flex; flex-direction: column; gap: 12px; }
 .glct-trk-skin .trk-ed-types { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
@@ -612,11 +612,11 @@
   white-space: nowrap;
   background: var(--trk-ink-3);
   box-shadow: inset 0 0 0 1px var(--trk-line);
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   font-weight: 650;
   color: var(--trk-dim);
 }
-.glct-trk-skin .trk-ed-type i { width: 13px; font-size: 11px; color: var(--trk-faint); }
+.glct-trk-skin .trk-ed-type i { width: 13px; font-size: var(--gl-is-t-meta); color: var(--trk-faint); }
 .glct-trk-skin .trk-ed-type[aria-checked="true"] { background: var(--trk-paper); color: var(--trk-ink-0); box-shadow: none; }
 .glct-trk-skin .trk-ed-type[aria-checked="true"] i { color: var(--trk-ink-0); }
 @media (hover: hover) and (pointer: fine) {
@@ -634,7 +634,7 @@
 .glct-trk-skin .trk-ed-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .glct-trk-skin .trk-ed-field.is-wide { grid-column: 1 / -1; }
 .glct-trk-skin .trk-ed-field > span {
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   font-stretch: 112%;
   letter-spacing: 0.08em;
@@ -651,7 +651,7 @@
   background: var(--trk-ink-1);
   box-shadow: inset 0 0 0 1px var(--trk-line-strong);
   color: var(--trk-text);
-  font: 550 13px/1 var(--trk-font);
+  font: 550 var(--gl-is-t-lead)/1 var(--trk-font);
   font-variant-numeric: tabular-nums;
   transition: box-shadow var(--gl-d-quick) var(--gl-ease);
 }
@@ -697,10 +697,10 @@
   border-bottom: 2px solid var(--trk-ink-0);
   transform: rotate(-45deg);
 }
-.glct-trk-skin .trk-ed-check input:focus-visible + .trk-ed-box { outline: 2px solid var(--trk-paper); outline-offset: 2px; }
+.glct-trk-skin .trk-ed-check input:focus-visible + .trk-ed-box { outline: var(--gl-is-focus-ring); outline-offset: 2px; }
 .glct-trk-skin .trk-ed-check-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.glct-trk-skin .trk-ed-check-text b { font-size: 12.5px; font-weight: 650; color: var(--trk-text); }
-.glct-trk-skin .trk-ed-check-text small { font-size: 11px; line-height: 1.3; color: var(--trk-faint); }
+.glct-trk-skin .trk-ed-check-text b { font-size: var(--gl-is-t-lead); font-weight: 650; color: var(--trk-text); }
+.glct-trk-skin .trk-ed-check-text small { font-size: var(--gl-is-t-meta); line-height: 1.3; color: var(--trk-faint); }
 
 /* ═══ Pool chat card ═══════════════════════════════════════════════════════ */
 
@@ -710,7 +710,7 @@
   background: var(--trk-ink-1);
   border-top: 1px solid var(--trk-line-strong);
   box-shadow: inset 2px 0 0 var(--trk-paper);
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
 }
 .glct-trk-skin.glct-trk-card.is-empty { box-shadow: inset 2px 0 0 var(--trk-red); }
 .glct-trk-skin .glct-trk-card-head { display: flex; align-items: center; gap: 7px; }
@@ -727,17 +727,17 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 13.5px;
+  font-size: var(--gl-is-t-lead);
   font-weight: 700;
   font-stretch: 106%;
 }
 .glct-trk-skin .glct-trk-card-count { font-variant-numeric: tabular-nums; }
 .glct-trk-skin .glct-trk-card-count b { font-size: 20px; font-weight: 750; line-height: 1; }
-.glct-trk-skin .glct-trk-card-count i { font-style: normal; font-size: 11px; color: var(--trk-faint); }
+.glct-trk-skin .glct-trk-card-count i { font-style: normal; font-size: var(--gl-is-t-meta); color: var(--trk-faint); }
 .glct-trk-skin.is-empty .glct-trk-card-count b { color: var(--trk-red); }
 .glct-trk-skin .glct-trk-card-meta {
   margin: 3px 0 9px 17px;
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 650;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -749,12 +749,12 @@
   place-items: center;
   width: 24px;
   height: 24px;
-  font-size: 12.5px;
+  font-size: var(--gl-is-t-lead);
   font-weight: 750;
   font-variant-numeric: tabular-nums;
   background: var(--trk-paper);
   color: var(--trk-ink-0);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-sm)), calc(100% - var(--gl-is-cut-sm)) 100%, 0 100%);
 }
 .glct-trk-skin .glct-trk-card-die.is-drop {
   position: relative;
@@ -771,7 +771,7 @@
   background: var(--trk-red);
   transform: rotate(-35deg);
 }
-.glct-trk-skin .glct-trk-card-tally { display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 650; }
+.glct-trk-skin .glct-trk-card-tally { display: flex; justify-content: space-between; font-size: var(--gl-is-t-body); font-weight: 650; }
 .glct-trk-skin .glct-trk-card-keep { color: var(--trk-text); }
 .glct-trk-skin .glct-trk-card-gone { color: var(--trk-faint); }
 .glct-trk-skin .glct-trk-card-out { width: 100%; font-weight: 750; letter-spacing: 0.12em; text-transform: uppercase; color: var(--trk-red); }
@@ -782,6 +782,6 @@
   position: absolute; top: 0; right: 0; left: auto; width: auto; margin: 0; padding: 8px 9px; border: 0; z-index: 3;
 }
 .chat-message.glct-pool-msg:has(.glct-trk-card) :is(.message-sender, .flavor-text) { display: none; }
-.chat-message.glct-pool-msg:has(.glct-trk-card) .message-metadata { margin: 0; font-size: 10px; color: var(--gl-text-dim); }
+.chat-message.glct-pool-msg:has(.glct-trk-card) .message-metadata { margin: 0; font-size: var(--gl-is-t-meta); color: var(--gl-text-dim); }
 .chat-message.glct-pool-msg:has(.glct-trk-card) .message-content { margin: 0; padding: 0; }
 .chat-message.glct-pool-msg .glct-trk-card .glct-trk-card-head { padding-right: 70px; }

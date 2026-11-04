@@ -13,32 +13,32 @@
 :is(.glus-rc, .glus-sc, .gluniverse-stream-overlay-root, .gluniverse-stream-chat-card,
   .gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) {
   /* the neutral ramp (design system: color.neutral) */
-  --glus-ink-0: #05060a;
-  --glus-ink-1: #0a0b11;
-  --glus-ink-2: #0f1017;
-  --glus-ink-3: #15171f;
-  --glus-ink-4: #1c1e28;
-  --glus-ink-5: #272a36;
-  --glus-ink-6: #353846;
-  --glus-text: #f4f4f7;
-  --glus-dim: #b3b5c2;
-  --glus-faint: #6a6d7c;
-  --glus-line: rgb(var(--gl-tint-light) / 0.08);
-  --glus-line-strong: rgb(var(--gl-tint-light) / 0.16);
-  --glus-hover: rgb(var(--gl-tint-light) / 0.05);
-  --glus-shade: rgb(var(--gl-tint-dark) / 0.55);
+  --glus-ink-0: var(--gl-is-ink-0);
+  --glus-ink-1: var(--gl-is-ink-1);
+  --glus-ink-2: var(--gl-is-ink-2);
+  --glus-ink-3: var(--gl-is-ink-3);
+  --glus-ink-4: var(--gl-is-ink-4);
+  --glus-ink-5: var(--gl-is-ink-5);
+  --glus-ink-6: var(--gl-is-ink-6);
+  --glus-text: var(--gl-is-text);
+  --glus-dim: var(--gl-is-dim);
+  --glus-faint: var(--gl-is-faint);
+  --glus-line: var(--gl-is-line);
+  --glus-line-strong: var(--gl-is-line-strong);
+  --glus-hover: var(--gl-is-hover);
+  --glus-shade: var(--gl-is-shade);
 
   /* paper and the status hues (design system: color.status) */
-  --glus-paper: #ecedf2;
-  --glus-amber: #ffb020;
-  --glus-red: #ff4d5a;
+  --glus-paper: var(--gl-is-paper);
+  --glus-amber: var(--gl-is-amber);
+  --glus-red: var(--gl-is-red);
   --glus-red-deep: #d6184a;
-  --glus-green: #2fb672;
-  --glus-steel: #8e91a0;
+  --glus-green: var(--gl-is-green);
+  --glus-steel: var(--gl-is-steel);
 
-  --glus-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
+  --glus-font: var(--gl-is-font);
   /* the chamfer on a window-sized plate's lower right */
-  --glus-plate-cut: 10px;
+  --glus-plate-cut: var(--gl-is-cut-lg);
 }
 
 /* ═══ Hiding Foundry's UI on the capture ═════════════════════════════════════ */
@@ -365,7 +365,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   background: var(--glus-ink-0);
   color: var(--glus-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   font-variant-numeric: tabular-nums;
   box-shadow: none;
   transition: border-color var(--gl-d-quick) var(--gl-ease), background-color var(--gl-d-quick) var(--gl-ease);
@@ -374,8 +374,8 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   border-color: rgb(var(--gl-tint-light) / 0.28);
 }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) :is(input, select, button, a, [tabindex]):focus-visible {
-  outline: 2px solid var(--glus-paper);
-  outline-offset: 1px;
+  outline: var(--gl-is-focus-ring);
+  outline-offset: var(--gl-is-focus-offset);
   box-shadow: none;
 }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) :is(input, select):disabled {
@@ -393,8 +393,8 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   accent-color: var(--glus-paper);
 }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) code {
-  font-family: var(--gl-tech);
-  font-size: 11px;
+  font-family: var(--gl-is-num);
+  font-size: var(--gl-is-t-meta);
   color: var(--glus-dim);
   background: none;
   border: 0;
@@ -421,7 +421,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   box-shadow: none;
   color: var(--glus-text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--gl-is-t-lead);
   font-weight: 550;
   line-height: 1;
   white-space: nowrap;
@@ -429,13 +429,13 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   transition: background-color var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease),
     color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease);
 }
-:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button i { font-size: 11px; color: var(--glus-dim); }
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button i { font-size: var(--gl-is-t-meta); color: var(--glus-dim); }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button:hover:not(:disabled) {
   background: var(--glus-ink-4);
   border-color: rgb(var(--gl-tint-light) / 0.28);
 }
-:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button:active:not(:disabled) { scale: 0.97; }
-:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button:disabled { opacity: 0.35; cursor: default; }
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button:active:not(:disabled) { scale: var(--gl-is-press); }
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button:disabled { opacity: var(--gl-is-disabled); cursor: default; }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button[aria-pressed="true"] {
   background: var(--glus-paper);
   border-color: var(--glus-paper);
@@ -443,7 +443,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button[aria-pressed="true"] i { color: inherit; }
 
-.gluniverse-stream-director .gluniverse-stream-btn--small { height: 26px; padding: 0 9px; font-size: 12px; }
+.gluniverse-stream-director .gluniverse-stream-btn--small { height: 26px; padding: 0 9px; font-size: var(--gl-is-t-body); }
 /* The one loud button: going live. Broadcast red, as on every desk that has one. */
 .gluniverse-stream-director .gluniverse-stream-btn--primary {
   background: var(--glus-red-deep);
@@ -533,7 +533,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 /* Wraps rather than clips: a long state ("Stream login offline") pushes the login under it, never off it. */
 .gluniverse-stream-onair-head { grid-area: head; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
 .gluniverse-stream-onair-state {
-  font-size: 15px;
+  font-size: var(--gl-is-t-title);
   font-weight: 750;
   font-stretch: 116%;
   letter-spacing: 0.06em;
@@ -544,7 +544,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 .gluniverse-stream-onair[data-state="live"] .gluniverse-stream-onair-state { color: var(--glus-red); }
 .gluniverse-stream-onair[data-state="exposed"] .gluniverse-stream-onair-state { color: var(--glus-amber); }
 .gluniverse-stream-onair-login {
-  font-size: 12.5px;
+  font-size: var(--gl-is-t-lead);
   color: var(--glus-dim);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -561,7 +561,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 }
 .gluniverse-stream-onair-meta > div { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
 .gluniverse-stream-onair-meta dt {
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 650;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -569,7 +569,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 }
 .gluniverse-stream-onair-meta dd {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--gl-is-t-lead);
   color: var(--glus-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -589,7 +589,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   background: color-mix(in oklab, var(--glus-amber) 8%, var(--glus-ink-1));
   color: var(--glus-text);
   opacity: 1;
-  font-size: 12.5px;
+  font-size: var(--gl-is-t-lead);
   line-height: 1.45;
 }
 .gluniverse-stream-director .gluniverse-stream-readonly strong { font-weight: 550; }
@@ -610,12 +610,12 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   border: 0;
   background: none;
   color: var(--glus-faint);
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   font-weight: 650;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.gluniverse-stream-director .gluniverse-stream-tab i { color: inherit; font-size: 11px; }
+.gluniverse-stream-director .gluniverse-stream-tab i { color: inherit; font-size: var(--gl-is-t-meta); }
 .gluniverse-stream-director .gluniverse-stream-tab:hover:not(:disabled) { background: none; color: var(--glus-dim); }
 .gluniverse-stream-director .gluniverse-stream-tab::after {
   content: "";
@@ -662,7 +662,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   padding: 0;
   border: 0;
   font-family: var(--glus-font);
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   font-stretch: 116%;
   letter-spacing: 0.12em;
@@ -671,7 +671,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 }
 .gluniverse-stream-director h2 small {
   margin-left: 6px;
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 450;
   font-stretch: 100%;
   letter-spacing: 0;
@@ -682,13 +682,13 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   margin: 14px 0 8px;
   padding: 0;
   border: 0;
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   font-weight: 600;
   color: var(--glus-dim);
 }
 
 .gluniverse-stream-label {
-  font-size: 11.5px;
+  font-size: var(--gl-is-t-body);
   color: var(--glus-faint);
 }
 
@@ -707,7 +707,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   margin: 0;
 }
 .gluniverse-stream-field > span {
-  font-size: 11.5px;
+  font-size: var(--gl-is-t-body);
   color: var(--glus-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -728,11 +728,11 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   color: var(--glus-text);
   cursor: pointer;
 }
-.gluniverse-stream-user-list small { font-size: 11px; color: var(--glus-faint); }
+.gluniverse-stream-user-list small { font-size: var(--gl-is-t-meta); color: var(--glus-faint); }
 .gluniverse-stream-user-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
 
 /* Padding: four sides by two units, one compact grid. */
@@ -742,7 +742,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   gap: 6px 8px;
   align-items: center;
   margin-bottom: 12px;
-  font-size: 11.5px;
+  font-size: var(--gl-is-t-body);
   color: var(--glus-faint);
 }
 .gluniverse-stream-sides > span:nth-child(-n + 5) { text-align: center; }
@@ -757,11 +757,11 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   align-items: center;
   margin: 6px 0 0;
 }
-.gluniverse-stream-director label.gluniverse-stream-range > span { font-size: 11.5px; color: var(--glus-faint); }
+.gluniverse-stream-director label.gluniverse-stream-range > span { font-size: var(--gl-is-t-body); color: var(--glus-faint); }
 .gluniverse-stream-director label.gluniverse-stream-range input[type="range"] { width: 100%; min-width: 4rem; margin: 0; }
 .gluniverse-stream-director label.gluniverse-stream-range output {
   text-align: right;
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--glus-text);
@@ -793,7 +793,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 /* Specific enough to beat the skin's `:disabled` dimming, which would otherwise show the radio through. */
 .gluniverse-stream-corner-pad .gluniverse-stream-corner input[type="radio"] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .gluniverse-stream-corner:has(input:checked) { background: var(--glus-paper); }
-.gluniverse-stream-corner:has(input:focus-visible) { outline: 2px solid var(--glus-paper); outline-offset: 2px; }
+.gluniverse-stream-corner:has(input:focus-visible) { outline: var(--gl-is-focus-ring); outline-offset: 2px; }
 .gluniverse-stream-corner:has(input:disabled) { cursor: default; opacity: 0.5; }
 
 .gluniverse-stream-filter-entry {
@@ -805,7 +805,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   padding: 10px 12px;
   background: var(--glus-ink-2);
   border: 1px solid var(--glus-line);
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   font-variant-numeric: tabular-nums;
 }
 .gluniverse-stream-filter-entry .gluniverse-stream-label { margin-right: 8px; }
@@ -820,7 +820,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   align-items: flex-end;
 }
 .gluniverse-stream-actions { margin-top: 10px; }
-.gluniverse-stream-autostart { align-items: center; margin-top: 12px; font-size: 12.5px; color: var(--glus-dim); }
+.gluniverse-stream-autostart { align-items: center; margin-top: 12px; font-size: var(--gl-is-t-lead); color: var(--glus-dim); }
 .gluniverse-stream-autostart > span { flex: 1 1 200px; }
 .gluniverse-stream-selector-rule input[type="text"] { flex: 1 1 200px; }
 .gluniverse-stream-selector-rule .gluniverse-stream-layer { width: 90px; }
@@ -828,7 +828,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 .gluniverse-stream-director .gluniverse-stream-form-hint {
   margin: 10px 0 0;
   max-width: 62ch;
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   line-height: 1.5;
   color: var(--glus-faint);
   opacity: 1;
@@ -839,7 +839,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   margin: 0;
   padding: 14px 12px;
   border: 1px dashed var(--glus-line-strong);
-  font-size: 12.5px;
+  font-size: var(--gl-is-t-lead);
   color: var(--glus-faint);
 }
 
@@ -856,7 +856,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   padding: 0 8px 7px;
   border-bottom: 1px solid var(--glus-line);
   text-align: left;
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 650;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -867,13 +867,13 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   padding: 7px 8px;
   border-bottom: 1px solid var(--glus-line);
   vertical-align: middle;
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
   background: none;
 }
 .gluniverse-stream-director tbody tr { background: none; }
 .gluniverse-stream-director tbody tr:hover { background: var(--glus-hover); }
 .gluniverse-stream-director tr[data-tracked] td:first-child { box-shadow: inset 2px 0 0 var(--glus-paper); }
-.gluniverse-stream-director td small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--glus-faint); }
+.gluniverse-stream-director td small { display: block; margin-top: 2px; font-size: var(--gl-is-t-body); color: var(--glus-faint); }
 .gluniverse-stream-cell-main { display: block; color: var(--glus-text); }
 .gluniverse-stream-cell-end { text-align: right; white-space: nowrap; width: 1%; }
 .gluniverse-stream-director td .gluniverse-stream-layer { width: 72px; height: 26px; }
@@ -882,7 +882,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 .gluniverse-stream-tags > span {
   padding: 2px 6px;
   border: 1px solid var(--glus-line-strong);
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -891,7 +891,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 
 /* Allow / Block / Default: one control, three faces. */
 .gluniverse-stream-segmented { display: inline-flex; }
-.gluniverse-stream-director .gluniverse-stream-segmented button { height: 26px; padding: 0 9px; font-size: 12px; }
+.gluniverse-stream-director .gluniverse-stream-segmented button { height: 26px; padding: 0 9px; font-size: var(--gl-is-t-body); }
 .gluniverse-stream-director .gluniverse-stream-segmented button + button { margin-left: -1px; }
 
 .gluniverse-stream-selector-rules { margin: 10px 0 0; padding: 0; list-style: none; }
@@ -905,7 +905,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 .gluniverse-stream-selector-rules li code { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
 
 /* Colour swatches contributed by the targeting section. */
-.gluniverse-stream-director label.gluniverse-stream-color { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.gluniverse-stream-director label.gluniverse-stream-color { display: flex; align-items: center; gap: 8px; font-size: var(--gl-is-t-lead); }
 .gluniverse-stream-director label.gluniverse-stream-color input[type="color"] {
   flex: 0 0 28px;
   width: 28px;
@@ -925,11 +925,11 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 10px 14px;
   margin-block: 4px 10px;
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
 }
 .gluniverse-stream-number-grid > label { display: flex; align-items: center; gap: 8px; margin: 0; }
 .gluniverse-stream-director .form-group { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
-.gluniverse-stream-director .form-group > label { flex: 0 0 140px; font-size: 12px; color: var(--glus-faint); }
+.gluniverse-stream-director .form-group > label { flex: 0 0 140px; font-size: var(--gl-is-t-body); color: var(--glus-faint); }
 
 /* ═══ The Chat Filter page: content types down, author columns across ═══════ */
 
@@ -937,10 +937,10 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   height: 100%;
   overflow-y: auto;
   padding-inline-end: 4px;
-  font-size: 13px;
+  font-size: var(--gl-is-t-lead);
 }
 .gluniverse-stream-filter-intro { margin: 0 0 6px; line-height: 1.5; color: var(--glus-dim); }
-.gluniverse-stream-filter .gluniverse-stream-form-hint { margin: 0 0 8px; color: var(--glus-faint); font-size: 12px; }
+.gluniverse-stream-filter .gluniverse-stream-form-hint { margin: 0 0 8px; color: var(--glus-faint); font-size: var(--gl-is-t-body); }
 
 .gluniverse-stream-filter-presets {
   display: flex;
@@ -971,7 +971,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   background: var(--glus-ink-1);
   border-bottom: 1px solid var(--glus-line-strong);
   text-align: left;
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 650;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -988,7 +988,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   justify-content: center;
   gap: 8px;
   margin-top: 4px;
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 450;
   letter-spacing: 0;
   text-transform: none;
@@ -996,7 +996,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 .gluniverse-stream-filter-group-head th {
   padding: 16px 8px 6px;
   text-align: left;
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
   font-stretch: 116%;
   letter-spacing: 0.12em;
@@ -1014,7 +1014,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   letter-spacing: 0;
   text-transform: none;
   color: var(--glus-faint);
-  font-size: 11.5px;
+  font-size: var(--gl-is-t-body);
   line-height: 1.35;
 }
 .gluniverse-stream-filter-table tbody tr { background: none; }
@@ -1060,7 +1060,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   object-position: 50% 15%;
   border: 0;
 }
-.glus-framing-list span { display: grid; line-height: 1.25; font-size: 13px; }
+.glus-framing-list span { display: grid; line-height: 1.25; font-size: var(--gl-is-t-lead); }
 .glus-framing-list small { color: var(--glus-faint); }
 .glus-framing-editor {
   display: grid;
@@ -1069,7 +1069,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   padding: 12px 16px;
   overflow-y: auto;
 }
-.glus-framing-editor .hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--glus-faint); }
+.glus-framing-editor .hint { margin: 0; font-size: var(--gl-is-t-body); line-height: 1.5; color: var(--glus-faint); }
 .glus-framing-view {
   position: relative;
   overflow: hidden;
@@ -1087,7 +1087,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   user-select: none;
   pointer-events: none;
 }
-.glus-framing-zoom { display: flex; gap: 8px; align-items: center; max-width: 410px; font-size: 12px; color: var(--glus-faint); }
+.glus-framing-zoom { display: flex; gap: 8px; align-items: center; max-width: 410px; font-size: var(--gl-is-t-body); color: var(--glus-faint); }
 .glus-framing-zoom input { flex: 1; }
 /* The live preview sits on a stand-in for a dark map, which is what the card is drawn over. */
 .glus-framing-preview {
