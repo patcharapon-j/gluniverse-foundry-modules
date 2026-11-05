@@ -20,7 +20,7 @@ import {
 import { URGENT_MS, CRITICAL_MS, remainingOf } from "../scripts/features/timer/state.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
-const read = (p) => readFileSync(ROOT + p, "utf8");
+const read = (p) => readFileSync(ROOT + p, "utf8").replace(/\r\n/g, "\n");
 const problems = [];
 let passed = 0;
 const ok = (cond, msg) => { if (cond) passed++; else problems.push(msg); };
