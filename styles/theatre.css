@@ -35,6 +35,7 @@
 
 :is(.glth-overlay, .glth-chat-cut) {
   /* the neutral tones */
+  --glth-ink-1: var(--gl-is-ink-1);
   --glth-ink-2: var(--gl-is-ink-2);
   --glth-text: var(--gl-is-text);
   --glth-paper: var(--gl-is-paper);
@@ -44,6 +45,7 @@
   /* type and shape */
   --glth-font: var(--gl-is-font);
   --glth-cut: var(--gl-is-cut);
+  --glth-wedge: 14px;  /* the 115° cut on a tag's right edge, at the tag's height */
   /* film black and the veils over the picture */
   --glth-film: rgb(var(--gl-tint-dark));
   /* Type over art: a close contact shadow that edges every stroke, under a
@@ -210,27 +212,26 @@
 }
 
 /* ── Corner location tag ──
-   Inset clear of the scene controls and below the resting top bar. */
+   The one Ink and Signal object on the players' screen, and the only thing
+   that stays up for the whole scene: an ink slab with the paper edge, cut
+   with the system's 115° wedge on its right. It brings its own ground, so it
+   reads over a white sky as well as over night. Inset clear of the scene
+   controls and below the resting top bar. */
 .glth-tag {
   left: clamp(72px, 5vw, 120px);
   top: calc(clamp(56px, 7vh, 96px) + var(--glth-lb) * 100vh);
   opacity: 0;
-  font-size: var(--gl-is-t-body);
-  font-weight: 500;
-  letter-spacing: 0.3em;
+  padding: 8px calc(14px + var(--glth-wedge)) 8px 14px;
+  background: var(--glth-ink-1);
+  box-shadow: inset 2px 0 0 var(--glth-paper);
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--glth-wedge)) 100%, 0 100%);
+  font-size: var(--gl-is-t-lead);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
   white-space: nowrap;
-  color: var(--glth-paper);
-  text-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.7), 0 1px 12px rgb(var(--gl-tint-dark) / 0.6);
-}
-.glth-tag::before {
-  content: "";
-  display: inline-block;
-  width: 18px;
-  height: 1px;
-  margin-right: 10px;
-  vertical-align: middle;
-  background: var(--glth-paper);
+  color: var(--glth-text);
 }
 
 /* ── The chat line a cut posts (th.chatOnCut) ──

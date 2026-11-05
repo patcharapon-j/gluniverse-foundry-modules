@@ -756,6 +756,10 @@ section = "seams";
   // Type over art is solid: a translucent line loses most exactly where the picture is busiest.
   const seeThrough = [...ovCss.matchAll(/([^{}]+)\{[^}]*(?<![-\w])color:\s*(color-mix\([^;]*transparent|rgba?\([^;]*\/\s*0?\.\d)/g)].map((m) => m[1].trim());
   ok("no text colour in theatre.css is translucent", seeThrough.length === 0, seeThrough.join(" | "));
+  // The corner tag stays up for the whole scene over art nobody chose for it, so it brings its own ground.
+  const tagRule = ovCss.match(/\.glth-tag\s*\{([^}]*)\}/)?.[1] ?? "";
+  ok("the corner tag is an ink slab with the paper edge and the wedge", /background:\s*var\(--glth-ink-/.test(tagRule)
+    && /inset 2px 0 0 var\(--glth-paper\)/.test(tagRule) && /clip-path:\s*polygon\([^;]*var\(--glth-wedge\)/.test(tagRule));
   ok("the overlay's skin is never written on :root", !/(^|[},\s]):root\b[^{]*\{[^}]*--glth-/.test(ovCss));
   // The chat line a cut posts (th.chatOnCut): every class it writes is styled, and it is a sized plate.
   const MC = await imp(`${FEAT}/model.mjs`);
