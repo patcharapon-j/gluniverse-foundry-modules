@@ -84,6 +84,17 @@ await section("the shared budget ships the old policy and behaves like the old l
   Budget.setPolicy(null);
   ok(Budget.policy === LOCAL_POLICY && ladder.level === 0, "budget.mjs", "setPolicy(null) must restore the shipped policy");
 
+  // At 60 Hz every interval is ~16.7 ms, above the 15 ms recovery threshold, so
+  // a ladder shed during a load never recovers on its own. settle() on
+  // canvasReady is what gives the effects back.
+  for (let i = 0; i < 60; i++) Budget.sample(40);
+  for (let i = 0; i < 600; i++) Budget.sample(1000 / 60);
+  ok(ladder.level === 3, "budget.mjs", "expected a 60 Hz client to hold a load's shed (if this changed, revisit the settle hook)");
+  Budget.settle();
+  ok(ladder.level === 0, "budget.mjs", "settle() did not give a load's shed effects back");
+  ok(/Hooks\.on\(\s*["']canvasReady["'],\s*\(\)\s*=>\s*Budget\.settle\(\)/.test(stripComments(read("scripts/main.mjs"))),
+    "main.mjs", "nothing calls Budget.settle() on canvasReady; a scene load's shed would stick for the session");
+
   const seen = [];
   const off = Budget.onChange((why) => seen.push(why));
   Budget.setAmbient(false);
