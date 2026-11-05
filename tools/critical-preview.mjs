@@ -156,7 +156,7 @@ const html = `<!doctype html>
 ${frames.join("\n")}
 <script type="module">
   import { createCinematicMotion } from "../scripts/features/critical/motion.mjs";
-  import { chromeStyle, cutInHTML, cutInModel, durationLabel, fitBox, mediaStyle, videoEdges } from "../scripts/features/critical/cut-in.mjs";
+  import { chromeStyle, cutInHTML, cutInModel, durationLabel, fitBox, mediaStyle, styleWriter, videoEdges } from "../scripts/features/critical/cut-in.mjs";
   const LANG = ${JSON.stringify(LANG)};
   const t = (key) => key.split(".").reduce((o, p) => o?.[p], LANG) ?? key;
   // What GMConfigMenu#_onRender wires: the readout follows the thumb.
@@ -198,19 +198,23 @@ ${frames.join("\n")}
     const root = tpl.content.firstElementChild;
     host.append(root);
     const [top, bottom] = root.querySelectorAll(".gluc-cut-rule");
-    const plate = root.querySelector(".gluc-cut-plate");
+    const write = styleWriter({ root, top, bottom, plate: root.querySelector(".gluc-cut-plate") });
+    const writeMedia = styleWriter({ backdrop, video });
     const motion = createCinematicMotion(DURATION, { edges: videoEdges(DURATION) });
     const paint = (ms) => {
       const f = motion.sample(ms);
-      backdrop.style.opacity = String(f.bgAlpha);
-      Object.assign(video.style, mediaStyle(f));
-      const s = chromeStyle(f, box, sw, sh);
-      root.style.opacity = s.root.opacity;
-      top.style.transform = s.top.transform;
-      bottom.style.transform = s.bottom.transform;
-      plate.style.transform = s.plate.transform;
-      plate.style.clipPath = s.plate.clipPath;
+      writeMedia({ backdrop: { opacity: String(f.bgAlpha) }, video: mediaStyle(f) });
+      write(chromeStyle(f, box, sw, sh));
     };
+    // ?bench=1: the per-frame cost of one beat, style and layout forced every
+    // frame, written into the frame's caption.
+    if (q.get("bench")) {
+      const N = 3000;
+      const t0 = performance.now();
+      for (let i = 0; i < N; i++) { paint(((i * 1000) / 60) % DURATION); void root.getBoundingClientRect(); }
+      const per = ((performance.now() - t0) / N) * 1000;
+      el.closest(".preview-frame").querySelector(".preview-label").textContent += " · bench " + per.toFixed(1) + " µs/frame";
+    }
     const seek = forced ?? el.dataset.seek;
     if (seek != null) { paint(Number(seek)); continue; }
     const start = performance.now();

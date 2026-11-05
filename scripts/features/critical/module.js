@@ -1,6 +1,6 @@
 import { createCinematicMotion } from "./motion.mjs";
 import {
-  BACKDROP_VAR, bandOf, chromeStyle, colorToInt, cutInHTML, cutInModel, durationLabel, fitBox, isVideoPath, mediaStyle, videoEdges
+  BACKDROP_VAR, chromeStyle, colorToInt, cutInHTML, cutInModel, durationLabel, fitBox, isVideoPath, mediaStyle, styleWriter, videoEdges
 } from "./cut-in.mjs";
 import { cssVar, motionScale } from "../../core/theme.mjs";
 import { onSocket, emitSocket } from "../../core/socket.mjs";
@@ -516,22 +516,21 @@ async function runImageCinematic(event) {
   sprite.scale.set(baseScale);
   sprite.alpha = 0;
   stage.addChild(sprite);
+  // The mask is the band the video clips to (bandOf): the art's own rect,
+  // opened from its centre by the wipe. It is a child of the sprite, so the
+  // drift's scale and lift carry it for free and it is redrawn only while the
+  // wipe moves, not on every frame of the hold.
   const mask = new PIXI.Graphics();
-  stage.addChild(mask);
+  sprite.addChild(mask);
   sprite.mask = mask;
-  // The mask is the band the video clips to (bandOf), so a still and a clip
-  // open, drift and leave identically and the chrome's rules sit on its edges.
-  // Redrawing an unchanged rect rebuilds its geometry for nothing, so it is
-  // keyed on the band to the half pixel.
-  let maskKey = "";
+  let maskWipe = -1;
   const drawMask = (frame) => {
-    const band = bandOf(frame, box, sh);
-    const key = `${Math.round(band.top * 2)}:${Math.round(band.bottom * 2)}:${Math.round(band.w * 2)}`;
-    if (key === maskKey) return;
-    maskKey = key;
-    mask.clear().beginFill(16777215, 1).drawRect(band.x, band.top, band.w, band.bottom - band.top).endFill();
+    const wipe = Math.round(clamp01(frame.wipe) * 1000) / 1000;
+    if (wipe === maskWipe) return;
+    maskWipe = wipe;
+    mask.clear().beginFill(16777215, 1).drawRect(-tw / 2, (-th / 2) * wipe, tw, th * wipe).endFill();
   };
-  drawMask({ wipe: 0, scaleMul: 1, lift: 0 });
+  drawMask({ wipe: 0 });
   const chrome = mountChrome(container, event, box, sw, sh);
   playSfx(event.isPC ? "pc" : "gm");
   cinematicLive = true;
@@ -569,9 +568,9 @@ async function runImageCinematic(event) {
   sprite.mask = null;
   stage.removeChildren();
   app2.stage.removeChildren();
+  // The mask is the sprite's child, so this takes it too.
   sprite.destroy?.({ children: true });
   backdrop.destroy?.({ children: true });
-  mask.destroy?.({ children: true });
   stage.destroy?.({ children: true });
   cinematicLive = false;
   app2.stop();
@@ -616,6 +615,7 @@ async function runVideoCinematic(event) {
   let laidOutW = 0;
   let laidOutH = 0;
   let chrome = null;
+  const writeMedia = styleWriter({ backdrop, video });
   const start = performance.now();
   try {
     await new Promise((resolve) => {
@@ -642,8 +642,7 @@ async function runVideoCinematic(event) {
           chrome?.remove();
           chrome = mountChrome(host, event, box, sw, sh);
         }
-        backdrop.style.opacity = String(frame.bgAlpha);
-        Object.assign(video.style, mediaStyle(frame));
+        writeMedia({ backdrop: { opacity: String(frame.bgAlpha) }, video: mediaStyle(frame) });
         chrome.apply(frame);
         if (t >= 1) {
           finish();
@@ -681,16 +680,9 @@ function mountChrome(host, event, box, sw, sh) {
   const root = tpl.content.firstElementChild;
   host.appendChild(root);
   const [top, bottom] = root.querySelectorAll(".gluc-cut-rule");
-  const plate = root.querySelector(".gluc-cut-plate");
+  const write = styleWriter({ root, top, bottom, plate: root.querySelector(".gluc-cut-plate") });
   return {
-    apply(frame) {
-      const s = chromeStyle(frame, box, sw, sh);
-      root.style.opacity = s.root.opacity;
-      top.style.transform = s.top.transform;
-      bottom.style.transform = s.bottom.transform;
-      plate.style.transform = s.plate.transform;
-      plate.style.clipPath = s.plate.clipPath;
-    },
+    apply(frame) { write(chromeStyle(frame, box, sw, sh)); },
     remove() { root.remove(); }
   };
 }

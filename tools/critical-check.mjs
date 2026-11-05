@@ -128,9 +128,44 @@ for (const [path, want] of [
     near(Number(/translate3d\(0, ([-\d.]+)px/.exec(s.bottom.transform)[1]), band.bottom - 1, `${ms}ms: the bottom rule rides the band`, 0.06);
     eq(s.root.opacity, String(f.imgAlpha), `${ms}ms: the chrome fades with the art`);
   }
+  // Through the hold nothing but the drift moves: the writer re-writes nothing else.
+  const writes = [];
+  const node = (name) => ({ style: new Proxy({}, { set: (o, p, v) => { writes.push(`${name}.${String(p)}`); o[p] = v; return true; } }) });
+  const nodes = { root: node("root"), top: node("top"), bottom: node("bottom"), plate: node("plate"), video: node("video"), backdrop: node("backdrop") };
+  const writeChrome = C.styleWriter(nodes);
+  const writeMedia = C.styleWriter(nodes);
+  const full = C.fitBox(1920, 1080, 1920, 1080);
+  for (let ms = 300; ms <= 700; ms += 1000 / 60) {
+    const f = motion.sample(ms);
+    writeMedia({ backdrop: { opacity: String(f.bgAlpha) }, video: C.mediaStyle(f) });
+    writeChrome(C.chromeStyle(f, full, 1920, 1080));
+  }
+  const held = new Set(writes.filter((w, i) => writes.indexOf(w) !== i));
+  for (const still of ["video.clipPath", "video.opacity", "backdrop.opacity", "plate.clipPath", "root.opacity"]) {
+    ok(!held.has(still), `${still} is re-written through the hold though it does not change`);
+  }
+  ok(held.has("video.transform"), "the drift still moves through the hold");
   motion.destroy();
   const mod = sources["module.js"];
-  ok(/bandOf\(frame, box, sh\)/.test(mod), "module.js: the PIXI mask must be the band the video clips to");
+  ok(/styleWriter\(\{ backdrop, video \}\)/.test(mod) && /styleWriter\(\{ root, top, bottom/.test(mod), "module.js: both the media and the chrome write through styleWriter");
+  // The PIXI mask is the art's own rect opened by the wipe, parented to the
+  // sprite: in screen space that is exactly bandOf (the drift carries it).
+  ok(/sprite\.addChild\(mask\)/.test(mod) && /drawRect\(-tw \/ 2, \(-th \/ 2\) \* wipe, tw, th \* wipe\)/.test(mod), "module.js: the PIXI mask must be the sprite-local band the video clips to");
+  ok(!/mask\.destroy/.test(mod.slice(mod.indexOf("async function runImageCinematic"), mod.indexOf("async function runVideoCinematic"))), "module.js: the mask is the sprite's child and must not be destroyed twice");
+  {
+    // Sprite-local band, carried by the sprite's transform, equals bandOf.
+    const m = createCinematicMotion(1000);
+    const tw = 1600, th = 900, sw = 1920, sh = 1200;
+    const box = C.fitBox(tw, th, sw, sh);
+    for (const ms of [30, 500, 900]) {
+      const f = m.sample(ms);
+      const s = box.scale * f.scaleMul;
+      const top = sh / 2 + f.lift + s * (-th / 2) * f.wipe;
+      const band = C.bandOf(f, box, sh);
+      near(top, band.top, `${ms}ms: the sprite-local mask lands on the band`, 1e-6);
+    }
+    m.destroy();
+  }
   ok((mod.match(/chrome\.apply\(frame\)/g) ?? []).length === 2, "module.js: both cut-in kinds drive the chrome from the beat");
   ok((mod.match(/chrome\??\.remove\(\)/g) ?? []).length >= 2, "module.js: both cut-in kinds take the chrome down");
 }

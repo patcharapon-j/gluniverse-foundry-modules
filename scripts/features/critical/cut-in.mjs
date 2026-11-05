@@ -135,6 +135,31 @@ export function chromeStyle(frame, box, sw, sh) {
   };
 }
 
+/**
+ * Bind per-frame styles (`{ part: { prop: value } }`, as chromeStyle and
+ * mediaStyle produce them) to named nodes (anything with a `.style`). A value
+ * is written only when it changed: through the hold the video's clip and
+ * opacity, the plate's clip and the rules of a full-height band stand still,
+ * and re-writing an inline style each frame re-dirties style for nothing.
+ */
+export function styleWriter(nodes) {
+  const last = new Map();
+  return (styles) => {
+    for (const part in styles) {
+      const el = nodes[part];
+      const props = styles[part];
+      if (!el || !props) continue;
+      for (const prop in props) {
+        const key = `${part}.${prop}`;
+        const value = props[prop];
+        if (last.get(key) === value) continue;
+        last.set(key, value);
+        el.style[prop] = value;
+      }
+    }
+  };
+}
+
 /** The duration slider's readout, written at render and on every input. */
 export function durationLabel(ms) {
   const n = Math.round(Number(ms));
