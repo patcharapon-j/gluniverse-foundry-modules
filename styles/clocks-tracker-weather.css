@@ -133,8 +133,9 @@
 #glct-weather-hud .dh-grip { display: flex; gap: 3px; }
 #glct-weather-hud .dh-grip i { width: 3px; height: 3px; background: var(--glct-ink-6); }
 #glct-weather-hud .dh-title {
-  flex: 1; min-width: 0; font-size: var(--gl-is-t-meta); font-weight: 700; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--glct-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* the title is a phrase ("Weather — Hex Flower"): sentence case keeps it whole */
+  flex: 1; min-width: 0; font-size: var(--gl-is-t-body); font-weight: 600; line-height: 1; letter-spacing: 0;
+  color: var(--glct-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 #glct-weather-hud .wx-hbtn {
   appearance: none; width: 26px; height: 26px; min-height: 0; margin: 0; padding: 0; border: none; border-radius: 0; cursor: pointer;
@@ -368,7 +369,7 @@
 .glct-wxeditor .wxe-flabel { font-size: var(--gl-is-t-meta); color: var(--glct-dim); font-weight: 600; line-height: 1.25; }
 .glct-wxeditor .wxe-frow :is(input, select, textarea) { box-sizing: border-box; max-width: 100%; }
 .glct-wxeditor .wxe-frow textarea { width: 100%; }
-.glct-wxeditor .wxe-frow input[type=color] { width: 100%; height: 28px; padding: 2px; border: 0; background: var(--glct-ink-0); box-shadow: inset 0 0 0 1px var(--glct-line-strong); cursor: pointer; }
+.glct-wxeditor .wxe-frow input[type=color] { width: 64px; height: 28px; padding: 2px; border: 0; background: var(--glct-ink-0); box-shadow: inset 0 0 0 1px var(--glct-line-strong); cursor: pointer; }
 .glct-wxeditor .wxe-frow input[type=range] { width: 100%; accent-color: var(--glct-paper); }
 .glct-wxeditor .wxe-fsubtitle {
   font-size: var(--gl-is-t-meta); letter-spacing: 0.1em; text-transform: uppercase; color: var(--glct-faint); font-weight: 700;
