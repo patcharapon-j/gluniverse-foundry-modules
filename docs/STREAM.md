@@ -105,10 +105,12 @@ only and stays off the canvas during a drag or ruler.
 
 ## Targeting lines
 
-An arc from the combatant whose turn it is to each token it targets: an ink rim
-for busy maps, a band in the relationship colour that tapers towards the source,
-a one-pixel hairline, and four corner brackets that close on the target as the
-line lands. A landed line is still. It draws out, locks on and stops; nothing
+An arc from the combatant whose turn it is to each token it targets: an ink
+shade bed and an ink rim for busy maps, a band in the relationship colour that
+tapers towards the source, a one-pixel hairline, and four corner brackets that
+close on the target as the line lands. The brackets trace an Ink and Signal
+plate: square corners and one 45° cut at the bottom right. Nothing in the line
+glows; the bed is ink, never the line's colour. A landed line is still. It draws out, locks on and stops; nothing
 loops, there is no filter pass, and the launch holds a `Budget.claimMotion`
 only while something is moving. Every duration is in
 `targeting/line-motion.js`. The set of lines is announced on

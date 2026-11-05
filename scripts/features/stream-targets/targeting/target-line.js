@@ -18,7 +18,13 @@ const RETICLE_OPEN_SCALE = 1.45;
 /** During the lock, the brackets' alpha reaches 1 this many times sooner than their spread settles. */
 const RETICLE_LOCK_ALPHA_RATE = 1.8;
 /** A bracket's arm, as a share of its half-span. */
-const BRACKET_ARM_SHARE = 0.34;
+const BRACKET_ARM_SHARE = 0.36;
+/** The chamfer on the bottom-right bracket, as a share of its arm: the plates' cut corner, scaled to the lock. */
+const BRACKET_CUT_SHARE = 0.5;
+/** The colour band and the brackets, in soft units (screen pixels at zoom 1): wide enough that the hue, not the
+ *  paper hairline down its middle, is what reads. */
+const BAND_U = 3.2;
+const BRACKET_U = 2.2;
 /** The head fades in over the last stretch of the reach, so it lands with the line. */
 const HEAD_FADE_FROM = 0.82;
 /** The body is thin where it leaves the source and reaches full width over this share of its length. */
@@ -274,8 +280,8 @@ export class TargetLine {
       strokePath(under, path, 0, end, 5 * u, INK, BED_ALPHA[1] * body, point);
       // Ink rim, colour, hairline: the body tapers out of the source, so its direction reads without the head.
       // Never thinner than two device pixels, or the hairline down the middle would be wider than its band.
-      strokeTapered(core, path, end, taperTo, (2.6 * u) + (2.5 * hl), 4.5 * hl, INK, 0.6 * body, point, this.#from);
-      strokeTapered(core, path, end, taperTo, 2.6 * u, 2 * hl, color, 0.95 * body, point, this.#from);
+      strokeTapered(core, path, end, taperTo, (BAND_U * u) + (2.5 * hl), 4.5 * hl, INK, 0.6 * body, point, this.#from);
+      strokeTapered(core, path, end, taperTo, BAND_U * u, 2 * hl, color, 0.95 * body, point, this.#from);
       strokePath(core, path, 0, end, hl, bright, 0.9 * body, point);
 
       pointAt(path, 0, point);
@@ -295,8 +301,8 @@ export class TargetLine {
     const ringAlpha = clamp01(state.ringAlpha);
     if (ringAlpha > 0.001) {
       const half = ringRadius(targetSize) * Math.max(0, Number(state.ringScale) || 0);
-      drawBrackets(core, to.x, to.y, half, (1.8 * u) + (2.5 * hl), INK, 0.55 * ringAlpha);
-      drawBrackets(core, to.x, to.y, half, 1.8 * u, color, 0.95 * ringAlpha);
+      drawBrackets(core, to.x, to.y, half, (BRACKET_U * u) + (2.5 * hl), INK, 0.55 * ringAlpha);
+      drawBrackets(core, to.x, to.y, half, BRACKET_U * u, color, 0.95 * ringAlpha);
       drawBrackets(core, to.x, to.y, half, hl, bright, 0.9 * ringAlpha);
     }
     return true;
@@ -455,7 +461,10 @@ function fillCircle(graphics, x, y, radius, color, alpha) {
   graphics.endFill();
 }
 
-/** Four corner brackets on the square of half-span `half` round (x, y): the suite's cut motif, as a lock. */
+/**
+ * Four corner brackets on the square of half-span `half` round (x, y), square except the bottom-right one, which
+ * is cut at 45°: the outline of an Ink and Signal plate, with its one chamfered corner, closed round the target.
+ */
 function drawBrackets(graphics, x, y, half, width, color, alpha) {
   if (alpha <= 0.001 || half <= 0 || width <= 0) return;
   const arm = half * BRACKET_ARM_SHARE;
@@ -464,8 +473,10 @@ function drawBrackets(graphics, x, y, half, width, color, alpha) {
     for (const sy of [-1, 1]) {
       const cx = x + (sx * half);
       const cy = y + (sy * half);
+      const cut = sx > 0 && sy > 0 ? arm * BRACKET_CUT_SHARE : 0;
       graphics.moveTo(cx - (sx * arm), cy);
-      graphics.lineTo(cx, cy);
+      graphics.lineTo(cx - (sx * cut), cy);
+      if (cut > 0) graphics.lineTo(cx, cy - (sy * cut));
       graphics.lineTo(cx, cy - (sy * arm));
     }
   }

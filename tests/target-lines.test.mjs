@@ -1113,6 +1113,34 @@ test("the bed under the line is ink shade, never a halo of the line's own colour
   }
 });
 
+test("the reticle is a plate's outline: square corners and one 45° cut at the bottom right", () => {
+  const t = loadTargetLine();
+  const line = t.make({ sourceId: "a", targetId: "a" });
+  line.show();
+  Object.assign(line.state, { reach: 1, body: 1, ringAlpha: 1, ringScale: 1 });
+  line.render({ source: token(500, 500), target: token(500, 500), scale: 1, gridSize: 100, resolution: 1 });
+  const ops = line.coreGraphics.ops;
+  // One stroke pass: the colour's (the ink rim and the hairline repeat the same shape).
+  const colourPass = ops.slice(ops.findIndex((op, i) => op.op === "line" && i > 0 && op.color !== t.INK && op.width > 0));
+  const brackets = [];
+  colourPass.forEach((op, i) => {
+    if (op.op !== "moveTo" || brackets.length >= 4) return;
+    const run = [op];
+    for (let j = i + 1; colourPass[j]?.op === "lineTo"; j++) run.push(colourPass[j]);
+    brackets.push(run);
+  });
+  assert.equal(brackets.length, 4, "four corner brackets");
+  const cut = brackets.filter(run => run.length === 4);
+  assert.equal(cut.length, 1, "exactly one corner is cut, as on a plate");
+  const [, b, c] = cut[0];
+  assert.ok(c.x > 500 && c.y > 500 && b.x > 500 && b.y > 500, "the cut corner is the bottom right");
+  assert.ok(Math.abs(Math.abs(c.x - b.x) - Math.abs(c.y - b.y)) < 1e-9 && c.x !== b.x, "a 45° cut");
+  for (const run of brackets.filter(r => r.length === 3)) {
+    const [a, corner, d] = run;
+    assert.ok((a.y === corner.y && corner.x === d.x) || (a.x === corner.x && corner.y === d.y), "the other corners are square");
+  }
+});
+
 test("a style that has not changed does not force a redraw", () => {
   const t = loadTargetLine();
   const line = t.make({ color: 0x4db8ff });
