@@ -17,7 +17,7 @@
  */
 
 import { SUITE_ID, featurePath, warn } from "../../core/const.mjs";
-import { PALETTE, motionScale, onThemeChange } from "../../core/theme.mjs";
+import { INK_SIGNAL, motionScale, onThemeChange } from "../../core/theme.mjs";
 import { FEATURE_ID, FLAGS } from "./constants.mjs";
 import { foundryAdapter, keysInRect } from "./hex-math.mjs";
 import { partyCentres } from "./party.mjs";
@@ -116,7 +116,7 @@ class Host {
       keys: this.keys,
       loadTexture,
       resolveIcon,
-      palette: PALETTE,
+      palette: INK_SIGNAL,
       terrainName: (id) => terrainName(this.store?.map, id),
       // "glhex:icons/x.webp" → the module's assets/hexcrawl/icons/x.webp
       assetRoot: featurePath(FEATURE_ID, "assets/x").slice(0, -1),

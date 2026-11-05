@@ -122,10 +122,10 @@ export async function openSceneDialog() {
       : hexGrid ? F("GLHEX.scene.canEnable", { name: scene.name })
         : F("GLHEX.scene.notHex", { name: scene.name });
 
-  const content = `<div class="glhex-scene-dialog gl-type">
+  const content = `<div class="glhex-scene-dialog">
     <p class="glhex-scene-status">${escapeHTML(status)}</p>
     <fieldset class="glhex-scene-new">
-      <legend class="gl-tech-label">${escapeHTML(L("GLHEX.scene.newLegend"))}</legend>
+      <legend class="glhex-label">${escapeHTML(L("GLHEX.scene.newLegend"))}</legend>
       <label>${escapeHTML(L("GLHEX.scene.name"))}<input type="text" name="name" value="${escapeHTML(L("GLHEX.scene.defaultName"))}"></label>
       <div class="glhex-scene-row">
         <label>${escapeHTML(L("GLHEX.scene.cols"))}<input type="number" name="cols" value="20" min="1" max="200"></label>

@@ -61,7 +61,7 @@ function appClass() {
   _Cls = class HexImportApp extends ApplicationV2 {
     static DEFAULT_OPTIONS = {
       id: "glhex-import",
-      classes: ["glhex-import", "gl-type"],
+      classes: ["glhex-import"],
       tag: "section",
       window: { title: "GLHEX.import.title", icon: "fa-solid fa-file-import", resizable: true },
       position: { width: 560, height: "auto" },
@@ -84,7 +84,7 @@ function appClass() {
       const isHex = !!scene?.getFlag(SUITE_ID, FLAGS.enabled);
       const p = this.parsed;
       const summary = p ? `
-        <div class="glhex-import-summary gl-well">
+        <div class="glhex-import-summary">
           <div><b>${escapeHTML(p.scene.name)}</b> · ${p.scene.cols}×${p.scene.rows} · ${escapeHTML(L(`grid${p.scene.gridType}`))}</div>
           <div>${escapeHTML(L("counts", {
             hexes: Object.keys(p.map.hexes).length,
@@ -98,19 +98,19 @@ function appClass() {
       const error = this.error ? `<div class="glhex-import-error"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHTML(this.error)}</div>` : "";
       return `
         <p class="glhex-import-hint">${escapeHTML(L("hint"))}</p>
-        <textarea class="glhex-import-text gl-field" name="json" spellcheck="false" placeholder='{ "format": "glhex-map", … }'>${escapeHTML(this.text)}</textarea>
+        <textarea class="glhex-import-text" name="json" spellcheck="false" placeholder='{ "format": "glhex-map", … }'>${escapeHTML(this.text)}</textarea>
         <input type="file" class="glhex-import-file" accept=".json,application/json" hidden>
         <div class="glhex-import-row">
-          <button type="button" class="gl-btn glhex-import-btn" data-action="loadFile"><i class="fa-solid fa-folder-open"></i> ${escapeHTML(L("load"))}</button>
-          <button type="button" class="gl-btn glhex-import-btn" data-action="example"><i class="fa-solid fa-copy"></i> ${escapeHTML(L("example"))}</button>
-          <button type="button" class="gl-btn glhex-import-btn" data-action="exportCurrent" ${isHex ? "" : "hidden"}><i class="fa-solid fa-file-export"></i> ${escapeHTML(L("export"))}</button>
+          <button type="button" class="glhex-import-btn" data-action="loadFile"><i class="fa-solid fa-folder-open"></i> ${escapeHTML(L("load"))}</button>
+          <button type="button" class="glhex-import-btn" data-action="example"><i class="fa-solid fa-copy"></i> ${escapeHTML(L("example"))}</button>
+          <button type="button" class="glhex-import-btn" data-action="exportCurrent" ${isHex ? "" : "hidden"}><i class="fa-solid fa-file-export"></i> ${escapeHTML(L("export"))}</button>
           <span class="glhex-import-spacer"></span>
-          <button type="button" class="gl-btn glhex-import-btn" data-action="check"><i class="fa-solid fa-list-check"></i> ${escapeHTML(L("check"))}</button>
+          <button type="button" class="glhex-import-btn" data-action="check"><i class="fa-solid fa-list-check"></i> ${escapeHTML(L("check"))}</button>
         </div>
         ${error}${summary}
         <div class="glhex-import-row glhex-import-commit">
-          <button type="button" class="gl-btn glhex-import-btn" data-action="replace" ${isHex ? "" : "hidden"}><i class="fa-solid fa-arrows-rotate"></i> ${escapeHTML(L("replace"))}</button>
-          <button type="button" class="gl-btn glhex-import-btn glhex-import-primary" data-action="create"><i class="fa-solid fa-map-location-dot"></i> ${escapeHTML(L("create"))}</button>
+          <button type="button" class="glhex-import-btn" data-action="replace" ${isHex ? "" : "hidden"}><i class="fa-solid fa-arrows-rotate"></i> ${escapeHTML(L("replace"))}</button>
+          <button type="button" class="glhex-import-btn glhex-import-primary" data-action="create"><i class="fa-solid fa-map-location-dot"></i> ${escapeHTML(L("create"))}</button>
         </div>`;
     }
 

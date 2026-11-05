@@ -663,20 +663,97 @@ for (const s of ["styles/hexcrawl.css", "styles/hexcrawl-play.css"]) ok(`module.
 for (const l of ["lang/hexcrawl.en.json", "lang/hexcrawl-apps.en.json"]) ok(`module.json lists ${l}`, manifest.languages.some((x) => x.path === l));
 ok("features/index.mjs imports the adapter", readFileSync(join(ROOT, "scripts", "features", "index.mjs"), "utf8").includes("./hexcrawl/index.mjs"));
 
+const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+
 head("css");
-const play = readFileSync(join(ROOT, "styles", "hexcrawl-play.css"), "utf8");
-ok("the chat card sizes its .gl-btn (it declares no font-size)", /\.glhex-card \.gl-btn[\s\S]*?font-size/.test(play));
-ok("no raw white veils", !/rgba\(\s*255\s*,\s*255\s*,\s*255/.test(play));
-ok("no @font-face / network @import", !/@font-face|@import\s+url\(['"]?http/.test(play));
-ok("no raw ms/s durations", !/\b\d+(\.\d+)?m?s\b(?![-\w])/.test(play.replace(/\/\*[\s\S]*?\*\//g, "")));
+for (const s of ["styles/hexcrawl-import.css"]) ok(`module.json lists ${s}`, manifest.styles.includes(s));
+// The feature's three sheets: the GM apps, the play surfaces, the import window.
+const SHEETS = ["hexcrawl.css", "hexcrawl-play.css", "hexcrawl-import.css"]
+  .map((f) => [f, readFileSync(join(ROOT, "styles", f), "utf8").replace(/\/\*[\s\S]*?\*\//g, "")]);
+const allCss = SHEETS.map(([, css]) => css).join("\n");
+for (const [f, css] of SHEETS) {
+  ok(`${f}: no raw white veils`, !/rgba?\(\s*255\s*,\s*255\s*,\s*255/.test(css));
+  ok(`${f}: no @font-face / network @import`, !/@font-face|@import\s+url\(['"]?http/.test(css));
+  ok(`${f}: no raw ms/s durations`, !/\b\d+(\.\d+)?m?s\b(?![-\w])/.test(css));
+}
+
+/* Ink and Signal (DESIGN.md, docs/adr/0012). The skin aliases core's `--gl-is-*`
+   under `--glhex-*` on the feature's own roots. Etched Glass is legacy, so a
+   read of its tokens (the accent, violet, cyan, the glass surfaces, its type
+   scale) is the migration drifting back. Shared motion, z-order, tint channels
+   and glass strength stay shared (DESIGN.md, "What stays shared"). */
+head("ink and signal");
+const SHARED_GL = /^--gl-(?:is-[a-z0-9-]+|d-[a-z]+|ease(?:-[a-z]+)?|snap|lift(?:-lg)?|stagger|breathe|tint-(?:light|dark)|z-[a-z]+|blur|glass-k|motion-scale|ui-scale)$/;
+for (const [f, css] of SHEETS) {
+  const legacy = [...new Set([...css.matchAll(/var\((--gl-[a-z0-9-]+)/g)].map((m) => m[1]).filter((t) => !SHARED_GL.test(t)))];
+  ok(`${f} reads no Etched Glass token`, legacy.length === 0, legacy.join(", "));
+  ok(`${f} writes nothing on :root`, !/:root/.test(css));
+  ok(`${f} redeclares no --gl-* token`, !/(^|[;{\s])--gl-[a-z0-9-]+\s*:/m.test(css));
+  const hexes = css.match(/#[0-9a-fA-F]{3,8}\b(?![-\w])/g) ?? [];
+  ok(`${f} states no colour of its own (The Alias Rule)`, hexes.length === 0, hexes.join(", "));
+  const raw = css.match(/rgba?\((?!\s*var\(--gl-tint-)[^)]*\)/g) ?? [];
+  ok(`${f} draws veils from the tint channels only`, raw.length === 0, raw.join(", "));
+  const small = [...css.matchAll(/font-size:\s*([^;}]+)/g)].map((m) => m[1].trim())
+    .filter((v) => !/^var\(--gl-is-t-(?:meta|body|lead|title|display)\)$|^inherit$/.test(v) && !(/^(\d+(?:\.\d+)?)px$/.test(v) && parseFloat(v) >= 11));
+  ok(`${f} sets no type under 11px and no size off the scale (The Floor Rule)`, small.length === 0, small.join(", "));
+  const frames = [...css.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]).filter((n) => !n.startsWith("glhex-"));
+  ok(`${f} prefixes its keyframes glhex-`, frames.length === 0, frames.join(", "));
+  ok(`${f}: no prefers-reduced-motion`, !/prefers-reduced-motion/.test(css));
+}
+for (const step of ["ink-0", "ink-1", "ink-2", "ink-3", "ink-4", "ink-5", "ink-6", "text", "paper", "dim", "faint", "steel", "on-slab", "line", "line-strong", "hover", "selected", "shade", "amber", "red", "green", "ember", "info"]) {
+  ok(`the skin aliases --gl-is-${step}`, new RegExp(`--glhex-${step}:\\s*var\\(--gl-is-${step}\\)`).test(allCss));
+}
+// Every root a hexcrawl surface hangs off carries the skin (an alias resolves
+// nowhere a root forgot): the GM windows, the import window, the dialogs, the
+// tooltip and the chat card.
+const skinRoots = /:is\(([^)]*)\)\s*\{[^}]*--glhex-ink-0:/.exec(allCss)?.[1] ?? "";
+for (const root of [".glhex-app", ".glhex-root", ".glhex-import", ".glhex-dialog", ".glhex-tooltip", ".glhex-card"]) {
+  ok(`the skin is declared on ${root}`, skinRoots.split(",").map((s) => s.trim()).includes(root));
+}
+// No Etched Glass utility class on a hexcrawl surface: `.gl-btn`, `.gl-field`
+// and the rest paint the old glass, the accent and the tech face.
+const LEGACY_CLASS = /class(?:Name)?\s*[=:]\s*["'`][^"'`]*\bgl-(?:btn|btn-accent|field|glass|well|tech-label|scroll|rule|empty|numeric|type)\b/;
+const markupFiles = [
+  ...readdirSync(join(ROOT, "templates", "hexcrawl")).map((f) => join(ROOT, "templates", "hexcrawl", f)),
+  ...readdirSync(FEAT).filter((f) => f.endsWith(".mjs")).map((f) => join(FEAT, f)),
+  ...readdirSync(join(FEAT, "apps")).filter((f) => f.endsWith(".mjs")).map((f) => join(FEAT, "apps", f)),
+];
+for (const f of markupFiles) {
+  const src = readFileSync(f, "utf8");
+  const hit = src.split("\n").find((l) => LEGACY_CLASS.test(l) || /classes:\s*\[[^\]]*"gl-(?:type|glass)"/.test(l));
+  ok(`${relative(ROOT, f)} uses no Etched Glass utility class`, !hit, hit?.trim().slice(0, 120));
+}
+{
+  // .gl-btn and Foundry leave a button's size to its host: a chat log hands it
+  // 14px. Every button on the card carries the card's own class, which sizes it.
+  const arrivalSrc = readFileSync(join(FEAT, "arrival.mjs"), "utf8");
+  const buttons = arrivalSrc.match(/<button[^>]*>/g) ?? [];
+  ok("every chat card button carries .glhex-card-btn", buttons.length > 0 && buttons.every((b) => /glhex-card-btn/.test(b)));
+  ok("the chat card sizes its buttons (The Size-It-Yourself Rule)", /\.glhex-card-btn\s*\{[^}]*font-size/.test(allCss));
+}
+{
+  // PIXI cannot read a custom property, so the map reads Ink and Signal
+  // through core/theme.mjs's INK_SIGNAL (stream-targets-check holds that mirror
+  // equal to gl-tokens.css). The host and the preview hand it to the renderer,
+  // and every key the renderer reads off it must exist there.
+  const { INK_SIGNAL } = await imp("scripts/core/theme.mjs");
+  const hostSrc = stripComments(readFileSync(join(FEAT, "host.mjs"), "utf8"));
+  const pvSrc = readFileSync(join(ROOT, "tools", "templates", "hexcrawl-preview.html"), "utf8");
+  ok("the host and the preview hand the renderer INK_SIGNAL", /palette:\s*INK_SIGNAL/.test(hostSrc) && /palette:\s*INK_SIGNAL/.test(pvSrc));
+  const styleSrc = stripComments(readFileSync(join(FEAT, "render", "style.mjs"), "utf8"));
+  const missing = [...new Set([...styleSrc.matchAll(/palette\.(\w+)/g)].map((m) => m[1]).filter((k) => !(k in INK_SIGNAL)))];
+  ok("the map's chrome reads only keys the Ink and Signal mirror has", missing.length === 0, missing.join(", "));
+  ok("no violet on the map (The No Violet Rule)", !/violet/i.test(styleSrc));
+  const edSrc = stripComments(readFileSync(join(FEAT, "apps", "hex-editor.mjs"), "utf8"));
+  ok("an uncoloured landmark defaults to the call amber the map draws", /DEFAULT_LM_COLOR\s*=\s*INK_SIGNAL\.amber/.test(edSrc)
+    && /palette\.amber/.test(styleSrc));
+}
 
 /* ── renderer & apps purity ─────────────────────────────────────────────── */
 const walk = (dir) => existsSync(dir) ? readdirSync(dir).flatMap((f) => {
   const p = join(dir, f);
   return statSync(p).isDirectory() ? walk(p) : p.endsWith(".mjs") ? [p] : [];
 }) : [];
-const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
-
 head("renderer");
 const renderFiles = walk(join(FEAT, "render"));
 ok("render/ exists", renderFiles.length > 0);

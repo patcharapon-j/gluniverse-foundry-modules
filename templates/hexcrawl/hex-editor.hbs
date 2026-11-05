@@ -1,9 +1,9 @@
 {{!-- Hexcrawl — single-hex editor. Dotted names (mk.f.terrain, lm.0.label) nest through Foundry's form parser. --}}
-<div class="glhex-root glhex-ed gl-type">
+<div class="glhex-root glhex-ed">
 {{#if empty}}
-  <p class="gl-empty">{{localize "GLHEX.app.palette.noScene"}}</p>
+  <p class="glhex-empty">{{localize "GLHEX.app.palette.noScene"}}</p>
 {{else}}
-  <div class="glhex-body gl-scroll">
+  <div class="glhex-body">
     {{!-- Border first: it decides whether anything below this line applies. --}}
     <label class="glhex-check glhex-border-row {{#if d.bd}}is-on{{/if}}">
       <input type="checkbox" name="bd" {{#if d.bd}}checked{{/if}} data-rerender>
@@ -13,42 +13,42 @@
 
     <div class="glhex-grid2">
       <label class="glhex-field">
-        <span class="gl-tech-label">{{localize "GLHEX.app.hex.terrain"}}</span>
-        <select name="t" class="gl-field">
+        <span class="glhex-label">{{localize "GLHEX.app.hex.terrain"}}</span>
+        <select name="t" class="glhex-input">
           {{#each terrains}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
         </select>
       </label>
       <label class="glhex-field">
-        <span class="gl-tech-label">{{localize "GLHEX.app.hex.region"}}</span>
-        <select name="rg" class="gl-field" data-rerender>
+        <span class="glhex-label">{{localize "GLHEX.app.hex.region"}}</span>
+        <select name="rg" class="glhex-input" data-rerender>
           {{#each regions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
         </select>
       </label>
       <label class="glhex-field">
-        <span class="gl-tech-label">{{localize "GLHEX.app.hex.rating"}}</span>
-        <select name="rt" class="gl-field" data-rerender>
+        <span class="glhex-label">{{localize "GLHEX.app.hex.rating"}}</span>
+        <select name="rt" class="glhex-input" data-rerender>
           {{#each ratings}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
         </select>
       </label>
       <label class="glhex-field">
-        <span class="gl-tech-label">{{localize "GLHEX.app.hex.cost"}}</span>
-        <input type="number" name="cost" class="gl-field gl-numeric" min="0" step="any" value="{{cost}}" placeholder="{{costPlaceholder}}">
+        <span class="glhex-label">{{localize "GLHEX.app.hex.cost"}}</span>
+        <input type="number" name="cost" class="glhex-input glhex-num" min="0" step="any" value="{{cost}}" placeholder="{{costPlaceholder}}">
       </label>
     </div>
 
     <fieldset class="glhex-block">
-      <legend class="gl-tech-label">{{localize "GLHEX.app.hex.visibility"}}</legend>
+      <legend class="glhex-label">{{localize "GLHEX.app.hex.visibility"}}</legend>
       <div class="glhex-grid2">
         <label class="glhex-field">
-          <span class="gl-tech-label">{{localize "GLHEX.app.hex.state"}}</span>
-          <select name="st" class="gl-field" data-rerender>
+          <span class="glhex-label">{{localize "GLHEX.app.hex.state"}}</span>
+          <select name="st" class="glhex-input" data-rerender>
             {{#each states}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
           </select>
         </label>
         {{#if masked}}
           <label class="glhex-field">
-            <span class="gl-tech-label">{{localize "GLHEX.app.hex.preset"}}</span>
-            <select name="mk.p" class="gl-field" data-rerender>
+            <span class="glhex-label">{{localize "GLHEX.app.hex.preset"}}</span>
+            <select name="mk.p" class="glhex-input" data-rerender>
               {{#each presets}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
             </select>
           </label>
@@ -72,20 +72,20 @@
     </fieldset>
 
     <label class="glhex-field">
-      <span class="gl-tech-label">{{localize "GLHEX.app.hex.name"}}</span>
-      <input type="text" name="nm" class="gl-field" value="{{d.nm}}" placeholder="{{namePlaceholder}}">
+      <span class="glhex-label">{{localize "GLHEX.app.hex.name"}}</span>
+      <input type="text" name="nm" class="glhex-input" value="{{d.nm}}" placeholder="{{namePlaceholder}}">
     </label>
 
     <fieldset class="glhex-block">
-      <legend class="gl-tech-label">{{localize "GLHEX.app.hex.landmarks"}} <span class="gl-numeric glhex-dim">{{landmarks.length}}/{{maxLandmarks}}</span></legend>
+      <legend class="glhex-label">{{localize "GLHEX.app.hex.landmarks"}} <span class="glhex-num glhex-dim">{{landmarks.length}}/{{maxLandmarks}}</span></legend>
       <p class="glhex-note">{{lmSeenHint}}</p>
       {{#each landmarks}}
         <div class="glhex-lm {{#if seen}}is-seen{{else}}is-unseen{{/if}}" data-index="{{i}}">
           <button type="button" class="glhex-lm-icon" data-action="pickIcon" style="--glhex-lm-color: {{colorShown}}" data-tooltip="{{localize "GLHEX.app.hex.pickIcon"}}" aria-label="{{localize "GLHEX.app.hex.pickIcon"}}">
             {{#if img}}<img src="{{img}}" alt="">{{else}}<i class="{{#if icon}}{{icon}}{{else}}fa-solid fa-landmark{{/if}}"></i>{{/if}}
           </button>
-          <input type="text" name="lm.{{i}}.label" class="gl-field" value="{{label}}" placeholder="{{localize "GLHEX.app.hex.landmarkLabel"}}">
-          <select name="lm.{{i}}.vis" class="gl-field glhex-lm-vis" data-rerender aria-label="{{localize "GLHEX.app.hex.landmarkVis"}}">
+          <input type="text" name="lm.{{i}}.label" class="glhex-input" value="{{label}}" placeholder="{{localize "GLHEX.app.hex.landmarkLabel"}}">
+          <select name="lm.{{i}}.vis" class="glhex-input glhex-lm-vis" data-rerender aria-label="{{localize "GLHEX.app.hex.landmarkVis"}}">
             {{#each vis}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
           </select>
           <button type="button" class="glhex-mini glhex-danger" data-action="removeLandmark" data-tooltip="{{localize "GLHEX.app.common.remove"}}" aria-label="{{localize "GLHEX.app.common.remove"}}"><i class="fa-solid fa-trash"></i></button>
@@ -99,12 +99,12 @@
             <input type="hidden" name="lm.{{i}}.color" value="{{color}}">
             <button type="button" class="glhex-mini" data-action="clearLandmarkColor" data-tooltip="{{localize "GLHEX.app.hex.landmarkColorClear"}}" aria-label="{{localize "GLHEX.app.hex.landmarkColorClear"}}"><i class="fa-solid fa-rotate-left"></i></button>
           </span>
-          <select name="lm.{{i}}.size" class="gl-field glhex-lm-size gl-numeric" aria-label="{{localize "GLHEX.app.hex.landmarkSize"}}" data-tooltip="{{localize "GLHEX.app.hex.landmarkSize"}}">
+          <select name="lm.{{i}}.size" class="glhex-input glhex-lm-size glhex-num" aria-label="{{localize "GLHEX.app.hex.landmarkSize"}}" data-tooltip="{{localize "GLHEX.app.hex.landmarkSize"}}">
             {{#each sizes}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
           </select>
           <div class="glhex-link glhex-lm-link">
             <i class="fa-solid fa-book-open"></i>
-            <input type="text" name="lm.{{i}}.journal" class="gl-field" value="{{journal}}" data-uuid-drop="JournalEntry,JournalEntryPage"
+            <input type="text" name="lm.{{i}}.journal" class="glhex-input" value="{{journal}}" data-uuid-drop="JournalEntry,JournalEntryPage"
               placeholder="{{localize "GLHEX.app.hex.journalDrop"}}">
             <button type="button" class="glhex-mini" data-action="openLink" data-tooltip="{{localize "GLHEX.app.common.open"}}" aria-label="{{localize "GLHEX.app.common.open"}}"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
           </div>
@@ -118,14 +118,14 @@
     </fieldset>
 
     <label class="glhex-field">
-      <span class="gl-tech-label">{{localize "GLHEX.app.hex.notes"}}</span>
-      <textarea name="nt" class="gl-field" rows="3" placeholder="{{localize "GLHEX.app.hex.notesPlaceholder"}}">{{d.nt}}</textarea>
+      <span class="glhex-label">{{localize "GLHEX.app.hex.notes"}}</span>
+      <textarea name="nt" class="glhex-input" rows="3" placeholder="{{localize "GLHEX.app.hex.notesPlaceholder"}}">{{d.nt}}</textarea>
     </label>
   </div>
 
   <footer class="glhex-ed-foot">
-    <button type="button" class="gl-btn glhex-btn" data-action="cancel">{{localize "GLHEX.app.common.cancel"}}</button>
-    <button type="submit" class="gl-btn gl-btn-accent glhex-btn"><i class="fa-solid fa-check"></i> {{localize "GLHEX.app.common.save"}}</button>
+    <button type="button" class="glhex-btn" data-action="cancel">{{localize "GLHEX.app.common.cancel"}}</button>
+    <button type="submit" class="glhex-btn glhex-btn--primary"><i class="fa-solid fa-check"></i> {{localize "GLHEX.app.common.save"}}</button>
   </footer>
 {{/if}}
 </div>

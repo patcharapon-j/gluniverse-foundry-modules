@@ -1,7 +1,7 @@
 {{!-- Hexcrawl — GM brush palette. Every string localized; glyph SVG built from constants. --}}
-<div class="glhex-root glhex-pal gl-type">
+<div class="glhex-root glhex-pal">
 {{#if empty}}
-  <p class="gl-empty">{{localize "GLHEX.app.palette.noScene"}}</p>
+  <p class="glhex-empty">{{localize "GLHEX.app.palette.noScene"}}</p>
 {{else}}
   <nav class="glhex-tools" aria-label="{{localize "GLHEX.app.palette.tools"}}">
     {{#each tools}}
@@ -13,8 +13,8 @@
   </nav>
 
   <div class="glhex-pal-head">
-    <span class="glhex-pal-tool gl-tech-label">{{toolLabel}}</span>
-    <span class="gl-rule"></span>
+    <span class="glhex-pal-tool glhex-label">{{toolLabel}}</span>
+    <span class="glhex-rule"></span>
   </div>
 
   <section class="glhex-pal-value">
@@ -87,16 +87,16 @@
 
   <section class="glhex-regions {{#if is.region}}is-picking{{/if}}">
     <div class="glhex-pal-head">
-      <span class="gl-tech-label">{{localize "GLHEX.app.palette.regions"}}</span>
-      <span class="gl-rule"></span>
+      <span class="glhex-label">{{localize "GLHEX.app.palette.regions"}}</span>
+      <span class="glhex-rule"></span>
       <button type="button" class="glhex-mini" data-action="newRegion" data-tooltip="{{localize "GLHEX.app.palette.newRegion"}}"
         aria-label="{{localize "GLHEX.app.palette.newRegion"}}"><i class="fa-solid fa-plus"></i></button>
     </div>
     {{#if showFilter}}
-      <input type="search" class="glhex-filter gl-field" data-region-filter value="{{filter}}"
+      <input type="search" class="glhex-filter glhex-input" data-region-filter value="{{filter}}"
         placeholder="{{localize "GLHEX.app.palette.filter"}}" aria-label="{{localize "GLHEX.app.palette.filter"}}">
     {{/if}}
-    <ol class="glhex-region-list gl-scroll">
+    <ol class="glhex-region-list">
       {{#if is.region}}
         <li class="glhex-region-row glhex-region-row--none {{#if regionNone}}is-active{{/if}}" data-action="regionClear">
           <span class="glhex-chip glhex-chip--none"></span>
@@ -112,7 +112,7 @@
             <span class="glhex-region-sub">{{terrain}}</span>
           </span>
           <span class="glhex-pips" data-tooltip="{{ratingTitle}}" {{#if rating}}data-glhex-rating="{{rating}}"{{/if}}>{{#each pips}}<span class="glhex-pip {{#if on}}is-on{{/if}}"></span>{{/each}}</span>
-          <span class="glhex-count gl-numeric" data-tooltip="{{localize "GLHEX.app.palette.hexCount"}}">{{count}}</span>
+          <span class="glhex-count glhex-num" data-tooltip="{{localize "GLHEX.app.palette.hexCount"}}">{{count}}</span>
           <button type="button" class="glhex-mini glhex-row-edit" data-action="editRegion"
             data-tooltip="{{localize "GLHEX.app.common.edit"}}" aria-label="{{localize "GLHEX.app.common.edit"}}"><i class="fa-solid fa-pen"></i></button>
         </li>
@@ -128,7 +128,7 @@
         data-tooltip="{{localize "GLHEX.app.palette.stageHint"}}">
         <span class="glhex-switch"></span>{{localize "GLHEX.app.palette.stage"}}
       </button>
-      <button type="button" class="gl-btn glhex-btn glhex-reveal {{#unless staged}}is-idle{{/unless}}" data-action="reveal">
+      <button type="button" class="glhex-btn glhex-reveal {{#unless staged}}is-idle{{/unless}}" data-action="reveal">
         <i class="fa-solid fa-sun"></i> {{stagedLabel}}
       </button>
     </div>

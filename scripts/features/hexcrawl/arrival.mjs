@@ -44,7 +44,7 @@ export function arrivalHTML(scene, record) {
   const rows = [];
 
   rows.push(`<header class="glhex-card-head"><i class="fa-solid fa-person-hiking"></i>`
-    + `<div><div class="glhex-card-kicker gl-tech-label">${escapeHTML(L("GLHEX.card.arrival"))}</div>`
+    + `<div><div class="glhex-card-kicker glhex-label">${escapeHTML(L("GLHEX.card.arrival"))}</div>`
     + `<div class="glhex-card-title">${escapeHTML(title)}</div></div></header>`);
 
   rows.push(`<div class="glhex-card-line">${glyphSvg(terrain.glyph, terrain.color)}<span>${escapeHTML(terrainName(map, terrain.id))}</span>`
@@ -53,8 +53,8 @@ export function arrivalHTML(scene, record) {
   if (rating) rows.push(`<div class="glhex-card-line" data-glhex-rating="${rating}">${pipsHTML(rating)}<span class="glhex-rating-word">${escapeHTML(ratingName(rating))}</span></div>`);
 
   rows.push(`<dl class="glhex-card-facts">`
-    + `<dt>${escapeHTML(L("GLHEX.card.costLabel"))}</dt><dd class="gl-numeric">${escapeHTML(costLabel(map.config, record.cost ?? 0))}</dd>`
-    + `<dt>${escapeHTML(L("GLHEX.card.legLabel"))}</dt><dd class="gl-numeric">${escapeHTML(secondsLabel(map.config, legSeconds(scene)))}</dd>`
+    + `<dt>${escapeHTML(L("GLHEX.card.costLabel"))}</dt><dd class="glhex-num">${escapeHTML(costLabel(map.config, record.cost ?? 0))}</dd>`
+    + `<dt>${escapeHTML(L("GLHEX.card.legLabel"))}</dt><dd class="glhex-num">${escapeHTML(secondsLabel(map.config, legSeconds(scene)))}</dd>`
     + (record.advanced ? `<dt></dt><dd class="glhex-card-note">${escapeHTML(L("GLHEX.card.timeAdvanced"))}</dd>` : "")
     + `</dl>`);
 
@@ -69,18 +69,18 @@ export function arrivalHTML(scene, record) {
 
   const actions = [];
   if (dice.formula) {
-    actions.push(`<button type="button" class="gl-btn gl-btn-accent glhex-card-btn" data-glhex-action="roll">`
+    actions.push(`<button type="button" class="glhex-card-btn is-primary" data-glhex-action="roll">`
       + `<i class="fa-solid fa-dice"></i> ${escapeHTML(F("GLHEX.card.roll", { formula: dice.formula }))}</button>`);
   }
-  actions.push(`<button type="button" class="gl-btn glhex-card-btn" data-glhex-action="leg">`
+  actions.push(`<button type="button" class="glhex-card-btn" data-glhex-action="leg">`
     + `<i class="fa-solid fa-flag-checkered"></i> ${escapeHTML(L("GLHEX.card.newLeg"))}</button>`);
   rows.push(`<footer class="glhex-card-actions">${actions.join("")}</footer>`);
   if (dice.formula) rows.push(`<div class="glhex-card-hint">${escapeHTML(F("GLHEX.card.triggerHint", { trigger: dice.trigger }))}</div>`);
 
-  return `<div class="glhex-card gl-type">${rows.join("")}</div>`;
+  return `<div class="glhex-card">${rows.join("")}</div>`;
 }
 
-const section = (label, body) => `<section class="glhex-card-section"><div class="gl-tech-label">${escapeHTML(label)}</div><div>${body}</div></section>`;
+const section = (label, body) => `<section class="glhex-card-section"><div class="glhex-label">${escapeHTML(label)}</div><div>${body}</div></section>`;
 
 export async function postArrivalCard(scene, record) {
   const map = readMap(scene);
@@ -103,9 +103,9 @@ export async function rollEncounter({ formula, trigger, key, scene: sceneId }) {
   const map = scene ? readMap(scene) : null;
   const where = map && key ? (displayName(map, key) || terrainName(map, effectiveTerrain(map, key).id)) : "";
   const chips = results.map((v) => `<span class="glhex-die${v <= trigger ? " is-hit" : ""}">${v}</span>`).join("");
-  const content = `<div class="glhex-card glhex-roll gl-type${hit ? " is-triggered" : " is-quiet"}">`
+  const content = `<div class="glhex-card glhex-roll${hit ? " is-triggered" : " is-quiet"}">`
     + `<header class="glhex-card-head"><i class="fa-solid fa-dice"></i><div>`
-    + `<div class="glhex-card-kicker gl-tech-label">${escapeHTML(F("GLHEX.card.rolled", { formula }))}${where ? ` · ${escapeHTML(where)}` : ""}</div>`
+    + `<div class="glhex-card-kicker glhex-label">${escapeHTML(F("GLHEX.card.rolled", { formula }))}${where ? ` · ${escapeHTML(where)}` : ""}</div>`
     + `<div class="glhex-card-title">${escapeHTML(L(hit ? "GLHEX.card.triggered" : "GLHEX.card.quiet"))}</div></div></header>`
     + `<div class="glhex-dice">${chips}</div>`
     + `<div class="glhex-card-hint">${escapeHTML(F("GLHEX.card.triggerHint", { trigger }))}</div></div>`;

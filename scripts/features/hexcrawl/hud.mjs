@@ -30,7 +30,7 @@ async function promptSight(doc) {
   const { DialogV2 } = foundry.applications.api;
   const map = readMap(doc.parent);
   const cur = partyFlag(doc)?.sight;
-  const content = `<div class="glhex-sight-dialog gl-type"><label>${escapeHTML(L("GLHEX.hud.sightLabel"))}
+  const content = `<div class="glhex-sight-dialog"><label>${escapeHTML(L("GLHEX.hud.sightLabel"))}
     <input type="number" name="sight" min="0" max="6" step="1" value="${cur ?? ""}" placeholder="${map.config.sight}"></label>
     <p class="hint">${escapeHTML(F("GLHEX.hud.sightHint", { n: map.config.sight }))}</p></div>`;
   const value = await DialogV2.prompt({

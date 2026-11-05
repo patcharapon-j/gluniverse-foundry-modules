@@ -77,7 +77,7 @@ export class HexRenderer {
    * @param {Iterable<string>} o.keys every drawable offset key
    * @param {(src:string)=>Promise<any>} [o.loadTexture]
    * @param {(fa:string)=>({char,fontFamily,fontWeight}|null)} [o.resolveIcon]
-   * @param {object} o.palette        core/theme.mjs PALETTE (or a mirror)
+   * @param {object} o.palette        core/theme.mjs INK_SIGNAL (or a mirror)
    * @param {(id:string)=>string} [o.terrainName]  localised terrain name for built-ins
    * @param {string} [o.fontFamily]   label face (default the suite display face)
    * @param {number} [o.resolution]   device pixel ratio (default globalThis.devicePixelRatio)
@@ -768,7 +768,7 @@ export class HexRenderer {
           g.drawImage(src, pad, pad, w, h);
           g.filter = "none";
           g.globalCompositeOperation = "source-in";
-          g.fillStyle = this.palette.ink0;
+          g.fillStyle = this.colors.css.ink0;
           g.fillRect(0, 0, cv.width, cv.height);
           out = this.PIXI.Texture.from(cv);
         }
@@ -829,7 +829,7 @@ export class HexRenderer {
     if (!cells.length) { if (this._blight) this._blight.mesh.visible = false; return; }
     if (!this._blight) {
       const shader = blightShader(PIXI, {
-        R: this.R, color: this.colors.violet, hot: this.colors.violetHot, bruise: this.colors.bruise,
+        R: this.R, color: this.colors.blight, hot: this.colors.blightHot, bruise: this.colors.bruise,
         pixel: GEO.blightPixel, alpha: ALPHA.blight,
       });
       const mesh = new PIXI.Mesh(blightGeometry(PIXI, cells), shader);
@@ -962,9 +962,10 @@ export class HexRenderer {
           rec.lastTrace = s.trace;
           rec.traceG.clear();
           if (s.trace > 0) {
-            rec.traceG.lineStyle({ width: w * 2.6, color: this.colors.accent, alpha: 0.18, cap: "round", join: "round" });
+            // An ink underlay, not a glow: the survey line reads over a bright tile.
+            rec.traceG.lineStyle({ width: w * 2.6, color: this.colors.ink0, alpha: 0.4, cap: "round", join: "round" });
             tracePoly(rec.traceG, rec.poly, s.trace, rec.c.x, rec.c.y);
-            rec.traceG.lineStyle({ width: w, color: this.colors.trace, alpha: 1, cap: "round", join: "round" });
+            rec.traceG.lineStyle({ width: w, color: this.colors.mark, alpha: 1, cap: "round", join: "round" });
             tracePoly(rec.traceG, rec.poly, s.trace, rec.c.x, rec.c.y);
           }
         }
