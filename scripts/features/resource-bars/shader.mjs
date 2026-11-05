@@ -167,6 +167,16 @@ export const READOUT_INSET = 0.06;
 export const SHIELD_PITCH = 0.44;
 
 /**
+ * How much of the chroma the straight OKLab line loses between two ramp stops
+ * `rampAt()` puts back: 0 is the plain line, 1 holds the stops' interpolated
+ * chroma exactly. Short of 1 because the full hold lifts the brightest liquids'
+ * resting peaks past 1.0 in a channel, which the ceiling forbids; this much is
+ * enough to keep the amber-to-green step out of olive. `resource-bar-check`
+ * evaluates the ramp at this value.
+ */
+export const RAMP_CHROMA_HOLD = 0.6;
+
+/**
  * The guard-break fracture's two shape parameters, in the units
  * `core/fx-glsl.mjs`'s field takes them: how many shards, and how far they
  * spread. Both are 1.0 for the square-ish quads that field was written for and
@@ -468,6 +478,7 @@ const HEAD = PRECISION + SCALE_PRELUDE + `
 const float CUT = ` + f4(CUT) + `;
 const float BODY_INSET = ` + f4(BODY_INSET) + `;
 const float SHIELD_PITCH = ` + f4(SHIELD_PITCH) + `;
+const float RAMP_CHROMA_HOLD = ` + f4(RAMP_CHROMA_HOLD) + `;
 const float BREAK_DENSE = ` + f4(BREAK_DENSE) + `;
 const float BREAK_REACH = ` + f4(BREAK_REACH) + `;
 const float BREAK_THICK = ` + f4(BREAK_THICK) + `;
@@ -649,7 +660,16 @@ vec3 rampAt(float t) {
   float f = s - i;
   vec3 a = i < 0.5 ? uRamp[0] : (i < 1.5 ? uRamp[1] : uRamp[2]);
   vec3 b = i < 0.5 ? uRamp[1] : (i < 1.5 ? uRamp[2] : uRamp[3]);
-  return oklabToSrgb(mix(a, b, f));
+  /* Chroma is interpolated on its own, so a stop-to-stop step keeps its colour:
+     the straight OKLab line sags in chroma between two hues, and between amber
+     and Ink and Signal's deeper green that sag is an olive that reads as sick.
+     Lightness and hue still follow the straight line. */
+  vec3 lab = mix(a, b, f);
+  float c = mix(length(a.yz), length(b.yz), f);
+  float n = length(lab.yz);
+  float hold = RAMP_CHROMA_HOLD * smoothstep(0.15, 0.45, f) * smoothstep(1.0, 0.6, f);
+  if (n > 1e-4) lab.yz *= mix(1.0, c / n, hold);
+  return oklabToSrgb(lab);
 }
 
 /* ── The idle loop ───────────────────────────────────────────────────────
@@ -742,6 +762,10 @@ const vec3 INK = ${v3(PALETTE.isInk2)};
 const vec3 INK0 = ${v3(PALETTE.isInk0)};
 const vec3 FRAME = ${v3(PALETTE.isInk6)};
 const vec3 STEEL = ${v3(PALETTE.isSteel)};
+/* The low-health warning on the frame and its breath: Ink and Signal's alarm
+   red. (The arterial red the fill itself sinks into stays deeper than any
+   signal on purpose; it is the liquid, not the chrome.) */
+const vec3 ALARM = ${v3(PALETTE.isRed)};
 `;
 
 /* ── The liquids ────────────────────────────────────────────────────────────
@@ -1456,15 +1480,15 @@ void main(void) {
 
   /* The chrome breathes on the same slow clock as the fill. Two red pulses at
      different rates read as two unrelated warnings rather than as one state. */
-  C = mix(C, vec3(1.00, 0.20, 0.24), mStroke * uLow * (0.28 + 0.52 * breathe));
+  C = mix(C, ALARM, mStroke * uLow * (0.28 + 0.52 * breathe));
   C = mix(C, vec3(1.0), uFlash * 0.06);
 
   /* A broad, soft recess protects the in-bar reading without adding a badge.
      It darkens the empty well only — the liquid is never darkened. */
   float readingWell = rbGauss(p.y, 0.13) * hero * mTrough * (1.0 - mFill);
   C *= 1.0 - readingWell * 0.34;
-  // Dividers remain opaque black across every fill and effect layer.
-  C = mix(C, vec3(0.0), (1.0 - segMask) * mFillA);
+  // Dividers remain opaque ink-0 across every fill and effect layer.
+  C = mix(C, INK0, (1.0 - segMask) * mFillA);
   vec3 outC = C * A * mix(0.80, 1.0, hero);
   float outA = A * mix(0.80, 1.0, hero);
 
@@ -1479,10 +1503,12 @@ void main(void) {
   float outMask = smoothstep(0.0, max(px * 1.6, 0.012), dBody);
 
   /* A floor only. The separable-blur pass downstream is the real bloom; what
-     stays here is the contact light immediately against the body. */
-  vec3 glowCol = mix(base, vec3(1.00, 0.16, 0.20), uLow * 0.85);
-  float glow = exp(-outside / 0.055) * rbEdge(fillX + 0.14, fillX - 0.04, p.x) * 0.22;
-  glow += exp(-outside / 0.045) * exp(-abs(p.x - fillX) / 0.14) * (0.30 + 0.9 * uBloom);
+     stays here is the contact light immediately against the body, and only
+     while it means something: a heal's bloom at the edge, and the low-health
+     breath. At rest a bar casts nothing (Ink and Signal's No Glow Rule): twenty
+     tokens are twenty readings, not twenty coloured smears. */
+  vec3 glowCol = mix(base, ALARM, uLow * 0.85);
+  float glow = exp(-outside / 0.045) * exp(-abs(p.x - fillX) / 0.14) * 0.9 * uBloom;
   glow += exp(-outside / 0.050) * uLow * (0.30 + 0.70 * breathe) * 0.55 * hero;
   /* A dead bar casts nothing: the liquid that lit it has run out. */
   glow *= outMask * mix(0.45, 1.0, hero) * (1.0 - uDead * hero);

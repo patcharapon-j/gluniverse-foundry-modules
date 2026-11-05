@@ -387,8 +387,15 @@ operation (`floor`, `fract`, `step`, crisp discs, thin bands) inside a liquid
 chunk. The shared frame follows the same rule where it touches the liquid: the
 reading well recesses only the empty trough, and the low-health breath brightens.
 
-Not the liquid, and deliberately still dark: the trough, the black divider gaps,
+Not the liquid, and deliberately still dark: the trough, the divider gaps (cut in
+`--gl-is-ink-0`, not pure black, so an empty trough is not a row of black slots),
 the frame, and the guard-break fracture's seams.
+
+Nothing glows at rest. The contact glow under the fill head only shows when it is
+saying something: the heal bloom, and the low-health breath in `ALARM`. It used
+to carry a resting term too, which put a coloured smear under every token on the
+map; Ink and Signal's No Glow Rule took it out, and the check refuses a resting
+glow term coming back.
 
 ### Bloodied
 
@@ -1244,6 +1251,13 @@ olive that reads as "muddy green" rather than "getting worse". The forward
 transform happens in JS at settings-change time; the shader pays only for the
 inverse.
 
+OKLab alone still sags. Ink and Signal's green is deeper than the old one, and
+the straight line from amber to it loses about a quarter of its chroma in the
+middle, so a creature at 60 to 70% read sick. `rampAt()` puts back
+`RAMP_CHROMA_HOLD` of the lost chroma, faded to nothing near each stop. It stays
+off the amber end on purpose: lava's brightest resting pixel already sits at the
+ceiling there, and the check fails on any chroma added at 50%.
+
 The colour-blind-safe ramp runs `--gl-is-info`, a cyan bridge, `--gl-is-amber`
 and `--gl-is-ember`. The cyan is the one Etched Glass hue left on the bar, kept on
 purpose: Ink and Signal has no hue between amber and info, and the OKLab line
@@ -1283,8 +1297,9 @@ ribs were kept.
 The ramp is sampled through `pow(uFrac, 1.45)` rather than linearly. Sampled
 straight, the whole lower half of the range is orange and red only arrives in
 the last few percent, so a creature at a third of its hit points looks merely
-warm. Below the threshold the fill goes further still, into an arterial red no
-ramp stop reaches — the one place the fill is allowed to editorialise, because
+warm. Below the threshold the stroke and the breath go to `--gl-is-red` (the
+shader's `ALARM`, generated from the palette mirror), and the fill goes further
+still, into an arterial red no ramp stop reaches — the one place the fill is allowed to editorialise, because
 "you are about to die" is not a shade of the same information.
 
 Health is encoded two ways that are not hue: **segment position**, and the

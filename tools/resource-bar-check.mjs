@@ -140,8 +140,21 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   if (/GOLD\s*=|vec3\(\s*1\.000,\s*0\.914,\s*0\.722\)|vec3\(\s*0\.55,\s*0\.62,\s*0\.78\)/.test(frag))
     fail("The bar's stroke still carries the Etched Glass gold or blue steel; the frame is ink and steel.");
   const v3 = (hex) => ramp.hexToFloat3(hex).map((c) => c.toFixed(4)).join(", ");
-  for (const [nm, hex] of [["INK", PALETTE.isInk2], ["INK0", PALETTE.isInk0], ["FRAME", PALETTE.isInk6], ["STEEL", PALETTE.isSteel]])
+  for (const [nm, hex] of [["INK", PALETTE.isInk2], ["INK0", PALETTE.isInk0], ["FRAME", PALETTE.isInk6], ["STEEL", PALETTE.isSteel], ["ALARM", PALETTE.isRed]])
     if (!frag.includes(`const vec3 ${nm} = vec3(${v3(hex)});`)) fail(`The shader's ${nm} is not generated from PALETTE (${hex}).`);
+  if (/vec3\(\s*1\.00,\s*0\.(16|20),\s*0\.(20|24)\)/.test(frag)) fail("The low-health warning still uses a literal red; it is ALARM, --gl-is-red.");
+  if (/mix\(C,\s*vec3\(0\.0\),\s*\(1\.0 - segMask\)/.test(frag)) fail("The dividers are pure black; they are INK0.");
+
+  /* Nothing glows at rest (DESIGN.md, the No Glow Rule): the contact glow
+     past the body exists only under a heal's bloom or the low-health breath. */
+  const glowAt = frag.indexOf("vec3 glowCol");
+  const glowBlock = glowAt < 0 ? "" : frag.slice(glowAt, frag.indexOf("outC += glowCol", glowAt));
+  const terms = [...glowBlock.matchAll(/glow\s*\+?=\s*([^;]+);/g)].map((m) => m[1]);
+  if (!terms.length || terms.some((t) => !/uBloom|uLow/.test(t)) || terms.some((t) => /\(\s*0\.\d+\s*\+\s*0\.\d+\s*\*\s*uBloom\)/.test(t)))
+    fail("A contact-glow term past the bar's body is lit at rest; every term must be scaled by uBloom or uLow.");
+
+  /* The ramp holds chroma between stops, so the amber-to-green step is not an olive. */
+  if (!/float hold = RAMP_CHROMA_HOLD \* smoothstep\(0\.15, 0\.45, f\) \* smoothstep\(1\.0, 0\.6, f\);/.test(frag) || !/lab\.yz \*= mix\(1\.0, c \/ n, hold\);/.test(frag) || !(shader.RAMP_CHROMA_HOLD > 0)) fail("rampAt() no longer holds chroma between stops; the amber to green step sags into olive.");
 
   /* Faces: numbers in the tabular face, words in Google Sans Flex. */
   const face = async (file) => strip(await src("scripts/features/resource-bars/" + file));
@@ -1743,9 +1756,19 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
         .map((v) => Math.max(v, 0)).map((v) => (v >= 0.0031308 ? 1.055 * Math.pow(v, 1 / 2.4) - 0.055 : v * 12.92));
     };
     const tempCol = ramp.hexToFloat3(ramp.TEMP_COLOR);
+    /* rampAt's chroma-held step: the straight OKLab mix, with its chroma put
+       back to the stops' interpolated chroma. */
+    const rampStep = (a, b, f) => {
+      const lab = mix3(a, b, f);
+      const c = Math.hypot(a[1], a[2]) * (1 - f) + Math.hypot(b[1], b[2]) * f;
+      const n = Math.hypot(lab[1], lab[2]);
+      const hold = shader.RAMP_CHROMA_HOLD * ss(0.15, 0.45, f) * ss(1.0, 0.6, f);
+      const k = n > 1e-4 ? 1 + (c / n - 1) * hold : 1;
+      return [lab[0], lab[1] * k, lab[2] * k];
+    };
     const baseAt = (u, stops) => {
       const t = clamp01(u / 0.72) * 3, i = Math.min(Math.floor(t), 2);
-      let b = oklabToSrgbJs(mix3(stops[i], stops[i + 1], t - i));
+      let b = oklabToSrgbJs(rampStep(stops[i], stops[i + 1], t - i));
       b = mix3(b, [luma(b), luma(b), luma(b)], 0.06);
       return mix3(b, tempCol, 0.16 * ss(0.6, 1.0, u));
     };
