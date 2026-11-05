@@ -552,7 +552,7 @@
   background: var(--glct-amber); color: var(--glct-on); box-shadow: none;
   font-size: var(--gl-is-t-meta); font-weight: 700;
 }
-.glct-calendar button.cal-badge:hover { background: var(--glct-amber); filter: brightness(1.08); }
+.glct-calendar button.cal-badge:hover { background: color-mix(in srgb, var(--glct-amber) 88%, var(--glct-paper)); }
 .glct-calendar .cal-badge span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* GM-only: ink with the amber edge, so it reads as "not on the players' calendar" */
 .glct-calendar button.cal-badge.gm-only { background: var(--glct-ink-2); color: var(--glct-amber); box-shadow: inset 2px 0 0 var(--glct-amber), inset 0 0 0 1px var(--glct-line); }
