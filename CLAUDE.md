@@ -873,9 +873,12 @@ flashes in early); that the preview plays the shipped renderer and prints the
 shipped `TIMINGS`, so its clock cannot drift; that every setting the renderer
 reads is registered; that every edge-intensity tier names a class the CSS
 defines, since one that resolves to nothing renders as "full"; that every sound
-profile carries all three stages; that a preset only remaps `--gl-accent` plus
-`--insight-*` (`registerTheme` enforces the same at runtime); and that every
-duration the renderer passes is tier-scaled:
+profile carries all three stages; that a preset sets only `PRESET_VARS` (the
+tone `--insight-tone`, the edge correction and the body style), with a tone
+that is one of core's Ink and Signal hues (`registerTheme` enforces the same at
+runtime, and reads a legacy `--gl-accent` as the tone); that the skin reads no
+Etched Glass colour token, no undeclared `--insight-*`, no raw hex and no text
+under 11px; and that every duration the renderer passes is tier-scaled:
 
 ```bash
 node tools/insight-check.mjs
@@ -895,15 +898,16 @@ Two older rules are there because this feature got both wrong on the way in.
 
 `--gl-glow`, `--gl-bloom`, `--gl-accent-soft` and `--gl-accent-faint` are
 declared at `:root` **against the `:root` accent**, so they do not follow a
-scoped `--gl-accent` remap — a custom property's `var()` is substituted where
-it is declared, and descendants inherit the already-resolved value. Reading one
-inside a violet card paints the suite's default blue, and only on the elements
-that happen to use it. Every accent-derived value in `styles/insight.css` is
-struck inline with `color-mix()` for that reason; the check refuses the four.
+scoped remap — a custom property's `var()` is substituted where it is declared,
+and descendants inherit the already-resolved value. Reading one inside an amber
+card paints the suite's default blue, and only on the elements that happen to
+use it. Every tone-derived value in `styles/insight.css` is struck inline with
+`color-mix()` against `--insight-tone` for that reason; the check refuses the
+four.
 
 And **an accent that covers a whole viewport has to be corrected per hue.**
-Over a cool map amber carries far further than a luminance-matched violet
-would predict: on the shared burn the
+Over a cool map amber (and white) carries far further than a luminance-matched
+cool hue would predict: on the shared burn the
 Fantasy preset washed the entire frame yellow instead of lighting its edges,
 and looked deliberate in every file involved. That is why a preset may set
 `--insight-burn` and `--insight-reach-*` at all — the edge is the one place a

@@ -35,15 +35,21 @@ in chat keeps their caret.
 
 ## The card
 
-A black plate with the suite's chamfer, a solid accent tag naming the sense
+A black plate with the suite's chamfer, a solid tone tag naming the sense
 (the GM's label, or "Insight"), "Only you" opposite it so the player knows the
 table cannot see it, an optional title and picture, the body, and a foot with
 the queue count ("2 more waiting") and the one control.
 
-Identity is `--gl-accent`, set by the accent preset (Dreadlight violet, Fantasy
-amber). A preset may set `--gl-accent` and `--insight-*` only, and the edge's
-per-hue correction (`--insight-burn`, `--insight-reach-x/y`) is the preset's to
-set, because the edge is the one place a hue covers a whole screen.
+The skin is Ink and Signal (DESIGN.md): core's `--gl-is-*` values aliased as
+`--insight-*` on the two roots (`.insight-stage`, `.insight-compose`), never on
+`:root`. Every lit part of the arrival reads one tone, `--insight-tone`, set by
+the preset: Dreadlight is paper (white light out of a black room), Fantasy is
+amber. A preset may set only `PRESET_VARS` in `module/themes.mjs` (the tone,
+the edge's per-hue correction `--insight-burn` / `--insight-reach-x/y`, and the
+body style), because the edge is the one place a hue covers a whole screen.
+A preset another module registered against the old `--gl-accent` still lands:
+`registerTheme` reads that value as the tone. The arrival is a cinematic beat,
+so it is the one place this skin lets light spill; the compose window is flat.
 
 Screen Edge Alert is a client setting: Full, Subtle (no vignette, half burn,
 shorter reach), Off (the card alone).

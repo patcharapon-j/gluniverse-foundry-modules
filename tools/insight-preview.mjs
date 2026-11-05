@@ -110,8 +110,8 @@ const SAMPLES = {
 
 /** Each row of the sheet: one simulated screen. */
 const ROWS = [
-  { key: "a", note: "Full edge · Dreadlight · titled, shared with two others, two more waiting", sample: "titled", preset: "dreadlight", intensity: "full" },
-  { key: "b", note: "Full edge · Fantasy accent", sample: "divine", preset: "fantasy", intensity: "full" },
+  { key: "a", note: "Full edge · Dreadlight (paper) · titled, shared with two others, two more waiting", sample: "titled", preset: "dreadlight", intensity: "full" },
+  { key: "b", note: "Full edge · Fantasy (amber)", sample: "divine", preset: "fantasy", intensity: "full" },
   { key: "c", note: "Recall Knowledge hand-off · no title, fixed label", sample: "recall", preset: "dreadlight", intensity: "full" },
   { key: "d", note: "Subtle edge · no vignette, half burn · with a picture", sample: "image", preset: "dreadlight", intensity: "subtle" },
   { key: "e", note: "Edge off · the card carries it alone", sample: "whisper", preset: "fantasy", intensity: "off" },
@@ -148,7 +148,7 @@ const COMPOSE_EMPTY = compose({
 
 /* The beat list, read off the shipped clock. */
 const beats = (t) => [
-  [t.edge, "The edge. The room dims, the accent rises from all four sides, one hairline traces the screen."],
+  [t.edge, "The edge. The room dims, the tone rises from all four sides, one hairline traces the screen."],
   [t.line, "The cut draws out from the centre, wider than the card."],
   [t.card, "The card opens down out of the cut and one light crosses it."],
   [t.contentStart, `The words arrive in reading order, ${t.contentStagger} ms apart: label, who can see it, title, picture, body, the control.`],
