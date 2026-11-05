@@ -1,3 +1,42 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Critical: the full-screen cut-in and its two config windows.
+
+   Ink and Signal (DESIGN.md, docs/adr/0012-ink-and-signal-core.md). The skin
+   aliases the core `--gl-is-*` values as `--gluc-*` on the feature's own roots
+   and never on :root; sizes, cuts and states are read straight from core.
+
+   Roots: `#gls-critical-overlay` (the cut-in), `.gluc-gm-config` and
+   `.gluc-actor-config` (the windows: the application frame and its form both
+   carry the class).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:is(#gls-critical-overlay, .gluc-gm-config, .gluc-actor-config) {
+  --gluc-ink-0: var(--gl-is-ink-0);
+  --gluc-ink-1: var(--gl-is-ink-1);
+  --gluc-ink-2: var(--gl-is-ink-2);
+  --gluc-ink-3: var(--gl-is-ink-3);
+  --gluc-ink-4: var(--gl-is-ink-4);
+  --gluc-text: var(--gl-is-text);
+  --gluc-paper: var(--gl-is-paper);
+  --gluc-dim: var(--gl-is-dim);
+  --gluc-faint: var(--gl-is-faint);
+  --gluc-on-slab: var(--gl-is-on-slab);
+  --gluc-line: var(--gl-is-line);
+  --gluc-line-strong: var(--gl-is-line-strong);
+  --gluc-hover: var(--gl-is-hover);
+  --gluc-shade: var(--gl-is-shade);
+  --gluc-font: var(--gl-is-font);
+  --gluc-num: var(--gl-is-num);
+
+  /* meaning: a call reaches every screen */
+  --gluc-call: var(--gl-is-amber);
+
+  /* The cut-in's backdrop. PIXI reads this off the overlay root (cut-in.mjs). */
+  --gluc-backdrop: var(--gluc-ink-0);
+}
+
+/* ═══ The cut-in ═══════════════════════════════════════════════════════════ */
+
 #gls-critical-overlay {
   position: fixed;
   inset: 0;
@@ -24,7 +63,7 @@
 .gluc-video-backdrop {
   position: absolute;
   inset: 0;
-  background: rgb(var(--gl-tint-dark));
+  background: var(--gluc-backdrop);
 }
 
 .gluc-video-layer video.gluc-video {
@@ -39,48 +78,234 @@
   will-change: transform, opacity, clip-path;
 }
 
-.gluc-gm-config section {
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid rgb(var(--gl-tint-light) / 0.08);
+/* ═══ The windows ══════════════════════════════════════════════════════════ */
+
+.application:is(.gluc-gm-config, .gluc-actor-config) {
+  background: var(--gluc-ink-1);
+  border: 1px solid var(--gluc-line-strong);
+  border-radius: 0;
+  box-shadow: 0 24px 64px var(--gluc-shade);
+  color: var(--gluc-text);
+  font-family: var(--gluc-font);
+}
+.application:is(.gluc-gm-config, .gluc-actor-config) .window-header {
+  background: var(--gluc-ink-0);
+  border-bottom: 1px solid var(--gluc-line);
+  color: var(--gluc-dim);
+}
+.application:is(.gluc-gm-config, .gluc-actor-config) .window-title {
+  font-family: var(--gluc-font);
+  font-size: var(--gl-is-t-body);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.application:is(.gluc-gm-config, .gluc-actor-config) .window-content {
+  padding: 14px 16px 16px;
+  background: none;
+  color: var(--gluc-text);
 }
 
-.gluc-gm-config section:last-of-type {
-  border-bottom: none;
+/* The form's own root (the template's outer div). */
+div:is(.gluc-gm-config, .gluc-actor-config) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: var(--gl-is-t-body);
+  line-height: 1.4;
+}
+
+div.gluc-gm-config > header h2 {
+  margin: 0;
+  border: 0;
+  font-size: var(--gl-is-t-title);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* A section is one plate: a tone step from the window, a hairline, the cut. */
+.gluc-gm-config section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 14px 14px 16px;
+  background: var(--gluc-ink-2);
+  box-shadow: inset 0 0 0 1px var(--gluc-line);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut)), calc(100% - var(--gl-is-cut)) 100%, 0 100%);
 }
 
 .gluc-gm-config h3 {
-  margin: 0.5rem 0;
-  font-size: 1rem;
+  margin: 0;
+  border: 0;
+  color: var(--gluc-faint);
+  font-family: var(--gluc-font);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
-.gluc-gm-config .range-value {
-  margin-left: 0.5rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.gluc-actor-config .form-fields {
-  display: flex;
-  gap: 0.5rem;
+div:is(.gluc-gm-config, .gluc-actor-config) .form-group {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+}
+div:is(.gluc-gm-config, .gluc-actor-config) .form-group > label {
+  color: var(--gluc-text);
+  font-size: var(--gl-is-t-lead);
+  font-weight: 600;
+  line-height: 1.35;
+}
+div:is(.gluc-gm-config, .gluc-actor-config) .form-group > .notes {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--gluc-dim);
+  font-size: var(--gl-is-t-meta);
+  line-height: 1.4;
+}
+div:is(.gluc-gm-config, .gluc-actor-config) .form-fields {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+div:is(.gluc-gm-config, .gluc-actor-config) .notes {
+  color: var(--gluc-dim);
+  font-size: var(--gl-is-t-meta);
 }
 
-.gluc-actor-config input[type='color'] {
-  width: 3rem;
-  height: 1.75rem;
-  padding: 0;
-  border: 1px solid rgb(var(--gl-tint-dark) / 0.3);
-  border-radius: 3px;
+/* Fields: void fill, strong hairline, square, 32px. Foundry styles every control
+   at element level, so the skin restates each one under its roots. */
+div:is(.gluc-gm-config, .gluc-actor-config) :is(input:not([type="checkbox"], [type="range"]), select) {
+  box-sizing: border-box;
+  height: 32px;
+  min-width: 0;
+  flex: 1;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: var(--gluc-ink-0);
+  box-shadow: inset 0 0 0 1px var(--gluc-line-strong);
+  color: var(--gluc-text);
+  font-family: var(--gluc-font);
+  font-size: var(--gl-is-t-body);
+  transition: box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+div:is(.gluc-gm-config, .gluc-actor-config) :is(input, select):hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px var(--gluc-dim);
+}
+div:is(.gluc-gm-config, .gluc-actor-config) :is(input, select, button):focus-visible {
+  outline: var(--gl-is-focus-ring);
+  outline-offset: var(--gl-is-focus-offset);
+  box-shadow: inset 0 0 0 1px var(--gluc-line-strong);
+}
+div:is(.gluc-gm-config, .gluc-actor-config) :is(input, select):disabled {
+  opacity: var(--gl-is-disabled);
+  cursor: default;
+}
+div:is(.gluc-gm-config, .gluc-actor-config) input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  justify-self: start;
+  accent-color: var(--gluc-paper);
+}
+div:is(.gluc-gm-config, .gluc-actor-config) input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--gluc-paper);
+}
+.gluc-gm-config .range-value {
+  margin-left: 8px;
+  color: var(--gluc-text);
+  font-family: var(--gluc-num);
+  font-size: var(--gl-is-t-body);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.gluc-clear-color {
-  width: 1.75rem;
-  height: 1.75rem;
+/* Buttons: an ink control with a hairline and the small cut; Save is the one
+   primary. Each declares its own size (DESIGN.md, the Size-It-Yourself Rule). */
+div:is(.gluc-gm-config, .gluc-actor-config) button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  min-height: 0;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: var(--gluc-ink-3);
+  box-shadow: inset 0 0 0 1px var(--gluc-line);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-sm)), calc(100% - var(--gl-is-cut-sm)) 100%, 0 100%);
+  color: var(--gluc-text);
+  font-size: var(--gl-is-t-body);
+  line-height: 1.1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--gl-d-brisk) var(--gl-ease),
+    translate var(--gl-d-brisk) var(--gl-ease),
+    scale var(--gl-d-tap) var(--gl-ease);
+}
+/* A labelled button takes the skin's face; Foundry's icon buttons (the file
+   picker's browse) are the glyph itself and keep the icon font. */
+div:is(.gluc-gm-config, .gluc-actor-config) button:not([class*="fa-"]) {
+  font-family: var(--gluc-font);
+  font-weight: 600;
+}
+div:is(.gluc-gm-config, .gluc-actor-config) button i { font-size: var(--gl-is-t-meta); }
+div:is(.gluc-gm-config, .gluc-actor-config) button:hover:not(:disabled) {
+  background: var(--gluc-ink-4);
+  translate: 0 calc(var(--gl-lift) * -1);
+}
+div:is(.gluc-gm-config, .gluc-actor-config) button:active:not(:disabled) { scale: var(--gl-is-press); }
+div:is(.gluc-gm-config, .gluc-actor-config) button[type="submit"] {
+  background: var(--gluc-paper);
+  box-shadow: none;
+  color: var(--gluc-on-slab);
+}
+div:is(.gluc-gm-config, .gluc-actor-config) button[type="submit"]:hover:not(:disabled) {
+  background: var(--gluc-text);
+}
+
+/* file-picker: Foundry's element holds a text input and a browse button. */
+div:is(.gluc-gm-config, .gluc-actor-config) file-picker {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+}
+div:is(.gluc-gm-config, .gluc-actor-config) file-picker button {
+  flex: none;
+  width: 32px;
   padding: 0;
 }
+
+div:is(.gluc-gm-config, .gluc-actor-config) .sheet-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+div:is(.gluc-gm-config, .gluc-actor-config) .sheet-footer button { flex: none; }
 
 .gluc-test-button {
   margin-right: auto;
+}
+
+/* Trigger for Everyone puts the cut-in on every screen at the table: a call,
+   so it carries the amber edge. */
+div:is(.gluc-gm-config, .gluc-actor-config) button.gluc-broadcast-button {
+  box-shadow: inset 2px 0 0 var(--gluc-call), inset 0 0 0 1px var(--gluc-line);
 }
