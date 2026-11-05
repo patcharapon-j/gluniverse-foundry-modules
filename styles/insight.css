@@ -146,8 +146,8 @@
   right: -48px;
   height: 2px;
   z-index: var(--gl-z-raised);
+  /* a crisp rule, no halo: it stays on the card as its top edge at rest */
   background: linear-gradient(90deg, transparent, var(--insight-tone) 48px, var(--insight-tone) calc(100% - 48px), transparent);
-  box-shadow: 0 0 16px 1px color-mix(in oklab, var(--insight-tone) 50%, transparent);
   transform-origin: 50% 50%;
 }
 
@@ -159,7 +159,8 @@
   overflow: hidden;
   pointer-events: auto;
   background: var(--insight-ink-1);
-  box-shadow: inset 0 0 0 1px var(--insight-line);
+  /* strong: the plate has to hold its edge over a dark map with the edge off */
+  box-shadow: inset 0 0 0 1px var(--insight-line-strong);
   /* the chamfer, drawn at the card's current opening so it opens downward */
   clip-path: polygon(
     0 0, 100% 0,
@@ -304,6 +305,7 @@
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
   color: var(--insight-dim);
+  white-space: nowrap;
 }
 .insight-queue[hidden] { display: none; }
 
@@ -451,7 +453,7 @@
   .insight-person:hover { color: var(--insight-text); background: var(--insight-ink-4); }
 }
 .insight-compose-empty {
-  margin: 0;
+  margin: 4px 0 0;
   font-size: var(--gl-is-t-body);
   color: var(--insight-dim);
 }
@@ -483,13 +485,22 @@
 }
 
 /* quick picks: ways to tick several chips at once. Each adds to what is
-   ticked, which the "+" says; the text buttons' own padding is pulled back so
-   the first one lines up with the chips. */
+   ticked, which the "+" says; they are small hairline controls so they read
+   as buttons, not as more headings. */
 .insight-compose-picks {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin: 4px 0 2px -6px;
+  gap: 6px;
+  margin: 2px 0;
+}
+.insight-compose .insight-compose-picks .insight-compose-all {
+  height: 24px;
+  padding: 0 10px 0 8px;
+  box-shadow: inset 0 0 0 1px var(--insight-line-strong);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-xs)), calc(100% - var(--gl-is-cut-xs)) 100%, 0 100%);
+}
+@media (hover: hover) and (pointer: fine) {
+  .insight-compose .insight-compose-picks .insight-compose-all:hover { background: var(--insight-hover); }
 }
 .insight-compose-picks .insight-compose-all::before { content: "+ "; }
 
