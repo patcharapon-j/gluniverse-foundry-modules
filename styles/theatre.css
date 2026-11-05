@@ -231,6 +231,11 @@
   letter-spacing: 0.22em;
   text-transform: uppercase;
   white-space: nowrap;
+  /* A long location ends in an ellipsis inside the slab rather than running
+     under the sidebar. */
+  max-width: min(56vw, 760px);
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--glth-text);
 }
 
