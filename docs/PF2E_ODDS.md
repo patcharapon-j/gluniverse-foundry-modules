@@ -1,10 +1,10 @@
-# PF2e Odds and Save Resolution — design
+# PF2e Odds — design
 
-Status: **PRs 1–3 built, not yet run in a live session.** The engine,
+Status: **built, not yet run in a live session.** The engine,
 every Odds surface (line badge, sheet, roll dialog, save prompt), the
 observation ledger, the Observations window, the Creaturedex hint and the Dice
 So Nice highlight exist and pass `tools/pf2e-odds-check.mjs`. Save Resolution
-is built and documented in `docs/SAVE_RESOLUTION.md`. Not built: the HUD (its
+was built and later removed from the suite. Not built: the HUD (its
 own grilling). This file records the decisions from the grilling session
 (Q1–Q36).
 
@@ -25,20 +25,18 @@ own grilling). This file records the decisions from the grilling session
 
 ## Shape
 
-One pure engine, three toggleable features, one later session.
+One pure engine, two toggleable features, one later session.
 
 | Piece | Id / prefix / i18n | What it is |
 |---|---|---|
 | Engine | `core/pf2e-odds.mjs` | Pure maths, importable under Node. No `game`, no `canvas`. |
 | Odds | `pf2e-odds`, `od.`, `GLOD.*` | Odds on the targeting line, the sheet and the roll dialog, plus the observation ledger. |
 | Dice highlight | sub-feature `od.dice` | The degree ring on the Dice So Nice die, and the landed-face pulse on the badge. |
-| Save Resolution | `pf2e-saves`, `sv.`, `GLSV.*` | Resolve saves for an area or a set of targets, then apply damage and effects. |
-| HUD | — | A replacement for pf2e-hud / Token Action HUD. Gets its own grilling session after the three above ship. |
+| HUD | — | A replacement for pf2e-hud / Token Action HUD. Gets its own grilling session after the above ship. |
 
 PF2e only. There is no system-adapter seam.
 
-Delivery is three stacked PRs: (1) engine + Odds + ledger, (2) dice highlight,
-(3) Save Resolution.
+Delivery was stacked PRs: (1) engine + Odds + ledger, (2) dice highlight.
 
 ## The engine
 
@@ -111,8 +109,8 @@ The GM always sees the truth. Players see what the party has *observed*.
     reset.
   - A read-only "observed: AC 19–22" hint in Creaturedex's GM view.
 
-One visibility gate decides all three of: the degree a player learns, the
-dice highlight, and an NPC row's degree in Save Resolution.
+One visibility gate decides both the degree a player learns and the dice
+highlight.
 
 ## Surfaces
 
@@ -227,12 +225,6 @@ against that DC, gated on whether they've learned it.
 - **Exclusion:** Spotlight Roll messages are skipped, since that feature draws
   its own die.
 
-## Save Resolution (`pf2e-saves`)
-
-Built; see `docs/SAVE_RESOLUTION.md`, which also records where it departs from
-the design agreed here (saves roll through PF2e's own `check.roll` rather than
-Spotlight's `rollSlot`, and the session carries message ids, never results).
-
 ## Checks and previews (to build with each PR)
 
 - `tools/pf2e-odds-check.mjs`:
@@ -251,9 +243,3 @@ Spotlight's `rollSlot`, and the session carries message ids, never results).
   the odds on the real targeting line framed from
   `tools/target-line-preview.mjs` (`?odds=1`; add `gm`, `land`,
   `acting=<id>`, `hover=<source>><target>`, `floor=bright`).
-- `tools/pf2e-saves-check.mjs`:
-  - degree × basic-save multipliers
-  - area membership against `pf2eCoverage`
-  - the GM-only write path
-  - undo round trip
-  - NPC rows sealed

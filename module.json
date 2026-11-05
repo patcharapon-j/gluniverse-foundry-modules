@@ -37,19 +37,12 @@
     "styles/statsblock-import.css",
     "styles/statsblock-import-reflavor.css",
     "styles/loot-gen.css",
-    "styles/tidy5e-slots-design-system.css",
-    "styles/tidy5e-slots-inventory-slots.css",
-    "styles/tidy5e-slots-components.css",
-    "styles/tidy5e-slots-etched-glass.css",
-    "styles/pf2e-level-zero.css",
     "styles/critical.css",
     "styles/timer.css",
     "styles/mythic-gme.css",
-    "styles/oracles.css",
     "styles/pf2e-recall.css",
     "styles/pf2e-aoe.css",
     "styles/pf2e-fx.css",
-    "styles/pf2e-arcane-surge.css",
     "styles/pf2e-variant-rules.css",
     "styles/pf2e-variant-rules-boss.css",
     "styles/pf2e-creaturedex.css",
@@ -57,7 +50,6 @@
     "styles/pf2e-odds-surfaces.css",
     "styles/pf2e-odds-dice.css",
     "styles/pf2e-odds-observations.css",
-    "styles/pf2e-saves.css",
     "styles/spotlight-roll.css",
     "styles/spotlight-roll-app.css",
     "styles/combat-intro.css",
@@ -76,8 +68,7 @@
     "styles/diorama-editor.css",
     "styles/diorama-env.css",
     "styles/diorama-props.css",
-    "styles/diorama-standee.css",
-    "styles/perf.css"
+    "styles/diorama-standee.css"
   ],
   "languages": [
     {
@@ -133,11 +124,6 @@
     {
       "lang": "en",
       "name": "English",
-      "path": "lang/tidy5e-slots.en.json"
-    },
-    {
-      "lang": "en",
-      "name": "English",
       "path": "lang/pf2e-flatten.en.json"
     },
     {
@@ -154,11 +140,6 @@
       "lang": "en",
       "name": "English",
       "path": "lang/mythic-gme.en.json"
-    },
-    {
-      "lang": "en",
-      "name": "English",
-      "path": "lang/oracles.en.json"
     },
     {
       "lang": "en",
@@ -183,11 +164,6 @@
     {
       "lang": "en",
       "name": "English",
-      "path": "lang/pf2e-arcane-surge.en.json"
-    },
-    {
-      "lang": "en",
-      "name": "English",
       "path": "lang/pf2e-variant-rules.en.json"
     },
     {
@@ -199,11 +175,6 @@
       "lang": "en",
       "name": "English",
       "path": "lang/pf2e-odds.en.json"
-    },
-    {
-      "lang": "en",
-      "name": "English",
-      "path": "lang/pf2e-saves.en.json"
     },
     {
       "lang": "en",
@@ -283,11 +254,6 @@
     {
       "lang": "en",
       "name": "English",
-      "path": "lang/perf.en.json"
-    },
-    {
-      "lang": "en",
-      "name": "English",
       "path": "lang/spotlight-roll.en.json"
     },
     {
@@ -311,14 +277,6 @@
   ],
   "relationships": {
     "recommended": [
-      {
-        "id": "tidy5e-sheet",
-        "type": "module",
-        "reason": "Required only for the Tidy 5e Inventory Slots feature.",
-        "compatibility": {
-          "minimum": "13.0.0"
-        }
-      },
       {
         "id": "dice-so-nice",
         "type": "module",

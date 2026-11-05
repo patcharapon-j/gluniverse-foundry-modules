@@ -26,7 +26,7 @@
 
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FEATURE = join(ROOT, "scripts/features/statsblock-import");
@@ -36,7 +36,7 @@ const notes = [];
 const fail = (msg) => problems.push(msg);
 const note = (msg) => notes.push(msg);
 
-const prompt = await import(join(FEATURE, "reflavor-prompt.js"));
+const prompt = await import(pathToFileURL(join(FEATURE, "reflavor-prompt.js")).href);
 const {
   RUNGS,
   SECTION_GRAMMAR,

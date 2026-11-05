@@ -574,8 +574,8 @@ void main() { gl_FragColor = texture2D(u_src, v_uv); }`;
 // frames. Full fidelity by default; degraded only on evidence.
 //
 // The rung it OPENS at rides the suite's shared budget (core/budget.mjs):
-// `supersampleFloor()` is 0 unless the `perf` feature's tier says otherwise, so
-// a Performance table starts one rung down and a Potato one at 1×. The floor and
+// `supersampleFloor()` is 0 unless the budget's policy says otherwise, so a
+// policy floor of 1 starts one rung down and 2 at 1×. The floor and
 // the slow-frame reflex below are separate: the floor follows the policy both
 // ways, while rungs the reflex dropped on evidence stay dropped for the session.
 const SPLASH_SS_LADDER = [2, 1.5, 1];
@@ -648,7 +648,7 @@ class BreakSplashGL {
 
   // One registration and one policy listener for the renderer's lifetime (it is
   // a session singleton), both dropped by destroy(). A policy change re-sizes
-  // the scratch at once, so dropping to Potato frees the 2× texture now rather
+  // the scratch at once, so a floor at 1× frees the 2× texture now rather
   // than at the next guard break; ensureScratch() is a no-op when nothing moved
   // and when the context has been released.
   attachBudget() {
@@ -5686,7 +5686,7 @@ class CardFXManager {
     this.entries = new Map();   // combatantId -> { canvas, ctx, mode, seed, impact, t0 }
     this.ticking = false;
     // Runs for as long as any card is broken or dying, often a whole combat, so
-    // its time is attributed to this feature in the perf overlay. The wrapper
+    // its time is attributed to this feature while the budget profiles. The wrapper
     // only measures; the 30fps cap and the rAF cadence are unchanged.
     this.tickFn = Budget.measure("initiative", this._tick.bind(this));
     // The overlay that owns the rail, set on the first sync(). Read only for

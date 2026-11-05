@@ -287,7 +287,7 @@ scene; one still on it reads as following the GM's default (`CONFIG_VERSION` in
 
 The camera shake is the first entry of `SHED_ORDER` on the shared frame budget
 and the backdrop the last, and the layer claims motion while it shakes, a
-transition runs or a video plays, so Balanced does not stutter it.
+transition runs or a video plays, so an idle-rate drop does not stutter it.
 
 ## Checks
 

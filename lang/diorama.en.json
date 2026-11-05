@@ -174,7 +174,6 @@
   "GLDIO.graphics.hint": "These are for this computer only. Changes show at once.",
   "GLDIO.graphics.reset": "Reset to defaults",
   "GLDIO.graphics.readout.title": "What the view costs now",
-  "GLDIO.graphics.readout.section": "3D view",
   "GLDIO.graphics.readout.view": "3D view",
   "GLDIO.graphics.readout.closed": "closed",
   "GLDIO.graphics.readout.na": "n/a",

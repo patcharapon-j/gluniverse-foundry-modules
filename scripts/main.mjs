@@ -17,6 +17,7 @@ import { buildCatalog } from "./core/catalog.mjs";
 import { initSocketDispatcher } from "./core/socket.mjs";
 import { runMigrations } from "./core/migration.mjs";
 import { initFaceFrameSocket } from "./core/face-frame.mjs";
+import { Budget } from "./core/budget.mjs";
 
 // Side-effecting import: every feature calls Suite.register(...) on load.
 import "./features/index.mjs";
@@ -28,6 +29,10 @@ Hooks.once("init", async () => {
   // Catalog every registered suite setting/menu and hide them from Foundry's
   // native Settings sheet — the Control Center is the single grouped surface.
   buildCatalog();
+  // A scene load is not a slow machine. At 60 Hz every interval sits above the
+  // recovery threshold, so effects shed during a load would stay shed for the
+  // rest of the session without this.
+  Hooks.on("canvasReady", () => Budget.settle());
   await Suite.runPhase("onInit");
   log(`Initialised — ${Suite.all().filter((f) => Suite.enabled(f.id)).length}/${Suite.all().length} features active.`);
 });

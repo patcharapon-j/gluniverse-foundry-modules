@@ -53,7 +53,6 @@ assets/<featureId>/         Images, sounds
 docs/DESIGN_SYSTEM.md       The token pool, the theme contract, retheming
 docs/FEATURE_CONTRACT.md    Binding contract for porting/adding a feature
 docs/PORTING_GUIDE.md       How a standalone module was migrated in
-docs/PERFORMANCE.md         The perf feature: tiers, governor, core patches
 ```
 
 The three `gl-*.css` files load first, in that order, so every feature sheet can
@@ -637,187 +636,6 @@ controls step out past the active card's badges, and the side column of
 delayed cards moves inward when the screen edge has no room for it. The motion
 check pins both.
 
-**When touching Arcane Surge** (`features/pf2e-arcane-surge/`,
-`styles/pf2e-arcane-surge.css`), re-run its consistency check. Everything it
-covers fails *silently*. The load-bearing one: a level's surge threshold is
-simultaneously the d20 result that surges, the number of glyph faces baked onto
-that level's die, and what the baker asserts coverage for. Those live in three
-files, and a disagreement renders perfectly while making the die a **lie about
-its own odds** — the one thing that die exists to tell the truth about. It also
-pins band monotonicity and the tier windows the draft's tone rests on (Fraying
-reaches Major but never Catastrophic; inviting in Unraveling must actually be
-more dangerous than not inviting, or the temptation the whole mechanic is built
-on is false); the three-way uniform agreement across the *three* shader programs,
-where a uniform missing from one leaves every frame drawn at whatever value the
-driver happened to start with; `SHED_ORDER` completeness; the runtime-built
-`GLAS.level.*`, `GLAS.tier.*` and `GLAS.mode.*` key families, which nothing else
-checks; the die's defensive claim on the global `CONFIG.Dice.terms` letter,
-where a collision silently breaks another module's die; and the two guards a
-double-fire would destroy — one casting one check, one card one roll.
-
-**The standing instability in the HUD chip is not a shader.** It was one, and the
-reason it stopped being one is worth knowing before you change it back: a WebGL
-context held open all session so a strip twenty pixels tall could draw four wavy
-lines needed a program warmed off-screen at load (drivers specialise on first
-draw, so the first level change of a session stuttered), a colour ramp pushed as
-uniforms because GLSL cannot read a custom property, a device-pixel size
-recomputed against `devicePixelRatio` *and* the suite's Interface Scale `zoom`,
-a `uTexel` uniform carrying one device pixel so a hairline could not vanish, and
-a warmed context kept alive even at Stable. It is four SVG paths moved by
-anime.js now (`weave-shape.mjs` — pure geometry; `weave-render.mjs` — the DOM
-and the tweens; `weave.mjs` — the half that reads the world), and none of that
-machinery has an equivalent: the colour is `--gl-accent` inherited from the chip
-so a level change and a retheme both arrive by themselves, a CSS pixel is a CSS
-pixel so a 1px stroke is a hairline everywhere, there is nothing to compile, and
-Stable costs literally nothing — no element, no timer, no tween. The check tool
-refuses a context creeping back into any of the three.
-
-What the check drives rather than reads: Stable is inert in every parameter,
-every rung of the ladder rises above the one below it, Fraying never sprouts
-torn fibres and Unraveling always does, and every dash array the ladder can
-produce is positive and sums to its thread's period — one negative entry makes
-the browser discard the whole attribute, and a thread that never parts is
-exactly what the feature not working looks like. Three structural ones beside
-them. The drift loop is a translation of exactly one wavelength, which is only
-seamless because every term of the wave is a whole harmonic of the fundamental:
-a non-harmonic term (1.87 is the obvious pick, because it makes a wave look less
-mechanical) renders beautifully and then snaps, once per loop, forever. The
-`--glas-bleed` in the CSS must equal `BLEED_PX` in the geometry, or the threads
-are laid out for a box that is not the one they are drawn in. And
-`weave-render.mjs` must hold no reference to `game`, because it is what the
-preview page drives — the moment it reads the world, the preview has to
-reimplement it, and a preview built on a second copy flatters whichever copy was
-touched last. Nothing here may touch the shared anime.js engine either: it
-already pauses itself on `document.hidden` (which is why there is no visibility
-handler), and a dozen features run on it.
-
-Two more it pins because this feature got both wrong on the way in. The weave
-must **not** run the shared glass fracture from `core/fx-glsl.mjs`: it is a
-fraying weave of its own, because a broken creature already carries that crack in
-three places and instability sharing it read as one more thing being broken. And
-each level's hue must be a single statement. It used to be two — `palette.mjs`'s
-`LEVEL_KEYS` feeding the shader, and the `.glas-level-*` accent remaps — and they
-drifted: `unbound` was on `--gl-holo-b`, which `gl-tokens.css` aliases to
-`--gl-violet`, so the ladder's two most dangerous rungs rendered in exactly the
-same colour and nothing said so. The CSS is now the only statement, and what is
-checked is four distinct tokens each paired with its own `-hot` sibling:
-
-```bash
-node tools/arcane-surge-check.mjs
-```
-
-Zero problems required. What it cannot do is compile a line of GLSL — and a
-shader that fails to compile degrades to *nothing drawn* rather than erroring —
-or tell you how any of it looks. Both need the browser-backed harness:
-
-```bash
-node tools/arcane-surge-preview.mjs --out=.preview/surge.html
-```
-
-**Serve it** (`node tools/preview-server.mjs`) — a `file://` page does not
-execute its module scripts, so the shaders never compile, the weave's imports
-never resolve, and you get empty boxes rather than a failure. The weave rows
-there run the **shipped** `WeaveRenderer` against the **shipped** stylesheets,
-imported over that server rather than restated, at **shipping size** — a strip in
-a HUD bar, which is the smallest place any effect in the suite has been asked to
-land — with a 4× vector magnification beside it for the shape. Ignore that page's
-`ms/frame` readout: eight weaves and a dozen canvases on a throttled tab put it
-in the hundreds while nothing is doing any work. On the beats the `ms/draw`
-figure beside it is the one that means something; on the weave rows the shed
-state is.
-
-The die faces are generated, not drawn; re-bake and confirm coverage after any
-recipe change:
-
-```bash
-node tools/gen-surge-textures.mjs && node tools/gen-surge-textures.mjs --check
-```
-
-**Nothing on these dice is painted** — every face is relief and light over Dice
-So Nice's own frosted glass. Two of the shipped files exist only to make that
-possible and both read as mistakes: `clear.png` is fully transparent and is what
-makes DSN read a face's bump and emissive maps at all (a text label, `""`
-included, takes a branch that ignores them), and `surface.png` is pure white
-because DSN draws a texture's bump only inside the block that draws its source.
-Replace either with the "obvious" thing and the dice go blank while nothing
-errors.
-
-And **the bump map is also the transmission mask.** On any transmissive material
-DSN binds the finished bump canvas a second time as `transmissionMap` and reads
-it through `smoothstep(0.6, 0.9, r)`, so the height field is what decides which
-parts of the die are glass (≥ 230) and which are solid (≤ 153) — DSN draws its
-own numerals at `#555` on a `#FFFFFF` field, which is that contract stated in
-its source. A flat level below the top of that curve makes the whole die opaque
-while remaining a perfectly ordinary-looking height map, and that is how these
-dice first shipped: a field at 141/255 put 94% of every face under the curve and
-the table got a black solid with no albedo on it. `--check` measures the band on
-both faces now, and separately requires the *tiling* surface to stay wholly
-inside it, since one dark pixel in a map drawn under every face is a permanent
-opaque smear repeated across the table.
-
-Three smaller ones in the same family, all of which shipped wrong once.
-
-**A d20 face is not centred in its texture tile.** DSN draws a label image
-across a whole 256px tile, 1:1, but what samples it is a triangle that is not
-concentric with the square: read off the `uv` attribute of DSN's own
-`DICE_MODELS.d20`, every face has its centroid at **y = 0.576**, not 0.5, and
-its largest inscribed circle is **0.575** of the half-tile. So art composed on
-the square is both off-centre and clipped by the die's own edges — and the
-contact sheet cannot show you, because it prints squares. The concentric grooves
-were struck at 0.62 about the square's centre, outside the incircle *and* off
-the face's centre, so every ring on the die was cut by two of its own edges,
-twenty times over. `--check` scans for it now: any pixel carrying a mark must
-fall inside `FACE_TRIANGLE`. That is stronger than a radius test, which would
-have caught only half of it.
-
-**The die's body and the mark burning in it are one statement.** They are
-produced in completely different places (the body is a colorset field in
-`dsn.mjs`, the glyph is baked into an emissive PNG by the texture tool) and,
-stated separately, they landed on the same teal within one commit — so the one
-thing the die exists to say was invisible while each half looked correct in its
-own file. Both come from `DIE_KEYS` in `palette.mjs`. The body is **black
-glass** now (`ink1`): a transmissive material carries its tint through the whole
-casting instead of painting it on, so that reads as smoked glass rather than as
-a black surface. What it costs is the hue axis — at that value a hue is not a
-colour anybody can see — so the check measures **either** ≥ 45° of hue **or**
-≥ 0.35 of relative luminance, and requires one of them; the glyph must out-value
-the body, and the *edge* must out-value it by ≥ 0.2, because DSN paints the
-bevels with it and that is the entire silhouette of a dark die.
-
-**Emission is not a local cost.** Any non-black `emissive` on any material in
-the dice scene switches the whole canvas onto DSN's bloom path for the length of
-the throw — a second full scene render plus ten `UnrealBloomPass` blurs — and on
-a transmissive material each of those renders drags a `renderTransmissionPass`
-with it, which three.js sizes to the **full viewport**, forces 4× MSAA on, and
-re-mipmaps every frame. So one glowing numeral roughly doubles the per-frame
-cost of every die on the table. The surge d20 pays it (a glyph that does not
-glow is not a glyph); the severity d100 does not, and the check holds the
-invariant rather than the implementation — the colorset must either set
-`emissiveLabels` **or** sit on a body below 0.15 luminance, where a white
-outlined numeral carries itself.
-
-And **warm the presets**. DSN loads a preset's images lazily inside
-`create()` at the first throw, one `await` per face — sixty serial round-trips
-per system, times three systems, mid-animation. 6.2.9 added
-`dice3d.preloadPresets(systemId)` for exactly this and says in its own source
-that without it such presets "cause visible lag". Not calling it *was* the lag.
-It does not cover DSN's own 2048² Sobel normal-map bake, which is JavaScript on
-the main thread at **370–520 ms per material**, once per level system; there is
-no public seam to warm that, and registering fewer systems is the only lever.
-For scale, the feature's own full-screen shaders measure 0.89 ms (surge) and
-0.37 ms (verdict) per frame at their worst shipping size — the live beats are
-not where the time goes.
-
-Bump and emissive maps *both* live behind DSN's "realistic lighting", which
-Foundry's own Low performance mode turns off; a die carrying nothing else is
-twenty identical faces there, so `registerDiceSoNice` checks and stands down to
-DSN's internal word-labelled preset rather than registering blanks over it.
-
-See `docs/ARCANE_SURGE.md` for the exposure model, the three deliberately
-different transport channels, why the standing instability is drawn in the HUD
-chip rather than over the board, and why every pass runs live off a warmed
-context rather than from baked frames.
-
 **When touching the PF2e areas** (`features/pf2e-aoe/`), re-run its consistency
 check. It covers the closed semantic vocabulary, classification ties, profile
 precedence, PF2e coverage (the 5/10/5 diagonal, half-grid cone origins, blocked
@@ -1330,29 +1148,6 @@ nothing, and the check refuses one. To see it: `node tools/target-line-preview.m
 `/.preview/odds.html` (`?freeze=1` stops the narrowing loop) or
 `/.preview/target-lines.html?odds=1` for the odds on the real line. See
 `docs/PF2E_ODDS.md`.
-
-**When touching Save Resolution** (`features/pf2e-saves/`, `styles/pf2e-saves.css`),
-re-run its check. Everything it covers fails silently:
-
-```bash
-node tools/pf2e-saves-check.mjs
-```
-
-Zero problems required. Three things are worth knowing before you change it.
-**The session flag carries no results.** `sv.session` reaches every client, so
-a row holds only the id of the message its save is on; every viewer reads the
-result off that message through pf2e-odds' `landingOf` gate, and a degree, a
-total or a multiplier written into the flag prints a hidden NPC's result on
-every player's console while every screen looks right. The per-row multiplier
-override lives in the panel's memory for that reason. **The active GM is the
-only writer**, through `mutate()`; a caster's owner opens a session over the
-socket on the attested sender, and a player's save is filed only against a
-creature they own. **Rolls are matched, not routed**: any saving throw against
-the session's spell (PF2e's own card button included) files to its row by
-identifier or token, and apply goes through PF2e's own `applyDamage` with IWR,
-never the flat path. To see it: `node tools/pf2e-saves-preview.mjs && node
-tools/preview-server.mjs`, then `/.preview/saves.html`. See
-`docs/SAVE_RESOLUTION.md`.
 
 **When touching Flatfinder** (`features/flatfinder/`, `styles/flatfinder.css`,
 `lang/flatfinder.en.json`), re-run its check, plus `recall-check` (Recall
@@ -2022,58 +1817,34 @@ tools/fx-canvas-preview.mjs && node tools/preview-server.mjs`, then
 `/.preview/fx-canvas.html` (judge stills with `seek`; headless Chrome starves
 animation frames). See `docs/SPELLSPRITE.md`.
 
-**When touching the Performance feature, the shared frame budget or any
-feature's shedding** (`features/perf/`, `core/budget.mjs`, `core/gl-surfaces.mjs`,
-`core/pan.mjs`, any `SHED_ORDER`, any suite WebGL context, any backdrop blur),
-re-run its check. Everything it covers fails silently:
+**When touching the shared frame budget or any feature's shedding**
+(`core/budget.mjs`, `core/gl-surfaces.mjs`, `core/pan.mjs`, any `SHED_ORDER`,
+any suite WebGL context, any backdrop blur), re-run its check. Everything it
+covers fails silently:
 
 ```bash
-node tools/perf-check.mjs
+node tools/budget-check.mjs
 ```
 
-Zero problems required. Five things are worth knowing before you change any of it.
+Zero problems required. Three things are worth knowing before you change any of it.
 
 **There is one frame clock.** Shedding is `Budget.ladder(id, SHED_ORDER)` in
 `core/budget.mjs`, never a private rolling average. A second clock sheds on its
-own schedule while the overlay and the GM's floor say the table is fine, and the
-check refuses `x = x * 0.9 + dt * 0.1` in any feature. The budget is always
-imported and always works: with `perf` off it runs the shipped 22/15 ms policy.
-Never make a feature ask "is perf on?"; the feature only changes the POLICY.
+own schedule while every other ladder says the table is fine, and the check
+refuses `x = x * 0.9 + dt * 0.1` in any feature. The budget is always imported
+and always works, running the shipped 22/15 ms policy (`LOCAL_POLICY`). Never
+make a feature branch on whether something has changed the policy.
 
-**The feature never writes a core setting.** Performance mode, resolution, the
-ticker rate and sight during moves are runtime overrides. Choosing Quality or
-switching the feature off must restore the user's own Foundry exactly, which a
-write cannot. Every override is listed in the overlay beside the user's own value
-(`overrides.mjs`), because a Foundry setting that appears to do nothing is
-otherwise a bug report.
-
-**Core patches are generation-gated AND integrity-checked.** Each
-`Patches.define()` names a `signature`, a fragment of the pristine method's
-source. A patch whose target no longer contains it (core changed it, or another
-module replaced it) stands down with "Conflict" instead of guessing. When
-Foundry updates, re-read each target, update the signature, and extend
-`VERIFIED_GENERATIONS`. Do not loosen the check.
-
-**Balanced promises no visible change.** The idle-rate drop must not slow
-anything that moves on its own. A suite feature that animates on the canvas
-without input calls `Budget.claimMotion(id, true)` while it does (resource
-bars and PF2e areas already do), or Balanced visibly stutters on exactly that
-thing. Every visual trade belongs at Performance or below, and the check pins
-Quality as the identity row.
+**A feature that animates on the canvas without input claims motion.** It calls
+`Budget.claimMotion(id, true)` while it does (resource bars and PF2e areas
+already do), so anything that lowers the idle rate can tell the canvas is not
+idle.
 
 **A WebGL context the suite owns is registered with `Surfaces`,** and the
 feature calls `use()` before each draw so a context released while idle is
 rebuilt first. A lost context stays lost on its canvas, so a rebuild needs a new
 canvas. Every backdrop blur is written against `--gl-blur` / `--gl-glass-k`
-(DESIGN_SYSTEM.md rule 9). A bare-pixel blur ignores the player's tier. The
-check requires both.
-
-`node tools/perf-bench.mjs` drives a stress page of real glass and ambient
-loops through Playwright or a local headless Chrome and prints frame intervals
-per glass level. It runs uncapped, so it shows main-thread cost; a backdrop
-blur's GPU cost only shows as dropped frames in the in-session overlay. See
-`docs/PERFORMANCE.md` for the tier table, the governor and the live-session
-checklist.
+(DESIGN_SYSTEM.md rule 9), never bare pixels. The check requires both.
 
 **When touching CSS**, additionally confirm you have not reintroduced any of the
 drift this design system exists to prevent — a raw hex that duplicates a token,

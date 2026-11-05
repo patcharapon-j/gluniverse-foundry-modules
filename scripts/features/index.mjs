@@ -15,22 +15,17 @@ import "./stage/index.mjs";
 import "./stream-pacer/index.mjs";
 import "./statsblock-import/index.mjs";
 import "./loot-gen/index.mjs";
-import "./tidy5e-slots/index.mjs";
 import "./pf2e-flatten/index.mjs";
-import "./pf2e-level-zero/index.mjs";
 import "./critical/index.mjs";
 import "./timer/index.mjs";
 import "./mythic-gme/index.mjs";
-import "./oracles/index.mjs";
 import "./pf2e-recall/index.mjs";
 import "./resource-bars/index.mjs";
 import "./pf2e-aoe/index.mjs";
 import "./pf2e-fx/index.mjs";
-import "./pf2e-arcane-surge/index.mjs";
 import "./pf2e-variant-rules/index.mjs";
 import "./pf2e-creaturedex/index.mjs";
 import "./pf2e-odds/index.mjs";
-import "./pf2e-saves/index.mjs";
 import "./spotlight-roll/index.mjs";
 // Gated on `initiative` via requiresFeature, so it is imported after it.
 import "./combat-intro/index.mjs";
@@ -44,5 +39,3 @@ import "./hexcrawl/index.mjs";
 import "./theatre/index.mjs";
 import "./roleplay-chat/index.mjs";
 import "./diorama/index.mjs";
-// Cross-cutting: tunes the canvas, the suite's own effects and Foundry's UI.
-import "./perf/index.mjs";

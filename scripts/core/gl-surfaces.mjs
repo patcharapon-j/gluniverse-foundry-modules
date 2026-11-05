@@ -2,7 +2,7 @@
  * GLUniverse Suite — lifecycle for the suite's own WebGL surfaces.
  *
  * Beside Foundry's canvas the suite holds several WebGL contexts of its own
- * (stage, arcane-surge, initiative, the weather and critical
+ * (stage, initiative, the weather and critical
  * PIXI apps). A browser caps live contexts at around sixteen and drops the
  * oldest SILENTLY when it runs out — which, on a table running a few other
  * modules, can be Foundry's own canvas. Every one of them also costs GPU memory
@@ -23,8 +23,8 @@
  *     something moves has no next frame to put the picture back.
  *
  * The feature keeps every decision about WHAT to draw; the registry only ever
- * calls the callbacks it was handed. With the `perf` feature off, the
- * policy's `glRelease` is 0 (never release) and `pauseHidden` false, and
+ * calls the callbacks it was handed. Under the shipped policy (LOCAL_POLICY in
+ * the budget) `glRelease` is 0 (never release) and `pauseHidden` false, and
  * off-screen pausing is the only thing that happens — which is what every one
  * of these surfaces should have been doing anyway.
  *

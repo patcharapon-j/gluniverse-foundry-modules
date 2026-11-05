@@ -206,13 +206,10 @@ rather than at the end.
 | stream-pacer       | sp.                          | null              | —               | off     |
 | statsblock-import  | sbi.                         | pf2e              | —               | off     |
 | loot-gen           | lg.                          | ["pf2e","dnd5e"]  | —               | off     |
-| tidy5e-slots       | tidy.                        | dnd5e             | tidy5e-sheet    | off     |
 | pf2e-flatten       | flatten.                     | pf2e              | —               | off     |
-| pf2e-level-zero    | l0.                          | pf2e              | —               | off     |
 | critical           | crit.                        | ["pf2e","dnd5e"]  | —               | off     |
 | timer              | timer.                       | null              | —               | off     |
 | mythic-gme         | mythic.                      | null              | —               | off     |
-| oracles            | oracle.                      | null              | —               | off     |
 | pf2e-recall        | rk.                          | pf2e              | —               | off     |
 | resource-bars      | rb.                          | null              | —               | off     |
 | pf2e-aoe            | aoe.                         | pf2e              | —               | off     |
@@ -223,7 +220,6 @@ rather than at the end.
 | vr-dents           | vr.dent                      | pf2e              | ⤷ pf2e-variant-rules | off |
 | vr-lasting-wounds  | vr.wound                     | pf2e              | ⤷ pf2e-variant-rules | off |
 | vr-boss-creatures  | vr.boss                      | pf2e              | ⤷ pf2e-variant-rules | off |
-| pf2e-arcane-surge  | surge.                       | pf2e              | —               | off     |
 | pf2e-creaturedex   | dex.                         | pf2e              | —               | off     |
 | spotlight-roll     | dr.                          | pf2e              | dice-so-nice (6.x, v14) | off |
 | combat-intro       | ci.                          | pf2e              | dice-so-nice (6.x, v14); feature initiative | off |
@@ -234,7 +230,6 @@ rather than at the end.
 | theatre            | th.                          | null              | —               | off     |
 | roleplay-chat      | rp.                          | null              | —               | off     |
 | diorama            | dio.                         | null              | —               | off     |
-| perf               | perf.                        | null              | —               | ON      |
 
 `⤷ <id>` in the requires column is a `requiresFeature` edge (a sibling suite
 feature that must be enabled), not a `requires` module id.

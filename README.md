@@ -30,7 +30,6 @@ flat native list — the Control Center is the single place to configure everyth
 | **Stream Pacer** | any | Table pacing: a signal band on every screen for hands, wrap-ups, countdowns and ready checks that also reaches players away from the tab. Spotlight marks, safety lights, campfire and Dire Peril. |
 | **PF2e Stat Block Importer** | PF2e | Import NPCs & hazards from pasted stat-block text. |
 | **Loot Generator** | PF2e / D&D 5e | System-aware loot generation with audited treasure proposals. |
-| **Tidy 5e Inventory Slots** | D&D 5e + `tidy5e-sheet` | Slot encumbrance and wear-and-tear for the Tidy 5e sheet. |
 | **Flatten Proficiency** | PF2e | Proficiency Without Level variant automation. |
 | **Critical** | PF2e / D&D 5e | JRPG-style cinematic critical-hit / critical-success animations, from an image or a video clip. |
 | **Stream Client** | any | OBS/browser capture mode: hides Foundry UI on a dedicated login, frames the camera, chat & presentation overlays, control room. |

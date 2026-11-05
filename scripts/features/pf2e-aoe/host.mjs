@@ -168,7 +168,7 @@ class AoeHost {
     this.loadPlateFonts();
     this.ladder = Budget.ladder("pf2e-aoe", SHED_ORDER, { minShed: () => this.minShed });
     /* The level can move while the tick is stopped (a still look, motion
-       "none", a tier change from the Performance feature), and nothing else
+       "none", a policy change on the budget), and nothing else
        would write the gates until the next pan. */
     this._unbudget = Budget.onChange(() => { if (!this._ticking) this.writeAll(); });
     this.ground = new PIXI.Container();
@@ -267,7 +267,7 @@ class AoeHost {
       this._ticking = false;
     }
     /* While this host wants frames something on the canvas is moving on its
-       own, so the Performance feature's idle-rate drop must not slow it. */
+       own, so no idle-rate drop may slow it. */
     Budget.claimMotion("pf2e-aoe", this._ticking);
   }
 

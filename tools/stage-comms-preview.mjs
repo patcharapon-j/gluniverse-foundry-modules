@@ -29,7 +29,6 @@
  *                            play one change after the entrances settle; t then
  *                            counts from the change
  *   ui=0                     hide the control strip (for screenshots)
- *   perf=light|none          the Performance feature's glass level (data-gl-perf)
  *   zoom=<k>                 magnify the page k× about the stack's edge, to inspect a card
  *
  * The art here has no face-locator result (that needs a Foundry world), so the
@@ -121,7 +120,6 @@ const { prepareArt } = await import("/scripts/features/stage/render/assets.mjs")
 const bg = BGS.find((b) => b.name === q.get("bg")) ?? BGS.find((b) => b.name === "gate") ?? BGS[0];
 if (bg) document.getElementById("bg").style.backgroundImage = "url(" + bg.src + ")";
 if (q.get("ui") === "0") document.getElementById("ui").style.display = "none";
-if (q.has("perf")) document.documentElement.dataset.glPerf = q.get("perf");
 if (Number(q.get("zoom")) > 1) {
   const z = Number(q.get("zoom"));
   const ax = q.get("edge") === "left" ? "0%" : "100%";

@@ -90,7 +90,7 @@ GLUniverse VTT `threejs-craft` bar, adapted to a Foundry v14 module.
 ## 7. Check it like a lookdev artist
 
 - `node tools/diorama-check.mjs` must report zero problems, and so must
-  `node tools/perf-check.mjs` when you touch the budget or a shed name.
+  `node tools/budget-check.mjs` when you touch the budget or a shed name.
 - Look at it. Serve `node tools/diorama-preview.mjs && node
   tools/preview-server.mjs`, open `/.preview/diorama.html`, and judge at every
   pitch and both yaw snaps, on a dark map and a bright one. Headless stills want

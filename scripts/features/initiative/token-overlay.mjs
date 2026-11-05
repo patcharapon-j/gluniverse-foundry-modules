@@ -143,7 +143,7 @@ export class TokenOverlayManager {
     this._entries = new Map();
     this._ticking = false;
     // Rides Foundry's canvas ticker, so its time is attributed to this feature
-    // in the perf overlay. Kept as one stable function: the ticker removes by
+    // while the budget profiles. Kept as one stable function: the ticker removes by
     // identity.
     this._tickFn = Budget.measure("initiative", this._onTick.bind(this));
     this._time = 0;

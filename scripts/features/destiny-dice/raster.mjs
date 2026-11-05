@@ -6,8 +6,7 @@
  * measure is what Dice So Nice is handed.
  *
  * The die is BLACK GLASS, and three Dice So Nice behaviours govern every value
- * here (read off its shipped sourcemap, and the same three Arcane Surge's dice
- * are built on; see docs/ARCANE_SURGE.md):
+ * here (read off its shipped sourcemap):
  *
  *   THE BUMP MAP IS ALSO THE TRANSMISSION MASK. On a transmissive material
  *   (`glass`) DSN binds the finished bump canvas a second time as

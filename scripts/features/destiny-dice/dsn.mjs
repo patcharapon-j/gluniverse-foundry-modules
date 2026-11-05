@@ -20,7 +20,8 @@
  *   so zero leaves the default of 1 and the "0 disables the glow" setting never
  *   did. Off now means no emissive maps and a black emissive, which also keeps
  *   the throw off DSN's bloom path entirely (any non-black emissive in the scene
- *   switches the whole dice canvas onto it; see the Arcane Surge notes).
+ *   switches the whole dice canvas onto it, a second scene render plus bloom passes
+ *   for the length of the throw).
  *
  *   A PRESET FOR A CUSTOM TERM NEEDS A SHAPE. `addDicePreset` looks `dz` up in
  *   the standard system and, finding nothing, looks up its `shape` argument

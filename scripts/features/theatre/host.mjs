@@ -27,8 +27,8 @@
  * frame clock with Budget.ladder(); the renderer is told the level each frame.
  * The shake is ambient motion, so it also holds still while Budget says ambient
  * motion should. While the layer moves on its own (a shake, a transition, a
- * playing video) it claims continuous motion, so the perf feature's idle-rate
- * drop never stutters it.
+ * playing video) it claims continuous motion, so no idle-rate drop stutters
+ * it.
  *
  * Nothing runs at import.
  */
