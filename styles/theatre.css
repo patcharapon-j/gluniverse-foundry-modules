@@ -46,7 +46,9 @@
   --glth-cut: var(--gl-is-cut);
   /* film black and the veils over the picture */
   --glth-film: rgb(var(--gl-tint-dark));
-  --glth-shadow: rgb(var(--gl-tint-dark) / 0.45);
+  /* Type over art: a close contact shadow that edges every stroke, under a
+     wide soft one that lifts the block off the picture. */
+  --glth-type-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.55), 0 2px 30px rgb(var(--gl-tint-dark) / 0.45);
 }
 
 .glth-overlay {
@@ -70,19 +72,23 @@
   pointer-events: none;
 }
 
-/* ── Scrims: a local shade behind each title placement ── */
+/* ── Scrims: a local shade behind each title placement ──
+   Each one reaches past the whole block it sits behind (eyebrow to subtitle),
+   with a second stop so the shade holds across the text rather than fading out
+   under its first line. The art decides how bright the ground is; the scrim
+   is what keeps the secondary lines readable over a sky or a gold leaf. */
 .glth-scrim {
   inset: 0 var(--glth-inset-r) 0 0;
   opacity: 0;
 }
 .glth-scrim--mid {
-  background: radial-gradient(ellipse 60% 35% at 50% 50%, rgb(var(--gl-tint-dark) / 0.45), transparent 75%);
+  background: radial-gradient(ellipse 66% 42% at 50% 50%, rgb(var(--gl-tint-dark) / 0.58), rgb(var(--gl-tint-dark) / 0.3) 55%, transparent 80%);
 }
 .glth-scrim--low {
-  background: linear-gradient(to top, rgb(var(--gl-tint-dark) / 0.7), transparent 45%);
+  background: linear-gradient(to top, rgb(var(--gl-tint-dark) / 0.78), rgb(var(--gl-tint-dark) / 0.42) 32%, transparent 58%);
 }
 .glth-scrim--high {
-  background: linear-gradient(to bottom left, rgb(var(--gl-tint-dark) / 0.6), transparent 45%);
+  background: radial-gradient(ellipse 90% 72% at 100% 0%, rgb(var(--gl-tint-dark) / 0.8), rgb(var(--gl-tint-dark) / 0.55) 45%, transparent 100%);
 }
 
 /* ── Black dip and letterbox bars ── */
@@ -104,7 +110,7 @@
 .glth-title {
   opacity: 0;
   max-width: none;
-  text-shadow: 0 2px 30px var(--glth-shadow);
+  text-shadow: var(--glth-type-shadow);
 }
 .glth-title--centre {
   left: calc((100% - var(--glth-inset-r)) / 2);
@@ -140,7 +146,9 @@
 .glth-title__eyebrow {
   font-size: clamp(11px, 1vw, 16px);
   line-height: 1.3;
-  color: color-mix(in srgb, var(--glth-paper) 82%, transparent);
+  /* Solid, never translucent: alpha text loses most where the art is busiest.
+     The name is Bright Paper; the lines around it step down to Paper. */
+  color: var(--glth-paper);
 }
 .glth-title--chapter .glth-title__eyebrow,
 .glth-title--wipe .glth-title__eyebrow {
@@ -150,7 +158,7 @@
   font-size: clamp(12px, 1.15vw, 19px);
   line-height: 1.3;
   margin-top: 0.9em;
-  color: color-mix(in srgb, var(--glth-paper) 78%, transparent);
+  color: var(--glth-paper);
 }
 .glth-title--credits .glth-title__sub {
   margin-top: 0.5em;
@@ -198,7 +206,7 @@
   line-height: 1.25;
   text-align: center;
   opacity: 0;
-  text-shadow: 0 2px 30px var(--glth-shadow);
+  text-shadow: var(--glth-type-shadow);
 }
 
 /* ── Corner location tag ──
@@ -212,8 +220,8 @@
   letter-spacing: 0.3em;
   text-transform: uppercase;
   white-space: nowrap;
-  color: color-mix(in srgb, var(--glth-paper) 75%, transparent);
-  text-shadow: 0 1px 12px rgb(var(--gl-tint-dark) / 0.6);
+  color: var(--glth-paper);
+  text-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.7), 0 1px 12px rgb(var(--gl-tint-dark) / 0.6);
 }
 .glth-tag::before {
   content: "";
@@ -222,7 +230,7 @@
   height: 1px;
   margin-right: 10px;
   vertical-align: middle;
-  background: color-mix(in srgb, var(--glth-paper) 75%, transparent);
+  background: var(--glth-paper);
 }
 
 /* ── The chat line a cut posts (th.chatOnCut) ──

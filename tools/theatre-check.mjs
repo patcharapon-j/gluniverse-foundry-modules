@@ -753,6 +753,9 @@ section = "seams";
   ok("theatre.css reads no Etched Glass token (only --gl-is-*, tints, z, motion)", legacy.length === 0, legacy.join(", "));
   const ovRoot = ovCss.match(/(^|\n)\s*:is\([^)]*\.glth-overlay[^)]*\)\s*\{([^}]*)\}/)?.[2] ?? "";
   ok("the overlay's skin aliases the core family on its own root", /--glth-text:\s*var\(--gl-is-text\)/.test(ovRoot) && /--glth-font:\s*var\(--gl-is-font\)/.test(ovRoot));
+  // Type over art is solid: a translucent line loses most exactly where the picture is busiest.
+  const seeThrough = [...ovCss.matchAll(/([^{}]+)\{[^}]*(?<![-\w])color:\s*(color-mix\([^;]*transparent|rgba?\([^;]*\/\s*0?\.\d)/g)].map((m) => m[1].trim());
+  ok("no text colour in theatre.css is translucent", seeThrough.length === 0, seeThrough.join(" | "));
   ok("the overlay's skin is never written on :root", !/(^|[},\s]):root\b[^{]*\{[^}]*--glth-/.test(ovCss));
   // The chat line a cut posts (th.chatOnCut): every class it writes is styled, and it is a sized plate.
   const MC = await imp(`${FEAT}/model.mjs`);
