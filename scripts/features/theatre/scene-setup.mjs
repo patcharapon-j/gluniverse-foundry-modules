@@ -242,7 +242,8 @@ async function confirm(titleKey, bodyKey, scene) {
   try {
     return await DialogV2.confirm({
       window: { title: L(titleKey), icon: "fa-solid fa-clapperboard" },
-      content: `<p class="gl-type">${escapeHTML(F(bodyKey, { name: scene.name }))}</p>`,
+      classes: ["glth-dialog"],
+      content: `<p class="glth-scene-confirm gl-type">${escapeHTML(F(bodyKey, { name: scene.name }))}</p>`,
       rejectClose: false,
     });
   } catch { return false; }
@@ -276,8 +277,9 @@ export async function promptCreate() {
   try {
     name = await DialogV2.prompt({
       window: { title: L("GLTH.scene.createTitle"), icon: "fa-solid fa-clapperboard" },
-      content: `<div class="gl-type"><label>${escapeHTML(L("GLTH.scene.name"))}
-        <input type="text" name="name" value="${escapeHTML(L("GLTH.scene.defaultName"))}" autofocus></label></div>`,
+      classes: ["glth-dialog"],
+      content: `<div class="glth-scene-prompt gl-type"><label class="glth-scene-prompt-field"><span>${escapeHTML(L("GLTH.scene.name"))}</span>
+        <input type="text" name="name" class="gl-field" value="${escapeHTML(L("GLTH.scene.defaultName"))}" autofocus></label></div>`,
       ok: {
         label: L("GLTH.scene.create"),
         icon: "fa-solid fa-clapperboard",

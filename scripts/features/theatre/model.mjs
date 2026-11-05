@@ -52,7 +52,7 @@
  * { background: string, width, height, padding, gridType, tokenVision, backgroundColor } | null
  */
 
-import { foldText, matchesQuery } from "../../core/util.mjs";
+import { escapeHTML, foldText, matchesQuery } from "../../core/util.mjs";
 import { DEFAULT_FACE, DEFAULT_MODE, DEFAULT_STYLE, FACES, MODES, STYLES, TIMING, VIDEO_RE, CUE_KINDS } from "./constants.mjs";
 
 // Only a number, or a string that spells one, is a value: `Number(null)` is 0,
@@ -290,6 +290,17 @@ export const isVideo = (src) => VIDEO_RE.test(String(src ?? ""));
 /** Title fields a viewer is shown. GM notes are never part of it. */
 export function titleOf(shot) {
   return { eyebrow: shot?.eyebrow ?? "", title: shot?.title ?? "", subtitle: shot?.subtitle ?? "" };
+}
+
+/**
+ * The chat line a cut posts (th.chatOnCut): the shot's title lines, escaped,
+ * as the markup styles/theatre.css draws. Pure, so the preview draws this exact
+ * string.
+ */
+export function cutLineMarkup(shot) {
+  const t = titleOf(shot);
+  const line = (cls, v) => (v ? `<div class="glth-chat-${cls}">${escapeHTML(v)}</div>` : "");
+  return `<div class="glth-chat-cut gl-type">${line("eyebrow", t.eyebrow)}${line("title", t.title)}${line("subtitle", t.subtitle)}</div>`;
 }
 
 /** A title with no text at all draws nothing (the transition still plays). */

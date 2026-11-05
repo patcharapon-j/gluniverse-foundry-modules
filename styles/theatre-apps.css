@@ -739,12 +739,13 @@
 
 .glth-dialog { font-family: var(--glth-font); }
 .glth-dialog .gl-btn, .glth-dialog .form-footer button { font-family: var(--glth-font); font-size: var(--gl-is-t-body); font-weight: 600; }
-.glth-folder-prompt { display: flex; flex-direction: column; gap: 12px; font-family: var(--glth-font); }
-.glth-folder-prompt-field { display: flex; flex-direction: column; gap: 5px; color: var(--glth-dim); font-size: var(--gl-is-t-meta); font-weight: 500; }
-.glth-folder-prompt-field input { width: 100%; padding: 6px 9px; font-size: var(--gl-is-t-lead); }
+:is(.glth-folder-prompt, .glth-scene-prompt) { display: flex; flex-direction: column; gap: 12px; font-family: var(--glth-font); }
+:is(.glth-folder-prompt-field, .glth-scene-prompt-field) { display: flex; flex-direction: column; gap: 5px; color: var(--glth-dim); font-size: var(--gl-is-t-meta); font-weight: 500; }
+:is(.glth-folder-prompt-field, .glth-scene-prompt-field) input { width: 100%; padding: 6px 9px; font-size: var(--gl-is-t-lead); }
 .glth-folder-prompt-check { display: flex; align-items: center; gap: 10px; color: var(--glth-text); font-size: var(--gl-is-t-body); }
 .glth-folder-prompt-check input[type="checkbox"] { margin: 0; accent-color: var(--glth-paper); }
 .glth-folder-prompt-check input[type="color"] { width: 40px; height: 24px; margin-left: auto; padding: 0; cursor: pointer; }
+.glth-scene-confirm { margin: 0; color: var(--glth-text); font-family: var(--glth-font); font-size: var(--gl-is-t-lead); line-height: 1.45; }
 .glth-card-prompt { display: flex; flex-direction: column; gap: 10px; font-family: var(--glth-font); }
 .glth-card-prompt p { margin: 0; color: var(--glth-dim); font-size: var(--gl-is-t-meta); }
 .glth-card-prompt textarea { width: 100%; padding: 9px; font-size: var(--gl-is-t-lead); line-height: 1.45; resize: vertical; }

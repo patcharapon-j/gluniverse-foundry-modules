@@ -151,7 +151,7 @@ and are scaled with `motionScale()`.
 | Style       | Image | Title |
 |-------------|-------|-------|
 | `centre` (default) | dip to black, swap behind it | centred; tracking collapses, rules draw out |
-| `chapter`   | push-in dissolve | lower left; band wipe, accent underline |
+| `chapter`   | push-in dissolve | lower left; band wipe, paper underline |
 | `credits`   | letterbox bars close, swap, reopen | credit line in the lower bar, letter by letter |
 | `wipe`      | soft diagonal wipe | upper right; words rise |
 | `cut`       | 120 ms crossfade | centred |
@@ -304,8 +304,13 @@ Serve the preview — a `file://` page does not run its module script.
 The filmstrip and the shot editor have no templates. `apps/filmstrip-view.mjs`
 and `apps/editor-view.mjs` build each panel's model and markup as a string; the
 apps set it and bind events. `node tools/theatre-apps-preview.mjs` writes
-`.preview/theatre-apps.html` (`app=filmstrip|editor`, `tab=scene`, `dirty=1`,
+`.preview/theatre-apps.html` (`app=filmstrip|editor|chat`, `tab=scene`, `dirty=1`,
 `collapsed=1`, `black=1`, `empty=1`), which draws the shipped markup over
-`styles/theatre-apps.css`. The skin is shared with Stage's Director
-(docs/adr/0008-stage-theatre-console.md), and `theatre-check` holds the two
-ramps equal.
+`styles/theatre-apps.css`. `app=chat` draws the line a cut posts
+(`cutLineMarkup` in `model.mjs`) in a 14px chat log. The skin is shared with
+Stage's Director (docs/adr/0008-stage-theatre-console.md), and `theatre-check`
+holds the two ramps equal.
+
+The overlay and the chat line are Ink and Signal too (`styles/theatre.css`,
+`--glth-*` aliases on `.glth-overlay` and `.glth-chat-cut`). The overlay has no
+hue: paper type and rules over film black.

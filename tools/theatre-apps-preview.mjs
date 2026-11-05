@@ -17,7 +17,8 @@
  * Serve it: a file:// page does not run its module script.
  *
  * URL parameters (all optional):
- *   app=both|filmstrip|editor   which app to draw (default both)
+ *   app=both|filmstrip|editor|chat   which app to draw (default both); chat is
+ *                               the line a cut posts, in a 14px chat log
  *   tab=shot|scene              the editor's tab
  *   collapsed=1                 the filmstrip folded to its transport
  *   dirty=1                     the edited shot carries an unsaved draft
@@ -49,6 +50,7 @@ const html = `<!doctype html>
 <link rel="stylesheet" href="/.preview/foundry/fonts/fontawesome/css/all.min.css">
 <link rel="stylesheet" href="/styles/gl-fonts.css">
 <link rel="stylesheet" href="/styles/gl-tokens.css">
+<link rel="stylesheet" href="/styles/theatre.css">
 <link rel="stylesheet" href="/styles/theatre-apps.css">
 <style>
   html, body { margin: 0; height: 100%; background: #1b1c21; overflow: hidden; }
@@ -62,6 +64,11 @@ const html = `<!doctype html>
   .glth-filmstrip { z-index: 2; }
   [hidden] { display: none !important; }
   .header-control { width: 24px; height: 24px; background: none; border: 0; color: #9a9caa; cursor: pointer; }
+  /* A chat log stand-in at Foundry's own 14px, the size a chat card inherits. */
+  #chat { position: absolute; right: 0; top: 0; bottom: 0; width: 300px; z-index: 3; box-sizing: border-box; padding: 8px;
+    display: flex; flex-direction: column; gap: 6px; margin: 0; list-style: none; background: #0e0f13; font: 14px/1.4 sans-serif; color: #ddd; overflow: auto; }
+  #chat .message { padding: 6px 8px; background: #1a1b21; border: 1px solid #2a2b33; }
+  #chat .message-header { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #c9c9c9; }
   #err { position: fixed; left: 8px; top: 8px; z-index: 9; color: #f88; font: 12px monospace; white-space: pre; }
 </style></head>
 <body>
@@ -71,6 +78,7 @@ const html = `<!doctype html>
   <section class="window-content"></section>
 </section>
 <div class="application glth-app glth-filmstrip" id="glth-filmstrip"></div>
+<ol id="chat" hidden></ol>
 <pre id="err"></pre>
 <script type="module">
 const PICS = ${JSON.stringify(pics)};
@@ -123,8 +131,16 @@ const film = document.getElementById("glth-filmstrip");
 const ed = document.getElementById("glth-editor");
 ed.style.width = (Number(q.get("w")) || 1000) + "px";
 ed.style.height = (Number(q.get("h")) || 700) + "px";
-film.hidden = which === "editor";
-ed.hidden = which === "filmstrip";
+film.hidden = which === "editor" || which === "chat";
+ed.hidden = which === "filmstrip" || which === "chat";
+// app=chat: the line a cut posts (th.chatOnCut), drawn from the shipped markup in a 14px chat log.
+const chat = document.getElementById("chat");
+chat.hidden = which !== "chat";
+if (which === "chat") {
+  const lines = [shots[0], shots[1], { eyebrow: "Three days later", title: "The Long Road to Varrow Keep and the Ashen Fields Beyond", subtitle: "Night of the fourth day, under a red moon" }];
+  chat.innerHTML = lines.map((s) => '<li class="message"><header class="message-header"><b>The Docks</b><time>now</time></header><div class="message-content">'
+    + M.cutLineMarkup(s) + "</div></li>").join("");
+}
 if (which === "editor") document.body.style.backgroundImage = "none";
 
 const draw = () => {

@@ -1,5 +1,15 @@
 /* ════════════════════════════════════════════════════════════════════════
-   Theatre — the title overlay (scripts/features/theatre/overlay/title-overlay.mjs)
+   Theatre — what the players see: the title overlay
+   (scripts/features/theatre/overlay/title-overlay.mjs) and the chat line a
+   cut posts (store.mjs, th.chatOnCut).
+
+   Ink and Signal (DESIGN.md, docs/adr/0012-ink-and-signal-core.md): the core
+   `--gl-is-*` family, aliased as `--glth-*` on these surfaces' own roots and
+   never on :root. The GM apps alias the same family in theatre-apps.css. The
+   overlay sits over campaign art, so it carries no hue: paper type, paper
+   rules, and film black. Film black is the tint channel, not `ink-0`: a dip and
+   the bars have to be the darkest thing on screen, and a capture card lifts a
+   near-black.
 
    One fixed layer on <body>: scrims, corner tag, black, letterbox bars, title,
    interlude card — in that paint order (DOM order; nothing here sets a
@@ -16,12 +26,32 @@
    whole screen, then drops back when the cue ends.
 
    The title faces are set inline from FACES (constants.mjs) — this sheet never
-   names a typeface. `--glth-lb` is the resting letterbox fraction, written by
-   the overlay, so placements clear the bars. `--glth-inset-r` is the width an
-   expanded sidebar covers at the right (TitleOverlay#setInset): titles, scrims
-   and the card are laid out in the screen left of it, over the picture the
-   camera centred there. Black and the bars span the whole screen.
+   names a title typeface. `--glth-lb` is the resting letterbox fraction,
+   written by the overlay, so placements clear the bars. `--glth-inset-r` is the
+   width an expanded sidebar covers at the right (TitleOverlay#setInset):
+   titles, scrims and the card are laid out in the screen left of it, over the
+   picture the camera centred there. Black and the bars span the whole screen.
    ════════════════════════════════════════════════════════════════════════ */
+
+:is(.glth-overlay, .glth-chat-cut) {
+  /* the neutral tones */
+  --glth-ink-1: var(--gl-is-ink-1);
+  --glth-ink-2: var(--gl-is-ink-2);
+  --glth-text: var(--gl-is-text);
+  --glth-paper: var(--gl-is-paper);
+  --glth-dim: var(--gl-is-dim);
+  --glth-faint: var(--gl-is-faint);
+  --glth-line: var(--gl-is-line);
+  /* type and shape */
+  --glth-font: var(--gl-is-font);
+  --glth-cut: var(--gl-is-cut);
+  --glth-wedge: 14px;  /* the 115° cut on a tag's right edge, at the tag's height */
+  /* film black and the veils over the picture */
+  --glth-film: rgb(var(--gl-tint-dark));
+  /* Type over art: a close contact shadow that edges every stroke, under a
+     wide soft one that lifts the block off the picture. */
+  --glth-type-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.55), 0 2px 30px rgb(var(--gl-tint-dark) / 0.45);
+}
 
 .glth-overlay {
   --glth-lb: 0;
@@ -32,9 +62,9 @@
   pointer-events: none;
   overflow: hidden;
   contain: strict;
-  color: var(--gl-text-bright);
-  /* The neutral sans the console skin reads in; each title face sets its own inline. */
-  font-family: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
+  color: var(--glth-text);
+  /* The neutral sans; each title face sets its own inline. */
+  font-family: var(--glth-font);
 }
 .glth-overlay.glth-overlay--live {
   z-index: calc(var(--gl-z-splash) - 1);
@@ -44,32 +74,39 @@
   pointer-events: none;
 }
 
-/* ── Scrims: a local shade behind each title placement ── */
+/* ── Scrims: a local shade behind each title placement ──
+   Each one reaches past the whole block it sits behind (eyebrow to subtitle),
+   with a second stop so the shade holds across the text rather than fading out
+   under its first line. The art decides how bright the ground is; the scrim
+   is what keeps the secondary lines readable over a sky or a gold leaf. */
 .glth-scrim {
   inset: 0 var(--glth-inset-r) 0 0;
   opacity: 0;
 }
 .glth-scrim--mid {
-  background: radial-gradient(ellipse 60% 35% at 50% 50%, rgb(var(--gl-tint-dark) / 0.45), transparent 75%);
+  background: radial-gradient(ellipse 66% 42% at 50% 50%, rgb(var(--gl-tint-dark) / 0.58), rgb(var(--gl-tint-dark) / 0.3) 55%, transparent 80%);
 }
 .glth-scrim--low {
-  background: linear-gradient(to top, rgb(var(--gl-tint-dark) / 0.7), transparent 45%);
+  background: linear-gradient(to top, rgb(var(--gl-tint-dark) / 0.78), rgb(var(--gl-tint-dark) / 0.42) 32%, transparent 58%);
 }
 .glth-scrim--high {
-  background: linear-gradient(to bottom left, rgb(var(--gl-tint-dark) / 0.6), transparent 45%);
+  background: radial-gradient(ellipse 90% 72% at 100% 0%, rgb(var(--gl-tint-dark) / 0.8), rgb(var(--gl-tint-dark) / 0.55) 45%, transparent 100%);
 }
 
 /* ── Black dip and letterbox bars ── */
 .glth-black {
   inset: 0;
   opacity: 0;
-  background: rgb(var(--gl-tint-dark));
+  background: var(--glth-film);
 }
+/* No standing `will-change`: the bars are two half-screen boxes that sit at
+   scaleY(0) for most of a session, and a permanent hint kept a viewport's worth
+   of compositor layer alive for them on every client. Their transform runs on
+   WAAPI, which promotes them for the length of each move by itself. */
 .glth-bar {
   left: 0;
   right: 0;
-  background: rgb(var(--gl-tint-dark));
-  will-change: transform;
+  background: var(--glth-film);
 }
 .glth-bar--top { top: 0; transform-origin: 50% 0; }
 .glth-bar--bottom { bottom: 0; transform-origin: 50% 100%; }
@@ -78,7 +115,7 @@
 .glth-title {
   opacity: 0;
   max-width: none;
-  text-shadow: 0 2px 30px rgb(var(--gl-tint-dark) / 0.45);
+  text-shadow: var(--glth-type-shadow);
 }
 .glth-title--centre {
   left: calc((100% - var(--glth-inset-r)) / 2);
@@ -114,7 +151,9 @@
 .glth-title__eyebrow {
   font-size: clamp(11px, 1vw, 16px);
   line-height: 1.3;
-  color: rgb(var(--gl-tint-light) / 0.82);
+  /* Solid, never translucent: alpha text loses most where the art is busiest.
+     The name is Bright Paper; the lines around it step down to Paper. */
+  color: var(--glth-paper);
 }
 .glth-title--chapter .glth-title__eyebrow,
 .glth-title--wipe .glth-title__eyebrow {
@@ -124,7 +163,7 @@
   font-size: clamp(12px, 1.15vw, 19px);
   line-height: 1.3;
   margin-top: 0.9em;
-  color: rgb(var(--gl-tint-light) / 0.78);
+  color: var(--glth-paper);
 }
 .glth-title--credits .glth-title__sub {
   margin-top: 0.5em;
@@ -139,14 +178,14 @@
   width: 62%;
   height: 1px;
   margin: 0.9em auto;
-  background: rgb(var(--gl-tint-light) / 0.7);
+  background: color-mix(in srgb, var(--glth-paper) 70%, transparent);
   transform-origin: 50% 50%;
 }
 .glth-title__underline {
   width: clamp(80px, 8.5vw, 160px);
   height: 2px;
   margin: 0.7em 0 0;
-  background: rgb(var(--gl-tint-light) / 0.9);
+  background: color-mix(in srgb, var(--glth-paper) 90%, transparent);
   transform-origin: 0 50%;
 }
 .glth-title__piece {
@@ -172,29 +211,68 @@
   line-height: 1.25;
   text-align: center;
   opacity: 0;
-  text-shadow: 0 2px 30px rgb(var(--gl-tint-dark) / 0.45);
+  text-shadow: var(--glth-type-shadow);
 }
 
 /* ── Corner location tag ──
-   Inset clear of the scene controls and below the resting top bar. */
+   The one Ink and Signal object on the players' screen, and the only thing
+   that stays up for the whole scene: an ink slab with the paper edge, cut
+   with the system's 115° wedge on its right. It brings its own ground, so it
+   reads over a white sky as well as over night. Inset clear of the scene
+   controls and below the resting top bar. */
 .glth-tag {
   left: clamp(72px, 5vw, 120px);
   top: calc(clamp(56px, 7vh, 96px) + var(--glth-lb) * 100vh);
   opacity: 0;
-  font-size: var(--gl-fs-sm);
-  font-weight: 500;
-  letter-spacing: 0.3em;
+  padding: 8px calc(14px + var(--glth-wedge)) 8px 14px;
+  background: var(--glth-ink-1);
+  box-shadow: inset 2px 0 0 var(--glth-paper);
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--glth-wedge)) 100%, 0 100%);
+  font-size: var(--gl-is-t-lead);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
   white-space: nowrap;
-  color: rgb(var(--gl-tint-light) / 0.75);
-  text-shadow: 0 1px 12px rgb(var(--gl-tint-dark) / 0.6);
+  /* A long location ends in an ellipsis inside the slab rather than running
+     under the sidebar. */
+  max-width: min(56vw, 760px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--glth-text);
 }
-.glth-tag::before {
-  content: "";
-  display: inline-block;
-  width: 18px;
-  height: 1px;
-  margin-right: 10px;
-  vertical-align: middle;
-  background: rgb(var(--gl-tint-light) / 0.75);
+
+/* ── The chat line a cut posts (th.chatOnCut) ──
+   An ink plate with the paper edge: a cut is a fact with no verdict, so it
+   carries no hue. Sized here, because a chat log sets its own type. */
+.glth-chat-cut {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px 10px 14px;
+  background: var(--glth-ink-2);
+  box-shadow: inset 2px 0 0 var(--glth-paper), inset 0 0 0 1px var(--glth-line);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glth-cut)), calc(100% - var(--glth-cut)) 100%, 0 100%);
+  color: var(--glth-text);
+  font-family: var(--glth-font);
+}
+.glth-chat-eyebrow {
+  color: var(--glth-faint);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.glth-chat-title {
+  color: var(--glth-text);
+  font-size: var(--gl-is-t-title);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.glth-chat-subtitle {
+  color: var(--glth-dim);
+  font-size: var(--gl-is-t-body);
+  font-weight: 500;
+  line-height: 1.4;
 }
