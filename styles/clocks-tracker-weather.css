@@ -160,7 +160,7 @@
 #glct-weather-hud .wx-cur-ico .wx-stage .glct-wx-canvas { position: absolute; inset: 0; }
 #glct-weather-hud .wx-cur-ico > i { position: relative; z-index: 2; font-size: 22px; color: var(--glct-text); text-shadow: 0 1px 3px rgb(var(--gl-tint-dark) / 0.8); }
 #glct-weather-hud .wx-cur-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-#glct-weather-hud .wx-cur-label { font-size: var(--gl-is-t-title); font-weight: 700; letter-spacing: 0; line-height: 1.15; color: var(--glct-text); }
+#glct-weather-hud .wx-cur-label { font-size: 18px; font-weight: 750; letter-spacing: -0.01em; line-height: 1.12; color: var(--glct-text); }
 #glct-weather-hud .wx-cur-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 #glct-weather-hud .wx-cur-season { font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--glct-faint); }
 #glct-weather-hud .wx-cur-temp {

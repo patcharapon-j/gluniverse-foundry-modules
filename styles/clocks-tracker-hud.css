@@ -212,7 +212,7 @@
 /* time cell: the clock is the hero, the watch strip sits tight beneath it */
 #glct-hud .clock-cell { align-items: center; justify-content: center; gap: 3px; padding: 0 18px; }
 #glct-hud .clock {
-  font-family: var(--glct-num); font-variant-numeric: tabular-nums; font-size: 26px; font-weight: 600;
+  font-family: var(--glct-num); font-variant-numeric: tabular-nums; font-size: 29px; font-weight: 700;
   letter-spacing: 0; line-height: 1; display: flex; align-items: center; gap: 9px; color: var(--glct-text);
 }
 /* slot-reel clock: each digit is its own vertical wheel that rotates in place */
@@ -541,7 +541,7 @@
 /* ═══ The calendar ══════════════════════════════════════════════════════════ */
 .glct-calendar .glct-cal { padding: 2px 2px 6px; color: var(--glct-text); }
 .glct-calendar .cal-head { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
-.glct-calendar .cal-title { flex: 1; text-align: center; font-size: var(--gl-is-t-title); font-weight: 700; letter-spacing: 0; }
+.glct-calendar .cal-title { flex: 1; text-align: center; font-size: 18px; font-weight: 750; letter-spacing: -0.01em; }
 .glct-calendar button.cal-nav { width: 32px; padding: 0; }
 .glct-calendar button.cal-nav i { font-size: var(--gl-is-t-body); }
 /* whole-month events: amber slabs above the grid instead of a band on every day */
