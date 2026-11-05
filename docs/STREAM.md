@@ -177,11 +177,15 @@ button. A GM roll with no art of its own can show a chosen picture, framed the
 same way.
 
 The look is setting-neutral, because the stream sits over whatever world the
-table plays in. The strip is a black plate with one chamfered corner and a 1px
-inner rule (`PLATE_CLIP` in `card-motion.js`, which the roll strip, the damage
-row and the status strip all clip to exactly). Tone is a top rule that fades out
-to the right plus a quiet wash behind the result, and a crit's light is a
-stronger wash rather than a glow. Everything the card says, and every number on
+table plays in, and it is Ink and Signal ([DESIGN.md](../DESIGN.md)): every value
+is aliased from core's `--gl-is-*`. The strip is a black plate with one chamfered
+corner and a 1px inset hairline (`PLATE_CLIP` in `card-motion.js`, which the roll
+strip, the damage row and the status strip all clip to exactly). Tone is a top
+rule that fades out to the right and a solid verdict tag; nothing glows at rest,
+and a crit's light is a beat that flares and goes, leaving the crack. The tones
+are signals: amber for a critical (the crack's own gold), green for a success,
+steel for a failure, red for a critical failure and info blue for a blind roll.
+A spell's tradition is written in its line, so it carries no hue. Everything the card says, and every number on
 it, is set in Google Sans Flex; Cormorant Garamond italic is kept for narrated
 text only (the emote, thought and narration quote styles). Both roles
 (`--glus-sans`, `--glus-serif`) are declared on the cards, never on `:root`.
@@ -207,7 +211,7 @@ a plate and never re-derives one.
 
 | The system posts | The stream shows |
 |---|---|
-| `duality` | The duality card. Hope's face on the left in gold, Fear's on the right in violet, in one die's footprint; the half that won is lit, both on a critical. The total is large and the headline is With Hope, With Fear or Critical. The card takes the outcome's tone: the warm signal for hope, a deep violet body for fear, gold and the gold crack for a critical. |
+| `duality` | The duality card. Hope's face on the left in amber, Fear's on the right in info blue, in one die's footprint; the half that won is lit, both on a critical. The total is large and the headline is With Hope, With Fear or Critical. The card takes the outcome's tone: amber for hope, info blue for fear, amber and the gold crack for a critical. |
 | `duality` thrown as a reaction (`plate.rxn`) | The same card with the duality thrown away: a neutral die and tone, and the verdict against the Difficulty as the headline. Its own chat filter row. |
 | `adversary` | "◆ Adversary" (or Environment) in the player slot, the kept d20, the total, and Hit or Miss. A natural 20 is a critical. |
 | `adversary` reaction | Nothing. The system whispers it to the GMs, and a whisper never reaches the stream. |
@@ -404,7 +408,9 @@ corner is on (the chat root carries `data-side`) and leaves the same way, then
 its height and margins close together, so the stack below it slides up instead
 of jumping. Nothing overshoots except the degree chip's small pop, and nothing
 is blurred: a filter on every card was the most expensive thing the overlay
-drew. Every animation the overlay waits on also has a timer behind it, so a
+drew, and a backdrop blur under a card's near-opaque plate cost about four times
+the frames on the card gallery's entrances (`tools/roll-cards-preview.mjs?play&bench`)
+for a blur nobody could see. Every animation the overlay waits on also has a timer behind it, so a
 background tab that never fires its finish still removes the card.
 
 The suite deliberately ignores the OS `prefers-reduced-motion` preference, so

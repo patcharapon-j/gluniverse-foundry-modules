@@ -1,14 +1,17 @@
 /*
  * GLUniverse Suite — stream-cards.
  *
- * The roll card and the status card, in the stream view's black skin (docs/adr/0007-stream-view-skin.md).
- * The skin's ink, paper and tones (`--glus-*`) are declared in styles/stream.css on every stream root,
- * this one included; motion lengths live in CARD_MOTION (cards/card-motion.js). Class prefix: .glus-rc-*
- * (roll card), .glus-sc-* (status card).
+ * The roll card and the status card, in Ink and Signal (DESIGN.md) under the stream view's skin
+ * (docs/adr/0007-stream-view-skin.md, docs/adr/0012-ink-and-signal-core.md). The skin's ink, paper and
+ * tones (`--glus-*`) are aliased from core's `--gl-is-*` in styles/stream.css on every stream root, this
+ * one included; the two signals only the cards use (info, ember) are aliased below under `--glus-rc-*`.
+ * Motion lengths live in CARD_MOTION (cards/card-motion.js). Class prefix: .glus-rc-* (roll card),
+ * .glus-sc-* (status card).
  *
  * The card is a chamfered slab: black-leaning ink, paper type, and one tone. The tone is a solid tag
- * beside the result (gold for a critical, red for a fumble) and a rule along the top edge; it is the
- * only colour on the card, so a glance reads the outcome before it reads a word.
+ * beside the result (amber for a critical, the crack's own gold; red for a fumble) and a rule along the
+ * top edge; it is the only colour on the card, so a glance reads the outcome before it reads a word.
+ * Nothing on it glows at rest: the crit's light is a beat that fades back out.
  *
  * Two voices of type, both scoped to the cards (--glus-sans, --glus-serif below), never :root:
  *   sans   everything the card says, and every number on it: totals, dice, DCs, damage, values
@@ -19,8 +22,9 @@
  *
  * State lives in data attributes on the root:
  *   data-tone     crit-success | success | failure | crit-failure | none | arcane | divine | occult | primal
+ *                 (a tradition is spelled out in the action line, so it carries no hue: paper, like none)
  *   data-pending  present while the total is still counting; the outcome colour waits for it to clear
- *   data-blind    a player's own blind roll, always violet
+ *   data-blind    a player's own blind roll, always info blue: a fact with no verdict on it
  *   data-npc      a GM creature roll
  */
 
@@ -35,26 +39,29 @@
    * The cards' two voices. Scoped here rather than on :root so no other feature inherits them.
    * Both faces are declared in gl-fonts.css; the suite tokens behind them are the fallbacks.
    */
-  --glus-sans: "Google Sans Flex", var(--gl-display);
+  --glus-sans: "Google Sans Flex", var(--gl-is-font);
   --glus-serif: "Cormorant Garamond", var(--gl-thai), Georgia, "Times New Roman", serif;
   /* Google Sans Flex is variable: numerals sit a touch under bold, running text a touch over normal. */
   --glus-weight-numeral: 650;
   --glus-weight-body: 450;
 
-  --glus-rc-deg-crit-success: var(--gl-signal);
+  /* The two signals only the cards read, aliased from core like the rest of the skin. */
+  --glus-rc-info: var(--gl-is-info);
+  --glus-rc-ember: var(--gl-is-ember);
+  /* Type on a filled tone slab (a verdict tag, a chip). */
+  --glus-rc-on-slab: var(--gl-is-on-slab);
+
+  /* A degree's tone. A critical is amber, the crit crack's own gold (FX_BREAK_COLORS.gold). */
+  --glus-rc-deg-crit-success: var(--glus-amber);
   --glus-rc-deg-success: var(--glus-green);
   --glus-rc-deg-failure: var(--glus-steel);
   --glus-rc-deg-crit-failure: var(--glus-red);
   --glus-rc-deg-none: var(--glus-paper);
-  --glus-rc-blind: var(--gl-violet);
-  --glus-rc-trad-arcane: var(--gl-info);
-  --glus-rc-trad-divine: var(--gl-signal-pale);
-  --glus-rc-trad-occult: var(--gl-orchid);
-  --glus-rc-trad-primal: var(--gl-jade);
+  --glus-rc-blind: var(--glus-rc-info);
 
-  /* One shadow for every glyph that can sit over the crack or over bright art. */
-  --glus-rc-text-shadow: 0 1px 0 rgb(var(--gl-tint-dark)), 0 0 4px rgb(var(--gl-tint-dark) / 0.9),
-    0 0 12px rgb(var(--gl-tint-dark) / 0.75);
+  /* One shadow for every glyph that can sit over the crack or over bright art. Two tight layers: the
+     total and the die repaint every frame while they count and spin, and a wide blur is paid each time. */
+  --glus-rc-text-shadow: 0 1px 0 rgb(var(--gl-tint-dark)), 0 0 4px rgb(var(--gl-tint-dark) / 0.9);
 
   /* The slab: a chamfer on the lower right, the suite's cut. Every plate below clips to its own. */
   --glus-cut: calc(0.62 * var(--u));
@@ -77,51 +84,27 @@
 .glus-rc[data-tone="success"] { --glus-rc-tone: var(--glus-rc-deg-success); }
 .glus-rc[data-tone="failure"] { --glus-rc-tone: var(--glus-rc-deg-failure); }
 .glus-rc[data-tone="crit-failure"] { --glus-rc-tone: var(--glus-rc-deg-crit-failure); }
-.glus-rc[data-tone="arcane"] { --glus-rc-tone: var(--glus-rc-trad-arcane); }
-.glus-rc[data-tone="divine"] { --glus-rc-tone: var(--glus-rc-trad-divine); }
-.glus-rc[data-tone="occult"] { --glus-rc-tone: var(--glus-rc-trad-occult); }
-.glus-rc[data-tone="primal"] { --glus-rc-tone: var(--glus-rc-trad-primal); }
-/* A blind roll is violet whatever the outcome; pending beats everything until the total settles. */
+/* A blind roll is info blue whatever the outcome; pending beats everything until the total settles. */
 .glus-rc[data-blind][data-tone] { --glus-rc-tone: var(--glus-rc-blind); }
 .glus-rc[data-pending][data-tone] { --glus-rc-tone: var(--glus-rc-deg-none); }
 
 /* ── Main strip ── */
 /*
- * No filter and no drop shadow on the card: its total counts and its die spins every frame, and a filter
- * on an ancestor of a moving layer re-rasterises the whole card on each of them. The slab is near-opaque
- * ink, which is what separates it from a bright map.
+ * No filter, no backdrop blur and no drop shadow on the card: its total counts and its die spins every
+ * frame, and a filter on an ancestor of a moving layer re-rasterises the whole card on each of them; a
+ * backdrop blur re-samples the map behind every plate on each of those frames too, for a plate that lets
+ * almost nothing through. The slab is near-opaque ink, which is what separates it from a bright map.
  */
 .glus-rc-main {
   position: relative;
   height: calc(4.4 * var(--u));
   display: grid;
   grid-template-columns: calc(5 * var(--u)) minmax(0, 1fr) auto;
-  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.045), transparent 60%),
-    color-mix(in oklab, var(--glus-ink-1) 94%, transparent);
-  box-shadow: inset 0 1px 0 var(--glus-line-strong);
+  background: color-mix(in oklab, var(--glus-ink-1) 97%, transparent);
+  box-shadow: inset 0 0 0 1px var(--glus-line);
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glus-cut)), calc(100% - var(--glus-cut)) 100%, 0 100%);
-  backdrop-filter: blur(calc(12px * var(--gl-glass-k)));
   overflow: hidden;
 }
-.glus-rc[data-blind] .glus-rc-main {
-  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.045), transparent 60%),
-    color-mix(in oklab, var(--gl-violet) 12%, color-mix(in oklab, var(--glus-ink-1) 94%, transparent));
-}
-/*
- * The tone's wash: a quiet light behind the result column. It holds off while the total is still
- * counting and on a card with no outcome, exactly as the outcome colour does.
- */
-.glus-rc-main::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: radial-gradient(60% 140% at 100% 50%, color-mix(in oklab, var(--glus-rc-tone) 13%, transparent), transparent 72%);
-  transition: opacity var(--gl-d-swift) var(--gl-ease);
-}
-.glus-rc[data-tone="none"] .glus-rc-main::after,
-.glus-rc[data-pending] .glus-rc-main::after { opacity: 0; }
 
 /*
  * Portrait: cropped, never stretched, feathered into the strip on the right and at top and bottom.
@@ -210,7 +193,7 @@
 .glus-rc-player {
   font-weight: 700;
   font-stretch: 116%;
-  font-size: calc(0.48 * var(--u));
+  font-size: calc(0.58 * var(--u));
   letter-spacing: 0.08em;
   color: var(--glus-dim);
   text-transform: uppercase;
@@ -253,15 +236,16 @@
   letter-spacing: 0.04em;
   margin-left: calc(0.3 * var(--u));
 }
-/* A chip beside the player name: a small solid slab, ink on its colour. */
+/* A chip beside the player name: a small solid tone slab, on-slab type, cut with the tag's wedge. */
 .glus-rc-chip {
   font-weight: 750;
   font-stretch: 116%;
-  font-size: calc(0.4 * var(--u));
-  letter-spacing: 0.08em;
-  color: var(--glus-ink-0);
-  padding: calc(0.08 * var(--u)) calc(0.3 * var(--u));
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glus-cut-sm)), calc(100% - var(--glus-cut-sm)) 100%, 0 100%);
+  font-size: calc(0.58 * var(--u));
+  line-height: 1.1;
+  letter-spacing: 0.06em;
+  color: var(--glus-rc-on-slab);
+  padding: calc(0.08 * var(--u)) calc(0.3 * var(--u)) calc(0.08 * var(--u)) calc(var(--glus-wedge) * 0.6 + 0.2 * var(--u));
+  clip-path: polygon(calc(var(--glus-wedge) * 0.6) 0, 100% 0, 100% 100%, 0 100%);
   text-transform: uppercase;
   text-shadow: none;
 }
@@ -294,6 +278,15 @@
   width: 1px;
   background: var(--glus-line-strong);
   transform-origin: center;
+  transition: background-color var(--gl-d-swift) var(--gl-ease);
+}
+/* Once the outcome lands, the divider becomes the result's tone edge, full height to meet the top rule. */
+.glus-rc:is([data-tone="crit-success"], [data-tone="success"], [data-tone="failure"], [data-tone="crit-failure"],
+  [data-tone="hope"], [data-tone="fear"], [data-tone="hit"], [data-tone="miss"]):not([data-pending]) .glus-rc-result::before {
+  top: 0;
+  bottom: 0;
+  width: max(2px, calc(0.1 * var(--u)));
+  background: var(--glus-rc-tone);
 }
 .glus-rc-degree {
   display: grid;
@@ -308,16 +301,23 @@
   display: block;
   padding: calc(0.12 * var(--u)) calc(0.4 * var(--u)) calc(0.12 * var(--u)) calc(var(--glus-wedge) + 0.26 * var(--u));
   background: var(--glus-rc-tone);
-  color: var(--glus-ink-0);
+  color: var(--glus-rc-on-slab);
   clip-path: polygon(var(--glus-wedge) 0, 100% 0, 100% 100%, 0 100%);
   font-weight: 750;
   font-stretch: 116%;
-  font-size: calc(0.52 * var(--u));
-  line-height: 1.15;
-  letter-spacing: 0.07em;
+  font-size: calc(0.6 * var(--u));
+  line-height: 1.1;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   text-shadow: none;
-  white-space: nowrap;
+  /*
+   * A two-word verdict ("Critical Success") stacks on two lines rather than taking the name's room: the
+   * name is the one thing on the card nothing else on screen says, and on a critical it was cut to
+   * three letters. A one-word verdict never reaches the cap and stays one line.
+   */
+  max-width: calc(5.4 * var(--u));
+  text-align: right;
+  text-wrap: balance;
   transition: background-color var(--gl-d-swift) var(--gl-ease);
 }
 .glus-rc[data-pending] .glus-rc-degree-label { visibility: hidden; }
@@ -325,8 +325,8 @@
 .glus-rc-spell-line {
   font-weight: 650;
   font-stretch: 110%;
-  font-size: calc(0.48 * var(--u));
-  letter-spacing: 0.07em;
+  font-size: calc(0.58 * var(--u));
+  letter-spacing: 0.06em;
   white-space: nowrap;
   display: flex;
   align-items: baseline;
@@ -357,7 +357,7 @@
 }
 .glus-rc[data-tone="crit-success"] .glus-rc-total,
 .glus-rc[data-tone="crit-failure"] .glus-rc-total { color: var(--glus-rc-tone); }
-.glus-rc[data-blind] .glus-rc-total { color: var(--gl-violet-hot); }
+.glus-rc[data-blind] .glus-rc-total { color: var(--glus-rc-blind); }
 .glus-rc[data-pending] .glus-rc-total { color: var(--glus-text); }
 
 /* Natural die: a d20 silhouette with the natural value large and centred. */
@@ -416,7 +416,7 @@
 .glus-rc-die[data-natural="min"] .glus-rc-die-value { color: var(--glus-rc-deg-crit-failure); }
 .glus-rc[data-blind] .glus-rc-die .glus-rc-die-edge,
 .glus-rc[data-blind] .glus-rc-die .glus-rc-die-facet { stroke: var(--glus-rc-blind); }
-.glus-rc[data-blind] .glus-rc-die .glus-rc-die-value { color: var(--gl-violet-hot); }
+.glus-rc[data-blind] .glus-rc-die .glus-rc-die-value { color: var(--glus-rc-blind); }
 .glus-rc[data-pending] .glus-rc-die .glus-rc-die-edge {
   stroke: var(--glus-steel);
   fill: color-mix(in oklab, var(--glus-ink-0) 70%, transparent);
@@ -473,6 +473,12 @@
   background: radial-gradient(90% 160% at 90% 50%, color-mix(in oklab, var(--glus-rc-tone) 26%, transparent), transparent 65%);
 }
 /* The tone's top rule: square to the slab, solid from the left and gone before the chamfer. */
+/*
+ * The tone's top rule. While nothing is decided (a total still counting, a card with no outcome) it is a
+ * quiet paper rule that fades out to the right. Once an outcome lands it is a solid tone edge across the
+ * whole plate, and with the tone edge down the result's left (below) it brackets the answer: the
+ * outcome reads from across the room before the tag's word does.
+ */
 .glus-rc-hair {
   left: 0;
   right: 0;
@@ -482,7 +488,12 @@
   transform-origin: left;
   background: linear-gradient(90deg, var(--glus-rc-tone), var(--glus-rc-tone) 34%, color-mix(in oklab, var(--glus-rc-tone) 30%, transparent) 72%, transparent);
 }
-.glus-rc[data-blind] .glus-rc-hair {
+.glus-rc:is([data-tone="crit-success"], [data-tone="success"], [data-tone="failure"], [data-tone="crit-failure"],
+  [data-tone="hope"], [data-tone="fear"], [data-tone="hit"], [data-tone="miss"]):not([data-pending]) .glus-rc-hair {
+  height: max(2px, calc(0.14 * var(--u)));
+  background: var(--glus-rc-tone);
+}
+.glus-rc[data-blind][data-tone] .glus-rc-hair {
   background: repeating-linear-gradient(90deg, var(--glus-rc-tone) 0 calc(0.5 * var(--u)), transparent 0 calc(0.8 * var(--u)));
 }
 
@@ -497,10 +508,9 @@
   align-items: center;
   gap: calc(0.55 * var(--u));
   padding: 0 calc(0.95 * var(--u)) 0 calc(0.8 * var(--u));
-  background: color-mix(in oklab, var(--glus-ink-2) 92%, transparent);
-  box-shadow: inset 0 1px 0 var(--glus-line);
+  background: color-mix(in oklab, var(--glus-ink-2) 97%, transparent);
+  box-shadow: inset 0 0 0 1px var(--glus-line);
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glus-cut)), calc(100% - var(--glus-cut)) 100%, 0 100%);
-  backdrop-filter: blur(calc(10px * var(--gl-glass-k)));
   overflow: hidden;
   text-shadow: var(--glus-rc-text-shadow);
 }
@@ -508,8 +518,8 @@
 .glus-rc-damage-key {
   font-weight: 700;
   font-stretch: 116%;
-  font-size: calc(0.44 * var(--u));
-  letter-spacing: 0.08em;
+  font-size: calc(0.58 * var(--u));
+  letter-spacing: 0.06em;
   color: var(--glus-faint);
   text-transform: uppercase;
 }
@@ -534,21 +544,19 @@
   font-size: calc(0.66 * var(--u));
   color: var(--glus-steel);
 }
-/* Damage types the suite already has a hue for take it; the rest stay steel. */
-.glus-rc-damage-part[data-type="fire"] i { color: var(--gl-warn-deep); }
-.glus-rc-damage-part[data-type="cold"] i { color: var(--gl-cyan-hot); }
-.glus-rc-damage-part[data-type="electricity"] i { color: var(--gl-info-hot); }
-.glus-rc-damage-part[data-type="acid"] i,
-.glus-rc-damage-part[data-type="poison"] i { color: var(--gl-good); }
-.glus-rc-damage-part[data-type="vitality"] i { color: var(--gl-signal-pale); }
-.glus-rc-damage-part[data-type="void"] i { color: var(--gl-violet); }
+/*
+ * The type is written beside its icon, so the icon carries no hue of its own (the Signal Rule). Fire is
+ * the one exception, because heat is exactly what ember means.
+ */
+.glus-rc-damage-part[data-type="fire"] i { color: var(--glus-rc-ember); }
 .glus-rc-damage-crit {
   font-weight: 750;
   font-stretch: 116%;
-  font-size: calc(0.44 * var(--u));
-  letter-spacing: 0.08em;
+  font-size: calc(0.58 * var(--u));
+  line-height: 1.1;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--glus-ink-0);
+  color: var(--glus-rc-on-slab);
   background: var(--glus-rc-deg-crit-success);
   padding: calc(0.08 * var(--u)) calc(0.3 * var(--u)) calc(0.08 * var(--u)) calc(var(--glus-wedge) * 0.8 + 0.2 * var(--u));
   clip-path: polygon(calc(var(--glus-wedge) * 0.8) 0, 100% 0, 100% 100%, 0 100%);
@@ -605,10 +613,9 @@
   align-items: center;
   gap: calc(0.5 * var(--u));
   padding: 0 calc(0.9 * var(--u)) 0 0;
-  background: color-mix(in oklab, var(--glus-ink-1) 94%, transparent);
-  box-shadow: inset 0 1px 0 var(--glus-line-strong);
+  background: color-mix(in oklab, var(--glus-ink-1) 97%, transparent);
+  box-shadow: inset 0 0 0 1px var(--glus-line);
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glus-cut)), calc(100% - var(--glus-cut)) 100%, 0 100%);
-  backdrop-filter: blur(calc(10px * var(--gl-glass-k)));
   overflow: hidden;
   text-shadow: var(--glus-rc-text-shadow);
 }
@@ -717,7 +724,7 @@
 }
 .glus-sc-chip-mark {
   font-weight: 750;
-  font-size: calc(0.55 * var(--u));
+  font-size: calc(0.62 * var(--u));
   line-height: 1;
   color: var(--glus-sc-chip-tone);
 }
@@ -737,8 +744,8 @@
 .glus-sc-chip-state {
   font-weight: 700;
   font-stretch: 116%;
-  font-size: calc(0.42 * var(--u));
-  letter-spacing: 0.08em;
+  font-size: calc(0.58 * var(--u));
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--glus-dim);
 }
@@ -753,6 +760,8 @@
   background: linear-gradient(90deg, var(--glus-sc-tone), var(--glus-sc-tone) 30%, color-mix(in oklab, var(--glus-sc-tone) 30%, transparent) 70%, transparent);
   pointer-events: none;
 }
+/* A status that pulls one way is a decided thing too: the same solid edge the roll card's outcome takes. */
+.glus-sc:is([data-tone="applied"], [data-tone="cleared"]) .glus-sc-hair { background: var(--glus-sc-tone); }
 
 /*
  * ── Plain rolls and chat ──────────────────────────────────────────────────────
@@ -774,6 +783,19 @@
   font-size: calc(0.6 * var(--u));
   color: var(--glus-text);
 }
+
+/* A damage roll with no attack to merge into lists its parts under the tag. They wrap onto a second line
+ * rather than squeezing the creature's name, which is the only thing on the card that says whose it was. */
+.glus-rc[data-kind="damage"] .glus-rc-degree-meta {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: calc(7.5 * var(--u));
+  row-gap: calc(0.08 * var(--u));
+  line-height: 1.2;
+}
+.glus-rc-meta-part { white-space: nowrap; }
+/* The separator ends a line rather than starting the next one. */
+.glus-rc-meta-part:not(:last-child)::after { content: "\00B7"; margin-inline-start: calc(0.25 * var(--u)); color: var(--glus-faint); }
 
 /*
  * A chat message is words, and words need width. The result column gives up its `auto` sizing and
@@ -825,7 +847,8 @@
   line-height: 1.16;
 }
 .glus-rc-quote[data-style="emote"] { color: var(--glus-text); }
-.glus-rc-quote[data-style="thought"] { color: color-mix(in oklab, var(--gl-violet-hot) 75%, var(--glus-text)); }
+/* A thought is the one line nobody said aloud: it steps back to dim, still the serif's italic. */
+.glus-rc-quote[data-style="thought"] { color: var(--glus-dim); }
 .glus-rc-quote[data-style="narration"] { color: var(--glus-text); }
 .glus-rc-quote[data-style="narration"][data-size="l"] { --glus-q-serif: 1.2; }
 /* A short line is the whole message: it carries weight as well as size, in the sans and the serif. */
@@ -842,7 +865,7 @@
   font-weight: 500;
   font-size: calc(var(--glus-q-serif) / var(--glus-q) * 1em);
   font-size-adjust: ex-height from-font;
-  color: color-mix(in oklab, var(--gl-signal-pale) 60%, var(--glus-text));
+  color: var(--glus-dim);
 }
 .glus-rc-aside[data-closes]::before,
 .glus-rc-aside[data-opens]::after {
