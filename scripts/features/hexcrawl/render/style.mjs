@@ -127,16 +127,24 @@ export const TEXT_RES_MAX = 4;
 /** One hairline, `n` device pixels wide, in world units. */
 export const hairline = (n, zoom, dpr) => n / Math.max(1e-3, zoom * dpr);
 
-/** Per-renderer colour cache: terrain colour → derived ints. */
+/**
+ * Per-renderer colour cache: terrain colour → derived ints.
+ *
+ * The chrome is Ink and Signal (DESIGN.md), read from the core mirror the host
+ * passes in (`INK_SIGNAL`): ink for the ground and the fog, paper for what the
+ * party is (its ring, its sight, its trail), amber for a call (a staged reveal,
+ * an uncoloured landmark) and red for blight, the one hazard the land itself
+ * carries. Terrain and region colours are data and pass through untouched.
+ */
 export function makeColors(palette) {
   const cache = new Map();
   const ink = palette.ink2;
-  const violetDark = mix(palette.violet, ink, 0.45);
+  const blightDark = mix(palette.red, ink, 0.45);
   const tile = (color, { blight = false, region = null, masked = false } = {}) => {
     const id = `${color}|${blight ? 1 : 0}|${region ?? ""}|${masked ? 1 : 0}`;
     let c = cache.get(id);
     if (c) return c;
-    const base = blight ? mix(color, violetDark, MIXES.blightLean) : color;
+    const base = blight ? mix(color, blightDark, MIXES.blightLean) : color;
     const bevel = region ? mix(base, region, MIXES.regionTint) : base;
     c = masked
       ? {
@@ -158,13 +166,13 @@ export function makeColors(palette) {
     cache.set(id, c);
     return c;
   };
-  // A landmark's own colour (null → the signal hue every badge used to draw in).
+  // A landmark's own colour (null → the call amber, the editor's default too).
   const lmCache = new Map();
   const landmark = (color) => {
     const id = color ?? "";
     let c = lmCache.get(id);
     if (c) return c;
-    const base = color || palette.warn;
+    const base = color || palette.amber;
     const lift = lighten(base, 0.4);
     c = { rim: hexToInt(base), lift: hexToInt(lift), css: lift };
     lmCache.set(id, c);
@@ -182,24 +190,22 @@ export function makeColors(palette) {
     ink2: hexToInt(ink),
     ink3: hexToInt(palette.ink3),
     text: hexToInt(palette.text),
-    textDim: hexToInt(palette.textDim),
-    accent: hexToInt(palette.accent),
-    accentLift: hexToInt(lighten(palette.accent, 0.35)),
-    warn: hexToInt(palette.warn),
-    warnLift: hexToInt(lighten(palette.warn, 0.4)),
-    violet: hexToInt(palette.violet),
-    violetHot: hexToInt(palette.violetHot ?? lighten(palette.violet, 0.5)),
-    bruise: hexToInt(mix(palette.violet, ink, 0.72)),
-    trace: hexToInt(mix(palette.text, palette.accent, 0.35)),
-    hatch: hexToInt(mix(palette.textDim, ink, 0.35)),
+    textDim: hexToInt(palette.dim),
+    /** The party's own marks: its ring, its sight boundary, its trail. */
+    mark: hexToInt(palette.paper),
+    /** A staged reveal: a call waiting on the GM. */
+    staged: hexToInt(palette.amber),
+    blight: hexToInt(palette.red),
+    blightHot: hexToInt(lighten(palette.red, 0.5)),
+    bruise: hexToInt(mix(palette.red, ink, 0.72)),
+    hatch: hexToInt(mix(palette.dim, ink, 0.35)),
     regionBorder: (hex) => hexToInt(hex ? lighten(hex, 0.25) : palette.text),
     /** A region rim whose colour is withheld (silhouette): neutral. */
-    silRim: hexToInt(mix(palette.textDim, ink, 0.25)),
+    silRim: hexToInt(mix(palette.dim, ink, 0.25)),
     css: {
       text: palette.text,
-      textDim: palette.textDim,
+      textDim: palette.dim,
       ink0: palette.ink0,
-      warnLift: lighten(palette.warn, 0.4),
     },
   };
 }

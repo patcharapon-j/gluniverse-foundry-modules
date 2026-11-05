@@ -57,7 +57,9 @@ The family is `--gl-is-*` rather than `--gl-ink-*` because Etched Glass already
 owns `--gl-ink-0` to `-3`. `scripts/core/theme.mjs` mirrors the dark ground's
 hex values as `INK_SIGNAL` (`ink0`…`ink6`, the tones and the five signals) for
 canvas and WebGL consumers; `node tools/stream-targets-check.mjs` compares the
-mirror with `gl-tokens.css` value for value.
+mirror with `gl-tokens.css` value for value. Hairlines, veils and sizes are not
+mirrored; read those with `cssVar()`. The Hexcrawl map reads its chrome from it
+too, and `hexcrawl-check` requires every key it reads to be there.
 
 To see every value read back from the shipped CSS, with a contrast grid for both
 grounds: `node tools/ink-signal-preview.mjs && node tools/preview-server.mjs`,

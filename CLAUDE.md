@@ -1629,8 +1629,13 @@ setting prefix, the WAV assets (`node tools/gen-hexcrawl-sounds.mjs`), the chat
 card sizing its `.gl-btn`, and the JSON import round trip — the import format is
 documented in `docs/HEXCRAWL_IMPORT.md` and parsed by `import.mjs`. To see the
 renderer: `node tools/hexcrawl-preview.mjs --out=.preview/hexcrawl.html && node
-tools/preview-server.mjs` (serve it; `file://` does not run the module). Nothing
-here proves the token-move pipeline, the chat card or the canvas layering; those
+tools/preview-server.mjs` (serve it; `file://` does not run the module). The
+windows, tooltip and chat cards are drawn from the shipped apps and templates over
+Foundry's own CSS by `node tools/hexcrawl-ui-preview.mjs`
+(`/.preview/hexcrawl-ui.html`). The skin is Ink and Signal (`--glhex-*` aliased
+from `--gl-is-*` on the feature's roots), and the check refuses an Etched Glass
+token or utility class creeping back. Nothing
+here proves the token-move pipeline, posting the chat card or the canvas layering; those
 need a live session — a scratch data folder holding only this module (junction),
 one system and a throwaway `world.json`, launched with `node main.mjs
 --dataPath=<scratch> --port=30017 --world=<id>`, is enough, and keeps a broken

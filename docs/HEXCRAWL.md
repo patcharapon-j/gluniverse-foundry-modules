@@ -1,7 +1,7 @@
 # Hexcrawl
 
 A system-agnostic hexcrawl map for Foundry: a normal Scene switched into
-"hexcrawl" mode, drawn as Etched Glass terrain tiles over Foundry's own hex
+"hexcrawl" mode, drawn as etched terrain tiles over Foundry's own hex
 grid, with regions, terrain ratings, landmarks, a party token that walks hex to
 hex, fog of war with a sight radius, and GM reveal / mask / hide. The procedure
 it follows is *Journey to Horizon* (Daggerheart, *Hope and Fear* pp. 169–179),
@@ -149,7 +149,7 @@ players cannot see; otherwise it draws exactly the player view.
   hex icon says what KIND of ground it is. Art follows `visualFor()` — nothing
   unless the terrain shows, region art only when the region does.
 - Blight is its own layer: one Mesh + shader (`render/blight.mjs`) over every
-  blighted hex body — crawling pixel-snapped violet veins with an edge glow,
+  blighted hex body — crawling pixel-snapped red veins with an edge glow,
   above the ground and fill, beneath icons. Not a filter (no resolution trap).
 - Region names: a region's name reaches players only once the GM ticks
   *Name known to players* (`region.nk`); until then `viewFor` returns
@@ -203,8 +203,29 @@ players cannot see; otherwise it draws exactly the player view.
   landmark they cannot see, so an unseen badge can only ever appear to a GM.
 - Party: **sight boundary** — a dashed outline around the union of the party's
   sight ranges, and a solid outline on the occupied hex.
-- Blight: **violet veins** pulsing slowly over a violet-leaned tile.
+- Blight: **red veins** pulsing slowly over a red-leaned tile. Red is the
+  danger signal, so blight reads as the same thing an Extreme rating does.
 - GM view of hidden/masked hexes: **hatched**.
+- Map marks (sight boundary, party ring, trail, reveal trace) are **paper over
+  an ink underlay**, never a coloured glow. Staged hexes are **amber**, the
+  call signal, on the map and on the palette's Reveal button alike.
+
+## The look (Ink and Signal)
+
+Every surface (palette, editors, scene settings, terrain manager, icon picker,
+import window, scene dialog, tooltip, chat cards) is on Ink and Signal
+(`DESIGN.md`, ADR 0012). The skin is `--glhex-*`, aliased from `--gl-is-*` on
+the feature's own roots in `styles/hexcrawl.css` and never on `:root`. One
+signal per meaning: amber is a call (staged, an uncoloured landmark), red is
+danger (Extreme, blight, a triggered roll, delete), green is good, ember is
+Rough, info is masked, steel is hidden or GM-only. The rating ramp
+(`[data-glhex-rating]`) runs green, amber, ember, red. The renderer reads the
+same values from `core/theme.mjs`'s `INK_SIGNAL` mirror, which
+`stream-targets-check` holds equal to `gl-tokens.css`.
+
+`node tools/hexcrawl-ui-preview.mjs` draws every one of those surfaces from
+the shipped templates and apps over Foundry's own CSS
+(`/.preview/hexcrawl-ui.html`, `?only=<ids>`, `?ground=parchment`, `?zoom=`).
 
 ## Runtime layout (`main.mjs` and friends)
 
@@ -250,7 +271,7 @@ token layer's hit-testing, so it lives in `canvas.interface` at a high zIndex.
    stands on is revealed and visited. Mask presets and the sight checklist
    are in the palette's scene settings.
 5. Hover a hex for its tooltip; click to pin it (Esc or a click elsewhere
-   unpins). GMs see a violet GM-only block; "view as players" hides it.
+   unpins). GMs see a steel-edged GM-only block; "view as players" hides it.
 
 ## Procedure mapping (Journey to Horizon, *Hope and Fear* pp. 169–179)
 
@@ -317,6 +338,7 @@ and are edited in the palette's scene settings.
 node tools/hexcrawl-check.mjs
 node tools/gen-hexcrawl-sounds.mjs --check
 node tools/hexcrawl-preview.mjs --out=.preview/hexcrawl.html && node tools/preview-server.mjs
+node tools/hexcrawl-ui-preview.mjs && node tools/preview-server.mjs
 ```
 
 The check drives hex-math, model (viewer question, auto-reveal, brushes,

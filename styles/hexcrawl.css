@@ -1,303 +1,438 @@
-/* ==========================================================================
-   Hexcrawl — GM apps (palette, editors, pickers). Prefix glhex-.
+/* ═══════════════════════════════════════════════════════════════════════════
+   Hexcrawl: the GM apps (palette, editors, pickers) and the skin every
+   hexcrawl surface shares. Prefix glhex-.
 
-   Frames carry ONLY feature classes (`.glhex-app`): never `.gl-glass` on an
-   ApplicationV2 frame — Foundry's `.application { position: absolute }` lives
-   in `@layer applications` and any unlayered `position` beats it. The glass is
-   painted on `.glhex-root` inside `.window-content`.
+   Ink and Signal (DESIGN.md, docs/adr/0012-ink-and-signal-core.md). Core's
+   `--gl-is-*` family is aliased under `--glhex-*` on the feature's own roots
+   and never on :root; sizes, cuts and states are read straight from core.
+   The chrome is black ink and paper. Hue appears only where it means
+   something, and on a hexcrawl that is mostly the map's own data: a terrain
+   or region colour arrives per element as `--glhex-sw` and is only mixed with
+   ink, never used to repaint chrome. The few signals the feature owns:
 
-   Terrain colours are DATA (docs/DESIGN_SYSTEM.md, "domain colours"): they
-   arrive per element as `--glhex-sw` and are only ever mixed with ink/text
-   tokens, never used to repaint chrome. Identity stays on `--gl-accent`.
-   ========================================================================== */
+     amber  a call: a staged reveal waiting, an uncoloured landmark
+     red    danger: an Extreme hex, blight, a triggered encounter, delete
+     green  good: an Optimal hex, a landmark the party can see, a quiet roll
+     ember  heat short of danger: a Rough hex
+     info   a fact with no verdict: the masked state
+     steel  the quiet tone: hidden, GM-only, the inactive
 
-.glhex-app {
-  /* Feature-local values only — prefixed so nothing here repaints the suite. */
+   Difficulty is one ramp (green, amber, ember, red), stated once in
+   hexcrawl-play.css and read by the palette, the tooltip and the card.
+
+   Frames carry ONLY feature classes (`.glhex-app`): Foundry's
+   `.application { position: absolute }` lives in `@layer applications`, so
+   any unlayered `position` on a frame beats it. Motion comes from the suite
+   (`--gl-d-*`, `--gl-ease*`); keyframes are prefixed `glhex-`.
+
+   Roots: `.application.glhex-app` and `.glhex-root` (the GM windows),
+   `.glhex-import` (the JSON window), `.glhex-dialog` (the scene and sight
+   dialogs), `.glhex-tooltip` (the hover card) and `.glhex-card` (chat).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:is(.glhex-app, .glhex-root, .glhex-import, .glhex-dialog, .glhex-tooltip, .glhex-card) {
+  /* the neutral ramp, leaning black */
+  --glhex-ink-0: var(--gl-is-ink-0);
+  --glhex-ink-1: var(--gl-is-ink-1);
+  --glhex-ink-2: var(--gl-is-ink-2);
+  --glhex-ink-3: var(--gl-is-ink-3);
+  --glhex-ink-4: var(--gl-is-ink-4);
+  --glhex-ink-5: var(--gl-is-ink-5);
+  --glhex-ink-6: var(--gl-is-ink-6);
+  --glhex-text: var(--gl-is-text);
+  --glhex-paper: var(--gl-is-paper);
+  --glhex-dim: var(--gl-is-dim);
+  --glhex-faint: var(--gl-is-faint);
+  --glhex-steel: var(--gl-is-steel);
+  --glhex-on-slab: var(--gl-is-on-slab);
+  --glhex-line: var(--gl-is-line);
+  --glhex-line-strong: var(--gl-is-line-strong);
+  --glhex-hover: var(--gl-is-hover);
+  --glhex-selected: var(--gl-is-selected);
+  --glhex-shade: var(--gl-is-shade);
+
+  /* meaning: the core signal hues */
+  --glhex-amber: var(--gl-is-amber);
+  --glhex-red: var(--gl-is-red);
+  --glhex-green: var(--gl-is-green);
+  --glhex-ember: var(--gl-is-ember);
+  --glhex-info: var(--gl-is-info);
+  --glhex-call: var(--glhex-amber);
+  --glhex-danger: var(--glhex-red);
+  --glhex-good: var(--glhex-green);
+  --glhex-masked: var(--glhex-info);
+  --glhex-blight: var(--glhex-red);
+  /* One tone per element (The One Tone Rule): paper unless something means more. */
+  --glhex-tone: var(--glhex-paper);
+
+  /* type and shape */
+  --glhex-font: var(--gl-is-font);
+  --glhex-num: var(--gl-is-num);
+  --glhex-cut: var(--gl-is-cut);
+  --glhex-cut-lg: var(--gl-is-cut-lg);
+  --glhex-cut-sm: var(--gl-is-cut-sm);
+  --glhex-cut-xs: var(--gl-is-cut-xs);
+
+  /* feature-local sizes */
   --glhex-cell: 30px;
   --glhex-pip: 6px;
   --glhex-row: 34px;
-  --glhex-mini: 22px;
+  --glhex-mini: 24px;
+  --glhex-ctl: 32px;
+
+  font-family: var(--glhex-font);
+  color: var(--glhex-text);
+  -webkit-font-smoothing: antialiased;
 }
 
+/* ── the window frames ─────────────────────────────────────────────────── */
+
+.application:is(.glhex-app, .glhex-import, .glhex-dialog) {
+  background: var(--glhex-ink-1);
+  border: 1px solid var(--glhex-line-strong);
+  border-radius: var(--gl-is-radius);
+  box-shadow: 0 24px 64px var(--glhex-shade);
+}
+.application:is(.glhex-app, .glhex-import, .glhex-dialog) .window-header {
+  background: var(--glhex-ink-0);
+  border-bottom: 1px solid var(--glhex-line);
+  color: var(--glhex-dim);
+}
+.application:is(.glhex-app, .glhex-import, .glhex-dialog) .window-header .window-title {
+  font-family: var(--glhex-font);
+  font-size: var(--gl-is-t-body);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.application:is(.glhex-app, .glhex-import, .glhex-dialog) .window-header :is(button, .header-control) {
+  color: var(--glhex-faint);
+  transition: color var(--gl-d-quick) var(--gl-ease);
+}
+.application:is(.glhex-app, .glhex-import, .glhex-dialog) .window-header :is(button, .header-control):hover { color: var(--glhex-text); }
 .glhex-app .window-content {
   padding: 0;
-  background: var(--gl-ink-0);
+  background: none;
   overflow: hidden;
-}
-
-.glhex-app .window-header {
-  font-family: var(--gl-display);
-  letter-spacing: var(--gl-track-normal);
 }
 
 /* The palette is a tool, not a document: a thin header that still drags. */
 .glhex-palette .window-header {
   min-height: 0;
-  padding-block: var(--gl-sp-2);
-  font-size: var(--gl-fs-sm);
+  padding-block: 4px;
 }
 
-/* ── root ─────────────────────────────────────────────────────────────── */
+/* ── root, type and the shared bits ────────────────────────────────────── */
 
 .glhex-root {
   display: flex;
   flex-direction: column;
-  gap: var(--gl-sp-5);
+  gap: 12px;
   height: 100%;
   min-height: 0;
-  padding: var(--gl-sp-5);
-  color: var(--gl-text);
-  font-family: var(--gl-display);
-  font-size: var(--gl-fs-sm);
-  line-height: var(--gl-lh-snug);
-  background:
-    radial-gradient(140% 70% at 100% 0%, color-mix(in srgb, var(--gl-accent) 9%, transparent), transparent 58%),
-    linear-gradient(180deg, var(--gl-ink-1), var(--gl-ink-0));
+  padding: 12px;
+  background: var(--glhex-ink-1);
+  font-size: var(--gl-is-t-body);
+  line-height: 1.4;
+}
+.glhex-pal { gap: 10px; padding: 10px; }
+
+/* Foundry styles every control at element level; inherit the skin's face. */
+:is(.glhex-root, .glhex-import, .glhex-dialog) :is(h1, h2, h3, h4, button, input, select, textarea, a, label, legend) {
+  font-family: inherit;
+}
+:is(.glhex-root, .glhex-import, .glhex-dialog) *,
+:is(.glhex-root, .glhex-import, .glhex-dialog) *::before,
+:is(.glhex-root, .glhex-import, .glhex-dialog) *::after { box-sizing: border-box; }
+
+.glhex-root ::selection,
+.glhex-import ::selection { background: var(--glhex-paper); color: var(--glhex-on-slab); }
+
+/* Scrolling regions: a thin rail from the ramp, not the browser's. */
+:is(.glhex-root, .glhex-import) :is(.glhex-body, .glhex-region-list, .glhex-import-text, .glhex-import-warnings ul) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--glhex-ink-5) transparent;
 }
 
-.glhex-pal { gap: var(--gl-sp-4); padding: var(--gl-sp-4); }
-
-.glhex-root .gl-empty { padding: var(--gl-sp-8); }
+.glhex-label {
+  color: var(--glhex-faint);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.glhex-num {
+  font-family: var(--glhex-num);
+  font-variant-numeric: tabular-nums;
+}
+.glhex-rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--glhex-line);
+}
+.glhex-empty {
+  margin: 0;
+  padding: 32px 16px;
+  color: var(--glhex-faint);
+  font-size: var(--gl-is-t-body);
+  text-align: center;
+}
 
 .glhex-pal-head {
   display: flex;
   align-items: center;
-  gap: var(--gl-sp-4);
+  gap: 10px;
   min-height: var(--glhex-mini);
 }
-.glhex-pal-head > .gl-rule { flex: 1 1 auto; }
-.glhex-pal-head .gl-tech-label,
-.glhex-root legend.gl-tech-label,
-.glhex-field > .gl-tech-label,
-.glhex-root > .glhex-body > .gl-tech-label,
-.glhex-custom-edit > .gl-tech-label {
-  font-size: var(--gl-fs-3xs);
-}
-.glhex-pal-tool { color: var(--gl-text-bright); }
+.glhex-pal-tool { color: var(--glhex-text); }
 
-.glhex-note,
+.glhex-note {
+  margin: 0;
+  color: var(--glhex-dim);
+  font-size: var(--gl-is-t-body);
+  line-height: 1.4;
+}
 .glhex-hint {
   margin: 0;
-  color: var(--gl-text-dim);
-  font-size: var(--gl-fs-xs);
-  line-height: var(--gl-lh-normal);
+  padding-top: 8px;
+  border-top: 1px solid var(--glhex-line);
+  color: var(--glhex-faint);
+  font-size: var(--gl-is-t-meta);
+  line-height: 1.4;
 }
-.glhex-hint {
-  padding-top: var(--gl-sp-3);
-  border-top: 1px solid var(--gl-hair);
-  color: var(--gl-text-faint);
-  font-size: var(--gl-fs-2xs);
+.glhex-hint i { margin-right: 4px; }
+.glhex-dim { color: var(--glhex-faint); font-size: var(--gl-is-t-meta); }
+
+/* ── controls ──────────────────────────────────────────────────────────── */
+
+/* Foundry styles every button at element level; this sheet sizes its own
+   (The Size-It-Yourself Rule). */
+.glhex-root button {
+  appearance: none;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font-size: var(--gl-is-t-body);
+  line-height: 1.1;
+  cursor: pointer;
 }
-.glhex-hint i { margin-right: var(--gl-sp-2); }
-.glhex-dim { color: var(--gl-text-faint); font-size: var(--gl-fs-2xs); }
+.glhex-root button:disabled { opacity: var(--gl-is-disabled); cursor: default; }
+.glhex-root button:active:not(:disabled) { scale: var(--gl-is-press); }
 
-/* ── shared controls ──────────────────────────────────────────────────── */
-
-/* .gl-btn declares no font-size; every button here is sized by this feature. */
 .glhex-root .glhex-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--gl-sp-3);
-  min-height: var(--gl-sp-10);
-  padding: 0 var(--gl-sp-6);
-  font-size: var(--gl-fs-xs);
+  gap: 6px;
+  min-height: var(--glhex-ctl);
+  padding: 0 12px;
+  background: var(--glhex-ink-3);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glhex-cut-sm)), calc(100% - var(--glhex-cut-sm)) 100%, 0 100%);
+  color: var(--glhex-text);
+  font-size: var(--gl-is-t-body);
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
+  transition:
+    background-color var(--gl-d-brisk) var(--gl-ease),
+    color var(--gl-d-brisk) var(--gl-ease),
+    translate var(--gl-d-quick) var(--gl-ease),
+    scale var(--gl-d-tap) var(--gl-ease);
 }
+.glhex-root .glhex-btn i { font-size: var(--gl-is-t-meta); }
+.glhex-root .glhex-btn:hover:not(:disabled) { background: var(--glhex-ink-4); translate: 0 var(--gl-lift); }
+.glhex-root .glhex-btn--primary {
+  background: var(--glhex-paper);
+  box-shadow: none;
+  color: var(--glhex-on-slab);
+}
+.glhex-root .glhex-btn--primary:hover:not(:disabled) { background: var(--glhex-text); }
 .glhex-root .glhex-btn-sm {
-  min-height: var(--glhex-mini);
-  padding: 0 var(--gl-sp-4);
-  font-size: var(--gl-fs-2xs);
+  min-height: 26px;
+  padding: 0 10px;
+  font-size: var(--gl-is-t-meta);
 }
-.glhex-root .glhex-btn-danger { --gl-accent: var(--gl-hazard); color: var(--gl-hazard-hot); }
+.glhex-root .glhex-btn-danger { color: var(--glhex-danger); }
 
-.glhex-mini {
+/* Square icon buttons. */
+.glhex-root .glhex-mini {
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
   width: var(--glhex-mini);
   height: var(--glhex-mini);
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--gl-hair);
-  border-radius: var(--gl-r-xs);
-  background: var(--gl-surface-inset);
-  color: var(--gl-text-dim);
-  font-size: var(--gl-fs-2xs);
+  background: var(--glhex-ink-3);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glhex-cut-xs)), calc(100% - var(--glhex-cut-xs)) 100%, 0 100%);
+  color: var(--glhex-dim);
+  font-size: var(--gl-is-t-meta);
   line-height: 1;
-  cursor: pointer;
   transition:
+    background-color var(--gl-d-quick) var(--gl-ease),
     color var(--gl-d-quick) var(--gl-ease),
-    border-color var(--gl-d-quick) var(--gl-ease),
-    background var(--gl-d-quick) var(--gl-ease),
-    translate var(--gl-d-tap) var(--gl-ease),
+    opacity var(--gl-d-quick) var(--gl-ease),
+    translate var(--gl-d-quick) var(--gl-ease),
     scale var(--gl-d-tap) var(--gl-ease);
 }
-.glhex-mini:hover {
-  color: var(--gl-text-bright);
-  border-color: var(--gl-accent-soft);
-  background: var(--gl-accent-faint);
-  translate: 0 var(--gl-lift);
-}
-.glhex-mini:active { translate: 0 var(--gl-press); scale: var(--gl-press-scale); }
-.glhex-mini.glhex-danger:hover { --gl-accent: var(--gl-hazard); color: var(--gl-hazard-hot); border-color: color-mix(in srgb, var(--gl-hazard) 45%, transparent); background: color-mix(in srgb, var(--gl-hazard) 12%, transparent); }
+.glhex-root .glhex-mini:hover:not(:disabled) { background: var(--glhex-ink-4); color: var(--glhex-text); translate: 0 var(--gl-lift); }
+.glhex-root .glhex-mini.glhex-danger:hover:not(:disabled) { color: var(--glhex-danger); }
 
-.glhex-link-btn {
+/* A quiet text action under a group. */
+.glhex-root .glhex-link-btn {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  gap: var(--gl-sp-3);
-  width: auto;
-  height: auto;
-  min-height: 0;
-  margin: 0;
-  padding: var(--gl-sp-2) var(--gl-sp-3);
-  border: 1px solid transparent;
-  border-radius: var(--gl-r-xs);
-  background: none;
-  color: var(--gl-text-dim);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-2xs);
-  letter-spacing: var(--gl-track-wide);
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 6px;
+  margin-left: -6px;
+  color: var(--glhex-faint);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  letter-spacing: 0.08em;
   line-height: 1;
   text-transform: uppercase;
-  cursor: pointer;
-  transition: color var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
+  transition: color var(--gl-d-quick) var(--gl-ease), background-color var(--gl-d-quick) var(--gl-ease);
 }
-.glhex-link-btn:hover { color: var(--gl-text-bright); border-color: var(--gl-hair); background: var(--gl-accent-faint); }
-.glhex-link-btn.is-active { color: var(--gl-accent); border-color: var(--gl-accent-soft); }
+.glhex-root .glhex-link-btn:hover { background: var(--glhex-hover); color: var(--glhex-text); }
+.glhex-root .glhex-link-btn.is-active { color: var(--glhex-paper); box-shadow: inset 0 -1px 0 var(--glhex-paper); }
 
-.glhex-root .gl-field {
+/* Fields: a void well with a strong hairline (DESIGN.md, Inputs). */
+:is(.glhex-root, .glhex-import) :is(.glhex-input, .glhex-import-text) {
   width: 100%;
-  min-height: var(--gl-sp-10);
-  padding: var(--gl-sp-2) var(--gl-sp-4);
-  font-size: var(--gl-fs-sm);
+  min-height: var(--glhex-ctl);
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: var(--glhex-ink-0);
+  box-shadow: inset 0 0 0 1px var(--glhex-line-strong);
+  color: var(--glhex-text);
+  font-size: var(--gl-is-t-body);
+  line-height: 1.3;
+  transition: box-shadow var(--gl-d-quick) var(--gl-ease);
 }
-.glhex-root textarea.gl-field { resize: vertical; min-height: calc(var(--gl-sp-10) * 2); line-height: var(--gl-lh-normal); font-family: var(--gl-display); }
-.glhex-root select.gl-field { padding-right: var(--gl-sp-2); }
-.glhex-root .gl-field::placeholder { color: var(--gl-text-faint); }
+:is(.glhex-root, .glhex-import) :is(.glhex-input, .glhex-import-text):hover { box-shadow: inset 0 0 0 1px var(--glhex-steel); }
+:is(.glhex-root, .glhex-import) :is(.glhex-input, .glhex-import-text):focus { outline: none; box-shadow: inset 0 0 0 1px var(--glhex-paper); }
+:is(.glhex-root, .glhex-import) :is(.glhex-input, .glhex-import-text)::placeholder { color: var(--glhex-faint); }
+.glhex-root textarea.glhex-input { padding: 8px 10px; resize: vertical; min-height: 64px; line-height: 1.4; }
+.glhex-root select.glhex-input { padding-right: 4px; }
+.glhex-root select.glhex-input option { background: var(--glhex-ink-1); color: var(--glhex-text); }
+/* Foundry draws its own checkbox from these and declares them on the input
+   itself, so the skin has to as well. Disabled keeps Foundry's own rule. */
+:is(.glhex-root, .glhex-dialog) input[type="checkbox"]:not(:disabled, [readonly]) {
+  --checkbox-background-color: var(--glhex-ink-5);
+  --checkbox-checked-color: var(--glhex-paper);
+  --checkbox-checkmark-color: var(--glhex-on-slab);
+  --checkbox-disabled-color: var(--glhex-ink-3);
+}
+.glhex-root input[type="checkbox"] { margin: 0; accent-color: var(--glhex-paper); }
+.glhex-root input[type="range"] { accent-color: var(--glhex-paper); }
 
-/* ── palette: tools ───────────────────────────────────────────────────── */
+/* ── palette: tools ────────────────────────────────────────────────────── */
 
 .glhex-tools {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: var(--gl-sp-1);
-  padding: var(--gl-sp-2);
-  border: 1px solid var(--gl-hair);
-  border-radius: var(--gl-r-sm);
-  background: var(--gl-surface-inset);
-  box-shadow: inset 0 2px 8px var(--gl-shadow);
+  grid-template-columns: repeat(9, 1fr);
+  gap: 2px;
+  padding: 2px;
+  background: var(--glhex-ink-0);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
 }
 
-.glhex-tool {
+.glhex-root .glhex-tool {
+  position: relative;
   display: grid;
   place-items: center;
   height: var(--glhex-cell);
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--gl-r-xs);
-  background: none;
-  color: var(--gl-text-dim);
-  font-size: var(--gl-fs-md);
+  color: var(--glhex-faint);
+  font-size: 14px;
   line-height: 1;
-  cursor: pointer;
   transition:
     color var(--gl-d-quick) var(--gl-ease),
-    background var(--gl-d-quick) var(--gl-ease),
-    border-color var(--gl-d-quick) var(--gl-ease),
-    box-shadow var(--gl-d-quick) var(--gl-ease),
-    translate var(--gl-d-tap) var(--gl-ease),
+    background-color var(--gl-d-quick) var(--gl-ease),
     scale var(--gl-d-tap) var(--gl-ease);
 }
-.glhex-tool:hover { color: var(--gl-text-bright); background: rgb(var(--gl-tint-light) / 0.05); translate: 0 var(--gl-lift); }
-.glhex-tool:active { translate: 0 var(--gl-press); scale: var(--gl-press-scale); }
-.glhex-tool.is-active {
-  color: var(--gl-text-bright);
-  border-color: color-mix(in srgb, var(--gl-accent) 60%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 26%, transparent), color-mix(in srgb, var(--gl-accent) 8%, transparent));
-  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.14), 0 0 10px color-mix(in srgb, var(--gl-accent) 30%, transparent);
+.glhex-root .glhex-tool::after {
+  content: "";
+  position: absolute;
+  inset: auto 4px 0;
+  height: 2px;
+  background: var(--glhex-paper);
+  scale: 0 1;
+  transition: scale var(--gl-d-brisk) var(--gl-ease);
 }
+.glhex-root .glhex-tool:hover { background: var(--glhex-hover); color: var(--glhex-text); }
+.glhex-root .glhex-tool.is-active { background: var(--glhex-ink-4); color: var(--glhex-text); }
+.glhex-root .glhex-tool.is-active::after { scale: 1 1; }
 
 .glhex-pal-value {
   display: flex;
   flex-direction: column;
-  gap: var(--gl-sp-4);
+  gap: 10px;
 }
 
-/* ── terrain swatches (also the glyph grid and built-in reference) ────── */
+/* ── terrain swatches (also the glyph grid and built-in reference) ─────── */
 
 .glhex-swatches,
 .glhex-glyph-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--glhex-cell), 1fr));
-  gap: var(--gl-sp-2);
+  gap: 4px;
 }
 
-.glhex-swatch {
-  --glhex-sw: var(--gl-text-dim);
+.glhex-root .glhex-swatch {
+  --glhex-sw: var(--glhex-dim);
   position: relative;
   display: grid;
   place-items: center;
   aspect-ratio: 1;
   min-width: 0;
-  height: auto;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  border: 1px solid color-mix(in srgb, var(--glhex-sw) 40%, transparent);
-  border-radius: 0;
-  clip-path: polygon(var(--gl-cut-xs) 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%, 0 var(--gl-cut-xs));
-  background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.08), transparent 45%),
-    color-mix(in srgb, var(--glhex-sw) 24%, var(--gl-ink-2));
-  color: color-mix(in srgb, var(--glhex-sw) 55%, var(--gl-text-bright));
-  cursor: pointer;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glhex-cut-xs)), calc(100% - var(--glhex-cut-xs)) 100%, 0 100%);
+  background: color-mix(in srgb, var(--glhex-sw) 24%, var(--glhex-ink-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glhex-sw) 30%, transparent);
+  color: color-mix(in srgb, var(--glhex-sw) 60%, var(--glhex-text));
   transition:
-    background var(--gl-d-quick) var(--gl-ease),
+    background-color var(--gl-d-quick) var(--gl-ease),
     box-shadow var(--gl-d-quick) var(--gl-ease),
-    translate var(--gl-d-tap) var(--gl-ease),
-    scale var(--gl-d-tap) var(--gl-snap);
+    translate var(--gl-d-quick) var(--gl-ease),
+    scale var(--gl-d-tap) var(--gl-ease);
 }
 .glhex-swatch .glhex-glyph { width: 72%; height: 72%; }
-.glhex-swatch:hover {
-  background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.14), transparent 50%),
-    color-mix(in srgb, var(--glhex-sw) 36%, var(--gl-ink-2));
-  translate: 0 var(--gl-lift);
-}
-.glhex-swatch:active { translate: 0 var(--gl-press); scale: var(--gl-press-scale); }
-.glhex-swatch.is-active {
-  color: var(--gl-text-bright);
-  background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.18), transparent 55%),
-    color-mix(in srgb, var(--glhex-sw) 48%, var(--gl-ink-2));
-  box-shadow: inset 0 0 0 1px var(--glhex-sw), inset 0 0 0 2px rgb(var(--gl-tint-dark) / 0.5), inset 0 0 12px color-mix(in srgb, var(--glhex-sw) 45%, transparent);
-  scale: 1.04;
+.glhex-root .glhex-swatch:hover { background: color-mix(in srgb, var(--glhex-sw) 36%, var(--glhex-ink-2)); translate: 0 var(--gl-lift); }
+.glhex-root .glhex-swatch.is-active {
+  background: color-mix(in srgb, var(--glhex-sw) 48%, var(--glhex-ink-2));
+  box-shadow: inset 0 0 0 2px var(--glhex-paper), inset 0 0 0 3px var(--glhex-ink-0);
+  color: var(--glhex-text);
 }
 .glhex-swatch.is-custom::after {
   content: "";
   position: absolute;
-  right: var(--gl-sp-1);
-  bottom: var(--gl-sp-1);
-  width: var(--gl-sp-2);
-  height: var(--gl-sp-2);
-  background: var(--gl-text-bright);
+  top: 3px;
+  right: 3px;
+  width: 4px;
+  height: 4px;
+  background: var(--glhex-text);
   opacity: 0.6;
-  transform: rotate(45deg);
+  rotate: 45deg;
 }
-.glhex-swatch--inherit {
-  --glhex-sw: var(--gl-text-faint);
-  border-style: dashed;
-  background: var(--gl-surface-inset);
-  color: var(--gl-text-dim);
-  font-size: var(--gl-fs-xs);
+.glhex-root .glhex-swatch--inherit {
+  --glhex-sw: var(--glhex-faint);
+  background: var(--glhex-ink-0);
+  box-shadow: inset 0 0 0 1px var(--glhex-line-strong);
+  color: var(--glhex-dim);
+  font-size: var(--gl-is-t-meta);
 }
-.glhex-swatch--static { width: var(--glhex-cell); cursor: default; }
+.glhex-swatch--static { display: grid; width: var(--glhex-cell); cursor: default; }
 .glhex-swatch--static:hover { translate: none; }
 
 .glhex-glyph {
@@ -310,82 +445,69 @@
 }
 .glhex-glyph circle { fill: currentColor; stroke: none; }
 
-/* ── rating pips (diamonds) ──────────────────────────────────────────── */
+/* ── rating pips, ratings, states, on/off ──────────────────────────────── */
 
-.glhex-pips { display: inline-flex; align-items: center; gap: var(--gl-sp-1); }
+.glhex-pips { display: inline-flex; align-items: center; gap: 3px; }
 .glhex-pip {
   width: var(--glhex-pip);
   height: var(--glhex-pip);
-  border: 1px solid color-mix(in srgb, var(--gl-signal) 45%, transparent);
-  transform: rotate(45deg);
-  transition: background var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+  box-shadow: inset 0 0 0 1px var(--glhex-ink-6);
+  rotate: 45deg;
+  transition: background-color var(--gl-d-quick) var(--gl-ease);
 }
 /* Tinted by difficulty where a rating is known (the ramp is in hexcrawl-play.css). */
-.glhex-pip.is-on {
-  border-color: var(--glhex-rating, var(--gl-signal));
-  background: var(--glhex-rating, var(--gl-signal));
-  box-shadow: 0 0 4px color-mix(in srgb, var(--glhex-rating, var(--gl-signal)) 55%, transparent);
-}
+.glhex-pip.is-on { background: var(--glhex-rating, var(--glhex-paper)); box-shadow: none; }
 
-.glhex-ratings { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gl-sp-2); }
-.glhex-rating,
-.glhex-state,
-.glhex-seg {
+.glhex-ratings { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }
+.glhex-states { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.glhex-onoff { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+
+/* A segmented picker: flat ink cells, the chosen one lifts a step and takes
+   its tone as an underline (DESIGN.md, Navigation). */
+.glhex-root :is(.glhex-rating, .glhex-state, .glhex-seg) {
+  --glhex-tone: var(--glhex-paper);
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--gl-sp-3);
-  height: auto;
-  min-height: 0;
-  margin: 0;
-  border: 1px solid var(--gl-hair);
-  border-radius: var(--gl-r-xs);
-  background: var(--gl-surface-inset);
-  color: var(--gl-text-dim);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-2xs);
-  letter-spacing: var(--gl-track-normal);
+  gap: 8px;
+  min-height: var(--glhex-ctl);
+  background: var(--glhex-ink-2);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+  color: var(--glhex-dim);
+  font-size: var(--gl-is-t-body);
+  font-weight: 600;
   line-height: 1;
-  text-transform: uppercase;
-  cursor: pointer;
   transition:
     color var(--gl-d-quick) var(--gl-ease),
-    border-color var(--gl-d-quick) var(--gl-ease),
-    background var(--gl-d-quick) var(--gl-ease),
-    translate var(--gl-d-tap) var(--gl-ease),
+    background-color var(--gl-d-quick) var(--gl-ease),
     scale var(--gl-d-tap) var(--gl-ease);
 }
-.glhex-rating { flex-direction: column; justify-content: center; gap: var(--gl-sp-3); padding: var(--gl-sp-4) var(--gl-sp-1); }
-.glhex-rating-name { font-size: var(--gl-fs-3xs); }
-.glhex-rating:hover,
-.glhex-state:hover,
-.glhex-seg:hover { color: var(--gl-text-bright); border-color: var(--gl-edge); translate: 0 var(--gl-lift); }
-.glhex-rating:active,
-.glhex-state:active,
-.glhex-seg:active { translate: 0 var(--gl-press); scale: var(--gl-press-scale); }
-.glhex-rating.is-active,
-.glhex-state.is-active,
-.glhex-seg.is-active {
-  color: var(--gl-text-bright);
-  border-color: color-mix(in srgb, var(--gl-accent) 60%, transparent);
-  background: color-mix(in srgb, var(--gl-accent) 16%, var(--gl-surface-inset));
-  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.10);
+.glhex-root :is(.glhex-rating, .glhex-state, .glhex-seg)::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: var(--glhex-tone);
+  scale: 0 1;
+  transition: scale var(--gl-d-brisk) var(--gl-ease);
 }
+.glhex-root :is(.glhex-rating, .glhex-state, .glhex-seg):hover { background: var(--glhex-ink-3); color: var(--glhex-text); }
+.glhex-root :is(.glhex-rating, .glhex-state, .glhex-seg).is-active { background: var(--glhex-ink-4); color: var(--glhex-text); }
+.glhex-root :is(.glhex-rating, .glhex-state, .glhex-seg).is-active::after { scale: 1 1; }
 
-.glhex-states { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gl-sp-2); }
-.glhex-state { padding: var(--gl-sp-4); }
-.glhex-state i { width: 1.1em; text-align: center; }
-.glhex-state.is-masked { --gl-accent: var(--gl-violet); }
-.glhex-state.is-masked i { color: color-mix(in srgb, var(--gl-violet) 70%, var(--gl-text-dim)); }
+.glhex-root .glhex-rating { --glhex-tone: var(--glhex-rating, var(--glhex-paper)); flex-direction: column; justify-content: center; gap: 7px; padding: 8px 2px; }
+.glhex-rating-name { font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.glhex-root .glhex-state { padding: 0 10px; }
+.glhex-state i { width: 1.1em; color: var(--glhex-faint); text-align: center; }
+.glhex-root .glhex-state.is-masked { --glhex-tone: var(--glhex-masked); }
+.glhex-root .glhex-state.is-masked i { color: var(--glhex-masked); }
+.glhex-root .glhex-seg { justify-content: center; }
 
-.glhex-onoff { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gl-sp-2); }
-.glhex-seg { justify-content: center; padding: var(--gl-sp-4); }
+/* ── regions list ──────────────────────────────────────────────────────── */
 
-/* ── regions list ────────────────────────────────────────────────────── */
+.glhex-regions { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 
-.glhex-regions { display: flex; flex-direction: column; gap: var(--gl-sp-3); min-height: 0; }
-.glhex-regions.is-picking .glhex-region-list { border-color: color-mix(in srgb, var(--gl-accent) 35%, transparent); }
-
-.glhex-filter.gl-field { min-height: var(--glhex-cell); font-size: var(--gl-fs-xs); }
+.glhex-root .glhex-filter.glhex-input { min-height: 28px; }
 
 .glhex-region-list,
 .glhex-custom-list,
@@ -397,171 +519,149 @@
 .glhex-region-list {
   display: flex;
   flex-direction: column;
-  gap: var(--gl-sp-1);
+  gap: 1px;
   max-height: 34vh;
   overflow-y: auto;
-  padding: var(--gl-sp-1);
-  border: 1px solid var(--gl-hair);
-  border-radius: var(--gl-r-sm);
-  background: var(--gl-surface-inset);
-  transition: border-color var(--gl-d-quick) var(--gl-ease);
+  padding: 2px;
+  background: var(--glhex-ink-0);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+  transition: box-shadow var(--gl-d-quick) var(--gl-ease);
 }
+.glhex-regions.is-picking .glhex-region-list { box-shadow: inset 0 0 0 1px var(--glhex-line-strong); }
 
 .glhex-region-row,
 .glhex-custom-row {
   display: grid;
   grid-template-columns: auto 1fr auto auto auto;
   align-items: center;
-  gap: var(--gl-sp-4);
+  gap: 10px;
   min-height: var(--glhex-row);
-  padding: var(--gl-sp-2) var(--gl-sp-4);
-  border: 1px solid transparent;
-  border-radius: var(--gl-r-xs);
+  padding: 4px 8px 4px 10px;
   cursor: pointer;
-  transition: background var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease);
+  transition: background-color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
 }
 .glhex-region-row:hover,
-.glhex-custom-row:hover { background: rgb(var(--gl-tint-light) / 0.04); border-color: var(--gl-hair); }
+.glhex-custom-row:hover { background: var(--glhex-hover); }
 .glhex-region-row.is-active {
-  border-color: color-mix(in srgb, var(--glhex-sw, var(--gl-accent)) 55%, transparent);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--glhex-sw, var(--gl-accent)) 20%, transparent), transparent 80%);
+  background: var(--glhex-selected);
+  box-shadow: inset 2px 0 0 var(--glhex-sw, var(--glhex-paper));
 }
-.glhex-region-row--none { grid-template-columns: auto 1fr; color: var(--gl-text-dim); }
+.glhex-region-row--none { grid-template-columns: auto 1fr; color: var(--glhex-dim); }
 .glhex-region-row[hidden] { display: none; }
 
 .glhex-chip {
-  width: var(--gl-sp-5);
-  height: var(--gl-sp-5);
-  border: 1px solid color-mix(in srgb, var(--glhex-sw) 70%, var(--gl-text-bright));
-  border-radius: var(--gl-r-xs);
+  width: 10px;
+  height: 10px;
   background: var(--glhex-sw);
-  box-shadow: inset 0 1px 0 rgb(var(--gl-tint-light) / 0.3), 0 0 6px color-mix(in srgb, var(--glhex-sw) 40%, transparent);
+  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-dark) / 0.35);
 }
-.glhex-chip.is-blight { outline: 1px solid var(--gl-violet); outline-offset: 1px; }
-.glhex-chip--none { --glhex-sw: transparent; border-style: dashed; border-color: var(--gl-text-faint); box-shadow: none; }
+.glhex-chip.is-blight { outline: 1px solid var(--glhex-blight); outline-offset: 2px; }
+.glhex-chip--none { --glhex-sw: transparent; box-shadow: inset 0 0 0 1px var(--glhex-faint); }
 
-.glhex-region-main { display: flex; flex-direction: column; min-width: 0; gap: var(--gl-sp-1); }
+.glhex-region-main { display: flex; flex-direction: column; min-width: 0; gap: 3px; }
 .glhex-region-name {
   overflow: hidden;
-  color: var(--gl-text-bright);
-  font-size: var(--gl-fs-sm);
+  color: var(--glhex-text);
+  font-size: var(--gl-is-t-body);
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .glhex-region-sub {
   overflow: hidden;
-  color: var(--gl-text-faint);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
+  color: var(--glhex-faint);
+  font-size: var(--gl-is-t-meta);
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 .glhex-count {
   min-width: 2ch;
-  color: var(--gl-text-dim);
-  font-size: var(--gl-fs-2xs);
+  color: var(--glhex-dim);
+  font-size: var(--gl-is-t-meta);
   text-align: right;
 }
-.glhex-row-edit { opacity: 0; transition: opacity var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease), translate var(--gl-d-tap) var(--gl-ease); }
+.glhex-root .glhex-row-edit { opacity: 0; }
 .glhex-region-row:hover .glhex-row-edit,
 .glhex-region-row.is-active .glhex-row-edit,
-.glhex-row-edit:focus-visible { opacity: 1; }
+.glhex-root .glhex-row-edit:focus-visible { opacity: 1; }
+.glhex-name-hidden { margin-left: 2px; color: var(--glhex-faint); font-size: var(--gl-is-t-meta); }
 
 .glhex-empty-row {
-  padding: var(--gl-sp-6) var(--gl-sp-4);
-  color: var(--gl-text-faint);
-  font-size: var(--gl-fs-xs);
+  padding: 16px 10px;
+  color: var(--glhex-faint);
+  font-size: var(--gl-is-t-body);
   text-align: center;
 }
 
-/* ── palette footer ──────────────────────────────────────────────────── */
+/* ── palette footer ────────────────────────────────────────────────────── */
 
-.glhex-pal-foot { display: flex; flex-direction: column; gap: var(--gl-sp-3); }
-.glhex-foot-row { display: flex; align-items: center; justify-content: space-between; gap: var(--gl-sp-4); }
-.glhex-foot-icons { display: inline-flex; gap: var(--gl-sp-2); }
+.glhex-pal-foot { display: flex; flex-direction: column; gap: 8px; }
+.glhex-foot-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.glhex-foot-icons { display: inline-flex; gap: 4px; }
 
-.glhex-toggle {
+.glhex-root .glhex-toggle {
   display: inline-flex;
   align-items: center;
-  gap: var(--gl-sp-4);
-  width: auto;
-  height: auto;
-  min-height: 0;
-  margin: 0;
-  padding: var(--gl-sp-2) 0;
-  border: 0;
-  background: none;
-  color: var(--gl-text-dim);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-2xs);
-  letter-spacing: var(--gl-track-normal);
-  line-height: 1;
-  text-transform: uppercase;
+  gap: 8px;
+  min-height: 28px;
+  color: var(--glhex-dim);
+  font-size: var(--gl-is-t-body);
+  font-weight: 600;
   white-space: nowrap;
-  cursor: pointer;
   transition: color var(--gl-d-quick) var(--gl-ease);
 }
-.glhex-toggle:hover,
-.glhex-toggle.is-on { color: var(--gl-text-bright); }
+.glhex-root .glhex-toggle:hover,
+.glhex-root .glhex-toggle.is-on { color: var(--glhex-text); }
 .glhex-switch {
   position: relative;
   flex: 0 0 auto;
-  width: calc(var(--gl-sp-10) + var(--gl-sp-2));
-  height: var(--gl-sp-7);
-  border: 1px solid var(--gl-edge);
-  border-radius: var(--gl-r-pill);
-  background: var(--gl-surface-inset);
-  box-shadow: inset 0 1px 3px var(--gl-shadow);
-  transition: background var(--gl-d-brisk) var(--gl-ease), border-color var(--gl-d-brisk) var(--gl-ease);
+  width: 26px;
+  height: 14px;
+  background: var(--glhex-ink-0);
+  box-shadow: inset 0 0 0 1px var(--glhex-line-strong);
+  transition: background-color var(--gl-d-brisk) var(--gl-ease), box-shadow var(--gl-d-brisk) var(--gl-ease);
 }
 .glhex-switch::after {
   content: "";
   position: absolute;
-  top: 1px;
-  left: 1px;
-  width: calc(var(--gl-sp-7) - 4px);
-  height: calc(var(--gl-sp-7) - 4px);
-  border-radius: var(--gl-r-pill);
-  background: var(--gl-text-dim);
-  transition: translate var(--gl-d-brisk) var(--gl-snap), background var(--gl-d-brisk) var(--gl-ease);
+  top: 3px;
+  left: 3px;
+  width: 8px;
+  height: 8px;
+  background: var(--glhex-faint);
+  transition: translate var(--gl-d-brisk) var(--gl-snap), background-color var(--gl-d-brisk) var(--gl-ease);
 }
-.glhex-toggle.is-on .glhex-switch {
-  border-color: color-mix(in srgb, var(--gl-accent) 65%, transparent);
-  background: color-mix(in srgb, var(--gl-accent) 30%, var(--gl-surface-inset));
-}
-.glhex-toggle.is-on .glhex-switch::after {
-  background: var(--gl-text-bright);
-  translate: calc(var(--gl-sp-10) + var(--gl-sp-2) - var(--gl-sp-7)) 0;
-  box-shadow: 0 0 6px var(--gl-accent);
-}
+/* On is a paper slab with an ink knob: the state reads at a glance, where a
+   paper outline round a paper knob read as an empty checkbox. */
+.glhex-toggle.is-on .glhex-switch { background: var(--glhex-paper); box-shadow: none; }
+.glhex-toggle.is-on .glhex-switch::after { background: var(--glhex-on-slab); translate: 12px 0; }
 
-/* Reveal staged: always clickable; idle looks restrained, a queue glows amber. */
-.glhex-root .glhex-reveal { --gl-accent: var(--gl-signal); min-height: var(--glhex-cell); padding: 0 var(--gl-sp-5); font-size: var(--gl-fs-2xs); }
+/* Reveal staged: always clickable. Idle it is quiet; a queue is a call, so it
+   becomes the amber slab the map's staged outlines are drawn in. */
+.glhex-root .glhex-reveal { min-height: 28px; padding: 0 10px; font-size: var(--gl-is-t-meta); }
+.glhex-root .glhex-reveal.is-idle { color: var(--glhex-faint); }
+/* Faint fails 4.5:1 on the ink-4 hover ground; the text lifts with it. */
+.glhex-root .glhex-reveal.is-idle:hover:not(:disabled) { color: var(--glhex-dim); }
 .glhex-root .glhex-reveal:not(.is-idle) {
-  color: var(--gl-signal-hot);
-  border-color: color-mix(in srgb, var(--gl-signal) 60%, transparent);
-  animation: glhex-beacon var(--gl-breathe) var(--gl-ease-inout) infinite;
+  background: var(--glhex-call);
+  box-shadow: none;
+  color: var(--glhex-on-slab);
+  font-weight: 700;
 }
-.glhex-root .glhex-reveal.is-idle { color: var(--gl-text-faint); }
-@keyframes glhex-beacon {
-  0%, 100% { box-shadow: inset 0 0 0 0 transparent; }
-  50% { box-shadow: inset 0 0 14px color-mix(in srgb, var(--gl-signal) 38%, transparent); }
-}
+.glhex-root .glhex-reveal:not(.is-idle):hover:not(:disabled) { background: color-mix(in srgb, var(--glhex-call) 82%, var(--glhex-text)); }
 
-/* ── editors ─────────────────────────────────────────────────────────── */
+/* ── editors ───────────────────────────────────────────────────────────── */
 
 .glhex-ed { padding: 0; gap: 0; }
 .glhex-body {
   display: flex;
   flex-direction: column;
-  gap: var(--gl-sp-6);
+  gap: 14px;
   flex: 1 1 auto;
   min-height: 0;
   max-height: 72vh;
   overflow-y: auto;
-  padding: var(--gl-sp-6) var(--gl-sp-7);
+  padding: 14px 16px;
 }
 .glhex-terrain-manager .glhex-body,
 .glhex-icon-picker .glhex-body { max-height: none; }
@@ -570,251 +670,256 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--gl-sp-4);
-  padding: var(--gl-sp-5) var(--gl-sp-7);
-  border-top: 1px solid var(--gl-hair);
-  background: linear-gradient(180deg, rgb(var(--gl-tint-dark) / 0.2), transparent);
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--glhex-ink-0);
+  border-top: 1px solid var(--glhex-line);
 }
-.glhex-ed-foot .glhex-btn { min-width: 84px; }
+.glhex-root .glhex-ed-foot .glhex-btn { min-width: 84px; }
 .glhex-spacer { flex: 1 1 auto; }
 
-.glhex-lead { margin: 0; color: var(--gl-text-bright); font-size: var(--gl-fs-lg); }
-.glhex-lead i { margin-right: var(--gl-sp-3); color: var(--gl-accent); }
+.glhex-lead {
+  margin: 0;
+  color: var(--glhex-text);
+  font-size: var(--gl-is-t-title);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.glhex-lead i { margin-right: 8px; color: var(--glhex-faint); font-size: var(--gl-is-t-lead); }
 
 .glhex-grid2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--gl-sp-5) var(--gl-sp-6);
+  gap: 10px 12px;
 }
 
-.glhex-field { display: flex; flex-direction: column; gap: var(--gl-sp-2); min-width: 0; }
+.glhex-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .glhex-field[hidden] { display: none; }
-.glhex-title-input.gl-field { font-size: var(--gl-fs-lg); }
+.glhex-root .glhex-title-input.glhex-input { font-size: var(--gl-is-t-title); font-weight: 700; }
 
+/* A group: one flat plate on the window (no plate nests inside it). */
 .glhex-block {
   display: flex;
   flex-direction: column;
-  gap: var(--gl-sp-5);
+  gap: 10px;
   margin: 0;
-  padding: var(--gl-sp-5) var(--gl-sp-6) var(--gl-sp-6);
-  border: 1px solid var(--gl-hair);
-  border-radius: var(--gl-r-sm);
-  background: rgb(var(--gl-tint-light) / 0.015);
+  padding: 12px 14px 14px;
+  border: 0;
+  background: var(--glhex-ink-2);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glhex-cut)), calc(100% - var(--glhex-cut)) 100%, 0 100%);
 }
-.glhex-block > legend { padding: 0 var(--gl-sp-3); }
+/* A legend breaks a fieldset's box; float it into the flow instead. */
+.glhex-block > legend { float: left; width: 100%; margin: 0 0 2px; padding: 0; }
+.glhex-block > legend + * { clear: both; }
 
-.glhex-checks { display: flex; flex-wrap: wrap; gap: var(--gl-sp-3) var(--gl-sp-6); }
+.glhex-checks { display: flex; flex-wrap: wrap; gap: 8px 14px; }
 .glhex-checks--col { flex-direction: column; }
 .glhex-check {
   display: inline-flex;
   align-items: center;
-  gap: var(--gl-sp-3);
-  color: var(--gl-text);
-  font-size: var(--gl-fs-sm);
+  gap: 8px;
+  color: var(--glhex-text);
+  font-size: var(--gl-is-t-body);
   cursor: pointer;
 }
-.glhex-check input { margin: 0; accent-color: var(--gl-accent); }
-.glhex-check.is-custom span::after { content: " •"; color: var(--gl-violet); }
-.glhex-check--end { align-self: end; min-height: var(--gl-sp-10); }
-.glhex-check > i { width: 1.1em; color: var(--gl-text-dim); text-align: center; }
-.glhex-checks--grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gl-sp-3) var(--gl-sp-6); }
-.glhex-sight-fields { display: grid; gap: var(--gl-sp-3); margin-top: var(--gl-sp-4); }
+.glhex-check.is-custom span::after { content: " •"; color: var(--glhex-masked); }
+.glhex-check--end { align-self: end; min-height: var(--glhex-ctl); }
+.glhex-check > i { width: 1.1em; color: var(--glhex-faint); text-align: center; }
+.glhex-checks--grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+.glhex-sight-fields { display: grid; gap: 8px; margin-top: 4px; }
 .glhex-sight-fields[hidden] { display: none; }
 
-/* Mask presets: a name column and one narrow tick column per field. */
-.glhex-presets td:nth-child(n) { width: auto; }
-.glhex-presets td:first-child { width: 100%; }
-.glhex-presets .glhex-presets-col { padding: 0 var(--gl-sp-1); color: var(--gl-text-dim); text-align: center; }
-.glhex-presets .glhex-presets-col input { margin: 0; accent-color: var(--gl-accent); }
-.glhex-presets .glhex-presets-act { display: flex; gap: var(--gl-sp-1); padding-right: 0; white-space: nowrap; }
-.glhex-name-hidden { margin-left: var(--gl-sp-1); color: var(--gl-text-faint); font-size: 0.8em; }
-
-.glhex-warn {
-  margin: 0;
-  padding: var(--gl-sp-4) var(--gl-sp-5);
-  border-left: 2px solid var(--gl-warn);
-  background: color-mix(in srgb, var(--gl-warn) 8%, transparent);
-  color: color-mix(in srgb, var(--gl-warn-hot) 70%, var(--gl-text));
-  font-size: var(--gl-fs-xs);
-  line-height: var(--gl-lh-normal);
-}
-.glhex-warn i { margin-right: var(--gl-sp-2); color: var(--gl-warn); }
-
-/* Document links (journal / roll table) — a drop target. */
-.glhex-link {
-  display: flex;
-  align-items: center;
-  gap: var(--gl-sp-3);
-  padding: var(--gl-sp-1);
-  border: 1px dashed transparent;
-  border-radius: var(--gl-r-sm);
-  transition: border-color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease);
-}
-.glhex-link > i { flex: 0 0 auto; width: 1.2em; color: var(--gl-text-faint); text-align: center; }
-.glhex-link .gl-field { flex: 1 1 auto; font-family: var(--gl-tech); font-size: var(--gl-fs-2xs); }
-.glhex-link.is-drop { border-color: var(--gl-accent); background: var(--gl-accent-faint); }
-
-/* Border: the one control that decides whether the rest of the hex applies. */
-.glhex-border-row {
-  padding: var(--gl-sp-2) var(--gl-sp-3);
-  border: 1px solid var(--gl-hair);
-  border-radius: var(--gl-r-sm);
-  background: var(--gl-surface-inset);
-}
-.glhex-border-row.is-on {
-  border-color: color-mix(in srgb, var(--gl-text-faint) 55%, transparent);
-  background: var(--gl-ink-0);
-  color: var(--gl-text-dim);
-}
-
-/* Landmarks */
-.glhex-lm {
-  display: grid;
-  grid-template-columns: var(--gl-sp-11) minmax(0, 1fr) minmax(0, 9.5em) auto;
-  align-items: center;
-  gap: var(--gl-sp-2) var(--gl-sp-3);
-  padding: var(--gl-sp-3);
-  border: 1px solid var(--gl-hair);
-  border-radius: var(--gl-r-sm);
-  background: var(--gl-surface-inset);
-}
-.glhex-lm-link { grid-column: 1 / -1; }
-.glhex-lm-vis.gl-field { font-size: var(--gl-fs-xs); }
-/* Second row: what the party sees of this badge, then its colour and size. */
-.glhex-lm-seen { grid-column: 1 / 3; }
-.glhex-lm-color { grid-column: 3 / 4; }
-.glhex-lm-size.gl-field { grid-column: 4 / 5; font-size: var(--gl-fs-xs); }
-.glhex-lm-seen {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--gl-sp-2);
-  color: var(--gl-text-faint);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
-}
-.glhex-lm.is-seen .glhex-lm-seen { color: var(--gl-good); }
-/* A GM-only landmark is dashed here and hatched on the map — one language. */
-.glhex-lm.is-unseen { border-style: dashed; }
-.glhex-lm.is-unseen .glhex-lm-icon { opacity: 0.7; }
-.glhex-lm-color .glhex-mini { flex: 0 0 auto; }
-.glhex-lm-icon {
-  display: grid;
-  place-items: center;
-  width: var(--gl-sp-11);
-  height: var(--gl-sp-11);
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  /* The badge's own colour (set inline per row), so the button reads as the
-     diamond the map draws; it falls back to the accent when a row has none. */
-  border: 1px solid color-mix(in srgb, var(--glhex-lm-color, var(--gl-accent)) 45%, transparent);
-  border-radius: 0;
-  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
-  background: color-mix(in srgb, var(--glhex-lm-color, var(--gl-accent)) 20%, var(--gl-ink-2));
-  color: var(--glhex-lm-color, var(--gl-text-bright));
-  font-size: var(--gl-fs-md);
-  cursor: pointer;
-  transition: background var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-snap);
-}
-.glhex-lm-icon:hover { background: color-mix(in srgb, var(--glhex-lm-color, var(--gl-accent)) 36%, var(--gl-ink-2)); scale: 1.06; }
-.glhex-lm-icon img { width: 60%; height: 60%; object-fit: contain; border: 0; }
-
-/* Colour override */
-.glhex-color { display: flex; align-items: center; gap: var(--gl-sp-3); min-height: var(--gl-sp-10); }
-.glhex-color input[type="color"] {
-  flex: 0 0 auto;
-  width: var(--gl-sp-11);
-  height: var(--gl-sp-10);
-  padding: 0;
-  border: 1px solid var(--gl-edge);
-  border-radius: var(--gl-r-xs);
-  background: none;
-  cursor: pointer;
-}
-.glhex-color:not(.is-custom) input[type="color"] { opacity: 0.55; }
-.glhex-color-state { flex: 1 1 auto; color: var(--gl-text-faint); font-family: var(--gl-tech); font-size: var(--gl-fs-3xs); letter-spacing: var(--gl-track-wide); text-transform: uppercase; }
-.glhex-color.is-custom .glhex-color-state { color: var(--gl-text-dim); }
-
-/* Scene settings: rating table */
-.glhex-table { width: 100%; margin: 0; border-collapse: separate; border-spacing: 0 var(--gl-sp-2); background: none; border: 0; }
+/* Scene settings: tables. */
+.glhex-table { width: 100%; margin: 0; border: 0; border-collapse: separate; border-spacing: 0 4px; background: none; }
 .glhex-table th,
-.glhex-table td { padding: 0 var(--gl-sp-3); border: 0; background: none; text-align: left; font-weight: var(--gl-weight-normal); }
-.glhex-table thead th { font-size: var(--gl-fs-3xs); }
-.glhex-table tbody th { color: var(--gl-text); font-size: var(--gl-fs-sm); white-space: nowrap; }
+.glhex-table td { padding: 0 6px; border: 0; background: none; font-weight: 500; text-align: left; }
 .glhex-table thead,
 .glhex-table thead tr,
-.glhex-table tr { background: none; text-shadow: none; }
+.glhex-table tr { border: 0; background: none; text-shadow: none; }
+.glhex-table tbody th { color: var(--glhex-text); font-size: var(--gl-is-t-body); font-weight: 600; white-space: nowrap; }
 .glhex-table td:nth-child(2) { width: 30%; }
 .glhex-table td:nth-child(3) { width: 30%; }
 .glhex-rownum {
   display: inline-grid;
   place-items: center;
-  width: var(--gl-sp-9);
-  height: var(--gl-sp-9);
-  margin-right: var(--gl-sp-3);
-  border: 1px solid color-mix(in srgb, var(--gl-signal) 45%, transparent);
-  color: var(--gl-signal);
-  font-size: var(--gl-fs-2xs);
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  background: var(--glhex-rating, var(--glhex-ink-4));
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glhex-cut-xs)), calc(100% - var(--glhex-cut-xs)) 100%, 0 100%);
+  color: var(--glhex-on-slab);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
 }
 
+/* Mask presets: a name column and one narrow tick column per field. */
+.glhex-presets td:nth-child(n) { width: auto; }
+.glhex-presets td:first-child { width: 100%; }
+.glhex-presets .glhex-presets-col { padding: 0 2px; color: var(--glhex-faint); text-align: center; }
+.glhex-presets .glhex-presets-act { display: flex; gap: 2px; padding-right: 0; white-space: nowrap; }
+
+.glhex-warn {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--glhex-ink-2);
+  box-shadow: inset 2px 0 0 var(--glhex-call), inset 0 0 0 1px var(--glhex-line);
+  color: var(--glhex-dim);
+  font-size: var(--gl-is-t-body);
+  line-height: 1.4;
+}
+.glhex-warn i { margin-right: 6px; color: var(--glhex-call); }
+
+/* Document links (journal / roll table): a drop target. */
+.glhex-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px;
+  outline: 1px dashed transparent;
+  outline-offset: 1px;
+  transition: outline-color var(--gl-d-quick) var(--gl-ease), background-color var(--gl-d-quick) var(--gl-ease);
+}
+.glhex-link > i { flex: 0 0 auto; width: 1.2em; color: var(--glhex-faint); text-align: center; }
+.glhex-root .glhex-link .glhex-input { flex: 1 1 auto; font-family: var(--glhex-num); font-size: var(--gl-is-t-meta); }
+.glhex-link.is-drop { outline-color: var(--glhex-paper); background: var(--glhex-selected); }
+
+/* Border: the one control that decides whether the rest of the hex applies. */
+.glhex-border-row {
+  min-height: var(--glhex-ctl);
+  padding: 0 10px;
+  background: var(--glhex-ink-2);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+}
+.glhex-border-row.is-on {
+  background: var(--glhex-ink-0);
+  box-shadow: inset 2px 0 0 var(--glhex-steel), inset 0 0 0 1px var(--glhex-line-strong);
+  color: var(--glhex-dim);
+}
+
+/* Landmarks: rows on the group's plate, separated by a hairline, not boxed. */
+.glhex-lm {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) minmax(0, 9.5em) auto;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--glhex-line);
+}
+.glhex-lm-link { grid-column: 1 / -1; }
+.glhex-lm-seen { grid-column: 1 / 3; }
+.glhex-lm-color { grid-column: 3 / 4; }
+.glhex-root .glhex-lm-size.glhex-input { grid-column: 4 / 5; }
+.glhex-lm-seen {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--glhex-faint);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.glhex-lm.is-seen .glhex-lm-seen { color: var(--glhex-good); }
+/* A GM-only landmark is dashed here and hatched on the map: one language. */
+.glhex-lm.is-unseen .glhex-lm-icon { opacity: 0.7; outline: 1px dashed var(--glhex-faint); outline-offset: 2px; }
+.glhex-root .glhex-lm-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  /* The badge's own colour (set inline per row), so the button reads as the
+     diamond the map draws. */
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  background: color-mix(in srgb, var(--glhex-lm-color, var(--glhex-call)) 22%, var(--glhex-ink-1));
+  color: var(--glhex-lm-color, var(--glhex-text));
+  font-size: 14px;
+  transition: background-color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-snap);
+}
+.glhex-root .glhex-lm-icon:hover { background: color-mix(in srgb, var(--glhex-lm-color, var(--glhex-call)) 38%, var(--glhex-ink-1)); scale: 1.06; }
+.glhex-lm-icon img { width: 60%; height: 60%; object-fit: contain; border: 0; }
+
+/* Colour override */
+.glhex-color { display: flex; align-items: center; gap: 6px; min-height: var(--glhex-ctl); }
+.glhex-root .glhex-color input[type="color"] {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 28px;
+  margin: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: 0;
+  background: var(--glhex-ink-0);
+  box-shadow: inset 0 0 0 1px var(--glhex-line-strong);
+  cursor: pointer;
+}
+.glhex-color:not(.is-custom) input[type="color"] { opacity: 0.55; }
+.glhex-color-state { flex: 1 1 auto; color: var(--glhex-faint); font-size: var(--gl-is-t-meta); }
+.glhex-color.is-custom .glhex-color-state { color: var(--glhex-dim); }
+
 /* Terrain manager */
-.glhex-builtins { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gl-sp-2) var(--gl-sp-5); }
-.glhex-builtin { display: flex; align-items: center; gap: var(--gl-sp-4); color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
+.glhex-builtins { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; }
+.glhex-builtin { display: flex; align-items: center; gap: 10px; color: var(--glhex-dim); font-size: var(--gl-is-t-body); }
 .glhex-builtin.is-shadowed { opacity: 0.45; text-decoration: line-through; }
-.glhex-builtin .glhex-swatch--static { width: var(--gl-sp-10); }
-.glhex-custom-list { display: flex; flex-direction: column; gap: var(--gl-sp-2); }
-.glhex-custom { border: 1px solid var(--gl-hair); border-radius: var(--gl-r-sm); background: var(--gl-surface-inset); transition: border-color var(--gl-d-quick) var(--gl-ease); }
-.glhex-custom.is-active { border-color: color-mix(in srgb, var(--glhex-sw) 55%, transparent); }
+.glhex-builtin .glhex-swatch--static { width: 26px; }
+.glhex-custom-list { display: flex; flex-direction: column; gap: 2px; }
+.glhex-custom {
+  background: var(--glhex-ink-2);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+  transition: box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+.glhex-custom.is-active { box-shadow: inset 2px 0 0 var(--glhex-sw), inset 0 0 0 1px var(--glhex-line-strong); }
 .glhex-custom-row { grid-template-columns: auto 1fr auto auto; }
-.glhex-caret { color: var(--gl-text-faint); font-size: var(--gl-fs-2xs); transition: rotate var(--gl-d-brisk) var(--gl-ease); }
+.glhex-caret { color: var(--glhex-faint); font-size: var(--gl-is-t-meta); transition: rotate var(--gl-d-brisk) var(--gl-ease); }
 .glhex-custom.is-active .glhex-caret { rotate: 180deg; }
 .glhex-custom-edit {
   display: flex;
   flex-direction: column;
-  gap: var(--gl-sp-4);
-  padding: var(--gl-sp-3) var(--gl-sp-5) var(--gl-sp-5);
-  border-top: 1px solid var(--gl-hair);
+  gap: 10px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--glhex-line);
 }
-.glhex-glyph-grid { grid-template-columns: repeat(auto-fill, minmax(var(--gl-sp-11), 1fr)); }
-.glhex-custom-edit .glhex-swatch { --glhex-sw: var(--gl-text-dim); }
-.glhex-custom-edit .glhex-swatch.is-active { --glhex-sw: var(--gl-accent); }
+.glhex-glyph-grid { grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); }
+.glhex-custom-edit .glhex-swatch { --glhex-sw: var(--glhex-dim); }
 
 /* Icon picker */
-.glhex-picker-top { display: flex; gap: var(--gl-sp-4); padding: var(--gl-sp-6) var(--gl-sp-7) 0; }
-.glhex-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--gl-sp-11) + var(--gl-sp-2)), 1fr)); gap: var(--gl-sp-2); }
+.glhex-picker-top { display: flex; gap: 8px; padding: 14px 16px 0; }
+.glhex-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 4px; }
 .glhex-icon-grid[hidden],
 .glhex-picker [data-curated][hidden] { display: none; }
-.glhex-icon {
+.glhex-root .glhex-icon {
   display: grid;
   place-items: center;
   aspect-ratio: 1;
-  height: auto;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--gl-hair);
-  border-radius: var(--gl-r-xs);
-  background: var(--gl-surface-inset);
-  color: var(--gl-text-dim);
-  font-size: var(--gl-fs-lg);
-  cursor: pointer;
+  background: var(--glhex-ink-2);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+  color: var(--glhex-dim);
+  font-size: 16px;
   transition:
     color var(--gl-d-quick) var(--gl-ease),
-    border-color var(--gl-d-quick) var(--gl-ease),
-    background var(--gl-d-quick) var(--gl-ease),
-    translate var(--gl-d-tap) var(--gl-ease),
-    scale var(--gl-d-tap) var(--gl-snap);
+    background-color var(--gl-d-quick) var(--gl-ease),
+    translate var(--gl-d-quick) var(--gl-ease),
+    scale var(--gl-d-tap) var(--gl-ease);
 }
-.glhex-icon:hover { color: var(--gl-text-bright); border-color: var(--gl-accent-soft); background: var(--gl-accent-faint); translate: 0 var(--gl-lift); scale: 1.06; }
-.glhex-icon:active { translate: 0 var(--gl-press); scale: var(--gl-press-scale); }
-.glhex-icon.is-active { color: var(--gl-text-bright); border-color: var(--gl-accent); background: color-mix(in srgb, var(--gl-accent) 20%, var(--gl-surface-inset)); }
-.glhex-current-img { display: flex; align-items: center; gap: var(--gl-sp-4); margin-top: var(--gl-sp-5); }
-.glhex-current-img img { width: var(--gl-sp-11); height: var(--gl-sp-11); object-fit: contain; border: 1px solid var(--gl-hair); }
+.glhex-root .glhex-icon:hover { background: var(--glhex-ink-4); color: var(--glhex-text); translate: 0 var(--gl-lift); }
+.glhex-root .glhex-icon.is-active { background: var(--glhex-ink-4); box-shadow: inset 0 0 0 1px var(--glhex-paper); color: var(--glhex-text); }
+.glhex-current-img { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.glhex-current-img img { width: 32px; height: 32px; object-fit: contain; border: 0; box-shadow: inset 0 0 0 1px var(--glhex-line); }
 
 /* Keyboard focus: the suite's one focus mark, on this feature's roots. */
-.glhex-root :is(button, [role="button"], a[href], input, select, textarea, [tabindex]):focus-visible {
-  outline: var(--gl-focus-outline);
-  outline-offset: 2px;
+:is(.glhex-root, .glhex-import, .glhex-dialog) :is(button, [role="button"], a[href], input, select, textarea, [tabindex]):focus-visible {
+  outline: var(--gl-is-focus-ring);
+  outline-offset: var(--gl-is-focus-offset);
 }
+/* A cut corner is a clip-path, and a clip-path clips the outline with it, so
+   the ring above would be drawn and never seen. Cut controls carry the mark
+   inside their own edge instead: paper on ink, ink on a paper or amber slab. */
+:is(.glhex-root, .glhex-import) :is(.glhex-btn, .glhex-mini, .glhex-swatch, .glhex-import-btn):focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--glhex-paper), inset 0 0 0 3px var(--glhex-ink-0);
+}
+:is(.glhex-root, .glhex-import) :is(.glhex-btn--primary, .glhex-import-primary, .glhex-reveal:not(.is-idle)):focus-visible {
+  box-shadow: inset 0 0 0 2px var(--glhex-on-slab);
+}
+/* The landmark mark is a diamond; a square ring sits wholly inside it. */
+.glhex-root .glhex-lm-icon:focus-visible { outline-offset: -9px; }

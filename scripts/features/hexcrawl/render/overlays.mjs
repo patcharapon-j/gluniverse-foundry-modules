@@ -32,12 +32,11 @@ export function drawSight(g, ctx, edges, width, phase) {
   g.clear();
   if (!edges.length) return;
   const R = ctx.R;
-  // A faint wide underlay so the dashes read over bright tiles.
+  // A faint wide ink underlay so the paper dashes read over bright tiles. Ink,
+  // never a coloured glow: nothing on the map glows at rest.
   g.lineStyle({ width: width * 3.4, color: ctx.colors.ink0, alpha: 0.45 });
   for (const e of edges) { g.moveTo(e.a.x, e.a.y); g.lineTo(e.b.x, e.b.y); }
-  g.lineStyle({ width: width * 5, color: ctx.colors.accent, alpha: 0.16 });
-  for (const e of edges) dashSegment(g, e.a, e.b, R / 3, 0.55, phase);
-  g.lineStyle({ width, color: ctx.colors.accentLift, alpha: 0.95 });
+  g.lineStyle({ width, color: ctx.colors.mark, alpha: 0.95 });
   for (const e of edges) dashSegment(g, e.a, e.b, R / 3, 0.55, phase);
 }
 
@@ -47,16 +46,16 @@ export function drawParty(g, ctx, party, width) {
   for (const { key } of party ?? []) {
     const { outer } = hexPolys(ctx, key);
     const ring = inset(outer, ctx.adapter.center(key), -0.02);
-    g.lineStyle({ width: GEO.partyGlow * R, color: ctx.colors.accent, alpha: 0.22, join: ROUND });
+    g.lineStyle({ width: GEO.partyGlow * R, color: ctx.colors.ink0, alpha: 0.5, join: ROUND });
     g.drawPolygon(flat(ring));
-    g.lineStyle({ width, color: ctx.colors.accentLift, alpha: 1, join: ROUND });
+    g.lineStyle({ width, color: ctx.colors.mark, alpha: 1, join: ROUND });
     g.drawPolygon(flat(ring));
   }
 }
 
 export function drawStaged(g, ctx, keys, width) {
   g.clear();
-  g.lineStyle({ width, color: ctx.colors.accentLift, alpha: 1 });
+  g.lineStyle({ width, color: ctx.colors.staged, alpha: 1 });
   for (const k of keys ?? []) {
     const c = ctx.adapter.center(k);
     const poly = inset(ctx.adapter.vertices(k), c, 0.1);
@@ -80,13 +79,13 @@ export function drawTrail(g, ctx, keys) {
       for (const t of [0.25, 0.5, 0.75]) {
         const ft = n === 1 ? 1 : (i - 1 + t) / (n - 1);
         g.lineStyle({ width: ring, color: ctx.colors.ink0, alpha: 0.7 * alphaAt(ft) });
-        g.beginFill(ctx.colors.accentLift, alphaAt(ft) * 0.85);
+        g.beginFill(ctx.colors.mark, alphaAt(ft) * 0.85);
         g.drawCircle(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, GEO.trailDot * R * 0.55);
         g.endFill();
       }
     }
     g.lineStyle({ width: ring, color: ctx.colors.ink0, alpha: 0.75 * alphaAt(f) });
-    g.beginFill(ctx.colors.accentLift, alphaAt(f));
+    g.beginFill(ctx.colors.mark, alphaAt(f));
     g.drawCircle(pts[i].x, pts[i].y, GEO.trailDot * R * 0.9);
     g.endFill();
   }

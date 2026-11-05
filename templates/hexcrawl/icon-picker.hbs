@@ -1,14 +1,14 @@
 {{!-- Hexcrawl — landmark icon picker. Search results are painted by JS into [data-results]. --}}
-<div class="glhex-root glhex-ed glhex-picker gl-type">
+<div class="glhex-root glhex-ed glhex-picker">
   <div class="glhex-picker-top">
-    <input type="search" class="gl-field glhex-filter" data-icon-search placeholder="{{localize "GLHEX.app.icon.search"}}" aria-label="{{localize "GLHEX.app.icon.search"}}">
-    <button type="button" class="gl-btn glhex-btn glhex-btn-sm" data-action="image"><i class="fa-solid fa-image"></i> {{localize "GLHEX.app.icon.image"}}</button>
+    <input type="search" class="glhex-input glhex-filter" data-icon-search placeholder="{{localize "GLHEX.app.icon.search"}}" aria-label="{{localize "GLHEX.app.icon.search"}}">
+    <button type="button" class="glhex-btn glhex-btn-sm" data-action="image"><i class="fa-solid fa-image"></i> {{localize "GLHEX.app.icon.image"}}</button>
   </div>
-  <div class="glhex-body gl-scroll">
+  <div class="glhex-body">
     <div data-curated>
       <div class="glhex-pal-head">
-        <span class="gl-tech-label">{{localize "GLHEX.app.icon.curated"}}</span>
-        <span class="gl-rule"></span>
+        <span class="glhex-label">{{localize "GLHEX.app.icon.curated"}}</span>
+        <span class="glhex-rule"></span>
       </div>
       <div class="glhex-icon-grid">
         {{#each curated}}
@@ -25,6 +25,6 @@
   </div>
   <footer class="glhex-ed-foot">
     <span class="glhex-spacer"></span>
-    <button type="button" class="gl-btn glhex-btn" data-action="cancel">{{localize "GLHEX.app.common.cancel"}}</button>
+    <button type="button" class="glhex-btn" data-action="cancel">{{localize "GLHEX.app.common.cancel"}}</button>
   </footer>
 </div>

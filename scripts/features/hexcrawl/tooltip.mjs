@@ -94,7 +94,7 @@ export function tooltipHTML(store, key) {
     const cost = travelCost(map, key);
     rows.push(`<div class="glhex-tip-line glhex-tip-rating" data-glhex-rating="${v.rating}">${pipsHTML(v.rating)}`
       + `<span class="glhex-rating-word">${escapeHTML(ratingName(v.rating))}</span>`
-      + `<span class="glhex-tip-cost gl-numeric">${escapeHTML(costLabel(map.config, cost))}</span></div>`);
+      + `<span class="glhex-tip-cost glhex-num">${escapeHTML(costLabel(map.config, cost))}</span></div>`);
   } else if (!hidden && v.state === "masked") {
     rows.push(`<div class="glhex-tip-line glhex-tip-rating">${pipsHTML(0, { masked: true })}`
       + `<span class="is-dim">${escapeHTML(L("GLHEX.tooltip.ratingUnknown"))}</span></div>`);
@@ -138,7 +138,7 @@ export function tooltipHTML(store, key) {
     if (region?.enc?.text) {
       const dice = encounterDice(map, key);
       gmRows.push(`<div class="glhex-tip-line"><span class="glhex-tip-k">${escapeHTML(L("GLHEX.tooltip.encounter"))}</span>`
-        + `<span>${escapeHTML(region.enc.text)}${dice.formula ? ` <span class="gl-numeric">(${escapeHTML(dice.formula)} ≤ ${dice.trigger})</span>` : ""}</span></div>`);
+        + `<span>${escapeHTML(region.enc.text)}${dice.formula ? ` <span class="glhex-num">(${escapeHTML(dice.formula)} ≤ ${dice.trigger})</span>` : ""}</span></div>`);
     }
     if (region?.rumor?.text) {
       gmRows.push(`<div class="glhex-tip-line"><span class="glhex-tip-k">${escapeHTML(L("GLHEX.tooltip.rumor"))}</span>`
@@ -147,7 +147,7 @@ export function tooltipHTML(store, key) {
     for (const note of [h.nt, region?.notes]) {
       if (note) gmRows.push(`<div class="glhex-tip-line glhex-tip-note">${escapeHTML(note)}</div>`);
     }
-    if (gmRows.length) rows.push(`<section class="glhex-tip-gm"><div class="glhex-tip-gm-label gl-tech-label">${escapeHTML(L("GLHEX.tooltip.gmOnly"))}</div>${gmRows.join("")}</section>`);
+    if (gmRows.length) rows.push(`<section class="glhex-tip-gm"><div class="glhex-tip-gm-label glhex-label">${escapeHTML(L("GLHEX.tooltip.gmOnly"))}</div>${gmRows.join("")}</section>`);
   }
   return rows.join("");
 }
@@ -261,7 +261,7 @@ class Tooltip {
   _ensureEl() {
     if (this.el) return this.el;
     const el = document.createElement("div");
-    el.className = "glhex-tooltip gl-glass gl-type";
+    el.className = "glhex-tooltip";
     el.setAttribute("role", "tooltip");
     el.addEventListener("click", (ev) => {
       const a = ev.target.closest?.("[data-uuid]");
@@ -288,23 +288,25 @@ class Tooltip {
     el.classList.toggle("is-pinned", !!pinned);
     el.classList.add("is-visible");
     el.dataset.key = key;
+    // The box changes only when its content does, so it is measured here, once
+    // per show, and never on a pointer move (a read there would flush the layout
+    // the previous move dirtied, on every move).
+    const box = el.getBoundingClientRect();
+    this._box = { w: box.width, h: box.height, z: uiScale(el) };
     if (at) this._place(at);
   }
 
   _place({ x, y }) {
     const el = this.el;
-    if (!el) return;
-    // The tooltip sits in the suite's interface-scale roster (CSS zoom), so
-    // left/top are multiplied by the zoom: position in unzoomed units, measure
-    // the rendered box.
-    const z = uiScale(el);
-    const box = el.getBoundingClientRect();
-    const w = box.width, h = box.height;
+    if (!el || !this._box) return;
+    // The tooltip sits in the suite's interface-scale roster (CSS zoom), so its
+    // own lengths are multiplied by the zoom: position in unzoomed units. It is
+    // moved by transform, which the compositor applies without a layout.
+    const { w, h, z } = this._box;
     let left = x + OFFSET, top = y + OFFSET;
     if (left + w > window.innerWidth - EDGE) left = Math.max(EDGE, x - OFFSET - w);
     if (top + h > window.innerHeight - EDGE) top = Math.max(EDGE, y - OFFSET - h);
-    el.style.left = `${Math.round(left / z)}px`;
-    el.style.top = `${Math.round(top / z)}px`;
+    el.style.transform = `translate(${Math.round(left / z)}px, ${Math.round(top / z)}px)`;
   }
 
   _hide() {

@@ -1,87 +1,33 @@
-/* Hexcrawl — play surfaces (tooltip, arrival card, token HUD, scene dialog).
-   Prefix glhex-. Etched Glass tokens only. Terrain colours arrive inline as
-   DATA (a forest is green whatever the accent), never from this sheet. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   Hexcrawl: the play surfaces (tooltip, arrival card, token HUD, dialogs).
+   Prefix glhex-. Ink and Signal through the `--glhex-*` skin declared in
+   hexcrawl.css on every root these hang off. Terrain colours arrive inline as
+   DATA (a forest is green whatever the chrome), never from this sheet.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Hover tooltip ─────────────────────────────────────────────────────── */
+/* Difficulty is a colour as well as a count: one ramp, stated once, read by the
+   tooltip, the arrival card, the palette and the scene settings. Signals, not
+   decoration: "extreme" reads as danger in every campaign. */
+:is(.glhex-root, .glhex-tooltip, .glhex-card) [data-glhex-rating="1"], .glhex-card[data-glhex-rating="1"] { --glhex-rating: var(--glhex-green); }
+:is(.glhex-root, .glhex-tooltip, .glhex-card) [data-glhex-rating="2"], .glhex-card[data-glhex-rating="2"] { --glhex-rating: var(--glhex-amber); }
+:is(.glhex-root, .glhex-tooltip, .glhex-card) [data-glhex-rating="3"], .glhex-card[data-glhex-rating="3"] { --glhex-rating: var(--glhex-ember); }
+:is(.glhex-root, .glhex-tooltip, .glhex-card) [data-glhex-rating="4"], .glhex-card[data-glhex-rating="4"] { --glhex-rating: var(--glhex-red); }
+.glhex-rating-word { color: var(--glhex-rating, inherit); font-weight: 600; }
 
-.glhex-tooltip {
-  --gl-accent: var(--gl-cyan);
-  position: fixed;
-  z-index: var(--gl-z-tooltip);
-  min-width: 12rem;
-  max-width: 20rem;
-  padding: var(--gl-sp-3) var(--gl-sp-4);
-  color: var(--gl-text);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-sm);   /* the interface-scale zoom (gl-tokens.css roster) sizes it */
-  line-height: var(--gl-lh-snug);
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(var(--gl-sp-1));
-  transition: opacity var(--gl-d-quick) var(--gl-ease), transform var(--gl-d-quick) var(--gl-ease);
+:is(.glhex-tooltip, .glhex-card) .glhex-pips { display: inline-flex; align-items: center; gap: 3px; }
+:is(.glhex-tooltip, .glhex-card) .glhex-pip {
+  width: 6px;
+  height: 6px;
+  box-shadow: inset 0 0 0 1px var(--glhex-ink-6);
+  rotate: 45deg;
 }
-.glhex-tooltip.is-visible { opacity: 1; transform: none; }
-.glhex-tooltip.is-pinned { pointer-events: auto; border-color: var(--gl-accent); box-shadow: var(--gl-etch), var(--gl-ring); }
+:is(.glhex-tooltip, .glhex-card) .glhex-pip.is-on { background: var(--glhex-rating, var(--glhex-paper)); box-shadow: none; }
+:is(.glhex-tooltip, .glhex-card) .glhex-pips.is-masked .glhex-pip { box-shadow: inset 0 0 0 1px var(--glhex-faint); opacity: 0.6; }
 
-.glhex-tip-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--gl-sp-3);
-  margin-bottom: var(--gl-sp-2);
-  padding-bottom: var(--gl-sp-2);
-  border-bottom: 1px solid var(--gl-hair);
-}
-.glhex-tip-name {
-  color: var(--gl-text-bright);
-  font-family: var(--gl-display);
-  font-size: var(--gl-fs-md);
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
-}
-.glhex-tip-state {
-  color: var(--gl-text-dim);
-  font-size: var(--gl-fs-2xs);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
-}
-.glhex-tip-state.is-revealed { color: var(--gl-good); }
-.glhex-tip-state.is-masked { color: var(--gl-warn); }
-.glhex-tip-state.is-hidden { color: var(--gl-text-faint); }
-
-.glhex-tip-line {
-  display: flex;
-  align-items: center;
-  gap: var(--gl-sp-2);
-  margin: var(--gl-sp-1) 0;
-}
-.glhex-tip-line .is-dim, .glhex-tip-line.is-dim { color: var(--gl-text-dim); }
-.glhex-tip-cost { margin-left: auto; color: var(--gl-text-bright); }
-.glhex-tip-blight {
-  margin-left: auto;
-  color: var(--gl-violet);
-  font-size: var(--gl-fs-2xs);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
-}
-.glhex-tip-rumor { align-items: flex-start; color: var(--gl-text); font-style: italic; }
-.glhex-tip-rumor i { margin-top: 0.2em; color: var(--gl-text-dim); }
-
-/* An image icon, tinted by the terrain colour through a mask (the art is white on transparency). */
-.glhex-tip-icon {
+:is(.glhex-tooltip, .glhex-card) .glhex-glyph {
   flex: none;
-  width: 1.5em;
-  height: 1.5em;
-  background: currentColor;
-  -webkit-mask: var(--glhex-icon) center / contain no-repeat;
-  mask: var(--glhex-icon) center / contain no-repeat;
-}
-
-.glhex-glyph {
-  flex: none;
-  width: 1.35em;
-  height: 1.35em;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -89,150 +35,311 @@
   stroke-linejoin: round;
 }
 
-/* Difficulty is a colour as well as a count: one ramp, stated once, read by the
-   tooltip, the arrival card and the palette (styles/hexcrawl.css). Fixed
-   semantic hues, not the accent — "extreme" reads as danger in every campaign. */
-[data-glhex-rating="1"] { --glhex-rating: var(--gl-good); }
-[data-glhex-rating="2"] { --glhex-rating: var(--gl-signal); }
-[data-glhex-rating="3"] { --glhex-rating: var(--gl-warn-deep); }
-[data-glhex-rating="4"] { --glhex-rating: var(--gl-hazard); }
-.glhex-rating-word { color: var(--glhex-rating, inherit); }
-
-.glhex-pips { display: inline-flex; gap: 3px; }
-.glhex-pip {
-  width: 0.55em;
-  height: 0.55em;
-  transform: rotate(45deg);
-  border: 1px solid var(--gl-line-strong);
-  background: transparent;
+:is(.glhex-tooltip, .glhex-card) .glhex-label {
+  color: var(--glhex-faint);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
 }
-.glhex-pip.is-on {
-  border-color: var(--glhex-rating, var(--gl-accent));
-  background: var(--glhex-rating, var(--gl-accent));
-  box-shadow: 0 0 6px color-mix(in srgb, var(--glhex-rating, var(--gl-accent)) 55%, transparent);
-}
-.glhex-pips.is-masked .glhex-pip { border-style: dashed; }
+:is(.glhex-tooltip, .glhex-card) .glhex-num { font-family: var(--glhex-num); font-variant-numeric: tabular-nums; }
 
-.glhex-tip-landmarks { margin: var(--gl-sp-2) 0 0; padding: 0; list-style: none; }
-.glhex-tip-landmarks li { display: flex; align-items: center; gap: var(--gl-sp-2); margin: var(--gl-sp-1) 0; }
-.glhex-tip-lm { display: inline-flex; align-items: center; gap: var(--gl-sp-2); color: var(--gl-text); }
-.glhex-tip-lm i { width: 1.1em; color: var(--gl-signal); text-align: center; }
-.glhex-tip-lm.is-link { cursor: pointer; text-decoration: underline dotted var(--gl-line-strong); }
-.glhex-tip-lm.is-link:hover { color: var(--gl-text-bright); text-decoration-color: var(--gl-accent); }
+/* ── Hover tooltip ─────────────────────────────────────────────────────── */
+
+/* Anchored at the corner and moved by `transform` (tooltip.mjs `_place`), so a
+   pointer move costs no layout. `translate` below is the arrival, and composes
+   with it. */
+.glhex-tooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--gl-z-tooltip);
+  min-width: 200px;
+  max-width: 300px;
+  padding: 10px 12px 10px 14px;
+  background: var(--glhex-ink-1);
+  border-radius: var(--gl-is-radius);
+  box-shadow: inset 0 0 0 1px var(--glhex-line-strong), 0 24px 64px var(--glhex-shade);
+  font-size: var(--gl-is-t-body);   /* the interface-scale zoom (gl-tokens.css roster) sizes it */
+  line-height: 1.4;
+  pointer-events: none;
+  opacity: 0;
+  translate: 0 4px;
+  transition: opacity var(--gl-d-quick) var(--gl-ease), translate var(--gl-d-quick) var(--gl-ease);
+}
+.glhex-tooltip.is-visible { opacity: 1; translate: none; }
+/* Pinned: it stays and takes clicks, so it carries the paper edge of an active plate. */
+.glhex-tooltip.is-pinned {
+  pointer-events: auto;
+  box-shadow: inset 2px 0 0 var(--glhex-paper), inset 0 0 0 1px var(--glhex-line-strong), 0 24px 64px var(--glhex-shade);
+}
+
+.glhex-tip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--glhex-line);
+}
+.glhex-tip-name {
+  color: var(--glhex-text);
+  font-size: var(--gl-is-t-lead);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.glhex-tip-state {
+  flex: none;
+  color: var(--glhex-dim);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.glhex-tip-state.is-revealed { color: var(--glhex-paper); }
+.glhex-tip-state.is-masked { color: var(--glhex-masked); }
+.glhex-tip-state.is-hidden { color: var(--glhex-steel); }
+
+.glhex-tip-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0;
+}
+.glhex-tip-line .is-dim, .glhex-tip-line.is-dim { color: var(--glhex-dim); }
+.glhex-tip-cost { margin-left: auto; color: var(--glhex-text); }
+.glhex-tip-blight {
+  margin-left: auto;
+  color: var(--glhex-blight);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.glhex-tip-rumor { align-items: flex-start; color: var(--glhex-text); font-style: italic; }
+.glhex-tip-rumor i { margin-top: 0.2em; color: var(--glhex-faint); }
+
+/* An image icon, tinted by the terrain colour through a mask (the art is white on transparency). */
+.glhex-tip-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  -webkit-mask: var(--glhex-icon) center / contain no-repeat;
+  mask: var(--glhex-icon) center / contain no-repeat;
+}
+
+.glhex-tip-landmarks { margin: 6px 0 0; padding: 0; list-style: none; }
+.glhex-tip-landmarks li { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.glhex-tip-lm { display: inline-flex; align-items: center; gap: 6px; color: var(--glhex-text); }
+.glhex-tip-lm i { width: 1.1em; color: var(--glhex-call); text-align: center; }
+.glhex-tip-lm.is-link { cursor: pointer; text-decoration: underline dotted var(--glhex-line-strong); text-underline-offset: 3px; }
+.glhex-tip-lm.is-link:hover { color: var(--glhex-paper); text-decoration-color: var(--glhex-paper); }
 .glhex-tip-tag {
   display: inline-flex;
   align-items: center;
-  gap: var(--gl-sp-1);
+  gap: 4px;
   margin-left: auto;
-  color: var(--gl-text-faint);
-  font-size: var(--gl-fs-3xs);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
+  color: var(--glhex-faint);
+  font-size: var(--gl-is-t-meta);
   white-space: nowrap;
 }
 /* GM only: whether the party can see this badge right now. */
-.glhex-tip-tag.is-seen { color: var(--gl-good); }
-.glhex-tip-tag.is-unseen { color: var(--gl-text-dim); }
+.glhex-tip-tag.is-seen { color: var(--glhex-good); }
+.glhex-tip-tag.is-unseen { color: var(--glhex-steel); }
 
-/* GM-only block: set apart so nobody reads it out by accident. */
+/* GM-only block: set apart so nobody reads it out by accident. A void well
+   with the steel edge of the quiet tone, the same "mine alone" the hatch is. */
 .glhex-tip-gm {
-  --gl-accent: var(--gl-violet);
-  margin-top: var(--gl-sp-3);
-  padding: var(--gl-sp-2) var(--gl-sp-3);
-  border-left: 2px solid var(--gl-accent);
-  background: rgb(var(--gl-tint-light) / 0.04);
+  margin: 8px -12px -10px -14px;
+  padding: 8px 12px 10px 14px;
+  background: var(--glhex-ink-0);
+  box-shadow: inset 2px 0 0 var(--glhex-steel), inset 0 1px 0 var(--glhex-line);
 }
-.glhex-tip-gm-label { margin-bottom: var(--gl-sp-1); color: var(--gl-violet); font-size: var(--gl-fs-3xs); }
-.glhex-tip-k { flex: none; color: var(--gl-text-dim); font-size: var(--gl-fs-2xs); text-transform: uppercase; letter-spacing: var(--gl-track-wide); }
+.glhex-tip-gm .glhex-tip-gm-label { margin-bottom: 6px; color: var(--glhex-steel); }
+.glhex-tip-k { flex: none; color: var(--glhex-faint); font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .glhex-tip-gm .glhex-tip-line { align-items: flex-start; }
-.glhex-tip-note { color: var(--gl-text-dim); white-space: pre-wrap; }
+.glhex-tip-note { color: var(--glhex-dim); white-space: pre-wrap; }
 
-/* ── Arrival card + encounter roll (chat, whispered to GMs) ────────────── */
+/* ── Arrival card + encounter roll (chat, whispered to GMs) ─────────────── */
 
-/* The card carries its own dark glass: a system's chat theme (dnd5e's is light
+/* The card carries its own ink plate: a system's chat theme (dnd5e's is light
    parchment) otherwise sits under text struck for ink, and the card reads grey
-   on white — correct in the file, illegible at the table. */
+   on white. An ink plate reads on parchment and on a dark sidebar alike
+   (the same choice as Flatfinder's badge, docs/adr/0010). */
 .glhex-card {
-  --gl-accent: var(--gl-cyan);
-  margin: calc(var(--gl-sp-1) * -1) 0;
-  padding: var(--gl-sp-3);
-  background: var(--gl-surface);
-  border: 1px solid var(--gl-edge);
-  border-radius: var(--gl-cut-sm);
-  box-shadow: inset 0 1px 0 var(--gl-hair);
-  color: var(--gl-text);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-sm);
-  line-height: var(--gl-lh-snug);
+  margin: -2px 0;
+  padding: 10px 12px 12px 14px;
+  background: var(--glhex-ink-1);
+  box-shadow: inset 2px 0 0 var(--glhex-tone), inset 0 0 0 1px var(--glhex-line);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glhex-cut-lg)), calc(100% - var(--glhex-cut-lg)) 100%, 0 100%);
+  font-size: var(--gl-is-t-body);
+  line-height: 1.4;
 }
-.glhex-card-head { display: flex; align-items: center; gap: var(--gl-sp-3); margin-bottom: var(--gl-sp-2); }
-.glhex-card-head > i { color: var(--gl-accent); font-size: var(--gl-fs-xl); }
-.glhex-card-kicker { font-size: var(--gl-fs-2xs); }
+.glhex-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.glhex-card-head > i { color: var(--glhex-tone); font-size: 18px; }
 .glhex-card-title {
-  color: var(--gl-text-bright);
-  font-family: var(--gl-display);
-  font-size: var(--gl-fs-lg);
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
+  color: var(--glhex-text);
+  font-size: var(--gl-is-t-title);
+  font-weight: 700;
+  line-height: 1.2;
 }
-.glhex-card-line { display: flex; align-items: center; gap: var(--gl-sp-2); margin: var(--gl-sp-1) 0; }
+/* The one name or answer each card is about is set in Display: the hex the
+   party walked into, or whether the dice called an encounter. An arrival's
+   tone is the difficulty of that hex (The One Tone Rule), so its edge and its
+   mark say Rough or Extreme before a word is read. */
+.glhex-card.glhex-arrival[data-glhex-rating] { --glhex-tone: var(--glhex-rating); }
+:is(.glhex-arrival, .glhex-roll) .glhex-card-head { align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+:is(.glhex-arrival, .glhex-roll) .glhex-card-head > i { margin-top: 3px; font-size: 20px; }
+:is(.glhex-arrival, .glhex-roll) .glhex-card-title {
+  font-size: var(--gl-is-t-display);
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+/* What the card is, under what it says: sentence case, never a spaced-caps
+   kicker over the title. `.glhex-card-kicker` stays for cards already posted. */
+.glhex-card-sub { margin-top: 2px; color: var(--glhex-dim); font-size: var(--gl-is-t-body); }
+.glhex-card-kicker { margin-bottom: 4px; }
+.glhex-card-line { display: flex; align-items: center; gap: 6px; margin: 3px 0; color: var(--glhex-text); }
 .glhex-card-facts {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: var(--gl-sp-1) var(--gl-sp-3);
-  margin: var(--gl-sp-2) 0;
-  padding: var(--gl-sp-2) 0;
-  border-block: 1px solid var(--gl-hair);
+  gap: 4px 10px;
+  margin: 8px 0;
+  padding: 8px 0;
+  border-block: 1px solid var(--glhex-line);
 }
-.glhex-card-facts dt { margin: 0; color: var(--gl-text-dim); font-size: var(--gl-fs-2xs); text-transform: uppercase; letter-spacing: var(--gl-track-wide); }
-.glhex-card-facts dd { margin: 0; color: var(--gl-text-bright); }
-.glhex-card-note { color: var(--gl-text-dim); font-style: italic; }
-.glhex-card-section { margin: var(--gl-sp-2) 0; }
-.glhex-card-section .gl-tech-label { font-size: var(--gl-fs-2xs); margin-bottom: var(--gl-sp-1); }
-.glhex-card-section p { margin: 0 0 var(--gl-sp-1); }
-.glhex-card-meta { margin-top: var(--gl-sp-1); color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
-.glhex-card-actions { display: flex; flex-wrap: wrap; gap: var(--gl-sp-2); margin-top: var(--gl-sp-3); }
-.glhex-card-hint { margin-top: var(--gl-sp-2); color: var(--gl-text-faint); font-size: var(--gl-fs-2xs); }
+.glhex-card-facts dt { margin: 0; color: var(--glhex-faint); font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.glhex-card-facts dd { margin: 0; color: var(--glhex-text); }
+.glhex-card-note { color: var(--glhex-dim); font-style: italic; }
+.glhex-card-section { margin: 8px 0; color: var(--glhex-text); }
+.glhex-card-section .glhex-label { margin-bottom: 4px; }
+.glhex-card-section p { margin: 0 0 4px; }
+.glhex-card-meta { margin-top: 4px; color: var(--glhex-dim); font-size: var(--gl-is-t-meta); }
+.glhex-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.glhex-card-hint { margin-top: 8px; color: var(--glhex-faint); font-size: var(--gl-is-t-body); }
 
-/* .gl-btn declares no font-size: a chat log would hand it 14px. Size it here. */
-.glhex-card .gl-btn,
-.glhex-card-btn {
+/* A chat log would hand a button 14px: the card sizes its own
+   (The Size-It-Yourself Rule). Cards posted before the move to Ink and Signal
+   still carry `.gl-btn`, whose sheen this turns off. */
+.glhex-card .glhex-card-btn {
+  display: inline-flex;
   flex: 1 1 auto;
-  font-size: var(--gl-fs-xs);
-  line-height: var(--gl-lh-tight);
-  padding: 0.55em 0.9em;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: var(--glhex-ink-3);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glhex-cut-sm)), calc(100% - var(--glhex-cut-sm)) 100%, 0 100%);
+  color: var(--glhex-text);
+  font-family: var(--glhex-font);
+  font-size: var(--gl-is-t-body);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: none;
+  cursor: pointer;
+  transition: background-color var(--gl-d-brisk) var(--gl-ease), translate var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease);
 }
-.glhex-card-btn i { margin-right: 0.35em; }
+.glhex-card .glhex-card-btn::before { content: none; }
+.glhex-card .glhex-card-btn i { font-size: var(--gl-is-t-meta); }
+.glhex-card .glhex-card-btn:hover:not(:disabled) { background: var(--glhex-ink-4); translate: 0 var(--gl-lift); }
+.glhex-card .glhex-card-btn:active:not(:disabled) { scale: var(--gl-is-press); }
+.glhex-card .glhex-card-btn:disabled { opacity: var(--gl-is-disabled); cursor: default; }
+/* The cut corner clips an outline, so the focus mark sits inside the edge. */
+.glhex-card .glhex-card-btn:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--glhex-paper), inset 0 0 0 3px var(--glhex-ink-0); }
+.glhex-card .glhex-card-btn:is(.is-primary, .gl-btn-accent):focus-visible { box-shadow: inset 0 0 0 2px var(--glhex-on-slab); }
+.glhex-card .glhex-card-btn:is(.is-primary, .gl-btn-accent) { background: var(--glhex-paper); box-shadow: none; color: var(--glhex-on-slab); }
+.glhex-card .glhex-card-btn:is(.is-primary, .gl-btn-accent):hover:not(:disabled) { background: var(--glhex-text); }
 
-.glhex-dice { display: flex; flex-wrap: wrap; gap: var(--gl-sp-2); margin: var(--gl-sp-2) 0; }
+.glhex-dice { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
 .glhex-die {
   display: grid;
   place-items: center;
-  min-width: 2em;
-  height: 2em;
-  border: 1px solid var(--gl-edge);
-  background: var(--gl-ink-2);
-  color: var(--gl-text-dim);
-  font-family: var(--gl-tech);
-  font-size: var(--gl-fs-md);
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  background: var(--glhex-ink-3);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+  color: var(--glhex-dim);
+  font-family: var(--glhex-num);
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
 }
-.glhex-die.is-hit { border-color: var(--gl-hazard); color: var(--gl-hazard-hot); box-shadow: 0 0 8px color-mix(in srgb, var(--gl-hazard) 50%, transparent); }
-.glhex-roll.is-triggered { --gl-accent: var(--gl-hazard); }
-.glhex-roll.is-triggered .glhex-card-title { color: var(--gl-hazard-hot); }
-.glhex-roll.is-quiet { --gl-accent: var(--gl-good); }
+.glhex-die.is-hit { background: var(--glhex-danger); box-shadow: none; color: var(--glhex-on-slab); font-weight: 700; }
+.glhex-roll.is-triggered { --glhex-tone: var(--glhex-danger); }
+.glhex-roll.is-triggered .glhex-card-title { color: var(--glhex-danger); }
+.glhex-roll.is-quiet { --glhex-tone: var(--glhex-good); }
 
-/* ── Token HUD ─────────────────────────────────────────────────────────── */
+/* ── Token HUD (Foundry's own HUD, so core is read straight) ───────────── */
 
-#token-hud .glhex-hud.active { border-color: var(--gl-cyan); color: var(--gl-cyan-hot); box-shadow: 0 0 8px color-mix(in srgb, var(--gl-cyan) 55%, transparent); }
-#token-hud .glhex-hud:disabled { opacity: 0.4; cursor: not-allowed; }
+#token-hud .glhex-hud.active { border-color: var(--gl-is-paper); color: var(--gl-is-paper); box-shadow: inset 0 0 0 1px var(--gl-is-paper); }
+#token-hud .glhex-hud:disabled { opacity: var(--gl-is-disabled); cursor: not-allowed; }
 
 /* ── Scene dialog + sight prompt ───────────────────────────────────────── */
 
-.glhex-scene-dialog, .glhex-sight-dialog { font-family: var(--gl-tech); font-size: var(--gl-fs-sm); }
-.glhex-scene-status { margin: 0 0 var(--gl-sp-3); color: var(--gl-text-dim); }
-.glhex-scene-new { display: grid; gap: var(--gl-sp-2); border: 1px solid var(--gl-hair); padding: var(--gl-sp-3); }
-.glhex-scene-new label, .glhex-sight-dialog label { display: grid; gap: var(--gl-sp-1); color: var(--gl-text-dim); font-size: var(--gl-fs-xs); }
-.glhex-scene-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gl-sp-2); }
-.glhex-dialog .form-footer button { font-size: var(--gl-fs-xs); }
+.glhex-dialog .window-content { background: var(--glhex-ink-1); color: var(--glhex-text); }
+:is(.glhex-scene-dialog, .glhex-sight-dialog) { font-size: var(--gl-is-t-body); }
+.glhex-scene-status { margin: 0 0 10px; color: var(--glhex-dim); }
+.glhex-scene-new {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 0;
+  border-radius: 0;
+  background: var(--glhex-ink-2);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+}
+.glhex-scene-new > legend { float: left; width: 100%; margin: 0 0 2px; padding: 0; }
+.glhex-scene-new > legend + * { clear: both; }
+.glhex-dialog :is(.glhex-scene-new, .glhex-sight-dialog) .glhex-label {
+  color: var(--glhex-faint);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+:is(.glhex-scene-new, .glhex-sight-dialog) label { display: grid; gap: 4px; color: var(--glhex-dim); font-size: var(--gl-is-t-meta); font-weight: 600; }
+.glhex-scene-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.glhex-dialog :is(input[type="text"], input[type="number"], select) {
+  min-height: 32px;
+  border: 0;
+  border-radius: 0;
+  background: var(--glhex-ink-0);
+  box-shadow: inset 0 0 0 1px var(--glhex-line-strong);
+  color: var(--glhex-text);
+  font-size: var(--gl-is-t-body);
+}
+.glhex-dialog :is(input[type="text"], input[type="number"], select):focus { outline: none; box-shadow: inset 0 0 0 1px var(--glhex-paper); }
+.glhex-sight-dialog .hint { margin: 8px 0 0; color: var(--glhex-faint); font-size: var(--gl-is-t-body); }
+/* The scene dialog offers three peer actions: one column of equal rows reads
+   as a choice, where a wrapped row of three widths read as leftovers. */
+.glhex-dialog .form-footer { display: grid; grid-auto-flow: row; gap: 6px; }
+.glhex-dialog .form-footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  min-height: 32px;
+  border: 0;
+  border-radius: 0;
+  background: var(--glhex-ink-3);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+  color: var(--glhex-text);
+  font-size: var(--gl-is-t-body);
+  font-weight: 600;
+  transition: background-color var(--gl-d-brisk) var(--gl-ease);
+}
+.glhex-dialog .form-footer button:hover { background: var(--glhex-ink-4); }
+.glhex-dialog .form-footer button:is([data-action="ok"], [autofocus], .default) { background: var(--glhex-paper); box-shadow: none; color: var(--glhex-on-slab); }

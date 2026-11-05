@@ -133,11 +133,6 @@ export const MAX_ICON_VARIANTS = 4;
 /** A hex with no terrain and no region draws as blank survey ground. */
 export const BLANK_TERRAIN = Object.freeze({ color: "#5b6478", glyph: "none" });
 
-/** The blight overlay hue: the suite's fixed "secret / uncanny" violet. Mirrors
- *  PALETTE.violet in core/theme.mjs — kept here only so this module stays pure;
- *  the renderer should prefer the theme mirror. */
-export const BLIGHT_HUE_KEY = "violet";
-
 /* ── Rating & travel ────────────────────────────────────────────────────── */
 
 export const RATING_MIN = 1;

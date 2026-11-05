@@ -64,7 +64,7 @@ const ROOT = "__ROOT__";
 const { HexRenderer } = await import(`${ROOT}/scripts/features/hexcrawl/render/renderer.mjs`);
 const HM = await import(`${ROOT}/scripts/features/hexcrawl/hex-math.mjs`);
 const M = await import(`${ROOT}/scripts/features/hexcrawl/model.mjs`);
-const { PALETTE } = await import(`${ROOT}/scripts/core/theme.mjs`);
+const { INK_SIGNAL } = await import(`${ROOT}/scripts/core/theme.mjs`);
 const { resolveIcon } = await import(`${ROOT}/scripts/features/hexcrawl/icons.mjs`);
 const IMP = await import(`${ROOT}/scripts/features/hexcrawl/import.mjs`);
 const PIXI = window.PIXI;
@@ -229,7 +229,7 @@ function build() {
   map.config.render = $("mode").value;
   state.map = map;
   const r = new HexRenderer({
-    PIXI, adapter: state.adapter, keys: state.keys, palette: PALETTE, resolveIcon,
+    PIXI, adapter: state.adapter, keys: state.keys, palette: INK_SIGNAL, resolveIcon,
     loadTexture: (src) => PIXI.Assets.load(src),
     terrainName: (id) => id.charAt(0).toUpperCase() + id.slice(1),
     resolution: window.devicePixelRatio || 1,

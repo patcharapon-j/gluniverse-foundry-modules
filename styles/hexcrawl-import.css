@@ -1,14 +1,76 @@
-/* Hexcrawl — JSON import / export window. Prefix glhex-import. */
-.glhex-import .window-content { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
-.glhex-import-hint { margin: 0; font-size: 12px; color: var(--gl-text-dim); line-height: 1.45; }
-.glhex-import-text { min-height: 240px; resize: vertical; font-family: var(--gl-tech); font-size: 11px; line-height: 1.5; white-space: pre; }
+/* Hexcrawl: the JSON import / export window. Prefix glhex-import. Ink and
+   Signal through the `--glhex-*` skin declared in hexcrawl.css on `.glhex-import`. */
+
+.glhex-import .window-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+  background: var(--glhex-ink-1);
+  color: var(--glhex-text);
+  font-size: var(--gl-is-t-body);
+}
+.glhex-import-hint { margin: 0; color: var(--glhex-dim); font-size: var(--gl-is-t-body); line-height: 1.45; }
+.glhex-import .glhex-import-text {
+  min-height: 240px;
+  padding: 10px;
+  resize: vertical;
+  font-family: var(--glhex-num);
+  font-size: var(--gl-is-t-meta);
+  line-height: 1.5;
+  white-space: pre;
+}
 .glhex-import-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .glhex-import-spacer { flex: 1; }
-.glhex-import .glhex-import-btn { font-size: 12px; padding: 5px 10px; }
-.glhex-import .glhex-import-primary { --gl-accent: var(--gl-cyan); border-color: var(--gl-accent); color: var(--gl-text-bright); }
-.glhex-import-commit { justify-content: flex-end; padding-top: 4px; border-top: 1px solid var(--gl-hair); }
-.glhex-import-summary { padding: 8px 10px; font-size: 12px; color: var(--gl-text); display: flex; flex-direction: column; gap: 4px; }
-.glhex-import-warnings summary { cursor: pointer; color: var(--gl-warn); }
-.glhex-import-warnings ul { margin: 4px 0 0; padding-left: 18px; max-height: 160px; overflow-y: auto; color: var(--gl-text-dim); }
-.glhex-import-ok { color: var(--gl-good); }
-.glhex-import-error { font-size: 12px; color: var(--gl-hazard); }
+
+/* The window sizes its own buttons (The Size-It-Yourself Rule). */
+.glhex-import .glhex-import-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  min-height: 32px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: var(--glhex-ink-3);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glhex-cut-sm)), calc(100% - var(--glhex-cut-sm)) 100%, 0 100%);
+  color: var(--glhex-text);
+  font-size: var(--gl-is-t-body);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--gl-d-brisk) var(--gl-ease), translate var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease);
+}
+.glhex-import .glhex-import-btn[hidden] { display: none; }
+.glhex-import .glhex-import-btn i { font-size: var(--gl-is-t-meta); }
+.glhex-import .glhex-import-btn:hover { background: var(--glhex-ink-4); translate: 0 var(--gl-lift); }
+.glhex-import .glhex-import-btn:active { scale: var(--gl-is-press); }
+.glhex-import .glhex-import-primary { background: var(--glhex-paper); box-shadow: none; color: var(--glhex-on-slab); }
+.glhex-import .glhex-import-primary:hover { background: var(--glhex-text); }
+
+.glhex-import-commit { justify-content: flex-end; padding-top: 10px; border-top: 1px solid var(--glhex-line); }
+.glhex-import-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--glhex-ink-2);
+  box-shadow: inset 0 0 0 1px var(--glhex-line);
+  color: var(--glhex-text);
+  font-size: var(--gl-is-t-body);
+}
+.glhex-import-summary b { font-weight: 700; }
+.glhex-import-warnings summary { color: var(--glhex-call); cursor: pointer; }
+.glhex-import-warnings ul { margin: 4px 0 0; padding-left: 18px; max-height: 160px; overflow-y: auto; color: var(--glhex-dim); }
+.glhex-import-ok { color: var(--glhex-good); }
+.glhex-import-error {
+  padding: 8px 12px;
+  background: var(--glhex-ink-2);
+  box-shadow: inset 2px 0 0 var(--glhex-danger), inset 0 0 0 1px var(--glhex-line);
+  color: var(--glhex-danger);
+  font-size: var(--gl-is-t-body);
+}

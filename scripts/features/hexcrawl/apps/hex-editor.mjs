@@ -18,7 +18,7 @@ import {
   borderFlagFor, isBlankHex, isBorder, isMaskPreset, landmarkSeen, landmarkSize, landmarksShown, maskFields, newId,
   normalizeHex, presetFields,
 } from "../model.mjs";
-import { PALETTE } from "../../../core/theme.mjs";
+import { INK_SIGNAL } from "../../../core/theme.mjs";
 import { StoreAppBase } from "./base.mjs";
 import {
   L, bindUuidDrops, currentStore, indexedList, openUuid, optionalNumber, optionList, presetChoices, ratingLabel,
@@ -31,7 +31,7 @@ const appId = (key) => `glhex-hex-${String(key).replace(/[^0-9a-z-]/gi, "_")}`;
 /** What the colour well shows for a landmark with no colour of its own: the
  *  hue the renderer actually draws it in. Never a literal — a suite colour in
  *  JS comes from the palette (docs/DESIGN_SYSTEM.md). */
-const DEFAULT_LM_COLOR = PALETTE.warn;
+const DEFAULT_LM_COLOR = INK_SIGNAL.amber;
 
 /** The size ladder, plus the landmark's own size when it is off it (an import
  *  or a hand-edited flag) — a value the editor could not show would be silently
