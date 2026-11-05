@@ -12,6 +12,7 @@
 :is(.gluniverse-stream-targets-section, .gluniverse-stream-targets-editor) {
   --gltg-ink-0: var(--gl-is-ink-0);
   --gltg-text: var(--gl-is-text);
+  --gltg-dim: var(--gl-is-dim);
   --gltg-faint: var(--gl-is-faint);
   --gltg-line-strong: var(--gl-is-line-strong);
 }
@@ -46,6 +47,18 @@
   color: var(--gltg-faint);
 }
 .gluniverse-stream-targets-switch:has(input:disabled) { cursor: default; }
+
+/* A control that cannot be used says so in its words as well as its box. */
+:is(.gluniverse-stream-targets-switch, .gluniverse-stream-targets-section label.gluniverse-stream-color):has(input:disabled) {
+  color: var(--gltg-dim);
+}
+.gluniverse-stream-director .gluniverse-stream-targets-section label.gluniverse-stream-color input[type="color"]:disabled { cursor: default; }
+
+/* With the lines switched off, everything under the master switch is a setting for later: it steps back. */
+.gluniverse-stream-targets-section[data-off] > :not(h2, .gluniverse-stream-targets-switches),
+.gluniverse-stream-targets-section[data-off] .gluniverse-stream-targets-switch:not(:first-child) {
+  opacity: 0.55;
+}
 
 /* The closing note: a readable measure rather than the window's width. */
 .gluniverse-stream-director .gluniverse-stream-targets-section .gluniverse-stream-form-hint { max-width: 54ch; }

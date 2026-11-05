@@ -16,7 +16,12 @@
  * URL params: `floor=bright` (a parchment map, where a pale line has to
  * survive), `zoom=0.5..2` (the stage zoom; hairlines stay one device pixel),
  * `freeze=1` (no replay loop), `phase=launch|hold|handoff` (which beat the
- * board settles on).
+ * board settles on), `odds=1` (PF2e Odds' tags placed on the lines).
+ *
+ * `view=panel` draws the shipped editor section in its standalone window
+ * instead, under the shipped sheets: `stream=0` (no stream client, so no
+ * "Visible to"), `readonly=1` (a non-GM), `off=1` (the lines switched off),
+ * `weight=0.25..2`.
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -141,7 +146,7 @@ try {
     const tpl = Hb.compile(await (await fetch("/templates/stream-targets/section.hbs")).text());
     const stream = q.get("stream") !== "0";
     const canEdit = !q.has("readonly");
-    const targeting = { ...DEFAULT_TARGETING_SETTINGS, intensity: Number(q.get("weight")) || 1 };
+    const targeting = { ...DEFAULT_TARGETING_SETTINGS, enabled: !q.has("off"), intensity: Number(q.get("weight")) || 1 };
     const choices = stream ? Object.values(TARGET_LINE_VISIBILITY) : [TARGET_LINE_VISIBILITY.everyone];
     const body = tpl({
       targeting, canEdit, weightPercent: Math.round(targeting.intensity * 100), showVisibility: stream && choices.length > 1,

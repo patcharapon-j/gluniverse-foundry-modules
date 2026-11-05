@@ -1,4 +1,4 @@
-<section class="gluniverse-stream-panel gluniverse-stream-targets-section">
+<section class="gluniverse-stream-panel gluniverse-stream-targets-section" {{#unless targeting.enabled}}data-off{{/unless}}>
   <h2>{{localize "GLUNIVERSE_STREAM.targeting.title"}}</h2>
   <div class="gluniverse-stream-targets-switches">
     <label class="gluniverse-stream-targets-switch"><input type="checkbox" name="targeting.enabled" {{#if targeting.enabled}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}><span>{{localize "GLUNIVERSE_STREAM.targeting.enabled"}}</span></label>
