@@ -99,11 +99,14 @@
   opacity: 0;
   background: var(--glth-film);
 }
+/* No standing `will-change`: the bars are two half-screen boxes that sit at
+   scaleY(0) for most of a session, and a permanent hint kept a viewport's worth
+   of compositor layer alive for them on every client. Their transform runs on
+   WAAPI, which promotes them for the length of each move by itself. */
 .glth-bar {
   left: 0;
   right: 0;
   background: var(--glth-film);
-  will-change: transform;
 }
 .glth-bar--top { top: 0; transform-origin: 50% 0; }
 .glth-bar--bottom { bottom: 0; transform-origin: 50% 100%; }

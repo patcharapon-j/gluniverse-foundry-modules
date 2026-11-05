@@ -620,8 +620,35 @@ export class TitleOverlay {
     const startAt = clock?.startAt;
     if (Number.isFinite(startAt)) anim.currentTime = now() - startAt;
     if (this._frozen) anim.pause();
-    this._anims.push({ anim, el: node, props, cue: clock?.cue !== false, startAt: Number.isFinite(startAt) ? startAt : now() });
+    const entry = { anim, el: node, props, cue: clock?.cue !== false, startAt: Number.isFinite(startAt) ? startAt : now() };
+    this._anims.push(entry);
+    anim.finished?.then(() => this._release(entry), () => { /* cancelled */ });
     return anim;
+  }
+
+  /**
+   * A finished animation keeps filling its end value, and an element with a
+   * live animation keeps its compositor layer: left alone, every cue would hold
+   * a full-screen scrim, both bars and each title piece on the GPU until the
+   * next one. So a finished animation writes its end value inline and goes.
+   *
+   * An element is released only once EVERY animation on it has finished, all
+   * together and committed in creation order (the topmost value wins, as in
+   * `_cancel`). Releasing one early could uncover an older animation still
+   * running underneath it: a clearTitle fade ending while the cue's own title
+   * arrival is still going would bring the title back.
+   */
+  _release(entry) {
+    if (this._frozen || !this._anims.includes(entry)) return;
+    const group = this._anims.filter((a) => a.el === entry.el);
+    if (group.some((a) => a.anim.playState !== "finished")) return;
+    if (entry.el.isConnected) {
+      for (const a of group) {
+        try { a.anim.commitStyles(); } catch { /* not rendered */ }
+      }
+    }
+    for (const a of group) a.anim.cancel();
+    this._anims = this._anims.filter((a) => a.el !== entry.el);
   }
 
   /**
