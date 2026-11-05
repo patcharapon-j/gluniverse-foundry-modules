@@ -16,7 +16,6 @@ import "./stream-pacer/index.mjs";
 import "./statsblock-import/index.mjs";
 import "./loot-gen/index.mjs";
 import "./pf2e-flatten/index.mjs";
-import "./pf2e-level-zero/index.mjs";
 import "./critical/index.mjs";
 import "./timer/index.mjs";
 import "./mythic-gme/index.mjs";

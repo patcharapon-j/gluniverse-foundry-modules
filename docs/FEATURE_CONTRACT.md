@@ -207,7 +207,6 @@ rather than at the end.
 | statsblock-import  | sbi.                         | pf2e              | —               | off     |
 | loot-gen           | lg.                          | ["pf2e","dnd5e"]  | —               | off     |
 | pf2e-flatten       | flatten.                     | pf2e              | —               | off     |
-| pf2e-level-zero    | l0.                          | pf2e              | —               | off     |
 | critical           | crit.                        | ["pf2e","dnd5e"]  | —               | off     |
 | timer              | timer.                       | null              | —               | off     |
 | mythic-gme         | mythic.                      | null              | —               | off     |
