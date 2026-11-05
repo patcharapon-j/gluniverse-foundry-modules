@@ -912,7 +912,11 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 
 /* Tags: ink chips cut with the system's 115° wedge, meta type. */
 .gluniverse-stream-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+/* On the tracking table the tags sit on the cell itself, which has to stay a table cell or the row breaks. */
+td.gluniverse-stream-tags { display: table-cell; line-height: 1.9; }
 .gluniverse-stream-tags > span {
+  display: inline-block;
+  margin-inline-end: 4px;
   padding: 3px 10px;
   background: var(--glus-ink-3);
   clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%);
@@ -974,7 +978,10 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   margin-block: 4px 10px;
   font-size: var(--gl-is-t-lead);
 }
-.gluniverse-stream-number-grid > label { display: flex; align-items: center; gap: 8px; margin: 0; }
+.gluniverse-stream-number-grid > label { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--glus-text); }
+/* A label that carries its own control keeps its words on one line and lets the control give way. */
+.gluniverse-stream-number-grid > label:has(select, input[type="range"]) { white-space: nowrap; color: var(--glus-faint); font-size: var(--gl-is-t-body); }
+.gluniverse-stream-number-grid > label > :is(select, input[type="range"]) { flex: 1 1 auto; min-width: 0; }
 .gluniverse-stream-director .form-group { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
 .gluniverse-stream-director .form-group > label { flex: 0 0 140px; font-size: var(--gl-is-t-body); color: var(--glus-faint); }
 
@@ -986,7 +993,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   padding-inline-end: 4px;
   font-size: var(--gl-is-t-lead);
 }
-.gluniverse-stream-filter-intro { margin: 0 0 6px; line-height: 1.5; color: var(--glus-dim); }
+.gluniverse-stream-filter-intro { max-width: 68ch; margin: 0 0 6px; line-height: 1.5; color: var(--glus-dim); }
 .gluniverse-stream-filter .gluniverse-stream-form-hint { margin: 0 0 8px; color: var(--glus-faint); font-size: var(--gl-is-t-body); }
 
 .gluniverse-stream-filter-presets {
@@ -1033,13 +1040,28 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 .gluniverse-stream-filter-bulk {
   display: flex !important;
   justify-content: center;
-  gap: 8px;
+  gap: 2px;
   margin-top: 4px;
   font-size: var(--gl-is-t-meta);
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
 }
+/* All / None: small ink cells rather than bare words, so a column flip is an easy target. */
+.gluniverse-stream-filter .gluniverse-stream-filter-bulk button {
+  height: 22px;
+  padding: 0 8px;
+  background: none;
+  box-shadow: none;
+  clip-path: none;
+  color: var(--glus-dim);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.gluniverse-stream-filter .gluniverse-stream-filter-bulk button:hover:not(:disabled) { background: var(--glus-ink-3); box-shadow: none; translate: none; color: var(--glus-text); }
+.gluniverse-stream-filter .gluniverse-stream-filter-bulk button:focus-visible { outline-offset: -2px; }
 .gluniverse-stream-filter-group-head th {
   padding: 16px 8px 6px;
   text-align: left;
