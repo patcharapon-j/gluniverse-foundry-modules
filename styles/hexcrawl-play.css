@@ -249,7 +249,9 @@
 .glhex-card .glhex-card-btn:hover:not(:disabled) { background: var(--glhex-ink-4); translate: 0 var(--gl-lift); }
 .glhex-card .glhex-card-btn:active:not(:disabled) { scale: var(--gl-is-press); }
 .glhex-card .glhex-card-btn:disabled { opacity: var(--gl-is-disabled); cursor: default; }
-.glhex-card .glhex-card-btn:focus-visible { outline: var(--gl-is-focus-ring); outline-offset: var(--gl-is-focus-offset); }
+/* The cut corner clips an outline, so the focus mark sits inside the edge. */
+.glhex-card .glhex-card-btn:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--glhex-paper), inset 0 0 0 3px var(--glhex-ink-0); }
+.glhex-card .glhex-card-btn:is(.is-primary, .gl-btn-accent):focus-visible { box-shadow: inset 0 0 0 2px var(--glhex-on-slab); }
 .glhex-card .glhex-card-btn:is(.is-primary, .gl-btn-accent) { background: var(--glhex-paper); box-shadow: none; color: var(--glhex-on-slab); }
 .glhex-card .glhex-card-btn:is(.is-primary, .gl-btn-accent):hover:not(:disabled) { background: var(--glhex-text); }
 

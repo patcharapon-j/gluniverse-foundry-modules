@@ -730,6 +730,12 @@ for (const f of markupFiles) {
   const buttons = arrivalSrc.match(/<button[^>]*>/g) ?? [];
   ok("every chat card button carries .glhex-card-btn", buttons.length > 0 && buttons.every((b) => /glhex-card-btn/.test(b)));
   ok("the chat card sizes its buttons (The Size-It-Yourself Rule)", /\.glhex-card-btn\s*\{[^}]*font-size/.test(allCss));
+  // A cut corner is a clip-path, which clips an outline too: every cut control
+  // a keyboard can reach carries its focus mark inside its own edge.
+  for (const cls of ["glhex-btn", "glhex-mini", "glhex-swatch", "glhex-import-btn", "glhex-card-btn"]) {
+    const re = new RegExp(`[^{}]*\\.${cls}\\b[^{}]*:focus-visible[^{]*\\{[^}]*box-shadow:\\s*inset`);
+    ok(`.${cls} draws its focus mark inside its clipped edge`, re.test(allCss));
+  }
   // The title leads; what the card is sits under it in sentence case. A
   // spaced-caps kicker above it wrapped to two lines and buried the result.
   ok("no card draws a kicker above its title", !/glhex-card-kicker/.test(arrivalSrc)

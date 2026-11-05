@@ -264,6 +264,9 @@ ${shots.map((s) => `<section class="pv-shot" data-id="${s.id}"><h2>${s.note}</h2
   if (only) for (const s of document.querySelectorAll(".pv-shot")) if (!only.includes(s.dataset.id)) s.remove();
   if (q.get("ground") === "parchment") document.body.classList.add("pv-parchment");
   if (q.get("zoom")) document.body.style.zoom = q.get("zoom");
+  // ?focus=<selector>: focus the first match in every shot, for a still of the
+  // keyboard focus mark (no pointer has moved, so :focus-visible matches).
+  if (q.get("focus")) for (const s of document.querySelectorAll(".pv-shot")) s.querySelector(q.get("focus"))?.focus();
 </script>
 </body></html>`;
 writeFileSync(OUT, page);

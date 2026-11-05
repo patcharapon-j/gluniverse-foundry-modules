@@ -911,3 +911,15 @@
   outline: var(--gl-is-focus-ring);
   outline-offset: var(--gl-is-focus-offset);
 }
+/* A cut corner is a clip-path, and a clip-path clips the outline with it, so
+   the ring above would be drawn and never seen. Cut controls carry the mark
+   inside their own edge instead: paper on ink, ink on a paper or amber slab. */
+:is(.glhex-root, .glhex-import) :is(.glhex-btn, .glhex-mini, .glhex-swatch, .glhex-import-btn):focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--glhex-paper), inset 0 0 0 3px var(--glhex-ink-0);
+}
+:is(.glhex-root, .glhex-import) :is(.glhex-btn--primary, .glhex-import-primary, .glhex-reveal:not(.is-idle)):focus-visible {
+  box-shadow: inset 0 0 0 2px var(--glhex-on-slab);
+}
+/* The landmark mark is a diamond; a square ring sits wholly inside it. */
+.glhex-root .glhex-lm-icon:focus-visible { outline-offset: -9px; }
