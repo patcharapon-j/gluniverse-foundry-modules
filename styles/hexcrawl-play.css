@@ -47,8 +47,13 @@
 
 /* ── Hover tooltip ─────────────────────────────────────────────────────── */
 
+/* Anchored at the corner and moved by `transform` (tooltip.mjs `_place`), so a
+   pointer move costs no layout. `translate` below is the arrival, and composes
+   with it. */
 .glhex-tooltip {
   position: fixed;
+  top: 0;
+  left: 0;
   z-index: var(--gl-z-tooltip);
   min-width: 200px;
   max-width: 300px;

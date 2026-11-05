@@ -288,23 +288,25 @@ class Tooltip {
     el.classList.toggle("is-pinned", !!pinned);
     el.classList.add("is-visible");
     el.dataset.key = key;
+    // The box changes only when its content does, so it is measured here, once
+    // per show, and never on a pointer move (a read there would flush the layout
+    // the previous move dirtied, on every move).
+    const box = el.getBoundingClientRect();
+    this._box = { w: box.width, h: box.height, z: uiScale(el) };
     if (at) this._place(at);
   }
 
   _place({ x, y }) {
     const el = this.el;
-    if (!el) return;
-    // The tooltip sits in the suite's interface-scale roster (CSS zoom), so
-    // left/top are multiplied by the zoom: position in unzoomed units, measure
-    // the rendered box.
-    const z = uiScale(el);
-    const box = el.getBoundingClientRect();
-    const w = box.width, h = box.height;
+    if (!el || !this._box) return;
+    // The tooltip sits in the suite's interface-scale roster (CSS zoom), so its
+    // own lengths are multiplied by the zoom: position in unzoomed units. It is
+    // moved by transform, which the compositor applies without a layout.
+    const { w, h, z } = this._box;
     let left = x + OFFSET, top = y + OFFSET;
     if (left + w > window.innerWidth - EDGE) left = Math.max(EDGE, x - OFFSET - w);
     if (top + h > window.innerHeight - EDGE) top = Math.max(EDGE, y - OFFSET - h);
-    el.style.left = `${Math.round(left / z)}px`;
-    el.style.top = `${Math.round(top / z)}px`;
+    el.style.transform = `translate(${Math.round(left / z)}px, ${Math.round(top / z)}px)`;
   }
 
   _hide() {

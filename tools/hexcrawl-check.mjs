@@ -917,6 +917,11 @@ ok("apps/ exists", appFiles.length > 0);
     (mv.match(/isBorder\(map, to\)/g) ?? []).length >= 2);
   const tipSrc = stripComments(readFileSync(join(FEAT, "tooltip.mjs"), "utf8"));
   ok("the tooltip tells a player nothing about a border hex", /v\.border[\s\S]{0,200}?if \(!gm\) return null;/.test(tipSrc));
+  // A pointer move must cost no layout: no measuring and no left/top in
+  // `_place`, which runs on every move. The box is measured once per show.
+  const place = tipSrc.match(/\n {2}_place\([^)]*\) \{[\s\S]*?\n {2}\}/)?.[0] ?? "";
+  ok("a tooltip move reads no layout and writes only transform",
+    !!place && !/getBoundingClientRect|getComputedStyle|uiScale\(|offset(Width|Height)|style\.(left|top)/.test(place) && /style\.transform/.test(place));
 }
 delete globalThis.game; delete globalThis.Hooks;
 for (const f of appFiles) {
