@@ -125,6 +125,7 @@ if (before) document.getElementById("stream-css").href = "/.preview/stream-befor
 const lang = Object.assign({},
   await (await fetch("/lang/stream.en.json")).json(),
   await (await fetch("/lang/stream-cards.en.json")).json(),
+  await (await fetch("/lang/stream-targets.en.json")).json(),
   await (await fetch("/lang/en.json")).json().catch(() => ({})));
 const localize = (key) => (key in lang ? lang[key] : key);
 const text = async (path) => (await fetch(path)).text();
