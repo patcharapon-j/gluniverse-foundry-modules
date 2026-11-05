@@ -105,9 +105,13 @@ lives 4 s plus 60 ms per character, capped at 12 s. Up to two lines stack on a
 token and three in the lane; an older line dims, the oldest leaves.
 
 Bubbles scale with the square root of the canvas zoom, clamped to 0.8 to 1.15, so
-they stay legible zoomed out and do not swamp the map zoomed in. They carry no
-backdrop blur: they move with every pan, and a blur under a moving element is
-redrawn on every frame. The lane is centred over the hotbar, never under an open
+they stay legible zoomed out and do not swamp the map zoomed in. Nothing here
+carries a backdrop blur, the lane and the switch included: every plate is solid
+ink, and a blur under a plate over the map is redrawn on every frame of a pan.
+That cost sits on the GPU and does not show in a preview's frame intervals
+(measured on the preview: about 4.2 ms per uncapped frame with or without it),
+so the check refuses a `backdrop-filter` outright. Placement itself is cheap:
+re-placing eleven stacks costs about 0.015 ms a frame. The lane is centred over the hotbar, never under an open
 sidebar (`laneBox`), and follows the suite's Interface Scale.
 
 **The chat log.** An in-character entry keeps Foundry's element (timestamp,

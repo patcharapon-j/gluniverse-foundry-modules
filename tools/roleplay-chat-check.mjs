@@ -490,6 +490,10 @@ for (const m of cssBare.matchAll(/(?:transition|animation)\s*:[^;]*;/g)) {
 }
 for (const m of cssBare.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)) ok(m[1].startsWith("glrp-"), `roleplay-chat.css: @keyframes ${m[1]} is not prefixed glrp-`);
 ok(!/backdrop-filter:\s*blur\(\d/.test(cssBare), "roleplay-chat.css: a backdrop blur not written against --gl-glass-k");
+// Every plate here sits over the canvas or a sidebar that may be transparent, and is solid ink so it
+// reads without a blur. A blur under the lane, a balloon or the collapsed-sidebar bar resamples the map
+// on every frame of a pan, a GPU cost no frame-interval measurement in a preview shows.
+ok(!/backdrop-filter\s*:\s*(?!none)/.test(cssBare), "roleplay-chat.css: a backdrop-filter is back — its plates are solid ink and sit over a moving map");
 
 /* ── Ink and Signal ──────────────────────────────────────────────────────── */
 // The skin aliases the core `--gl-is-*` family on its own roots (docs/adr/0012). An Etched Glass token
