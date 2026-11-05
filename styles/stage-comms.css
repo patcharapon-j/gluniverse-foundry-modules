@@ -141,7 +141,7 @@
   position: relative;
   isolation: isolate;
   transform-origin: calc(50% + 50% * var(--glstage-comms-dir)) 50%;
-  transition: transform var(--gl-d-swift) var(--gl-snap);
+  transition: transform var(--gl-d-swift) var(--gl-ease);
 }
 .glstage-comms[data-speaking] .glstage-comms-slot.is-speaking .glstage-comms-body {
   transform: translateX(calc(var(--glstage-comms-dir) * var(--glstage-comms-u) * -5)) scale(1.05);
@@ -849,19 +849,23 @@
   letter-spacing: 0.04em;
   text-shadow: 0 1px 2px var(--glstage-comms-shade), 0 0 calc(var(--glstage-comms-u) * 6) var(--glstage-comms-shade);
 }
+/* The epithet is content, not a label: sentence case at body weight, so a
+   whole "Envoy of the Court" fits a 188px card instead of an ellipsis. */
 .glstage-comms[data-style="clean"] .glstage-comms-title {
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-size: max(var(--glstage-comms-floor), calc(var(--glstage-comms-u) * 5.4));
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
   text-shadow: 0 1px 2px var(--glstage-comms-shade);
 }
 .glstage-comms[data-style="clean"] .glstage-comms-wave {
   align-items: flex-end;
-  height: calc(var(--glstage-comms-u) * 7);
+  height: calc(var(--glstage-comms-u) * 9);
   gap: calc(var(--glstage-comms-u) * 1.2);
   padding-bottom: calc(var(--glstage-comms-u) * 0.6);
 }
 .glstage-comms[data-style="clean"] .glstage-comms-wave i {
-  width: max(2px, calc(var(--glstage-comms-u) * 1.5));
+  width: max(3px, calc(var(--glstage-comms-u) * 2));
   transform-origin: 50% 100%;
   background: var(--glstage-comms-hot);
   border-radius: 0;
