@@ -104,6 +104,12 @@
   inset: 0;
   pointer-events: none;
 }
+/* The edge fades in and out as one: its own layer, so neither beat repaints
+   the screen-sized veil and rim under it. Nothing inside reaches out. */
+.insight-edge {
+  contain: strict;
+  will-change: opacity;
+}
 
 /* the room goes dark toward its edges, so the light at the rim reads as light
    and not as fog, and the eye is pulled in to the card */
