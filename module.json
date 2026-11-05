@@ -51,7 +51,6 @@
     "styles/pf2e-odds-surfaces.css",
     "styles/pf2e-odds-dice.css",
     "styles/pf2e-odds-observations.css",
-    "styles/pf2e-saves.css",
     "styles/spotlight-roll.css",
     "styles/spotlight-roll-app.css",
     "styles/combat-intro.css",
@@ -183,11 +182,6 @@
       "lang": "en",
       "name": "English",
       "path": "lang/pf2e-odds.en.json"
-    },
-    {
-      "lang": "en",
-      "name": "English",
-      "path": "lang/pf2e-saves.en.json"
     },
     {
       "lang": "en",
