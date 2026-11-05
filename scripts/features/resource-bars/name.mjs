@@ -451,17 +451,22 @@ function releaseRaster(r) {
  * forget every measurement and redraw every raster into its own canvas (the
  * textures the labels hold stay valid) and tell the host, whose labels re-fit.
  * The same contract ticker.mjs keeps for DYING and DEAD.
+ *
+ * The face is split by unicode-range (Latin, Latin-ext, and a Thai companion
+ * in the stack), and check/load only consider the faces their sample text
+ * needs, a space by default. So the sample names one character from each.
  */
+const FACE_SAMPLE = "AĀก";
 let faceWaiting = false;
 export function awaitLabelFace(onReady) {
   const fonts = globalThis.document?.fonts;
   if (faceWaiting || typeof fonts?.check !== "function" || typeof fonts.load !== "function") return;
   const font = NAME_LAYOUT.weight + " " + NAME_LAYOUT.measurePx + "px " + labelFont();
   let ready = true;
-  try { ready = fonts.check(font); } catch { return; }
+  try { ready = fonts.check(font, FACE_SAMPLE); } catch { return; }
   if (ready) return;
   faceWaiting = true;
-  fonts.load(font).then(() => {
+  fonts.load(font, FACE_SAMPLE).then(() => {
     faceWaiting = false;
     widths.clear();
     measurer = null;
