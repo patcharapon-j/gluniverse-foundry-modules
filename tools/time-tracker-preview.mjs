@@ -20,6 +20,14 @@
  *   &mission=1       a mission countdown is live
  *   &impl=old        origin/main's code and styles (needs --old)
  *   &seek=11         freeze the weather loop at 11 s (headless stills)
+ *   &glitch=1        the GM's temporal distortion is on
+ *   &view=hud        what else to open beside the bar, each the shipped app:
+ *                    weather (the Hex Flower window), calendar (with a day
+ *                    selected), events, wxeditor, delveditor, caledit, modcfg,
+ *                    shiftnames, cards (the weather and delve chat cards)
+ *
+ * Templates are compiled with the real Handlebars (from a CDN, as the stream
+ * preview does), so every app's template renders as Foundry would render it.
  *
  * `--old` extracts origin/main's scripts, styles, templates and lang into
  * .preview/old/ so the same page can show the before.
@@ -43,6 +51,7 @@ if (process.argv.includes("--old")) {
 const html = `<!doctype html>
 <html><head><meta charset="utf-8"><title>Time HUD preview</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.7.8/handlebars.min.js"></script>
 <script>
   const BASE = new URLSearchParams(location.search).get("impl") === "old" ? "/.preview/old/" : "/";
   for (const s of ["gl-fonts", "gl-tokens", "gl-motion", "clocks-tracker-hud", "clocks-tracker-weather", "clocks-tracker-delving"])
@@ -58,6 +67,17 @@ const html = `<!doctype html>
     radial-gradient(60% 60% at 50% 50%, #1c211b, #0b0d0c); }
   #err { position: fixed; left: 8px; bottom: 8px; color: #ff6b6b; font: 12px monospace; white-space: pre; z-index: 99; }
   #glct-hud { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 30; }
+  /* A stand-in for Foundry's own window frame, so a framed app sits where it would. */
+  .pv-stage { position: fixed; top: 220px; left: 0; right: 0; bottom: 0; display: flex; gap: 18px; justify-content: center; align-items: flex-start; flex-wrap: wrap; overflow: auto; padding: 0 18px 18px; z-index: 20; }
+  .pv-stage > .application { position: relative !important; inset: auto !important; transform: none !important; }
+  .application.pv-framed { display: flex; flex-direction: column; background: #0b0a13; color: #e7e6ef; border: 1px solid #302f3d; border-radius: 6px; box-shadow: 0 0 20px #000; font: 14px/1.4 "Signika", system-ui, sans-serif; }
+  .application.pv-framed > .window-header { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border-bottom: 1px solid #302f3d; font-weight: 700; }
+  .application.pv-framed > .window-header .window-title { flex: 1; margin: 0; font-size: 14px; }
+  .application.pv-framed > .window-content { padding: 12px; overflow: auto; }
+  .pv-chat { width: 300px; background: #0b0a13; border: 1px solid #302f3d; padding: 6px; display: flex; flex-direction: column; gap: 8px; }
+  .pv-chat .chat-message { background: #1a1922; border: 1px solid #302f3d; border-radius: 5px; padding: 8px; color: #e7e6ef; font: 14px/1.4 system-ui, sans-serif; }
+  .pv-chat .message-header { display: flex; justify-content: space-between; font-size: 12px; }
+  .pv-chat .message-metadata { display: flex; }
 </style></head>
 <body><div id="map"></div><pre id="err" class="err"></pre>
 <script type="module">
@@ -76,40 +96,11 @@ try {
   const localize = (k) => labels[k] ?? k;
   const format = (k, d = {}) => localize(k).replace(/{(\\w+)}/g, (_, n) => d[n] ?? "");
 
-  /* ---------------- a tiny Handlebars: if / unless / else / localize / vars ---------------- */
+  /* ---------------- Handlebars: the real one, with Foundry's localize helper ---------------- */
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  function parse(src) {
-    src = src.replace(/{{!--[\\s\\S]*?--}}/g, "").replace(/{{![\\s\\S]*?}}/g, "");
-    const root = { kids: [] }, stack = [root];
-    const re = /{{([#/]?)(\\w+)?\\s*([^}]*)}}/g;
-    let last = 0, m;
-    while ((m = re.exec(src))) {
-      stack.at(-1).kids.push(src.slice(last, m.index));
-      last = re.lastIndex;
-      const [, sig, name, arg] = m;
-      if (sig === "#") { const n = { block: name, arg: arg.trim(), kids: [], alt: null }; stack.at(-1).kids.push(n); stack.push(n); }
-      else if (sig === "/") stack.pop();
-      else if (name === "else") { const n = stack.at(-1); n.alt = []; n.kids = n.kids; n.inAlt = true; }
-      else stack.at(-1)[stack.at(-1).inAlt ? "alt" : "kids"].push({ tag: name, arg: arg.trim() });
-    }
-    stack.at(-1).kids.push(src.slice(last));
-    return root;
-  }
-  function run(node, ctx) {
-    let out = "";
-    for (const k of node.kids ?? []) {
-      if (typeof k === "string") out += k;
-      else if (k.block) {
-        const v = k.arg.split(".").reduce((o, p) => o?.[p], ctx);
-        const truthy = k.block === "unless" ? !v : !!v;
-        out += truthy ? run({ kids: k.kids }, ctx) : run({ kids: k.alt ?? [] }, ctx);
-      } else if (k.tag === "localize") out += esc(localize(k.arg.replace(/^['"]|['"]$/g, "")));
-      else out += esc([k.tag, ...(k.arg ? [k.arg] : [])].join(".").split(".").reduce((o, p) => o?.[p], ctx));
-    }
-    return out;
-  }
-  // else markers land in the open block's alt list
-  const compile = (src) => { const tree = parse(src); return (ctx) => run(tree, ctx); };
+  Handlebars.registerHelper("localize", (k, opts) => Object.keys(opts?.hash ?? {}).length ? format(k, opts.hash) : localize(k));
+  Handlebars.registerHelper("json", (v) => JSON.stringify(v, null, 2));
+  const compile = (src) => Handlebars.compile(src);
 
   /* ---------------- Foundry stand-ins ---------------- */
   const values = new Map();
@@ -145,19 +136,27 @@ try {
         const path = p.template.replace("modules/" + manifest.id + "/", BASE);
         out += compile(await fetch(path).then((r) => r.text()))(ctx);
       }
+      const framed = this.options.window?.frame !== false;
       if (!this.element) {
         const el = document.createElement(this.options.tag || "div");
         if (this.options.id) el.id = this.options.id;
         el.classList.add("application", ...(this.options.classes ?? []));
+        if (framed) {
+          el.classList.add("pv-framed");
+          const w = this.options.position?.width;
+          if (typeof w === "number") el.style.width = w + "px";
+          const title = localize(this.options.window?.title ?? "");
+          el.innerHTML = '<header class="window-header"><h1 class="window-title">' + esc(title) + '</h1><button type="button" class="header-control fa-solid fa-xmark"></button></header><section class="window-content"></section>';
+        }
         el.addEventListener("click", (ev) => {
           const t = ev.target.closest("[data-action]");
           const fn = t && this.options.actions[t.dataset.action];
           if (fn) fn.call(this, ev, t);
         });
-        document.body.append(el);
+        (framed ? (document.querySelector(".pv-stage") ?? document.body) : document.body).append(el);
         this.element = el;
       }
-      this.element.innerHTML = out;
+      (framed ? this.element.querySelector(".window-content") : this.element).innerHTML = out;
       this.rendered = true;
       await this._onRender(ctx, {});
       return this;
@@ -222,8 +221,15 @@ try {
   S(SETTINGS.hudCollapsed, q.get("collapsed") === "1");
   S(SETTINGS.hudVisibleToPlayers, true);
   S(SETTINGS.shiftLevelMode, false);
-  S(SETTINGS.hudGlitch, false);
-  S(SETTINGS.events, [{ id: "e1", name: "Harvest Moon", month: 3, day: 9, scope: "day", visibleToPlayers: true }]);
+  S(SETTINGS.hudGlitch, q.get("glitch") === "1");
+  // Events around today, so the badge, the calendar bands and the detail panel all have rows.
+  const now = time.components, mo = now.month, td = now.dayOfMonth + 1;
+  S(SETTINGS.events, [
+    { id: "e1", name: "Harvest Moon", month: mo, day: td, scope: "day", visibleToPlayers: true, notePublic: "The whole valley lights its lanterns." },
+    { id: "e2", name: "Caravan to Ourolyn", month: mo, day: Math.max(1, td - 1), endMonth: mo, endDay: td + 3, scope: "range", visibleToPlayers: true, pinned: true },
+    { id: "e3", name: "The Duke's Tithe", month: mo, day: td + 5, scope: "day", visibleToPlayers: false, notePrivate: "The tithe is short by a third." },
+    { id: "e4", name: "Month of Ash", month: mo, scope: "month", visibleToPlayers: true }
+  ]);
   S(SETTINGS.mission, q.get("mission") === "1" ? { active: true, target: time.worldTime + 600 * 22, label: "Reach the pass", kind: "deadline" } : { active: false });
   const kind = q.get("wx") ?? "storm";
   S(SETTINGS.weatherEnabled, kind !== "none");
@@ -254,6 +260,72 @@ try {
     fx.WeatherEffect.seek?.(Number(seek) || 0);
     const i = GlctHud.instance;
     for (const e of [i?._wx, i?._dx]) if (e?.model?.look === "storm") { e._strike(0.8); e._draw(); }
+  }
+
+  /* ---------------- the other surfaces, each the shipped app ---------------- */
+  const view = q.get("view") ?? "hud";
+  if (view !== "hud") {
+    const stage = document.createElement("div");
+    stage.className = "pv-stage";
+    document.body.append(stage);
+    const app = (f) => import(BASE + "scripts/features/clocks-tracker/apps/" + f);
+    globalThis.ChatMessage = { implementation: { getSpeaker: () => ({}), create: async () => null } };
+    if (view === "weather") {
+      const { WeatherHud } = await app("weather-hud.js");
+      await WeatherHud.open();
+      const el = document.getElementById("glct-weather-hud");
+      if (el) { el.style.position = "fixed"; el.style.left = "calc(50% - 144px)"; el.style.top = "220px"; }
+    } else if (view === "calendar") {
+      const { CalendarView } = await app("calendar-view.js");
+      await CalendarView.show();
+      const cell = document.querySelector('.glct-calendar .cal-cell[data-day="' + td + '"]');
+      cell?.click();
+    } else if (view === "events") {
+      const { EventsEditor } = await app("events-editor.js");
+      await EventsEditor.show();
+    } else if (view === "wxeditor") {
+      const { WeatherEditor } = await app("weather-editor.js");
+      await WeatherEditor.show();
+    } else if (view === "delveditor") {
+      const { DelvingEditor } = await app("delving-editor.js");
+      await DelvingEditor.show();
+    } else if (view === "caledit") {
+      const { CalendarEditor } = await app("calendar-editor.js");
+      await CalendarEditor.show();
+    } else if (view === "modcfg") {
+      const { ModuleConfigEditor } = await app("module-config-editor.js");
+      await ModuleConfigEditor.show();
+    } else if (view === "shiftnames") {
+      const { ShiftNamesEditor } = await app("shift-names-editor.js");
+      await ShiftNamesEditor.show();
+    } else if (view === "cards") {
+      const { WeatherEngine } = await import(BASE + "scripts/features/clocks-tracker/weather/engine.js");
+      const { DelvingStore } = await import(BASE + "scripts/features/clocks-tracker/delving/delving-store.js");
+      const w = game.settings.get("", SETTINGS.weather);
+      const region = w?.regions?.[w.activeRegion];
+      const season = region ? WeatherEngine.resolveSeason(region.climate, Object.keys(region.climate.seasons ?? {})[0]) : null;
+      const at = region?.state?.currentIndex ?? 9;
+      const hex = season?.hexes?.[at] ?? { label: "Storm", icon: "fa-solid fa-cloud-bolt", effect: effectFromKind("storm") };
+      const ominous = { ...hex, label: "Blood Rain", description: "Red rain hisses where it lands.", effectNote: "Exposure: DC 18 Fortitude each hour.", effect: { ...hex.effect, ominous: true, tintGlow: "#ff4d5a" } };
+      const cards = [
+        WeatherEngine._cardHtml({ hex: { ...hex, description: hex.description ?? "Thunder rolls down the valley." }, index: at, seasonName: "Spring", meta: { from: 4, dir: "upperRight", roll: 7 } }),
+        WeatherEngine._cardHtml({ hex: ominous, index: at, seasonName: "Spring", meta: {} }),
+        DelvingStore._cardHtml({ turn: 4, label: "Turn", featuredId: "a", header: true, rolls: [
+          { id: "a", name: "Torches", icon: "fa-solid fa-fire", tint: "#ff9a3c", faces: [6, 2, 1, 5], discard: 2, size: 6, stageName: "Guttering", remaining: 2, stageShift: true },
+          { id: "b", name: "Rations", icon: "fa-solid fa-bread-slice", tint: "#9aa3b0", faces: [], discard: 0, size: 6, stageName: "Starving", empty: true, terminal: true, terminalName: "Famine", ominous: true }
+        ] })
+      ];
+      const log = document.createElement("div");
+      log.className = "pv-chat";
+      log.id = "chat-log";
+      for (const [i, c] of cards.entries()) {
+        const msg = document.createElement("div");
+        msg.className = "chat-message " + (i < 2 ? "glct-weather-msg" : "glct-delve-msg");
+        msg.innerHTML = '<header class="message-header"><span class="message-sender">GM</span><span class="message-metadata"><time>2m ago</time></span></header><div class="message-content">' + c + "</div>";
+        log.append(msg);
+      }
+      stage.append(log);
+    }
   }
   document.body.dataset.ready = "1";
 } catch (e) { report(e.stack || e); }

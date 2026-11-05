@@ -8,7 +8,7 @@
  * continuous, exactly like the approved mockup.
  */
 
-import { MODULE_ID, SETTINGS, FALLBACK_TINTS, GLITCH_PALETTE } from "../const.js";
+import { MODULE_ID, SETTINGS, FALLBACK_TINTS } from "../const.js";
 import { animate, createMotionOwner, motionDuration } from "../../../core/motion.mjs";
 import { Features } from "../features.js";
 import { TimeEngine } from "../engine.js";
@@ -193,7 +193,6 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this._prevTurn = null;
     clearTimeout(this._rollSafety); this._rollSafety = null; this._rollSafetySeq = null;
     this._frameBar();
-    this._cloneMissionGlow();
     this._buildDynamic();
     this._applyFeatureGates();
     // the stream login can be (re)assigned mid-session; re-gate the event pills
@@ -224,20 +223,6 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     frame.className = "bar-frame";
     bar.before(frame);
     frame.appendChild(bar);
-  }
-
-  /**
-   * Give each mission-readout glyph a glyph-shaped halo twin (.mc-glow) whose
-   * static text-shadow breathes by opacity alone, replacing a drop-shadow filter
-   * animation that repainted the icon — and the bar — every frame.
-   */
-  _cloneMissionGlow() {
-    this.element?.querySelectorAll(".missline .mc-ico > i:not(.mc-glow)").forEach(icon => {
-      const glow = icon.cloneNode(false);
-      glow.classList.add("mc-glow");
-      glow.setAttribute("aria-hidden", "true");
-      icon.before(glow);
-    });
   }
 
   /**
@@ -1053,15 +1038,6 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     // Mission countdown changes how the stretch meter reads (see CSS .mission).
     root.querySelector(".hud-root")?.classList.toggle("mission", st.mission.active);
 
-    // per-shift theming — suppressed while glitched, where _setGlitchPalette pins
-    // a cold "lost signal" palette so the watch colour can't betray the time of day.
-    if (!this.glitched) {
-      root.style.setProperty("--tint", st.watch.tint);
-      root.style.setProperty("--tint2", st.watch.tint2);
-      root.style.setProperty("--glow", st.watch.glow);
-      root.style.setProperty("--glowsoft", st.watch.soft);
-    }
-
     // light sweep on shift change
     if (this._prevShift !== null && st.shiftIndex !== this._prevShift) {
       const bar = root.querySelector("[data-bar]");
@@ -1205,11 +1181,12 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this._ringSqs.forEach((rect, idx) => {
       const inHour = Math.floor(idx / 6) === st.hourOfShift;
       const passed = idx < st.stretchInShift, head = idx === st.stretchInShift;
-      let k = 1, fill = "rgba(255,255,255,.14)", filt = "none";
-      if (head) { k = 2.9; fill = "#fff"; filt = "drop-shadow(0 0 3.2px rgba(255,255,255,1))"; }
-      else if (inHour) { k = 1.55; fill = passed ? "var(--tint)" : "rgba(255,255,255,.22)"; }
-      else if (passed) { k = 1; fill = "var(--tint)"; }
-      rect.style.transform = `scaleY(${k})`; rect.style.fill = fill; rect.style.filter = filt;
+      // Ink and Signal: the head is paper, passed stretches steel, the rest ink.
+      let k = 1, fill = "var(--glct-ink-5)";
+      if (head) { k = 2.9; fill = "var(--glct-paper)"; }
+      else if (inHour) { k = 1.55; fill = passed ? "var(--glct-steel)" : "var(--glct-ink-6)"; }
+      else if (passed) { k = 1; fill = "var(--glct-steel)"; }
+      rect.style.transform = `scaleY(${k})`; rect.style.fill = fill;
     });
 
     // event chips — today's events, any GM-pinned upcoming events, then the
@@ -1462,7 +1439,8 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
    * so the bar keeps its true, stable width and NEVER jitters. The scramble is
    * shown by an absolutely-positioned ::after (content:attr(data-glitch)), which
    * can't affect layout, refreshed once a second; the digit reels scramble too.
-   * Engaging also pins the cold "lost-signal" palette and parks the dioramas;
+   * Engaging also parks the dioramas (the bar carries no watch colour that could
+   * leak the time);
    * lifting clears the scramble attrs and repaints the truth.
    */
   _applyGlitch() {
@@ -1475,7 +1453,6 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
     clearInterval(this._glitchT); this._glitchT = null;
     if (on) {
-      this._setGlitchPalette();
       // the static field subsumes the whole background — park the live weather and
       // delving dioramas (CSS hides them too) so only the distortion shows.
       this._wx?.pause(); this._dx?.pause();
@@ -1491,15 +1468,6 @@ export class GlctHud extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   }
 
-  /** Pin a cold, unstable "signal lost" palette while glitched (the per-shift
-   *  theming is suppressed in _paint so this isn't overwritten on the next paint). */
-  _setGlitchPalette() {
-    const el = this.element;
-    el.style.setProperty("--tint", GLITCH_PALETTE.tint);
-    el.style.setProperty("--tint2", GLITCH_PALETTE.tint2);
-    el.style.setProperty("--glow", GLITCH_PALETTE.glow);
-    el.style.setProperty("--glowsoft", GLITCH_PALETTE.soft);
-  }
 
   /** Glyph pool — letters + digits + technical punctuation, so the readout reads
    *  as scrambling characters rather than pure symbols. */

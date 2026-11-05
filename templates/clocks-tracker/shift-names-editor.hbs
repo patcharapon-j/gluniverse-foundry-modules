@@ -3,7 +3,7 @@
 
   {{#each rows}}
   <div class="ced-row sne-row">
-    <span class="sne-swatch" style="--sne-tint: {{this.tint}}"></span>
+    <span class="sne-num">{{this.number}}</span>
     <input type="text" name="shift-{{this.index}}" value="{{this.value}}" placeholder="{{this.placeholder}}" autocomplete="off" />
   </div>
   {{/each}}

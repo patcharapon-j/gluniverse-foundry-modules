@@ -28,6 +28,7 @@ export class SetTimeDialog {
     try {
     await DialogV2.prompt({
       window: { title: game.i18n.localize("GLCT.controls.setTime") },
+      classes: ["glct-settime"],
       content,
       ok: {
         label: game.i18n.localize("GLCT.editor.save"),
