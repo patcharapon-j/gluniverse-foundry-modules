@@ -14,7 +14,7 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 export class TimerPanel extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
     id: "gltimer-panel",
-    classes: ["gltimer-panel"],
+    classes: ["gltimer-panel", "gl-type"],
     window: { title: "GLTIMER.panel.title", icon: "fa-solid fa-stopwatch" },
     position: { width: 340, height: "auto" },
     actions: {
@@ -60,6 +60,16 @@ export class TimerPanel extends HandlebarsApplicationMixin(ApplicationV2) {
       curS: s.active ? totalSec % 60 : 0,
       presets: TimerPanel.PRESETS,
     };
+  }
+
+  /** Enter in either field starts (or sets) the timer, as the button does. */
+  _onFirstRender(context, options) {
+    super._onFirstRender?.(context, options);
+    this.element.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" || !ev.target.closest?.(".gltimer-input")) return;
+      ev.preventDefault();
+      TimerPanel._onStart.call(this, ev);
+    });
   }
 
   _readDurationMs() {
