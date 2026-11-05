@@ -94,6 +94,11 @@ in-character line is narration.
 | Narrator | A film subtitle in the caption lane above the hotbar |
 | OOC | Nothing. The log only |
 
+Over the map the speaker's name is a nameplate: a solid slab of the line's tone
+with the suite's 115° wedge, joined to the spine, on balloons and lane lines alike.
+It wipes in half a beat after its plate lands (`glrp-plate-in`). The chat log and
+the switch keep the name in plain type, because they are tools, not moments.
+
 A line whose token is not on the viewed scene, is hidden, cannot be seen, or is
 off screen goes to the caption lane instead, with the speaker's portrait. A line
 lives 4 s plus 60 ms per character, capped at 12 s. Up to two lines stack on a

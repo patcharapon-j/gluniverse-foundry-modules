@@ -593,13 +593,31 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
   overflow-wrap: anywhere;
   transition: opacity var(--gl-d-swift) var(--gl-ease);
 }
-.glrp-balloon-who {
+/* The nameplate. Over the map the speaker's name is a solid slab of the line's tone, wedged on its
+   right and joined to the spine on its left, so who is talking reads from across the board. It wipes
+   in a beat after its plate lands: the one authored moment of a line's arrival. */
+:is(.glrp-balloon-who, .glrp-line-who) {
   display: block;
-  margin-bottom: 4px;
-  font: 700 var(--gl-is-t-meta)/1 var(--glrp-sans);
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 16px 2px 12px;
+  font: 700 var(--gl-is-t-meta)/1.3 var(--glrp-sans);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: color-mix(in oklab, var(--glrp-hue) 70%, var(--glrp-dim));
+  color: var(--glrp-on);
+  background: var(--glrp-hue);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.glrp-balloon-who { max-width: calc(100% + 14px); margin: -7px 0 6px -14px; padding-left: 14px; }
+.glrp-enter :is(.glrp-balloon-who, .glrp-line-who) {
+  animation: glrp-plate-in var(--gl-d-brisk) var(--gl-ease) calc(var(--gl-d-swift) / 2) both;
+}
+@keyframes glrp-plate-in {
+  from { clip-path: polygon(0 0, 8px 0, 0 100%, 0 100%); }
 }
 .glrp-balloon-txt { display: block; }
 .glrp-balloon.glrp-old { opacity: var(--glrp-old); }
@@ -682,13 +700,7 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
 .glrp-line .glrp-line-art { width: 32px; height: 32px; margin-left: 4px; }
 .glrp-line .glrp-line-art.glrp-mono { font-size: 16px; }
 .glrp-line-body { min-width: 0; }
-.glrp-line-who {
-  margin-bottom: 4px;
-  font: 700 var(--gl-is-t-meta)/1 var(--glrp-sans);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: color-mix(in oklab, var(--glrp-hue) 70%, var(--glrp-dim));
-}
+.glrp-line-who { margin-bottom: 5px; }
 .glrp-line-txt { font: 500 var(--gl-is-t-title)/1.3 var(--glrp-sans); color: var(--glrp-text); overflow-wrap: anywhere; }
 .glrp-line[data-glrp-mode="say"] .glrp-line-txt::before { content: "“"; color: var(--glrp-dim); }
 .glrp-line[data-glrp-mode="say"] .glrp-line-txt::after { content: "”"; color: var(--glrp-dim); }
