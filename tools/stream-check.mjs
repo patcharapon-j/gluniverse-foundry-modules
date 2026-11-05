@@ -977,6 +977,14 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   if (/rgb\(var\(--gl-tint-light\)\s*\/\s*0?\.\d+\)/.test(s)) {
     fail("styles/stream.css: a hand-mixed tint veil — use --gl-is-line / --gl-is-line-strong / --gl-is-hover / --gl-is-selected");
   }
+  // The Control Room re-renders on every saved setting and status report. A panel arrival keyed on
+  // "not hidden" alone replays on each of those; it is keyed on the flag the tab switch sets.
+  for (const m of s.matchAll(/([^{}]*\.gluniverse-stream-tabpanel[^{}]*)\{[^}]*animation\s*:/g)) {
+    if (!/\[data-enter\]/.test(m[1])) fail("styles/stream.css: the tab panel's arrival is not keyed on [data-enter] — every render of the Control Room replays it");
+  }
+  if (!/panel\.dataset\.enter\s*=/.test(read("scripts/features/stream/director-app.js"))) {
+    fail("stream/director-app.js: #showTab no longer sets data-enter — a tab switch plays no arrival");
+  }
 }
 
 /* --------------------------------------------------------- named motion ---- */

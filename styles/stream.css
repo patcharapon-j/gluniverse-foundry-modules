@@ -695,7 +695,8 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   scrollbar-gutter: stable;
 }
 .gluniverse-stream-tabpanel[hidden] { display: none; }
-.gluniverse-stream-tabpanel:not([hidden]) { animation: glus-room-panel var(--gl-d-brisk) var(--gl-ease); }
+/* Set by the tab switch alone (director-app.js #showTab), so a re-render never replays it. */
+.gluniverse-stream-tabpanel[data-enter]:not([hidden]) { animation: glus-room-panel var(--gl-d-brisk) var(--gl-ease); }
 
 /*
  * A section is a run of controls under a small heading and a hairline, not a boxed card: the room is one

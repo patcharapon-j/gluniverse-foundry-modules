@@ -212,7 +212,14 @@ class StreamDirectorApp extends HandlebarsApplicationMixin(ApplicationV2) {
       button.setAttribute("aria-selected", String(button.dataset.tab === id));
     }
     for (const panel of this.element?.querySelectorAll(".gluniverse-stream-tabpanel") ?? []) {
-      panel.hidden = panel.dataset.tab !== id;
+      const show = panel.dataset.tab === id;
+      // Only a tab switch plays the panel's arrival. A render (a setting saved, a status report) rebuilds
+      // the markup, and an arrival keyed on "not hidden" replayed the whole panel's fade on every one.
+      if (show && panel.hidden) {
+        panel.dataset.enter = "";
+        panel.addEventListener("animationend", () => delete panel.dataset.enter, { once: true });
+      }
+      panel.hidden = !show;
     }
   }
 
