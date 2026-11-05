@@ -621,6 +621,10 @@
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n' x='0' y='0' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3.2 0 0 0 -1.35'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   background-size: calc(var(--glstage-comms-u) * 46) calc(var(--glstage-comms-u) * 46);
   mix-blend-mode: screen;
+  /* Twice the window each way, so the static can jump by transform (on the
+     compositor) instead of by background-position (a style pass and a
+     repaint on every frame, per card, for as long as the call is up). */
+  inset: -50%;
 }
 .glstage-comms[data-style="radio"] .glstage-comms-noise {
   opacity: 0.16;
@@ -712,17 +716,18 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--glstage-comms-hot) 70%, transparent), 0 0 calc(var(--glstage-comms-u) * 6) var(--glstage-comms-veil);
 }
 
-/* Static: the noise tile jumps between held positions (a stepped hold drawn
-   with paired stops, so the timing stays a token). */
+/* Static: the noise layer jumps between held offsets (a stepped hold drawn
+   with paired stops, so the timing stays a token). The layer is twice the
+   window, so any offset within ±25% of it still covers the window. */
 @keyframes glstage-comms-static {
-  0%, 12.4%      { background-position: 0 0; }
-  12.5%, 24.9%   { background-position: 37% 61%; }
-  25%, 37.4%     { background-position: 81% 14%; }
-  37.5%, 49.9%   { background-position: 22% 88%; }
-  50%, 62.4%     { background-position: 66% 42%; }
-  62.5%, 74.9%   { background-position: 9% 27%; }
-  75%, 87.4%     { background-position: 93% 76%; }
-  87.5%, 100%    { background-position: 48% 5%; }
+  0%, 12.4%      { transform: translate(0, 0); }
+  12.5%, 24.9%   { transform: translate(-6.5%, 5.5%); }
+  25%, 37.4%     { transform: translate(15.5%, -18%); }
+  37.5%, 49.9%   { transform: translate(-14%, 19%); }
+  50%, 62.4%     { transform: translate(8%, -4%); }
+  62.5%, 74.9%   { transform: translate(-20.5%, -11.5%); }
+  75%, 87.4%     { transform: translate(21.5%, 13%); }
+  87.5%, 100%    { transform: translate(-1%, -22.5%); }
 }
 @keyframes glstage-comms-squelch {
   0%   { opacity: 0.95; }
