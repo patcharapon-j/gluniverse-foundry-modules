@@ -19,7 +19,6 @@ import "./pf2e-flatten/index.mjs";
 import "./critical/index.mjs";
 import "./timer/index.mjs";
 import "./mythic-gme/index.mjs";
-import "./oracles/index.mjs";
 import "./pf2e-recall/index.mjs";
 import "./resource-bars/index.mjs";
 import "./pf2e-aoe/index.mjs";

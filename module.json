@@ -40,7 +40,6 @@
     "styles/critical.css",
     "styles/timer.css",
     "styles/mythic-gme.css",
-    "styles/oracles.css",
     "styles/pf2e-recall.css",
     "styles/pf2e-aoe.css",
     "styles/pf2e-fx.css",
@@ -144,11 +143,6 @@
       "lang": "en",
       "name": "English",
       "path": "lang/mythic-gme.en.json"
-    },
-    {
-      "lang": "en",
-      "name": "English",
-      "path": "lang/oracles.en.json"
     },
     {
       "lang": "en",

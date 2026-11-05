@@ -210,7 +210,6 @@ rather than at the end.
 | critical           | crit.                        | ["pf2e","dnd5e"]  | —               | off     |
 | timer              | timer.                       | null              | —               | off     |
 | mythic-gme         | mythic.                      | null              | —               | off     |
-| oracles            | oracle.                      | null              | —               | off     |
 | pf2e-recall        | rk.                          | pf2e              | —               | off     |
 | resource-bars      | rb.                          | null              | —               | off     |
 | pf2e-aoe            | aoe.                         | pf2e              | —               | off     |

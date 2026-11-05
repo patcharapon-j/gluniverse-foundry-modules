@@ -115,7 +115,7 @@ vocabulary. **This is what feature CSS consumes.**
 >
 > Frame classes stay feature-prefixed. Apply glass to an element *inside*
 > `.window-content`, and scope `--gl-accent` to the frame class so the header
-> inherits it. `styles/pf2e-recall.css` and `styles/oracles.css` show the shape.
+> inherits it. `styles/pf2e-recall.css` shows the shape.
 
 ---
 
