@@ -1,5 +1,5 @@
 import { createCinematicMotion } from "./motion.mjs";
-import { BACKDROP_VAR, colorToInt, fitBox, isVideoPath, mediaStyle, videoEdges } from "./cut-in.mjs";
+import { BACKDROP_VAR, colorToInt, durationLabel, fitBox, isVideoPath, mediaStyle, videoEdges } from "./cut-in.mjs";
 import { cssVar, motionScale } from "../../core/theme.mjs";
 import { onSocket, emitSocket } from "../../core/socket.mjs";
 import { clamp, clamp01, clampNumber } from "../../core/util.mjs";
@@ -227,6 +227,7 @@ class GMConfigMenu extends Base$1 {
       },
       durationMin: DURATION_MIN_MS,
       durationMax: DURATION_MAX_MS,
+      durationLabel: durationLabel(getSetting(SETTINGS.CINEMATIC_DURATION)),
       videoDurationChoices: [
         {
           value: VIDEO_DURATION_MODES.VIDEO,
@@ -240,6 +241,13 @@ class GMConfigMenu extends Base$1 {
         }
       ]
     };
+  }
+  /** The slider's readout follows the thumb, not the last save. */
+  _onRender(context, options) {
+    super._onRender?.(context, options);
+    const range = this.element.querySelector('input[name="cinematicDuration"]');
+    const out = this.element.querySelector(".range-value");
+    if (range && out) range.addEventListener("input", () => { out.value = durationLabel(range.value); });
   }
   static async #onSubmit(_event, _form, formData) {
     const data = formData.object;

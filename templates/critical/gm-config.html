@@ -1,8 +1,5 @@
 <div class="gluc-gm-config" autocomplete="off">
-  <header>
-    <h2>{{localize "GLUC.Settings.MenuName"}}</h2>
-    <p class="notes">{{localize "GLUC.Settings.MenuHint"}}</p>
-  </header>
+  <p class="gluc-lead">{{localize "GLUC.Settings.MenuHint"}}</p>
 
   <section>
     <h3>{{localize "GLUC.Settings.SectionImages"}}</h3>
@@ -44,7 +41,7 @@
       <label>{{localize "GLUC.Settings.CinematicDuration"}}</label>
       <div class="form-fields">
         <input type="range" name="cinematicDuration" min="{{durationMin}}" max="{{durationMax}}" step="50" value="{{data.cinematicDuration}}" />
-        <span class="range-value">{{data.cinematicDuration}} ms</span>
+        <output class="range-value" aria-live="polite">{{durationLabel}}</output>
       </div>
       <p class="notes">{{localize "GLUC.Settings.CinematicDurationHint"}}</p>
     </div>

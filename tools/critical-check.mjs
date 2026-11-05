@@ -96,6 +96,13 @@ for (const [path, want] of [
   ok(Number.isFinite(C.videoEdges(0).easeIn), "a zero-length clip still yields finite edges");
 }
 
+/* ── the duration readout ────────────────────────────────────────────────── */
+eq(C.durationLabel(1250), "1250 ms", "durationLabel");
+eq(C.durationLabel("800"), "800 ms", "durationLabel reads the slider's string value");
+eq(C.durationLabel(undefined), "0 ms", "durationLabel never prints NaN");
+ok(/addEventListener\("input"[^;]*durationLabel\(/.test(sources["module.js"]), "module.js: the slider readout must follow input, not the last save");
+ok(/\{\{durationLabel\}\}/.test(templates["gm-config.html"]), "gm-config.html: the readout must render durationLabel");
+
 /* ── colour from a token, for PIXI ───────────────────────────────────────── */
 eq(C.colorToInt("#05060a"), 0x05060a, "colorToInt reads #rrggbb");
 eq(C.colorToInt(" #fff "), 0xffffff, "colorToInt reads #rgb");

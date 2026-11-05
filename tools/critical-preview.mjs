@@ -18,12 +18,13 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outArg = process.argv.find((a) => a.startsWith("--out="));
 const OUT = resolve(ROOT, outArg ? outArg.slice("--out=".length) : ".preview/critical.html");
 
+const { durationLabel } = await import(pathToFileURL(join(ROOT, "scripts/features/critical/cut-in.mjs")).href);
 const LANG = JSON.parse(readFileSync(join(ROOT, "lang/critical.en.json"), "utf8"));
 const t = (key, data) => {
   const s = key.split(".").reduce((o, p) => (o && typeof o === "object" ? o[p] : undefined), LANG);
@@ -62,6 +63,7 @@ const gmContext = {
   data: { gmAvatar: "worlds/ashfall/art/cut-ins/npc-default.webp", pcCriticalSfx: "worlds/ashfall/sfx/crit-pc.ogg", gmCriticalSfx: "", cinematicDuration: 1000, videoAudioDefault: true },
   durationMin: 600,
   durationMax: 3000,
+  durationLabel: durationLabel(1000),
   videoDurationChoices: [
     { value: "video", label: "GLUC.Settings.VideoDurationModeChoiceVideo", selected: true },
     { value: "fixed", label: "GLUC.Settings.VideoDurationModeChoiceFixed", selected: false },
@@ -151,7 +153,12 @@ const html = `<!doctype html>
 ${frames.join("\n")}
 <script type="module">
   import { createCinematicMotion } from "../scripts/features/critical/motion.mjs";
-  import { fitBox, mediaStyle, videoEdges } from "../scripts/features/critical/cut-in.mjs";
+  import { durationLabel, fitBox, mediaStyle, videoEdges } from "../scripts/features/critical/cut-in.mjs";
+  // What GMConfigMenu#_onRender wires: the readout follows the thumb.
+  for (const range of document.querySelectorAll('input[name="cinematicDuration"]')) {
+    const out = range.closest(".form-fields").querySelector(".range-value");
+    range.addEventListener("input", () => { out.value = durationLabel(range.value); });
+  }
   const ART = { pc: { src: ${JSON.stringify(PC_ART)}, w: 1600, h: 900 }, npc: { src: ${JSON.stringify(NPC_ART)}, w: 800, h: 1200 } };
   const DURATION = 1000;
   const q = new URLSearchParams(location.search);

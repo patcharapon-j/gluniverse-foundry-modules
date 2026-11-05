@@ -69,6 +69,12 @@ export function mediaStyle(frame) {
   };
 }
 
+/** The duration slider's readout, written at render and on every input. */
+export function durationLabel(ms) {
+  const n = Math.round(Number(ms));
+  return `${Number.isFinite(n) ? n : 0} ms`;
+}
+
 /**
  * A CSS colour as a PIXI integer. Takes `#rgb` and `#rrggbb` (what a token
  * alias computes to); anything else is `fallback`, so a missing token draws the

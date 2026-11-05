@@ -115,12 +115,11 @@ div:is(.gluc-gm-config, .gluc-actor-config) {
   line-height: 1.4;
 }
 
-div.gluc-gm-config > header h2 {
+/* The window header already names the window; the form opens on what it is for. */
+.gluc-gm-config .gluc-lead {
   margin: 0;
-  border: 0;
-  font-size: var(--gl-is-t-title);
-  font-weight: 700;
-  line-height: 1.2;
+  color: var(--gluc-dim);
+  font-size: var(--gl-is-t-body);
 }
 
 /* A section is one plate: a tone step from the window, a hairline, the cut. */
@@ -194,6 +193,10 @@ div:is(.gluc-gm-config, .gluc-actor-config) :is(input:not([type="checkbox"], [ty
   font-family: var(--gluc-font);
   font-size: var(--gl-is-t-body);
   transition: box-shadow var(--gl-d-quick) var(--gl-ease);
+}
+div:is(.gluc-gm-config, .gluc-actor-config) input::placeholder {
+  color: var(--gluc-faint);
+  opacity: 1;
 }
 div:is(.gluc-gm-config, .gluc-actor-config) :is(input, select):hover:not(:disabled) {
   box-shadow: inset 0 0 0 1px var(--gluc-dim);
