@@ -4,7 +4,8 @@
  * The fill's hue is a function of the health fraction (a resource bar's job is
  * legibility at 40px across a table, so meaning beats theme purity here — see
  * docs/RESOURCE_BARS.md). Every stop is an existing suite hue from
- * `core/theme.mjs`'s PALETTE; nothing new is introduced, and
+ * `core/theme.mjs` (INK_SIGNAL, plus PALETTE for the safe ramp's cyan and the
+ * hues pinned to the initiative tracker); nothing new is introduced, and
  * `tools/resource-bar-check.mjs` pins that those values still equal the ones in
  * `styles/gl-tokens.css`.
  *
@@ -15,23 +16,26 @@
  * OKLab triples and only pays for the inverse transform.
  */
 
-import { PALETTE } from "../../core/theme.mjs";
+import { INK_SIGNAL as IS, PALETTE, mix } from "../../core/theme.mjs";
 
 /**
  * The two ramps, low health first (index 0 = empty, last = full).
  *
- * `default` runs green → yellow → orange → red. `signal` is skipped in favour
- * of `warnDeep`: #ffd24a and #ffb12d are close enough that spending a stop on
- * both turns the yellow→red half into one long orange.
+ * `default` is Ink and Signal's four verdict hues in order of danger: green →
+ * amber → ember → red. Health is the one quantity on a bar that is a verdict,
+ * which is the Signal Rule's whole condition for a hue.
  *
  * `safe` is the protan/deutan alternative offered as a client setting. It
- * abandons the red/green axis entirely for blue → cyan → yellow → orange, which
+ * abandons the red/green axis entirely for blue → cyan → amber → ember, which
  * separates on the axis those viewers still have, and separates on lightness
- * besides.
+ * besides. Its cyan bridge is the one Etched Glass hue left on the bar, kept on
+ * purpose: Ink and Signal has no hue between amber and info, and the straight
+ * OKLab line between two opposite hues runs through grey, which is "muddy"
+ * read as "neutral" in exactly the ramp that exists to stay legible.
  */
 export const RAMPS = Object.freeze({
-  default: Object.freeze([PALETTE.hazard, PALETTE.warnDeep, PALETTE.signal, PALETTE.good]),
-  safe: Object.freeze([PALETTE.warnDeep, PALETTE.signal, PALETTE.cyan, PALETTE.info]),
+  default: Object.freeze([IS.red, IS.ember, IS.amber, IS.green]),
+  safe: Object.freeze([IS.ember, IS.amber, PALETTE.cyan, IS.info]),
 });
 
 /**
@@ -40,18 +44,17 @@ export const RAMPS = Object.freeze({
  * The health ramp encodes *how hurt something is*. `bar2` is whatever the GM
  * bound it to — spell slots, ammo, morale — and painting a half-full ammo
  * counter the same orange as a half-dead creature says something false about
- * it. So the secondary rail routes through the suite accent instead, which is
- * exactly what the design system reserves `--gl-accent` for, and health
- * semantics stay with the resource that has them.
+ * it. So the secondary rail carries no hue at all (`--gl-is-dim`, the Signal
+ * Rule), and health semantics stay with the resource that has them.
  *
- * Temp HP and the shield rail share the cyan family on purpose — they are the
- * same idea (a buffer in front of your hit points) and should read as related.
- * The secondary rail is the one that must not join them, which is why it takes
- * the accent and they do not.
+ * Temp HP and the shield rail share info blue on purpose — they are the same
+ * idea (a buffer in front of your hit points, a fact with no verdict) and
+ * should read as related. Temp is the lighter tint because it is drawn as a
+ * pane over the liquid and has to read on top of it.
  */
-export const TEMP_COLOR = PALETTE.cyanHot;
-export const SHIELD_COLOR = PALETTE.cyan;
-export const RAIL_COLOR = PALETTE.accent;
+export const TEMP_COLOR = mix(IS.info, IS.text, 0.45);
+export const SHIELD_COLOR = IS.info;
+export const RAIL_COLOR = IS.dim;
 
 /**
  * The two golds the guard-break fracture is drawn in.
@@ -84,12 +87,27 @@ export const DYING_COLOR = PALETTE.orchid;
 export const DYING_HOT = PALETTE.orchidHot;
 
 /**
- * DEAD's steel: `--gl-text-dim`, the suite's quiet neutral. The flatline's line,
- * DEAD's letters and the frame of a dead bar are drawn in it, and nothing else on
- * a dead bar has a hue — the one state on the map that is not a colour is the
- * one that is over.
+ * DEAD's steel: `--gl-is-steel`, Ink and Signal's quiet tone. The flatline's
+ * line, DEAD's letters and the frame of a dead bar are drawn in it, and nothing
+ * else on a dead bar has a hue — the one state on the map that is not a colour
+ * is the one that is over.
  */
-export const DEAD_STEEL = PALETTE.textDim;
+export const DEAD_STEEL = IS.steel;
+
+/**
+ * The readout's inks. At rest it is paper text on an ink outline; an impact
+ * drags it toward the signal for what happened (red for a hit, green for a
+ * heal), and a floating delta is drawn in that signal outright. The signals are
+ * tinted toward paper because a numeral is a few pixels of stroke over a moving
+ * map, and the raw red and green are plate colours, not text colours at that
+ * size.
+ */
+export const READOUT_INK = Object.freeze({
+  rest: IS.text,
+  hit: mix(IS.red, IS.text, 0.3),
+  heal: mix(IS.green, IS.text, 0.45),
+  edge: IS.ink0,
+});
 
 /* ── sRGB ⇄ OKLab ────────────────────────────────────────────────────────
    Björn Ottosson's transform. Kept here rather than in core/theme.mjs because

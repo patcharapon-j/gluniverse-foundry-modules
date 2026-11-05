@@ -2,21 +2,20 @@
 <link rel="stylesheet" href="__ROOT__/styles/gl-fonts.css">
 <link rel="stylesheet" href="__ROOT__/styles/gl-tokens.css">
 <style>
+/* The page's own chrome is Ink and Signal, aliased from core like any skin. */
 :root{
-  --ink0:#02070b; --ink1:#080b11; --ink2:#0b0f17; --ink3:#161d2c;
-  --text:#eef1f7; --text-dim:#98a2b6; --line:rgb(255 255 255 / .09);
-  --accent:#6b86d6; --cyan:#5eeaff; --good:#5fdb92; --hazard:#ff4a52; --signal:#ffd24a;
-  --cut:12px;
-  --sans:var(--gl-display);
-  --mono:var(--gl-tech);
+  --ink0:var(--gl-is-ink-0); --ink1:var(--gl-is-ink-1); --ink2:var(--gl-is-ink-2); --ink3:var(--gl-is-ink-3);
+  --text:var(--gl-is-text); --text-dim:var(--gl-is-dim); --line:var(--gl-is-line);
+  --accent:var(--gl-is-faint); --cyan:var(--gl-is-paper); --good:var(--gl-is-green); --hazard:var(--gl-is-red); --signal:var(--gl-is-amber);
+  --cut:var(--gl-is-cut);
+  --sans:var(--gl-is-font);
+  --mono:var(--gl-is-num);
 }
 *{box-sizing:border-box}
 html{min-height:100%}
 body{
   margin:0; min-height:100%;
-  background:
-    radial-gradient(120% 90% at 50% -10%, #10182a 0%, var(--ink1) 55%, var(--ink0) 100%)
-    fixed;
+  background:var(--ink1);
   color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased;
 }
 /* Above the page, not behind it: the stage and the live panel are opaque, and
@@ -38,7 +37,7 @@ h2::after{content:""; flex:1; height:1px; background:var(--line)}
 .slot{width:100%; height:46px}
 .cap{font-size:11px; color:var(--text-dim); letter-spacing:.04em; line-height:1.4}
 .cap b{display:block; color:var(--text); font-weight:600; font-size:12px; letter-spacing:.02em; margin-bottom:2px}
-.cap i{font-style:normal; font-family:var(--mono); font-size:10.5px; color:var(--accent)}
+.cap i{font-style:normal; font-family:var(--mono); font-size:11px; color:var(--accent)}
 
 /* Scale ladder: cells sized in real pixels, bottom-aligned. */
 .ladder{display:flex; align-items:flex-end; gap:34px; flex-wrap:wrap}
@@ -68,7 +67,7 @@ h2::after{content:""; flex:1; height:1px; background:var(--line)}
 .tok .slot.hero{height:30.72px}
 .tok .slot.rail{height:12.8px}
 .tok .name{
-  font-family:var(--mono); font-size:10px; color:var(--text-dim); text-align:center;
+  font-family:var(--mono); font-size:11px; color:var(--text-dim); text-align:center;
   margin-top:5px; letter-spacing:.06em;
 }
 
@@ -319,12 +318,16 @@ const DYING_COL = /*__DYING_COL__*/;
 const DYING_HOT = /*__DYING_HOT__*/;
 /* The flatline, DEAD and a dead bar's frame: ramp.mjs's DEAD_STEEL. */
 const DEAD_STEEL = /*__DEAD_STEEL__*/;
+/* The readout's rest, hit, heal and outline inks: ramp.mjs's READOUT_INK. */
+const READOUT_INK = /*__READOUT_INK__*/;
 /* shader.mjs's TICKER_BAND: one repetition of the ticker strip spans this much
    of the bar's height, and its own aspect times that along it. */
 const TICKER_BAND = /*__TICKER_BAND__*/;
 /* Shared with the shader: what the readout has to clear is the corner the
    shader cuts out of the bar. */
 const READOUT_INSET = /*__READOUT_INSET__*/;
+/* shader.mjs's READOUT_RUN: the sizes and dims host.mjs lays the readout with. */
+const READOUT_RUN = /*__READOUT_RUN__*/;
 /* core/bloom.mjs's own numbers, inlined at generation time — never a copy. */
 const BLOOM_THRESHOLD = /*__BLOOM_THRESHOLD__*/;
 const BLOOM_KNEE = /*__BLOOM_KNEE__*/;
@@ -437,7 +440,7 @@ function buildAtlas() {
   c.width = CELL_W * GLYPHS.length;
   c.height = CELL_H;
   const x = c.getContext("2d");
-  x.font = "700 " + FONT_PX + "px " + getComputedStyle(document.documentElement).getPropertyValue("--gl-tech").trim();
+  x.font = "700 " + FONT_PX + "px " + getComputedStyle(document.documentElement).getPropertyValue("--gl-is-num").trim();
   x.textAlign = "center";
   x.textBaseline = "middle";
   x.lineJoin = "round";
@@ -558,7 +561,7 @@ function drawRun(parts, rightPx, midPx, w, h, fitted = false) {
   if (fitted) {
     const pad = maxSize * (CELL_H / FONT_PX) * atlas.cellRatio;
     const fit = Math.min(1, Math.max(1, w - READOUT_INSET * h * 2) / Math.max(1, total + pad),
-      h * 0.70 / Math.max(1, maxSize * (CELL_H / FONT_PX)));
+      h * READOUT_RUN.maxHeight / Math.max(1, maxSize * (CELL_H / FONT_PX)));
     parts = parts.map(p => ({ ...p, size: p.size * fit }));
     total *= fit;
     maxSize *= fit;
@@ -571,7 +574,7 @@ function drawRun(parts, rightPx, midPx, w, h, fitted = false) {
   let penX = rightPx - total;
   for (const part of parts) {
     gl.uniform3fv(TU.uInk, part.ink);
-    gl.uniform3fv(TU.uEdge, [0.02, 0.03, 0.05]);
+    gl.uniform3fv(TU.uEdge, READOUT_INK.edge);
     gl.uniform1f(TU.uOpacity, part.opacity ?? 1);
     for (const ch of part.text) {
       const m = atlas.metrics[ch];
@@ -643,8 +646,10 @@ function strip(kind, text, parts) {
 }
 
 (async () => {
-  const face = getComputedStyle(document.documentElement).getPropertyValue("--gl-display").trim() || "sans-serif";
+  const face = getComputedStyle(document.documentElement).getPropertyValue("--gl-is-font").trim() || "sans-serif";
   const font = "700 64px " + face;
+  /* Names are set in the same face at 600; load it before any label is fitted. */
+  try { await document.fonts.load("600 64px " + face, "NAME"); } catch { /* fall through */ }
   try {
     await Promise.race([
       document.fonts.load(font, "DYING DEAD 0123456789"),
@@ -1410,12 +1415,12 @@ function draw(now) {
          it and steps back by one notch of opacity — enough to rank the two,
          not enough to make the denominator something you go looking for. */
       const heat = a ? a.hit * 0.18 : 0;
-      const to = a?.heal ? [0.62, 1.0, 0.78] : [1.0, 0.52, 0.48];
-      const ink = [0.97, 0.99, 1.0].map((c, i) => c + (to[i] - c) * heat);
+      const to = a?.heal ? READOUT_INK.heal : READOUT_INK.hit;
+      const ink = READOUT_INK.rest.map((c, i) => c + (to[i] - c) * heat);
       if (readAlpha > 0) drawRun([
-        { text: String(cur), size: h * 0.48 * ns, ink, opacity: readAlpha },
-        { text: "/", size: h * 0.25 * ns, ink, opacity: 0.52 * readAlpha, bottom: true },
-        { text: String(shownMax), size: h * 0.28 * ns, ink, opacity: 0.60 * readAlpha, bottom: true },
+        { text: String(cur), size: h * READOUT_RUN.value * ns, ink, opacity: readAlpha },
+        { text: "/", size: h * READOUT_RUN.slash * ns, ink, opacity: READOUT_RUN.slashDim * readAlpha, bottom: true },
+        { text: String(shownMax), size: h * READOUT_RUN.max * ns, ink, opacity: READOUT_RUN.maxDim * readAlpha, bottom: true },
       ], rightPx, h * 0.5, w, h, true);
 
       /* Floating deltas rise out of the bar and fade. The number that changed
@@ -1432,7 +1437,7 @@ function draw(now) {
         for (const pop of a.popups) {
           const e = 1 - Math.pow(1 - pop.t, 2.2);
           const alpha = pop.t < 0.15 ? pop.t / 0.15 : 1 - Math.pow((pop.t - 0.15) / 0.85, 2.0);
-          const popInk = pop.heal ? [0.62, 1.0, 0.78] : [1.0, 0.52, 0.48];
+          const popInk = pop.heal ? READOUT_INK.heal : READOUT_INK.hit;
           /* Punched in, not faded in: it arrives at 1.35×, settles, then drifts
              back along the bar so consecutive deltas fan out instead of
              stacking on one another. */
@@ -1519,6 +1524,17 @@ import {
 } from "../scripts/features/resource-bars/name.mjs";
 import { GM_MARKER, cipherSeed, flurryEpoch } from "../scripts/features/resource-bars/mystify.mjs";
 import { hexToRgb, withAlpha } from "../scripts/core/theme.mjs";
+
+/* Fit nothing before the label face has loaded. host.mjs re-fits every label
+   when it lands (awaitLabelFace); this page simply waits, bounded, so a name is
+   never measured in the fallback and drawn in the real face. */
+try {
+  const face = getComputedStyle(document.documentElement).getPropertyValue("--gl-is-font").trim();
+  await Promise.race([
+    document.fonts.load(NAME_LAYOUT.weight + " 64px " + face, "NAME"),
+    new Promise((resolve) => setTimeout(resolve, 4000)),
+  ]);
+} catch { /* fall through: fit in whatever face there is */ }
 
 const rgbaOf = (hex, k = 1, a = 1) => {
   const { r, g, b } = hexToRgb(hex);

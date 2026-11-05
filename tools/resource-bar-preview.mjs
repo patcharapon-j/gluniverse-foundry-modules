@@ -40,9 +40,9 @@ const ROOT = new URL("../", import.meta.url);
 const arg = (name) => process.argv.find((a) => a.startsWith("--" + name + "="))?.split("=").slice(1).join("=");
 
 const {
-  FRAGMENT_SHADERS, LIQUIDS, DEFAULT_LIQUID, PREVIEW_VERTEX_SHADER, READOUT_INSET, TICKER_BAND, UNIFORMS,
+  FRAGMENT_SHADERS, LIQUIDS, DEFAULT_LIQUID, PREVIEW_VERTEX_SHADER, READOUT_INSET, READOUT_RUN, TICKER_BAND, UNIFORMS,
 } = await import(new URL("scripts/features/resource-bars/shader.mjs", ROOT).href);
-const { rampUniform, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, DEAD_STEEL, hexToFloat3 } = await import(new URL("scripts/features/resource-bars/ramp.mjs", ROOT).href);
+const { rampUniform, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, DEAD_STEEL, READOUT_INK, hexToFloat3 } = await import(new URL("scripts/features/resource-bars/ramp.mjs", ROOT).href);
 /* The bloom Foundry actually runs. The preview used to carry its own, gentler
    numbers (threshold 1.05, knee 0.55 on an unclamped float buffer), which
    flattered exactly the near-white peaks that bloom hardest on the table. */
@@ -137,9 +137,12 @@ function page(animImport, root) {
     "/*__DYING_COL__*/": JSON.stringify(hexToFloat3(DYING_COLOR)),
     "/*__DYING_HOT__*/": JSON.stringify(hexToFloat3(DYING_HOT)),
     "/*__DEAD_STEEL__*/": JSON.stringify(hexToFloat3(DEAD_STEEL)),
+    /* ramp.mjs's READOUT_INK, as the floats host.mjs hands the text shader. */
+    "/*__READOUT_INK__*/": JSON.stringify(Object.fromEntries(Object.entries(READOUT_INK).map(([k, v]) => [k, hexToFloat3(v)]))),
     /* The ticker's band, for the offset host.mjs's writeWords computes from it. */
     "/*__TICKER_BAND__*/": String(TICKER_BAND),
     "/*__READOUT_INSET__*/": String(READOUT_INSET),
+    "/*__READOUT_RUN__*/": JSON.stringify(READOUT_RUN),
     "/*__BLOOM_THRESHOLD__*/": String(DEFAULT_THRESHOLD),
     "/*__BLOOM_KNEE__*/": String(DEFAULT_KNEE),
     "/*__BLOOM_INTENSITY__*/": String(DEFAULT_INTENSITY),

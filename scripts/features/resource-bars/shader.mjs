@@ -4,7 +4,7 @@
  * One quad per bar, everything computed per-pixel: the recessed well, the
  * health liquid, the chip trail, the temp-HP overlay, the segment ticks, the
  * low-health breath, the change wave, the impact and its debris, and the
- * chamfered Etched Glass frame. Doing it in a shader rather than in
+ * chamfered ink-and-steel frame. Doing it in a shader rather than in
  * PIXI.Graphics is what makes "shading" and "animates every frame" cheap
  * instead of a per-token retessellation.
  *
@@ -65,6 +65,7 @@ import { PRECISION, SCALE_PRELUDE, VERTEX_SHADER } from "../../core/glsl.mjs";
 import {
   FX_GLSL_BREAK_FIELD, FX_GLSL_BREAK_PULSE, FX_GLSL_DYING_FIELD, FX_GLSL_DYING_NOISE, FX_GLSL_NOISE,
 } from "../../core/fx-glsl.mjs";
+import { hexToRgbFloat, INK_SIGNAL } from "../../core/theme.mjs";
 
 /* Re-exported so this module stays the single import site for everything the
    feature compiles, as it was when it owned the constant. */
@@ -144,7 +145,7 @@ export const UNIFORMS = Object.freeze({
   uBreakHot: "vec3",  // fracture core gold, sRGB 0..1
   uDyingCol: "vec3",  // --gl-orchid, sRGB 0..1
   uDyingHot: "vec3",  // --gl-orchid-hot, sRGB 0..1
-  uSteel: "vec3",     // --gl-text-dim, sRGB 0..1: the flatline, DEAD and a dead bar's frame
+  uSteel: "vec3",     // --gl-is-steel, sRGB 0..1: the flatline, DEAD and a dead bar's frame
 });
 
 /** Frame shape and the numeric run's safe inset, in bar-height units.
@@ -152,6 +153,20 @@ export const UNIFORMS = Object.freeze({
 export const CUT = 0.20;
 export const BODY_INSET = 0.0;
 export const READOUT_INSET = 0.06;
+
+/**
+ * The readout's run, in bar heights: the value, then the slash and the max on
+ * its baseline, each with the share of the ink it keeps. The value is the
+ * reading and is set at instrument size, most of the bar's height; the max is
+ * context and steps well down and back. host.mjs lays the run from this, and
+ * the preview and the check read the same object.
+ */
+export const READOUT_RUN = Object.freeze({
+  value: 0.60,
+  slash: 0.27, slashDim: 0.52,
+  max: 0.30, maxDim: 0.60,
+  maxHeight: 0.70,
+});
 
 /**
  * The shield ribs' pitch, in bar heights.
@@ -164,6 +179,16 @@ export const READOUT_INSET = 0.06;
  * crossing halved them again.
  */
 export const SHIELD_PITCH = 0.44;
+
+/**
+ * How much of the chroma the straight OKLab line loses between two ramp stops
+ * `rampAt()` puts back: 0 is the plain line, 1 holds the stops' interpolated
+ * chroma exactly. Short of 1 because the full hold lifts the brightest liquids'
+ * resting peaks past 1.0 in a channel, which the ceiling forbids; this much is
+ * enough to keep the amber-to-green step out of olive. `resource-bar-check`
+ * evaluates the ramp at this value.
+ */
+export const RAMP_CHROMA_HOLD = 0.6;
 
 /**
  * The guard-break fracture's two shape parameters, in the units
@@ -435,6 +460,9 @@ export const LIQUID_BODY = Object.freeze({
 });
 
 const f4 = (n) => n.toFixed(4);
+/* A palette hex as a GLSL vec3, so the chrome's inks are generated from the
+   mirror in core/theme.mjs rather than restated as floats. */
+const v3 = (hex) => "vec3(" + hexToRgbFloat(hex).map(f4).join(", ") + ")";
 
 /* The heartbeat at every level, crossfaded by uDyingLevel: one dyBeat per rate
    in DYING_BEATS, each weighted by how close the level index is to it. */
@@ -464,6 +492,7 @@ const HEAD = PRECISION + SCALE_PRELUDE + `
 const float CUT = ` + f4(CUT) + `;
 const float BODY_INSET = ` + f4(BODY_INSET) + `;
 const float SHIELD_PITCH = ` + f4(SHIELD_PITCH) + `;
+const float RAMP_CHROMA_HOLD = ` + f4(RAMP_CHROMA_HOLD) + `;
 const float BREAK_DENSE = ` + f4(BREAK_DENSE) + `;
 const float BREAK_REACH = ` + f4(BREAK_REACH) + `;
 const float BREAK_THICK = ` + f4(BREAK_THICK) + `;
@@ -645,7 +674,16 @@ vec3 rampAt(float t) {
   float f = s - i;
   vec3 a = i < 0.5 ? uRamp[0] : (i < 1.5 ? uRamp[1] : uRamp[2]);
   vec3 b = i < 0.5 ? uRamp[1] : (i < 1.5 ? uRamp[2] : uRamp[3]);
-  return oklabToSrgb(mix(a, b, f));
+  /* Chroma is interpolated on its own, so a stop-to-stop step keeps its colour:
+     the straight OKLab line sags in chroma between two hues, and between amber
+     and Ink and Signal's deeper green that sag is an olive that reads as sick.
+     Lightness and hue still follow the straight line. */
+  vec3 lab = mix(a, b, f);
+  float c = mix(length(a.yz), length(b.yz), f);
+  float n = length(lab.yz);
+  float hold = RAMP_CHROMA_HOLD * smoothstep(0.15, 0.45, f) * smoothstep(1.0, 0.6, f);
+  if (n > 1e-4) lab.yz *= mix(1.0, c / n, hold);
+  return oklabToSrgb(lab);
 }
 
 /* ── The idle loop ───────────────────────────────────────────────────────
@@ -730,10 +768,18 @@ vec3 rbWarm(vec3 c, float t) {
   return vec3(max(c.r, c.r + (1.0 - c.r) * 0.5 * clamp(t, 0.0, 1.0)), c.g * (1.0 - 0.22 * clamp(t, 0.0, 1.0)), c.b * (1.0 - 0.30 * clamp(t, 0.0, 1.0)));
 }
 
-/* Etched Glass ink, mirrored from PALETTE.ink1 / ink2 in core/theme.mjs. The
-   trough, the frame and the fracture's seams use these; no liquid does. */
-const vec3 INK  = vec3(0.043, 0.059, 0.090);
-const vec3 INK0 = vec3(0.008, 0.027, 0.043);
+/* Ink and Signal's chrome, generated from INK_SIGNAL in core/theme.mjs. The
+   trough, the frame and the fracture's seams use these; no liquid does. The
+   frame is ink-6 below and steel along its lit top: a hairline that separates
+   the bar from any map, with no hue in it. */
+const vec3 INK = ${v3(INK_SIGNAL.ink2)};
+const vec3 INK0 = ${v3(INK_SIGNAL.ink0)};
+const vec3 FRAME = ${v3(INK_SIGNAL.ink6)};
+const vec3 STEEL = ${v3(INK_SIGNAL.steel)};
+/* The low-health warning on the frame and its breath: Ink and Signal's alarm
+   red. (The arterial red the fill itself sinks into stays deeper than any
+   signal on purpose; it is the liquid, not the chrome.) */
+const vec3 ALARM = ${v3(INK_SIGNAL.red)};
 `;
 
 /* ── The liquids ────────────────────────────────────────────────────────────
@@ -1066,9 +1112,8 @@ void main(void) {
   float fy = clamp(p.y / fh, -1.0, 1.0);
 
   /* ── Palette ───────────────────────────────────────────────────────────
-     GOLD is PALETTE.signalPale. It is the only warm note and it appears in
-     exactly one place — the top of the stroke — which is what keeps it reading
-     as a material catching light rather than as a colour scheme.
+     The chrome has no hue (Ink and Signal's Signal Rule): the frame is ink and
+     steel, so the only colour on a bar is the reading.
 
      "Bloodied" (under half) is a state of the *liquid* — each shows it in its own
      idiom, paler and calmer, never darker — so the colour itself stays on the
@@ -1203,10 +1248,7 @@ void main(void) {
   /* ── Stroke ────────────────────────────────────────────────────────────
      The asymmetry that stops the bar reading as a form control comes from the
      cut corner, which does the job with none of the width end furniture cost. */
-  vec3 GOLD  = vec3(1.000, 0.914, 0.722);
-  vec3 STEEL = vec3(0.55, 0.62, 0.78);
-  vec3 strokeCol = mix(vec3(0.085, 0.100, 0.140),
-                       mix(STEEL, GOLD, 0.60), smoothstep(-0.75, 0.92, hb));
+  vec3 strokeCol = mix(FRAME, STEEL, smoothstep(-0.75, 0.92, hb));
 
   /* Register marks stepping outside the body at the quarters — the detail that
      says this was laid out on an instrument rather than drawn as a box. They
@@ -1414,7 +1456,7 @@ void main(void) {
      of the letters. uDead arrives 0 on the rails and on every living bar. */
   if (uDead > 0.001) {
     float dAmt = uDead * mBody;
-    vec3 deadStroke = mix(vec3(0.085, 0.100, 0.140), uSteel * 0.60, smoothstep(-0.75, 0.92, hb));
+    vec3 deadStroke = mix(FRAME * 0.60, uSteel * 0.60, smoothstep(-0.75, 0.92, hb));
     C = mix(C, deadStroke, mStroke * dAmt);
     C = mix(C, troughCol, mTrough * (1.0 - mFill) * dAmt);
 
@@ -1452,15 +1494,15 @@ void main(void) {
 
   /* The chrome breathes on the same slow clock as the fill. Two red pulses at
      different rates read as two unrelated warnings rather than as one state. */
-  C = mix(C, vec3(1.00, 0.20, 0.24), mStroke * uLow * (0.28 + 0.52 * breathe));
+  C = mix(C, ALARM, mStroke * uLow * (0.28 + 0.52 * breathe));
   C = mix(C, vec3(1.0), uFlash * 0.06);
 
   /* A broad, soft recess protects the in-bar reading without adding a badge.
      It darkens the empty well only — the liquid is never darkened. */
   float readingWell = rbGauss(p.y, 0.13) * hero * mTrough * (1.0 - mFill);
   C *= 1.0 - readingWell * 0.34;
-  // Dividers remain opaque black across every fill and effect layer.
-  C = mix(C, vec3(0.0), (1.0 - segMask) * mFillA);
+  // Dividers remain opaque ink-0 across every fill and effect layer.
+  C = mix(C, INK0, (1.0 - segMask) * mFillA);
   vec3 outC = C * A * mix(0.80, 1.0, hero);
   float outA = A * mix(0.80, 1.0, hero);
 
@@ -1475,15 +1517,21 @@ void main(void) {
   float outMask = smoothstep(0.0, max(px * 1.6, 0.012), dBody);
 
   /* A floor only. The separable-blur pass downstream is the real bloom; what
-     stays here is the contact light immediately against the body. */
-  vec3 glowCol = mix(base, vec3(1.00, 0.16, 0.20), uLow * 0.85);
-  float glow = exp(-outside / 0.055) * rbEdge(fillX + 0.14, fillX - 0.04, p.x) * 0.22;
-  glow += exp(-outside / 0.045) * exp(-abs(p.x - fillX) / 0.14) * (0.30 + 0.9 * uBloom);
-  glow += exp(-outside / 0.050) * uLow * (0.30 + 0.70 * breathe) * 0.55 * hero;
-  /* A dead bar casts nothing: the liquid that lit it has run out. */
-  glow *= outMask * mix(0.45, 1.0, hero) * (1.0 - uDead * hero);
-  outC += glowCol * glow * 0.75;
-  outA += glow * 0.26;
+     stays here is the contact light immediately against the body, and only
+     while it means something: a heal's bloom at the edge, and the low-health
+     breath. At rest a bar casts nothing (Ink and Signal's No Glow Rule): twenty
+     tokens are twenty readings, not twenty coloured smears. */
+  /* Both terms are zero at rest, which is nearly every bar on the map, so the
+     uniform branch skips the three exps for the whole quad. */
+  if (uBloom + uLow > 0.0) {
+    vec3 glowCol = mix(base, ALARM, uLow * 0.85);
+    float glow = exp(-outside / 0.045) * exp(-abs(p.x - fillX) / 0.14) * 0.9 * uBloom;
+    glow += exp(-outside / 0.050) * uLow * (0.30 + 0.70 * breathe) * 0.55 * hero;
+    /* A dead bar casts nothing: the liquid that lit it has run out. */
+    glow *= outMask * mix(0.45, 1.0, hero) * (1.0 - uDead * hero);
+    outC += glowCol * glow * 0.75;
+    outA += glow * 0.26;
+  }
   /* The heartbeat carries past the body too, in orchid. */
   float dyHalo = exp(-outside / 0.060) * outMask * dyHeart * uDying;
   outC += uDyingCol * dyHalo * 0.50;

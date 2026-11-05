@@ -15,11 +15,14 @@ gloss without redrawing geometry, which is why the stock bars look the way they
 do. One quad and a fragment shader makes all of that free, and makes "animates
 every frame" cost nothing extra.
 
-The visual language is Etched Glass materials on *Honkai: Star Rail* geometry:
-layers separated by air rather than welded into one frame, a stylised liquid in
-the health colour (see **Liquids**), and **one cut corner, top-right**. The palette is
-entirely the suite's own; the gold is `PALETTE.signalPale`, and it appears in
-exactly one place — the top of the stroke.
+The visual language is Ink and Signal (DESIGN.md) on *Honkai: Star Rail*
+geometry: layers separated by air rather than welded into one frame, a stylised
+liquid in the health colour (see **Liquids**), and **one cut corner, top-right**.
+The chrome has no hue: the trough is `--gl-is-ink-0` to `-2`, the frame is a
+hairline that runs from `--gl-is-ink-6` below to `--gl-is-steel` along its lit
+top, and the readout and names are `--gl-is-text` on an `--gl-is-ink-0`
+outline. Every one of them is generated from `core/theme.mjs`'s `INK_SIGNAL` mirror,
+never restated in GLSL, so the only colour on a bar is the reading.
 
 The bar is **axis-aligned**. It used to lean, by a shear of 0.32 shared between
 the GLSL and the numerals' layout, and the lean was doing most of the work of
@@ -384,8 +387,15 @@ operation (`floor`, `fract`, `step`, crisp discs, thin bands) inside a liquid
 chunk. The shared frame follows the same rule where it touches the liquid: the
 reading well recesses only the empty trough, and the low-health breath brightens.
 
-Not the liquid, and deliberately still dark: the trough, the black divider gaps,
+Not the liquid, and deliberately still dark: the trough, the divider gaps (cut in
+`--gl-is-ink-0`, not pure black, so an empty trough is not a row of black slots),
 the frame, and the guard-break fracture's seams.
+
+Nothing glows at rest. The contact glow under the fill head only shows when it is
+saying something: the heal bloom, and the low-health breath in `ALARM`. It used
+to carry a resting term too, which put a coloured smear under every token on the
+map; Ink and Signal's No Glow Rule took it out, and the check refuses a resting
+glow term coming back.
 
 ### Bloodied
 
@@ -511,14 +521,17 @@ The readout has its own channel, `anim.num`, separate from the fill's `frac`:
 the fill snaps on impact but the number counts, so a burst of small hits reads
 as one continuous fall rather than as a digit flickering.
 
-The **maximum is the scale, not the reading**, so it steps back: one size
-down, one step of opacity down, on the reading's baseline. One step, and the
-band matters in both directions. At full strength a small numeral is still
-high-contrast against the plate and competes with the number that actually
-changes; at the 0.22/0.30 this used to carry, the denominator becomes furniture
-you have to go looking for. 0.80 ranks the two and leaves both legible at a
-glance. The separator goes one further, to 0.62, because it is punctuation
-rather than information.
+The value is set at **instrument size**, 0.60 of the bar's height, so the
+reading is the largest thing on the bar after the liquid itself. The **maximum
+is the scale, not the reading**, so it steps well back: half the value's size
+(0.30), on the reading's baseline, at 0.60 of the ink. The band matters in both
+directions. At full strength a small numeral is still high-contrast against the
+plate and competes with the number that actually changes; at the 0.22/0.30 this
+once carried, the denominator becomes furniture you have to go looking for. The
+separator goes one further, to 0.52, because it is punctuation rather than
+information. All of it is `READOUT_RUN` in `shader.mjs`, which the host, the
+preview and the check read, and the check holds the hierarchy (value at least
+0.56, max at most 0.55 of it).
 
 The weight rides on `aDim`, a per-vertex attribute, because a run is one mesh
 with one `uInk`. Anything else means a second mesh and a second geometry to keep
@@ -922,7 +935,7 @@ over `flatlineMs`. `dead` runs 0 → 1 over `deadInMs`, and the shader reads its
 beats off it (`DEAD_PHASES`): the orchid and the veins go out of the trough and the
 frame cools to steel; a steel hairline draws across the empty trough from left to
 right, stopping `DEAD_GAP` short of the letters, starting only once the drain is
-done; then `DEAD` comes up in `--gl-text-dim` (`DEAD_STEEL`). After that nothing
+done; then `DEAD` comes up in `--gl-is-steel` (`DEAD_STEEL`). After that nothing
 moves — the liquid's clock stops too, and the bar leaves the ticker — and nothing
 on the bar has a hue: the contact glow goes out with the liquid. A revival fades
 the flatline back over `deadOutMs` and glides the fill to whatever owns it now,
@@ -1029,7 +1042,8 @@ simply pops, which costs nobody any information.
 Foundry's nameplate is a `PIXI.Text` centred under the token, in a font and a
 position nothing else in this feature shares. Once the bars are an instrument, a
 caption floating near them reads as a second, unrelated widget, so the name moves
-onto the bar: uppercase, lightly tracked, in the readout's own `--gl-tech`,
+onto the bar: uppercase, lightly tracked, in Ink and Signal's `--gl-is-font`
+(Google Sans Flex; the numbers stay in the tabular `--gl-is-num`),
 left-aligned on the top edge of the top bar's *body* and followed by a hairline
 rule running toward the cut corner. A token with no readable bar — a light
 source token, a marker, a loot pile — gets the same name centred in the same
@@ -1173,8 +1187,18 @@ The cipher's own rules are all about carrying no information:
 When a creature is **identified** while its label is on screen, the cipher
 decodes into the name, left to right, in about 600ms — starting from the exact
 glyphs the player was looking at, so the first frame does not pop. The GM always
-reads the real name: at 70% brightness, with a small `◇` marker in the accent,
-when players see a cipher.
+reads the real name: at 70% brightness, with a small `◇` marker in
+`--gl-is-info` (a fact with no verdict), when players see a cipher.
+
+Google Sans Flex is a web font with an optical-size axis, and both facts change
+how a name is laid out. The canvas sets the optical size from the font size, and
+it widens small text (a name is about 13% wider at 10px than at 100px), so
+layout is measured at 10px, the size a label is whole at on an ordinary display
+at 100% zoom; a larger raster is then a little narrower than its fit, never
+wider. And a name measured before the face has loaded keeps the fallback's
+widths, so the host waits for it once at attach (`awaitLabelFace`), redraws every
+raster in place and re-fits every label, the same contract `ticker.mjs` keeps
+for DYING and DEAD.
 
 ### The leak rules
 
@@ -1221,19 +1245,40 @@ call deep-clones the whole dex and an Alt press re-decides every token.
 
 ## Colour
 
-The fill hue is a function of the health fraction, interpolated in **OKLab**: a
-naive sRGB lerp from `--gl-good` to `--gl-signal` passes through a desaturated
+The fill hue is a function of the health fraction, interpolated in **OKLab**
+across Ink and Signal's four verdict hues: `--gl-is-green` full, then
+`--gl-is-amber`, `--gl-is-ember` and `--gl-is-red` empty. Health is the one
+quantity on a bar that is a verdict, which is the Signal Rule's whole condition
+for a hue. A naive sRGB lerp from green to amber passes through a desaturated
 olive that reads as "muddy green" rather than "getting worse". The forward
 transform happens in JS at settings-change time; the shader pays only for the
 inverse.
+
+OKLab alone still sags. Ink and Signal's green is deeper than the old one, and
+the straight line from amber to it loses about a quarter of its chroma in the
+middle, so a creature at 60 to 70% read sick. `rampAt()` puts back
+`RAMP_CHROMA_HOLD` of the lost chroma, faded to nothing near each stop. It stays
+off the amber end on purpose: lava's brightest resting pixel already sits at the
+ceiling there, and the check fails on any chroma added at 50%.
+
+The colour-blind-safe ramp runs `--gl-is-info`, a cyan bridge, `--gl-is-amber`
+and `--gl-is-ember`. The cyan is the one Etched Glass hue left on the bar, kept on
+purpose: Ink and Signal has no hue between amber and info, and the OKLab line
+between two opposite hues runs through grey.
 
 Three things sit off the ramp on purpose:
 
 | | Colour | Why |
 |---|---|---|
-| **Temp HP** | `cyanHot` | A buffer in front of your hit points |
-| **Shield rail** | `cyan` | The same idea, so they read as related |
-| **`bar2` rail** | `accent` | *Not* health. A half-full ammo counter must not be the same orange as a half-dead creature |
+| **Temp HP** | `--gl-is-info` tinted toward paper | A buffer in front of your hit points; lighter so the pane reads over the liquid |
+| **Shield rail** | `--gl-is-info` | The same idea, so they read as related: a fact with no verdict |
+| **`bar2` rail** | `--gl-is-dim` | *Not* health. A half-full ammo counter must not be the same orange as a half-dead creature, so it carries no hue at all |
+
+Two more stay off Ink and Signal on purpose, because another feature draws the
+same thing and the check pins the two together: the guard-break golds and the
+dying orchid are the initiative tracker's, which keeps its own skin (ADR 0001).
+One broken creature is one gold, and one dying creature one orchid, on the token,
+the card and the bar.
 
 Temp HP is drawn as a plate laid over the fill, and what sells it as a plate is
 the pattern rather than the colour: colour alone just makes a second fill. The
@@ -1255,8 +1300,9 @@ ribs were kept.
 The ramp is sampled through `pow(uFrac, 1.45)` rather than linearly. Sampled
 straight, the whole lower half of the range is orange and red only arrives in
 the last few percent, so a creature at a third of its hit points looks merely
-warm. Below the threshold the fill goes further still, into an arterial red no
-ramp stop reaches — the one place the fill is allowed to editorialise, because
+warm. Below the threshold the stroke and the breath go to `--gl-is-red` (the
+shader's `ALARM`, generated from the palette mirror), and the fill goes further
+still, into an arterial red no ramp stop reaches — the one place the fill is allowed to editorialise, because
 "you are about to die" is not a shade of the same information.
 
 Health is encoded two ways that are not hue: **segment position**, and the
@@ -1325,7 +1371,7 @@ and write nothing; that the initiative tracker reads through the dying reader,
 puts death at 3 under doomed 1 and agrees with it at max 0; that the veins are
 core's field and `FX_FRAG_DYING` still calls it with its old drift, statement for
 statement; that both features' orchids are the palette's and the flatline's steel
-is `--gl-text-dim`; the model's glide in and out, the hit points waiting
+is `--gl-is-steel`; the model's glide in and out, the hit points waiting
 underneath, the words entering from the right and running on the heartbeat's
 clock at its speed, quickening and crossfading with it, the flatline draining,
 coasting and landing still, a revival, a dead NPC's killing blow, the shed, motion

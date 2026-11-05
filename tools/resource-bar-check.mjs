@@ -87,18 +87,86 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   if (problems === before) ok(`uTexel 0 is inert in all ${shader.LIQUIDS.length} liquids (px floors to epsilon, no divisions by uTexel)`);
 }
 
-/* ── 3. The ramp still mirrors gl-tokens.css ────────────────────────────── */
+/* ── 3. Ink and Signal: the bar's colours and faces come from --gl-is-* ──── */
 {
+  /* The first declaration is the dark ground on :root; `.gl-is-paper` restates
+     the family further down for light hosts, and the canvas is never one. */
   const cssHex = (name) => tokensCss.match(new RegExp(`--gl-${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1]?.toLowerCase();
-  const pairs = [["hazard", 0], ["warn-deep", 1], ["signal", 2], ["good", 3]];
-  let drift = 0;
-  for (const [css, i] of pairs) {
-    const want = cssHex(css);
-    const have = String(ramp.RAMPS.default[i]).toLowerCase();
-    if (!want) { fail(`gl-tokens.css has no --gl-${css}; the ramp mirrors a token that no longer exists.`); drift++; }
-    else if (want !== have) { fail(`Ramp stop ${i} is ${have} but --gl-${css} is ${want}. The JS mirror has drifted from the stylesheet.`); drift++; }
+  const { PALETTE, INK_SIGNAL: IS } = await import(new URL("scripts/core/theme.mjs", ROOT).href);
+  const lc = (v) => String(v).toLowerCase();
+  const before = problems;
+
+  /* The palette mirror: every --gl-is-* hex has its INK_SIGNAL twin, equal. */
+  const isTokens = [...tokensCss.matchAll(/--gl-is-([a-z]+(?:-[a-z0-9]+)*):\s*#[0-9a-fA-F]{6}/g)].map((m) => m[1]);
+  const camel = (n) => n.split("-").map((w, i) => (i ? w[0].toUpperCase() + w.slice(1) : w)).join("");
+  for (const name of new Set(isTokens)) {
+    const key = camel(name);
+    if (!(key in IS)) fail(`core/theme.mjs has no INK_SIGNAL.${key} for --gl-is-${name}; canvas features cannot read the Ink and Signal value.`);
+    else if (lc(IS[key]) !== cssHex("is-" + name)) fail(`INK_SIGNAL.${key} is ${IS[key]} but --gl-is-${name} is ${cssHex("is-" + name)}. The JS mirror has drifted from the stylesheet.`);
   }
-  if (!drift) ok("health ramp mirrors --gl-hazard / --gl-warn-deep / --gl-signal / --gl-good");
+
+  /* The health ramp is the four signals in order of danger: red, ember, amber,
+     green. Health is the one quantity on a bar that is a verdict. */
+  const want = [IS.red, IS.ember, IS.amber, IS.green].map(lc);
+  if (ramp.RAMPS.default.map(lc).join() !== want.join())
+    fail(`The default health ramp is ${ramp.RAMPS.default.join(", ")}, not --gl-is-red / -ember / -amber / -green.`);
+  /* The safe ramp leaves the red/green axis: ember, amber, a cool bridge, info. */
+  const safe = ramp.RAMPS.safe.map(lc);
+  if (safe[0] !== lc(IS.ember) || safe[1] !== lc(IS.amber) || safe[2] !== lc(PALETTE.cyan) || safe[3] !== lc(IS.info))
+    fail(`The colour-blind-safe ramp is ${ramp.RAMPS.safe.join(", ")}; its ends must be --gl-is-ember / -amber … -info.`);
+
+  /* Off-ramp colours: the secondary rail carries no verdict, so no hue; the
+     shield and temp HP are a neutral fact, so info. */
+  if (lc(ramp.RAIL_COLOR) !== lc(IS.dim)) fail(`RAIL_COLOR is ${ramp.RAIL_COLOR}, not --gl-is-dim. bar2 is whatever the GM bound it to; a hue there says something false about it.`);
+  if (lc(ramp.SHIELD_COLOR) !== lc(IS.info)) fail(`SHIELD_COLOR is ${ramp.SHIELD_COLOR}, not --gl-is-info.`);
+  const tempHue = ramp.hexToOklab(ramp.TEMP_COLOR), infoHue = ramp.hexToOklab(IS.info);
+  const hueOf = ([, a, b]) => Math.atan2(b, a) * 180 / Math.PI;
+  if (Math.abs(hueOf(tempHue) - hueOf(infoHue)) > 12 || !(tempHue[0] > infoHue[0]))
+    fail(`TEMP_COLOR (${ramp.TEMP_COLOR}) is not a lighter tint of --gl-is-info; temp HP and the shield are one idea and must read as related.`);
+  if (lc(ramp.DEAD_STEEL) !== lc(IS.steel)) fail(`DEAD_STEEL is ${ramp.DEAD_STEEL}, not --gl-is-steel.`);
+
+  /* Readout, delta and name inks: from the palette, never float literals. */
+  const hostCode = strip(hostSrc);
+  if (/const (REST|HIT|HEAL)_INK\s*=\s*\[/.test(hostCode) || /new Float32Array\(\[\s*0\.\d+/.test(hostCode))
+    fail("host.mjs states a readout or delta ink as a float literal; route it through PALETTE (core/theme.mjs).");
+  const nameMod = await import(new URL("scripts/features/resource-bars/name.mjs", ROOT).href);
+  const ni = nameMod.NAME_INK;
+  if (lc(ni.text) !== lc(IS.text) || lc(ni.edge) !== lc(IS.ink0) || lc(ni.rule) !== lc(IS.steel) || lc(ni.marker) !== lc(IS.info))
+    fail(`NAME_INK is ${JSON.stringify(ni)}; the label is --gl-is-text on --gl-is-ink-0, its rule --gl-is-steel and the GM's cipher marker --gl-is-info.`);
+
+  /* The shader's chrome: the trough and frame inks are generated from PALETTE,
+     and the Etched Glass gold and blue steel are gone from the stroke. */
+  const frag = strip(shader.fragmentShader(shader.DEFAULT_LIQUID));
+  if (/GOLD\s*=|vec3\(\s*1\.000,\s*0\.914,\s*0\.722\)|vec3\(\s*0\.55,\s*0\.62,\s*0\.78\)/.test(frag))
+    fail("The bar's stroke still carries the Etched Glass gold or blue steel; the frame is ink and steel.");
+  const v3 = (hex) => ramp.hexToFloat3(hex).map((c) => c.toFixed(4)).join(", ");
+  for (const [nm, hex] of [["INK", IS.ink2], ["INK0", IS.ink0], ["FRAME", IS.ink6], ["STEEL", IS.steel], ["ALARM", IS.red]])
+    if (!frag.includes(`const vec3 ${nm} = vec3(${v3(hex)});`)) fail(`The shader's ${nm} is not generated from INK_SIGNAL (${hex}).`);
+  if (/vec3\(\s*1\.00,\s*0\.(16|20),\s*0\.(20|24)\)/.test(frag)) fail("The low-health warning still uses a literal red; it is ALARM, --gl-is-red.");
+  if (/mix\(C,\s*vec3\(0\.0\),\s*\(1\.0 - segMask\)/.test(frag)) fail("The dividers are pure black; they are INK0.");
+
+  /* Nothing glows at rest (DESIGN.md, the No Glow Rule): the contact glow
+     past the body exists only under a heal's bloom or the low-health breath. */
+  const glowAt = frag.indexOf("vec3 glowCol");
+  const glowBlock = glowAt < 0 ? "" : frag.slice(glowAt, frag.indexOf("outC += glowCol", glowAt));
+  const terms = [...glowBlock.matchAll(/glow\s*\+?=\s*([^;]+);/g)].map((m) => m[1]);
+  if (!terms.length || terms.some((t) => !/uBloom|uLow/.test(t)) || terms.some((t) => /\(\s*0\.\d+\s*\+\s*0\.\d+\s*\*\s*uBloom\)/.test(t)))
+    fail("A contact-glow term past the bar's body is lit at rest; every term must be scaled by uBloom or uLow.");
+  /* And because it is dark at rest, a resting bar must not pay for it. */
+  if (!/if \(uBloom \+ uLow > 0\.0\) \{\s*vec3 glowCol/.test(frag))
+    fail("The contact glow is evaluated on every bar at rest; gate it on uBloom + uLow so a quiet map skips its exps.");
+
+  /* The ramp holds chroma between stops, so the amber-to-green step is not an olive. */
+  if (!/float hold = RAMP_CHROMA_HOLD \* smoothstep\(0\.15, 0\.45, f\) \* smoothstep\(1\.0, 0\.6, f\);/.test(frag) || !/lab\.yz \*= mix\(1\.0, c \/ n, hold\);/.test(frag) || !(shader.RAMP_CHROMA_HOLD > 0)) fail("rampAt() no longer holds chroma between stops; the amber to green step sags into olive.");
+
+  /* Faces: numbers in the tabular face, words in Google Sans Flex. */
+  const face = async (file) => strip(await src("scripts/features/resource-bars/" + file));
+  if (!/cssVar\("--gl-is-num"/.test(await face("atlas.mjs"))) fail("atlas.mjs does not bake the numerals in --gl-is-num.");
+  if (!/cssVar\("--gl-is-font"/.test(await face("ticker.mjs"))) fail("ticker.mjs does not set DYING / DEAD in --gl-is-font.");
+  if (!/cssVar\("--gl-is-font"/.test(await face("name.mjs"))) fail("name.mjs does not set names in --gl-is-font.");
+  if (!/cssVar\("--gl-is-num"/.test(await face("cipher-atlas.mjs"))) fail("cipher-atlas.mjs does not bake the cipher in --gl-is-num.");
+
+  if (problems === before) ok("Ink and Signal: PALETTE mirrors every --gl-is-* hex; the ramp is red/ember/amber/green; rail dim, shield info, steel flatline; inks and faces from core; the frame is ink and steel");
 }
 
 /* ── 4. No raw durations in the animation path ──────────────────────────── */
@@ -322,7 +390,10 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   const declared = /attribute float aDim/.test(atlasSrc);
   const supplied = /addAttribute\("aDim"/.test(atlasSrc);
   const used = /vDim/.test(atlasSrc);
-  const weights = [...h.matchAll(/\bdim:\s*(\d*\.?\d+)/g)].map((m) => Number(m[1]));
+  /* The run's weights live in shader.mjs's READOUT_RUN; host.mjs must pass them. */
+  const runDims = /dim: R\.slashDim/.test(h) && /dim: R\.maxDim/.test(h)
+    ? [shader.READOUT_RUN.slashDim, shader.READOUT_RUN.maxDim] : [];
+  const weights = [...[...h.matchAll(/\bdim:\s*(\d*\.?\d+)/g)].map((m) => Number(m[1])), ...runDims];
   const faint = weights.filter((w) => w < 0.5);
   if (!declared || !supplied || !used)
     fail("The readout's per-glyph weight is incomplete (aDim must be declared, supplied by runGeometry and read as vDim); the maximum will draw at full strength and compete with the value.");
@@ -683,12 +754,12 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     };
     let count = 0;
     for (const w of [24, 48, 64, 128, 256]) for (const scale of [0.6, 1, 2]) {
-      const h = 24, inset = shader.READOUT_INSET * h;
+      const h = 24, inset = shader.READOUT_INSET * h, R = shader.READOUT_RUN;
       const geo = runGeometry([
-        { text: "999999", size: h * 0.48 * scale },
-        { text: "/", size: h * 0.25 * scale, bottom: true },
-        { text: "999999", size: h * 0.28 * scale, bottom: true },
-      ], { right: w - inset, mid: h / 2, center: false, maxWidth: Math.max(1, w - inset * 2), maxHeight: h * 0.70 });
+        { text: "999999", size: h * R.value * scale },
+        { text: "/", size: h * R.slash * scale, bottom: true },
+        { text: "999999", size: h * R.max * scale, bottom: true },
+      ], { right: w - inset, mid: h / 2, center: false, maxWidth: Math.max(1, w - inset * 2), maxHeight: h * R.maxHeight });
       const pos = geo.attributes.aVertexPosition;
       for (let i = 0; i < pos.length; i += 2) {
         if (pos[i] < inset - 1e-6 || pos[i] > w - inset + 1e-6 || pos[i + 1] < h * 0.15 - 1e-6 || pos[i + 1] > h * 0.85 + 1e-6)
@@ -696,6 +767,11 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       }
       count++;
     }
+    const R = shader.READOUT_RUN;
+    if (!(R && R.value >= 0.56 && R.max <= R.value * 0.55 && R.slash <= R.max && R.maxHeight >= R.value))
+      fail("READOUT_RUN lost its hierarchy: the value is the reading, set at most of the bar's height, and the max steps well down from it.");
+    if (!/size: h \* R\.value \* numScale/.test(hostSrc) || !/size: h \* R\.max \* numScale/.test(hostSrc))
+      fail("host.mjs lays the readout from literals rather than READOUT_RUN; the preview and this check would measure a different run.");
     if (shader.BODY_INSET !== 0) fail("The visible frame is narrower than the token quad.");
     else ok(`right-aligned readout fits ${count} token-width / text-scale combinations`);
   } finally {
@@ -1691,9 +1767,19 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
         .map((v) => Math.max(v, 0)).map((v) => (v >= 0.0031308 ? 1.055 * Math.pow(v, 1 / 2.4) - 0.055 : v * 12.92));
     };
     const tempCol = ramp.hexToFloat3(ramp.TEMP_COLOR);
+    /* rampAt's chroma-held step: the straight OKLab mix, with its chroma put
+       back to the stops' interpolated chroma. */
+    const rampStep = (a, b, f) => {
+      const lab = mix3(a, b, f);
+      const c = Math.hypot(a[1], a[2]) * (1 - f) + Math.hypot(b[1], b[2]) * f;
+      const n = Math.hypot(lab[1], lab[2]);
+      const hold = shader.RAMP_CHROMA_HOLD * ss(0.15, 0.45, f) * ss(1.0, 0.6, f);
+      const k = n > 1e-4 ? 1 + (c / n - 1) * hold : 1;
+      return [lab[0], lab[1] * k, lab[2] * k];
+    };
     const baseAt = (u, stops) => {
       const t = clamp01(u / 0.72) * 3, i = Math.min(Math.floor(t), 2);
-      let b = oklabToSrgbJs(mix3(stops[i], stops[i + 1], t - i));
+      let b = oklabToSrgbJs(rampStep(stops[i], stops[i + 1], t - i));
       b = mix3(b, [luma(b), luma(b), luma(b)], 0.06);
       return mix3(b, tempCol, 0.16 * ss(0.6, 1.0, u));
     };
@@ -2063,7 +2149,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   const idx = strip(await src("scripts/features/resource-bars/index.mjs"));
   const mainSrc = strip(await src("scripts/features/resource-bars/main.mjs"));
   const constants = await import(new URL("scripts/features/resource-bars/constants.mjs", ROOT).href);
-  const { PALETTE } = await import(new URL("scripts/core/theme.mjs", ROOT).href);
+  const { PALETTE, INK_SIGNAL } = await import(new URL("scripts/core/theme.mjs", ROOT).href);
   const lang = JSON.parse(await src("lang/resource-bars.en.json"));
   const h = strip(hostSrc);
   const state = (value, max, doomed = 0) => ({ value, max, doomed, slots: max + doomed, flatline: value >= max });
@@ -2209,10 +2295,10 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     if (css !== String(PALETTE.orchid).toLowerCase()) no(`PALETTE.orchid (${PALETTE.orchid}) does not mirror --gl-orchid (${css}).`);
     if (!/uDyingCol:\s*new Float32Array\(hexToFloat3\(DYING_COLOR\)\)/.test(h) || !/uDyingHot:\s*new Float32Array\(hexToFloat3\(DYING_HOT\)\)/.test(h))
       no("host.mjs does not feed uDyingCol / uDyingHot from ramp.mjs's DYING_COLOR / DYING_HOT.");
-    if (ramp.DEAD_STEEL !== PALETTE.textDim)
-      no(`ramp.mjs's DEAD_STEEL is ${ramp.DEAD_STEEL}, not PALETTE.textDim; the flatline is the suite's quiet neutral, not a hue of its own.`);
-    const dim = tokensCss.match(/--gl-text-dim:\s*(#[0-9a-fA-F]{6})/)?.[1]?.toLowerCase();
-    if (dim !== String(PALETTE.textDim).toLowerCase()) no(`PALETTE.textDim (${PALETTE.textDim}) does not mirror --gl-text-dim (${dim}).`);
+    if (ramp.DEAD_STEEL !== INK_SIGNAL.steel)
+      no(`ramp.mjs's DEAD_STEEL is ${ramp.DEAD_STEEL}, not INK_SIGNAL.steel; the flatline is the suite's quiet tone, not a hue of its own.`);
+    const steel = tokensCss.match(/--gl-is-steel:\s*(#[0-9a-fA-F]{6})/)?.[1]?.toLowerCase();
+    if (steel !== String(INK_SIGNAL.steel).toLowerCase()) no(`INK_SIGNAL.steel (${INK_SIGNAL.steel}) does not mirror --gl-is-steel (${steel}).`);
     if (!/uSteel:\s*new Float32Array\(hexToFloat3\(DEAD_STEEL\)\)/.test(h)) no("host.mjs does not feed uSteel from ramp.mjs's DEAD_STEEL.");
     if ("DYING_INK" in ramp || /DYING_INK/.test(h))
       no("The orchid readout ink is back. While dying the words are the reading, and the numeric readout fades out under them rather than turning orchid.");
