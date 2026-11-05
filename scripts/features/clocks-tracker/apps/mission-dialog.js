@@ -43,13 +43,13 @@ export class MissionDialog {
             <option value="time">${L("GLCT.mission.modeTime")}</option>
           </select>
         </div>
-        <fieldset data-pane="stretches" style="border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px 10px;">
+        <fieldset data-pane="stretches">
           <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;">
             <label>${L("GLCT.mission.stretches")}</label>
             <input type="number" name="stretches" value="6" min="1" step="1">
           </div>
         </fieldset>
-        <fieldset data-pane="time" style="border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px 10px;display:none;">
+        <fieldset data-pane="time" style="display:none;">
           <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;">
             <label>${L("GLCT.setTime.year")}</label>   <input type="number" name="year"   value="${c.year}">
             <label>${L("GLCT.setTime.month")}</label>  <select name="month">${monthOpts}</select>

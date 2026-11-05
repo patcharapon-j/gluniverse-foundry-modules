@@ -1,6 +1,6 @@
 /** Shared constants for GLUniverse — Clocks & Tracker. */
 
-import { PALETTE, withAlpha } from "../../core/theme.mjs";
+import { PALETTE } from "../../core/theme.mjs";
 
 /**
  * Ported into the GLUniverse Suite. The Foundry package id is the single suite
@@ -80,11 +80,9 @@ export const TRACKER_TYPES = ["point", "clock", "pool", "task", "hazard", "separ
 /**
  * The four daily watches (YZE shifts), chronological from midnight.
  * Names are defaults; the GM may override them via the shiftNames setting.
- * Colours drive the per-shift HUD theming (CSS custom properties).
- *
- * These are DATA, not theme: they encode time of day, so they stay a hand-tuned
- * ramp rather than being routed through the accent channel. The night tint is
- * the suite accent because dead of night is the HUD's resting state.
+ * The colours are DATA, not theme: they encode time of day and ride the
+ * `timeChanged` state for macros. The HUD itself no longer paints them (Ink and
+ * Signal keeps hue for meaning, and the watch name already says which watch).
  */
 export const WATCHES = [
   { key: "night", tint: PALETTE.accent, tint2: "#1a2233", glow: "rgba(120,150,225,.5)", soft: "rgba(120,150,225,.18)" },
@@ -106,18 +104,6 @@ export const FALLBACK_TINTS = Object.freeze({
   weatherTile: Object.freeze({ tint: "#3a4250", glow: "#7fb4e6" }),
   delving: Object.freeze({ tint: "#ff9a3c", glow: "#ffd27a" }),
   neutral: Object.freeze({ tint: "#9aa3b0", glow: "#9aa3b0" }),
-});
-
-/**
- * The "signal lost" palette pinned while the HUD is glitching. Cold cyan on
- * near-black with a violet bloom — deliberately off the per-shift ramp so the
- * fault state reads as a different system, not a different time of day.
- */
-export const GLITCH_PALETTE = Object.freeze({
-  tint: PALETTE.cyanHot,
-  tint2: "#0a0d16",
-  glow: withAlpha(PALETTE.cyanHot, 0.5),
-  soft: withAlpha(PALETTE.violet, 0.24),
 });
 
 /** Default watch display names (overridable per world). */

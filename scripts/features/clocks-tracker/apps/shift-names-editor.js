@@ -47,7 +47,7 @@ export class ShiftNamesEditor extends HandlebarsApplicationMixin(ApplicationV2) 
     const rows = WATCHES.map((w, i) => ({
       index: i,
       key: w.key,
-      tint: w.tint,
+      number: i + 1,
       value: current[i] ?? "",
       placeholder: DEFAULT_SHIFT_NAMES[i]
     }));

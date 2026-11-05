@@ -7,12 +7,28 @@ and the delve atmosphere on the right; both are live shader effects.
 
 ## Look
 
-The bar is a black slab. The watch's dark tint leans into the left edge only, the
-type is paper on ink, and the only highlight is one hairline on the top edge.
-There is no coloured bloom around the bar and no glass blur. The GM dock and the
-event tabs use the same ink, square-cornered, with colour carried by a single
-rule (the signal colour on an event's left edge, the hazard red on ominous
-weather) rather than by fills and glows.
+Every surface is Ink and Signal (docs/adr/0012-ink-and-signal-core.md). The
+tokens are aliased as `--glct-*` on the feature's own roots in
+`clocks-tracker-hud.css` (the bar, the weather window, the framed apps, the chat
+cards, the delve context menu), never on `:root`. The weather and delving sheets
+read those aliases.
+
+The bar is an ink slab with a bottom-right chamfer and one hairline on the top
+edge. The type is paper on ink, the clock and counts are in the number face, and
+the watch is a paper lozenge with a progress rule: the watches have no hue of
+their own any more (`WATCHES[].tint` is still published on `timeChanged` for
+macros). Hue only ever means something:
+
+- amber: events and holidays (the tabs, calendar bands, the effect note);
+- green: a mission goal; red: a mission deadline, ominous weather, an ominous or
+  ended delve resource, a blocked hex face;
+- info blue: the Hex Flower's start hex;
+- a GM-picked weather or resource colour: that condition's icon, its tone edge
+  and its hex fill, because the colour names it.
+
+Nothing glows at rest and there is no glass blur. Primary buttons are paper with
+ink type; everything else is an ink step. The glitch overlay scrambles in paper
+with a red and blue channel split.
 
 ## Effects
 
