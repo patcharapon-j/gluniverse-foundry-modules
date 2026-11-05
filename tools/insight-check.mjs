@@ -133,6 +133,15 @@ const rendered = classTokens(template);
   }
   const choices = [...(settings.match(/insight\.edgeIntensity[\s\S]*?choices:\s*\{([^}]*)\}/) ?? [, ""])[1].matchAll(/(\w+)\s*:/g)].map((m) => m[1]);
   ok(choices.length === 3, "could not read the edgeIntensity choices (the scan is broken)");
+  // A preset is written inline on the stage, the intensity class lands on the
+  // same element, and inline wins: a tier that sets a preset's property does
+  // nothing under any preset that sets it too. Tiers scale, presets set.
+  const { PRESET_VARS } = await load(FEATURE + "themes.mjs");
+  for (const cls of Object.values(table)) {
+    if (!cls) continue;
+    const body = css.match(new RegExp(`\\.${cls}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+    for (const v of PRESET_VARS) ok(!body.includes(`${v}:`), `.${cls} sets ${v}, which every preset sets inline; the tier would do nothing`);
+  }
   for (const c of choices) ok(Object.hasOwn(table, c), `edgeIntensity offers "${c}", which INTENSITY_CLASS does not map`);
 }
 
@@ -155,17 +164,34 @@ const rendered = classTokens(template);
   for (const c of cues) ok(STAGES.includes(c), `notification.mjs plays sound stage "${c}", which no profile defines`);
 }
 
-/* ── 6. a preset only remaps the accent channel + feature-local tokens ─── */
+/* ── 6. a preset sets the tone and the edge correction, nothing else ───── */
 {
-  const vars = [...themes.matchAll(/"(--[a-z0-9-]+)"\s*:/g)].map((m) => m[1]);
-  for (const v of new Set(vars)) {
-    ok(v === "--gl-accent" || v.startsWith("--insight-"), `themes.mjs preset sets ${v}; a preset may only remap --gl-accent and --insight-* tokens, or it forks the theme`);
+  const themesMod = await load(FEATURE + "themes.mjs");
+  const { getPresets, registerTheme, PRESET_VARS, PRESET_TONES } = themesMod;
+  ok(Array.isArray(PRESET_VARS) && PRESET_VARS.includes("--insight-tone"), "themes.mjs exports no PRESET_VARS naming --insight-tone");
+  ok(Array.isArray(PRESET_TONES) && PRESET_TONES.length > 0, "themes.mjs exports no PRESET_TONES");
+  const presets = getPresets();
+  for (const [id, cfg] of Object.entries(presets)) {
+    for (const v of Object.keys(cfg.vars)) {
+      ok(PRESET_VARS?.includes(v), `preset "${id}" sets ${v}; a preset may set only ${PRESET_VARS?.join(", ")}, or it forks the skin`);
+    }
+    // Ink and Signal: hue is a signal, read from core. No violet, no Etched Glass accent.
+    ok(PRESET_TONES?.includes(cfg.vars["--insight-tone"]), `preset "${id}" tone ${cfg.vars["--insight-tone"]} is not one of the Ink and Signal tones (${PRESET_TONES?.join(", ")})`);
   }
-  ok(vars.includes("--gl-accent"), "no preset sets --gl-accent");
+  // A preset registered by another module against the old accent channel
+  // still lands: --gl-accent is read as the tone. Anything else is refused.
+  const warn = console.warn; console.warn = () => {};
+  registerTheme("__check", { label: "x", vars: { "--gl-accent": "var(--gl-is-red)", "--gl-is-ink-1": "#fff", "--insight-burn": "0.5" } });
+  console.warn = warn;
+  const reg = presets.__check?.vars ?? {};
+  ok(reg["--insight-tone"] === "var(--gl-is-red)", "registerTheme drops a legacy --gl-accent instead of reading it as the tone");
+  ok(!("--gl-is-ink-1" in reg) && !("--gl-accent" in reg), "registerTheme lets a preset repaint something other than the tone");
+  ok(reg["--insight-burn"] === "0.5", "registerTheme refuses the per-hue edge correction");
+  delete presets.__check;
   // The edge is the one place a hue is spread over a whole screen, so the
   // per-hue correction must stay reachable: a preset sets it, the CSS reads it.
-  for (const t of ["--insight-burn", "--insight-reach-y", "--insight-reach-x"]) {
-    ok(css.includes(`var(${t})`), `insight.css no longer reads ${t}; a preset's per-hue edge correction would do nothing`);
+  for (const t of ["--insight-tone", "--insight-burn", "--insight-reach-y", "--insight-reach-x"]) {
+    ok(css.includes(`var(${t})`), `insight.css no longer reads ${t}; a preset's setting would do nothing`);
   }
 }
 
@@ -353,6 +379,32 @@ for (const t of ["--gl-glow", "--gl-bloom", "--gl-accent-soft", "--gl-accent-fai
   for (const m of composeTpl.matchAll(/data-action="(\w+)"/g)) ok(handlers.has(m[1]), `compose button data-action="${m[1]}" has no handler; it does nothing`);
   ok(/name="shared"/.test(composeTpl) && /data\.get\("shared"\)/.test(composeSrc), "the compose window's \"who else\" switch is not read on send");
   ok(/targets\.length > 1 && data\.get\("shared"\)/.test(composeSrc), "a card to one person can be sent as shared");
+}
+
+/* ── 16. the Ink and Signal skin ───────────────────────────────────────── */
+{
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  // Colour, type and shape come from core's --gl-is-* family; only motion,
+  // layering, tint channels and glass strength are still shared with Etched Glass.
+  const SHARED = /^--gl-(?:is-|d-|ease|z-|tint-|glass-k|blur|lift|stagger|motion-scale|thai)/;
+  for (const m of new Set([...bare.matchAll(/var\((--gl-[a-z0-9-]+)/g)].map((x) => x[1]))) {
+    ok(SHARED.test(m), `insight.css reads the Etched Glass token ${m}; alias a --gl-is-* value under --insight-*`);
+  }
+  // Every skin token read is declared (a read with no declaration falls back to nothing).
+  const declared = new Set([...bare.matchAll(/(--insight-[a-z0-9-]+)\s*:/g)].map((x) => x[1]));
+  for (const m of bare.matchAll(/@property\s+(--insight-[a-z0-9-]+)/g)) declared.add(m[1]);
+  for (const m of bare.matchAll(/var\((--insight-[a-z0-9-]+)\s*([,)])/g)) {
+    if (m[2] === ",") continue; // read with a fallback of its own
+    ok(declared.has(m[1]), `insight.css reads ${m[1]}, which it never declares`);
+  }
+  // A skin aliases core; it never restates a value (DESIGN.md, The Alias Rule).
+  ok(!/#[0-9a-f]{3,8}\b/i.test(bare), "insight.css states a raw hex; alias a --gl-is-* value instead");
+  // Flat plates: no glass.
+  ok(!/backdrop-filter/.test(bare), "insight.css blurs what is behind it; Ink and Signal plates are flat");
+  // The Floor Rule: nothing under 11px.
+  for (const m of bare.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)) ok(Number(m[1]) >= 11, `insight.css sets text at ${m[1]}px, under the 11px floor`);
+  // Every skin root is one of the feature's own; nothing on :root (14 pins that).
+  ok(/\.insight-stage,\s*\n?\s*\.insight-compose\s*\{[^}]*--insight-tone:/.test(bare), "the skin tokens are not declared on the feature's two roots");
 }
 
 /* ── report ───────────────────────────────────────────────────────────── */

@@ -2,19 +2,25 @@
    Insight — the arrival, and the GM's compose window.
 
    One private message, on one player's screen, that they cannot miss and that
-   reads the same in any campaign. So the look is the suite's quiet one: the
-   neutral ink ramp, paper type, one accent, a chamfered slab. Everything that
-   carries identity goes through --gl-accent, which a preset remaps on the
-   stage (module/themes.mjs); nothing here is a hue of its own.
+   reads the same in any campaign. It wears Ink and Signal (DESIGN.md): core's
+   `--gl-is-*` values aliased as `--insight-*` on the feature's two roots and
+   never on :root, a black plate, paper type, and ONE tone. Every lit part of
+   the arrival (the edge, the rim, the cut, the tag, the control) reads
+   `--insight-tone`, which a preset sets on the stage (module/themes.mjs) to
+   paper or one of core's signal hues.
 
    Two rules this file keeps that no diff shows:
 
    - --gl-glow, --gl-bloom, --gl-accent-soft and --gl-accent-faint are struck at
-     :root against the :root accent and do NOT follow a scoped remap. Every
-     accent-derived value below is mixed inline with color-mix() instead.
-   - The edge is the one place the accent covers a whole viewport, so it is the
+     :root against the :root accent and do NOT follow a scoped tone. Every
+     tone-derived value below is mixed inline with color-mix() instead.
+   - The edge is the one place the tone covers a whole viewport, so it is the
      one place a hue needs correcting: --insight-burn and --insight-reach-* are
-     the preset's to set (amber carries much further than violet).
+     the preset's to set (amber and white carry much further than a cool hue).
+
+   The arrival is a cinematic beat, so it is the one place this skin lets light
+   spill (DESIGN.md, The No Glow Rule). The compose window is a GM tool and
+   stays flat.
 
    Motion: anime.js owns every beat (module/notification.mjs). This file only
    states where each node rests, and hides each one until its beat.
@@ -30,19 +36,41 @@
 
 .insight-stage,
 .insight-compose {
-  --insight-font: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
-  --insight-plate: color-mix(in oklab, var(--gl-ink-1) 95%, transparent);
-  --insight-line: rgb(var(--gl-tint-light) / 0.08);
-  --insight-line-strong: rgb(var(--gl-tint-light) / 0.16);
-  --insight-hover: rgb(var(--gl-tint-light) / 0.05);
-  --insight-on-accent: var(--gl-ink-0);
-  --insight-cut: 12px;
+  /* the neutral ramp and its tones (core: --gl-is-*) */
+  --insight-ink-0: var(--gl-is-ink-0);
+  --insight-ink-1: var(--gl-is-ink-1);
+  --insight-ink-3: var(--gl-is-ink-3);
+  --insight-ink-4: var(--gl-is-ink-4);
+  --insight-ink-6: var(--gl-is-ink-6);
+  --insight-text: var(--gl-is-text);
+  --insight-paper: var(--gl-is-paper);
+  --insight-dim: var(--gl-is-dim);
+  --insight-faint: var(--gl-is-faint);
+  --insight-line: var(--gl-is-line);
+  --insight-line-strong: var(--gl-is-line-strong);
+  --insight-hover: var(--gl-is-hover);
+  --insight-good: var(--gl-is-green);
+  --insight-on: var(--gl-is-on-slab);
+
+  /* the one tone; a preset sets it (module/themes.mjs) */
+  --insight-tone: var(--insight-paper);
+
+  /* type and shape */
+  --insight-font: var(--gl-is-font);
+  --insight-num: var(--gl-is-num);
+  --insight-cut: var(--gl-is-cut-lg);
+  --insight-cut-sm: var(--gl-is-cut-sm);
   --insight-wedge: 16px;
 
   /* the edge, per hue (a preset may set these three) */
   --insight-reach-y: 20%;
   --insight-reach-x: 16%;
   --insight-burn: 1;
+  /* the Screen Edge Alert tier scales them; it never sets them, because a
+     preset writes them inline on the same element and inline wins */
+  --insight-tier-burn: 1;
+  --insight-tier-reach: 1;
+  --insight-rim: 3px;
 }
 
 /* ═══ The stage ════════════════════════════════════════════════════════════ */
@@ -53,7 +81,8 @@
   z-index: var(--gl-z-splash);
   pointer-events: none;
   font-family: var(--insight-font);
-  color: var(--gl-text);
+  color: var(--insight-text);
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Every animated node waits for its beat. The renderer writes its opacity
@@ -75,31 +104,44 @@
   inset: 0;
   pointer-events: none;
 }
-
-/* the room dims toward its edges, which pulls the eye in to the card */
-.insight-edge-veil {
-  background: radial-gradient(120% 95% at 50% 38%, transparent 42%,
-    color-mix(in oklab, var(--gl-ink-0) 64%, transparent) 100%);
-}
-
-/* the accent rising from all four sides, as one layer: one element to
-   composite, and its breath is opacity alone */
-.insight-edge-glow {
-  --insight-a: color-mix(in oklab, var(--gl-accent) calc(40% * var(--insight-burn)), transparent);
-  --insight-b: color-mix(in oklab, var(--gl-accent) calc(12% * var(--insight-burn)), transparent);
-  background:
-    linear-gradient(to bottom, var(--insight-a), var(--insight-b) calc(var(--insight-reach-y) * 0.3), transparent var(--insight-reach-y)),
-    linear-gradient(to top, var(--insight-a), var(--insight-b) calc(var(--insight-reach-y) * 0.3), transparent var(--insight-reach-y)),
-    linear-gradient(to right, var(--insight-a), var(--insight-b) calc(var(--insight-reach-x) * 0.3), transparent var(--insight-reach-x)),
-    linear-gradient(to left, var(--insight-a), var(--insight-b) calc(var(--insight-reach-x) * 0.3), transparent var(--insight-reach-x));
+/* The edge fades in and out as one: its own layer, so neither beat repaints
+   the screen-sized veil and rim under it. Nothing inside reaches out. */
+.insight-edge {
+  contain: strict;
   will-change: opacity;
 }
 
-/* one hairline around the whole screen */
+/* the room goes dark toward its edges, so the light at the rim reads as light
+   and not as fog, and the eye is pulled in to the card */
+.insight-edge-veil {
+  background: radial-gradient(118% 92% at 50% 36%, transparent 34%,
+    color-mix(in oklab, var(--insight-ink-0) 50%, transparent) 70%,
+    color-mix(in oklab, var(--insight-ink-0) 84%, transparent) 100%);
+}
+
+/* the tone rising from all four sides, as one layer: one element to
+   composite, and its breath is opacity alone */
+.insight-edge-glow {
+  --insight-k: calc(var(--insight-burn) * var(--insight-tier-burn));
+  --insight-ry: calc(var(--insight-reach-y) * var(--insight-tier-reach));
+  --insight-rx: calc(var(--insight-reach-x) * var(--insight-tier-reach));
+  --insight-a: color-mix(in oklab, var(--insight-tone) calc(40% * var(--insight-k)), transparent);
+  --insight-b: color-mix(in oklab, var(--insight-tone) calc(12% * var(--insight-k)), transparent);
+  background:
+    linear-gradient(to bottom, var(--insight-a), var(--insight-b) calc(var(--insight-ry) * 0.3), transparent var(--insight-ry)),
+    linear-gradient(to top, var(--insight-a), var(--insight-b) calc(var(--insight-ry) * 0.3), transparent var(--insight-ry)),
+    linear-gradient(to right, var(--insight-a), var(--insight-b) calc(var(--insight-rx) * 0.3), transparent var(--insight-rx)),
+    linear-gradient(to left, var(--insight-a), var(--insight-b) calc(var(--insight-rx) * 0.3), transparent var(--insight-rx));
+  will-change: opacity;
+}
+
+/* one solid line of the tone around the whole screen. The line is the alert
+   and is never dimmed by the burn (a 3px line cannot wash a frame); only the
+   light it throws inward is. */
 .insight-edge-rim {
   box-shadow:
-    inset 0 0 0 2px color-mix(in oklab, var(--gl-accent) calc(80% * var(--insight-burn)), transparent),
-    inset 0 0 22px color-mix(in oklab, var(--gl-accent) calc(26% * var(--insight-burn)), transparent);
+    inset 0 0 0 var(--insight-rim) var(--insight-tone),
+    inset 0 0 28px color-mix(in oklab, var(--insight-tone) calc(34% * var(--insight-burn) * var(--insight-tier-burn)), transparent);
 }
 
 /* ═══ The card ═════════════════════════════════════════════════════════════ */
@@ -121,8 +163,8 @@
   right: -48px;
   height: 2px;
   z-index: var(--gl-z-raised);
-  background: linear-gradient(90deg, transparent, var(--gl-accent) 48px, var(--gl-accent) calc(100% - 48px), transparent);
-  box-shadow: 0 0 16px 1px color-mix(in oklab, var(--gl-accent) 60%, transparent);
+  /* a crisp rule, no halo: it stays on the card as its top edge at rest */
+  background: linear-gradient(90deg, transparent, var(--insight-tone) 48px, var(--insight-tone) calc(100% - 48px), transparent);
   transform-origin: 50% 50%;
 }
 
@@ -133,10 +175,9 @@
   max-height: calc(100vh - clamp(64px, 15vh, 168px) - 32px);
   overflow: hidden;
   pointer-events: auto;
-  background:
-    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.05), transparent 120px),
-    var(--insight-plate);
-  backdrop-filter: blur(calc(14px * var(--gl-glass-k)));
+  background: var(--insight-ink-1);
+  /* strong: the plate has to hold its edge over a dark map with the edge off */
+  box-shadow: inset 0 0 0 1px var(--insight-line-strong);
   /* the chamfer, drawn at the card's current opening so it opens downward */
   clip-path: polygon(
     0 0, 100% 0,
@@ -159,26 +200,28 @@
   content: "";
   position: absolute;
   inset: -20% 0;
-  background: linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.12), transparent);
+  background: linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.1), transparent);
   transform: skewX(-25deg);
 }
 
-/* ── the head: a solid slab of the accent naming the sense, and who can see it ── */
+/* ── the head: a solid slab of the tone naming the sense, and who can see it ── */
 .insight-head {
   display: flex;
   align-items: stretch;
   justify-content: space-between;
-  min-height: 30px;
+  min-height: 32px;
   flex: none;
 }
 .insight-tag {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 9px;
   min-width: 0;
+  max-width: 64%;
   padding: 0 calc(var(--insight-wedge) + 14px) 0 16px;
-  background: var(--gl-accent);
-  color: var(--insight-on-accent);
+  background: var(--insight-tone);
+  color: var(--insight-on);
   clip-path: polygon(0 0, 100% 0, calc(100% - var(--insight-wedge)) 100%, 0 100%);
 }
 .insight-tag-mark {
@@ -191,26 +234,29 @@
 }
 .insight-sense {
   overflow: hidden;
-  font-size: 11.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 750;
-  font-stretch: 116%;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   line-height: 1;
   text-transform: uppercase;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* the tag keeps its label; a long "With …" gives way first */
 .insight-private {
-  display: flex;
-  align-items: center;
+  flex: 0 1 auto;
+  align-self: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 0 18px 0 12px;
-  font-size: 10.5px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
-  font-stretch: 112%;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
+  line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
-  color: var(--gl-text-dim);
+  color: var(--insight-dim);
 }
 
 /* ── the words ── */
@@ -219,12 +265,11 @@
   padding: 0;
   border: 0;
   font-family: var(--insight-font);
-  font-size: 23px;
+  font-size: var(--gl-is-t-display);
   font-weight: 750;
-  font-stretch: 106%;
-  line-height: 1.18;
-  letter-spacing: -0.008em;
-  color: var(--gl-text-bright);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--insight-text);
   text-wrap: balance;
 }
 
@@ -236,28 +281,33 @@
   margin: 16px 24px 0;
   border: 0;
   object-fit: cover;
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--insight-cut-sm)), calc(100% - var(--insight-cut-sm)) 100%, 0 100%);
 }
 
+/* The body is the message a player reads off a moving map, so it keeps a
+   reading size of its own (DESIGN.md: 16px and up stay literal). */
 .insight-body {
   min-height: 0;
   margin: 16px 0 0;
   padding: 0 24px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  font-size: 16.5px;
+  font-size: 16px;
   font-weight: 450;
   line-height: 1.6;
   font-style: var(--insight-body-style, normal);
-  color: var(--gl-text);
+  color: var(--insight-text);
   text-wrap: pretty;
+  scrollbar-width: thin;
+  scrollbar-color: var(--insight-ink-6) transparent;
 }
+.insight-card ::selection { background: var(--insight-paper); color: var(--insight-on); }
 .insight-head + .insight-body { margin-top: 18px; }
 .insight-body p { margin: 0 0 0.7em; }
 .insight-body p:last-child { margin-bottom: 0; }
-.insight-body :is(b, strong) { font-weight: 750; color: var(--gl-text-bright); }
+.insight-body :is(b, strong) { font-weight: 750; color: var(--insight-paper); }
 .insight-body :is(i, em) { font-style: italic; }
-.insight-body code { font-family: var(--gl-tech); font-size: 0.9em; }
+.insight-body code { font-family: var(--insight-num); font-size: 0.9em; }
 
 /* ── the foot: how many are waiting, and the one control ── */
 .insight-foot {
@@ -266,21 +316,22 @@
   align-items: stretch;
   justify-content: flex-end;
   gap: 14px;
-  min-height: 42px;
+  min-height: 40px;
   margin-top: 22px;
-  border-top: 1px solid var(--insight-line);
+  box-shadow: inset 0 1px 0 var(--insight-line);
 }
 .insight-queue {
   display: flex;
   align-items: center;
   margin-right: auto;
   padding-left: 24px;
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
-  font-stretch: 112%;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--gl-text-dim);
+  font-variant-numeric: tabular-nums;
+  color: var(--insight-dim);
+  white-space: nowrap;
 }
 .insight-queue[hidden] { display: none; }
 
@@ -296,38 +347,37 @@
   padding: 0 calc(var(--insight-cut) + 22px) 0 26px;
   border: 0;
   border-radius: 0;
-  background: var(--gl-accent);
+  background: var(--insight-tone);
   box-shadow: none;
-  color: var(--insight-on-accent);
+  color: var(--insight-on);
   font-family: var(--insight-font);
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   font-weight: 750;
-  font-stretch: 114%;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   line-height: 1;
   text-transform: uppercase;
   cursor: pointer;
   transition: background-color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease);
 }
 .insight-dismiss-label { white-space: nowrap; }
-.insight-stage .insight-dismiss:active:not(:disabled) { scale: 0.98; }
+.insight-stage .insight-dismiss:active:not(:disabled) { scale: var(--gl-is-press); }
 .insight-stage .insight-dismiss:disabled { cursor: default; }
 .insight-stage .insight-dismiss:focus-visible {
-  outline: 2px solid var(--insight-on-accent);
+  outline: 2px solid var(--insight-on);
   outline-offset: -5px;
 }
 @media (hover: hover) and (pointer: fine) {
   .insight-stage .insight-dismiss:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--gl-accent) 82%, var(--gl-text-bright));
+    background: color-mix(in oklab, var(--insight-tone) 86%, var(--insight-ink-0));
   }
 }
 
 /* ═══ Edge intensity (client setting) ══════════════════════════════════════ */
 
 .insight-intensity-subtle {
-  --insight-reach-y: 13%;
-  --insight-reach-x: 10%;
-  --insight-burn: 0.5;
+  --insight-tier-burn: 0.5;
+  --insight-tier-reach: 0.65;
+  --insight-rim: 2px;
 }
 .insight-intensity-subtle .insight-edge-veil { display: none; }
 .insight-intensity-off .insight-edge { display: none; }
@@ -336,22 +386,21 @@
 
 .insight-compose .window-content {
   padding: 0;
-  background: var(--gl-ink-1);
-  color: var(--gl-text);
+  background: var(--insight-ink-1);
+  color: var(--insight-text);
   font-family: var(--insight-font);
 }
 .insight-compose .window-header {
-  background: var(--gl-ink-0);
-  border-bottom: 1px solid var(--insight-line);
+  background: var(--insight-ink-0);
+  box-shadow: inset 0 -1px 0 var(--insight-line);
+  border-bottom: 0;
 }
 .insight-compose .window-header .window-title {
   font-family: var(--insight-font);
-  font-size: 12px;
-  font-weight: 750;
-  font-stretch: 112%;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--gl-text);
+  font-size: var(--gl-is-t-title);
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--insight-text);
 }
 
 .insight-compose-form {
@@ -378,12 +427,12 @@
   justify-content: space-between;
   gap: 8px;
   padding: 0;
-  font-size: 11px;
-  font-weight: 750;
-  font-stretch: 112%;
-  letter-spacing: 0.08em;
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1;
   text-transform: uppercase;
-  color: var(--gl-text-dim);
+  color: var(--insight-faint);
 }
 
 /* recipients: a chip per connected user, in their own Foundry colour */
@@ -397,14 +446,15 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 30px;
+  height: 32px;
   padding: 0 12px 0 10px;
-  box-shadow: inset 0 0 0 1px var(--insight-line-strong);
-  font-size: 13px;
+  background: var(--insight-ink-3);
+  box-shadow: inset 0 0 0 1px var(--insight-line);
+  font-size: var(--gl-is-t-body);
   font-weight: 600;
-  color: var(--gl-text-dim);
+  color: var(--insight-dim);
   cursor: pointer;
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--insight-cut-sm)), calc(100% - var(--insight-cut-sm)) 100%, 0 100%);
   transition: background-color var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease),
     box-shadow var(--gl-d-quick) var(--gl-ease);
 }
@@ -417,21 +467,22 @@
   flex: none;
   width: 8px;
   height: 8px;
-  background: var(--insight-person, var(--gl-text-dim));
+  background: var(--insight-person, var(--insight-dim));
 }
 .insight-person:has(input:checked) {
-  background: color-mix(in oklab, var(--gl-accent) 20%, var(--gl-ink-2));
-  box-shadow: inset 0 0 0 1px var(--gl-accent);
-  color: var(--gl-text-bright);
+  background: var(--insight-ink-4);
+  box-shadow: inset 0 0 0 1px var(--insight-paper);
+  color: var(--insight-text);
 }
-.insight-person:has(input:focus-visible) { outline: 2px solid var(--gl-text); outline-offset: 2px; }
+/* inset: the chip's chamfer clip would cut an outward ring away */
+.insight-person:has(input:focus-visible) { outline: var(--gl-is-focus-ring); outline-offset: -2px; }
 @media (hover: hover) and (pointer: fine) {
-  .insight-person:hover { color: var(--gl-text); background: var(--insight-hover); }
+  .insight-person:hover { color: var(--insight-text); background: var(--insight-ink-4); }
 }
 .insight-compose-empty {
-  margin: 0;
-  font-size: 13px;
-  color: var(--gl-text-dim);
+  margin: 4px 0 0;
+  font-size: var(--gl-is-t-body);
+  color: var(--insight-dim);
 }
 
 .insight-compose .insight-compose-all {
@@ -446,26 +497,38 @@
   background: none;
   box-shadow: none;
   font-family: var(--insight-font);
-  font-size: 11px;
+  font-size: var(--gl-is-t-meta);
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   line-height: 1;
-  color: var(--gl-accent);
+  color: var(--insight-dim);
   cursor: pointer;
+  transition: color var(--gl-d-quick) var(--gl-ease);
 }
+.insight-compose .insight-compose-all:focus-visible { outline: var(--gl-is-focus-ring); outline-offset: var(--gl-is-focus-offset); }
 @media (hover: hover) and (pointer: fine) {
-  .insight-compose .insight-compose-all:hover { color: var(--gl-text-bright); }
+  .insight-compose .insight-compose-all:hover { color: var(--insight-text); }
 }
 
 /* quick picks: ways to tick several chips at once. Each adds to what is
-   ticked, which the "+" says; the text buttons' own padding is pulled back so
-   the first one lines up with the chips. */
+   ticked, which the "+" says; they are small hairline controls so they read
+   as buttons, not as more headings. */
 .insight-compose-picks {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin: 4px 0 2px -6px;
+  gap: 6px;
+  margin: 2px 0;
+}
+.insight-compose .insight-compose-picks .insight-compose-all {
+  height: 24px;
+  padding: 0 10px 0 8px;
+  box-shadow: inset 0 0 0 1px var(--insight-line-strong);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-xs)), calc(100% - var(--gl-is-cut-xs)) 100%, 0 100%);
+}
+.insight-compose .insight-compose-picks .insight-compose-all:focus-visible { outline-offset: -2px; }
+@media (hover: hover) and (pointer: fine) {
+  .insight-compose .insight-compose-picks .insight-compose-all:hover { background: var(--insight-hover); }
 }
 .insight-compose-picks .insight-compose-all::before { content: "+ "; }
 
@@ -476,9 +539,9 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--gl-is-t-body);
   font-weight: 600;
-  color: var(--gl-text-dim);
+  color: var(--insight-dim);
   cursor: pointer;
   transition: color var(--gl-d-quick) var(--gl-ease), opacity var(--gl-d-quick) var(--gl-ease);
 }
@@ -492,52 +555,54 @@
   flex: none;
   width: 14px;
   height: 14px;
+  background: var(--insight-ink-0);
   box-shadow: inset 0 0 0 1px var(--insight-line-strong);
   transition: background-color var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
 }
-.insight-compose-shared:has(input:checked) { color: var(--gl-text-bright); }
+.insight-compose-shared:has(input:checked) { color: var(--insight-text); }
 .insight-compose-shared:has(input:checked) .insight-compose-shared-box {
-  background: var(--gl-accent);
-  box-shadow: inset 0 0 0 1px var(--gl-accent);
+  background: var(--insight-paper);
+  box-shadow: inset 0 0 0 1px var(--insight-paper);
 }
 .insight-compose-shared:has(input:checked) .insight-compose-shared-box::after {
   content: "";
   position: absolute;
   inset: 4px;
-  background: var(--insight-on-accent);
+  background: var(--insight-on);
 }
-.insight-compose-shared:has(input:focus-visible) { outline: 2px solid var(--gl-text); outline-offset: 2px; }
-.insight-compose-shared:has(input:disabled) { opacity: 0.45; cursor: default; }
+.insight-compose-shared:has(input:focus-visible) { outline: var(--gl-is-focus-ring); outline-offset: 2px; }
+.insight-compose-shared:has(input:disabled) { opacity: var(--gl-is-disabled); cursor: default; }
 @media (hover: hover) and (pointer: fine) {
-  .insight-compose-shared:not(:has(input:disabled)):hover { color: var(--gl-text); }
+  .insight-compose-shared:not(:has(input:disabled)):hover { color: var(--insight-text); }
 }
 
 .insight-compose-form :is(input[type="text"], textarea) {
   box-sizing: border-box;
   width: 100%;
   margin: 0;
-  padding: 9px 11px;
+  padding: 8px 10px;
   border: 0;
   border-radius: 0;
-  background: var(--gl-ink-0);
+  background: var(--insight-ink-0);
   box-shadow: inset 0 0 0 1px var(--insight-line-strong);
-  color: var(--gl-text);
+  color: var(--insight-text);
   font-family: var(--insight-font);
-  font-size: 14px;
+  font-size: var(--gl-is-t-lead);
   line-height: 1.5;
   transition: box-shadow var(--gl-d-quick) var(--gl-ease);
 }
-.insight-compose-form input[type="text"] { height: 36px; }
+.insight-compose-form input[type="text"] { height: 32px; padding-block: 0; }
 .insight-compose-form textarea { min-height: 110px; resize: vertical; }
-.insight-compose-form :is(input[type="text"], textarea)::placeholder { color: var(--gl-text-faint); }
+.insight-compose-form :is(input[type="text"], textarea)::placeholder { color: var(--insight-faint); }
 .insight-compose-form :is(input[type="text"], textarea):focus {
-  outline: none;
-  box-shadow: inset 0 0 0 1px var(--gl-accent), 0 0 0 3px color-mix(in oklab, var(--gl-accent) 22%, transparent);
+  outline: var(--gl-is-focus-ring);
+  outline-offset: var(--gl-is-focus-offset);
+  box-shadow: inset 0 0 0 1px var(--insight-line-strong);
 }
 .insight-compose-hint {
-  font-size: 12px;
+  font-size: var(--gl-is-t-meta);
   line-height: 1.45;
-  color: var(--gl-text-dim);
+  color: var(--insight-faint);
 }
 
 .insight-compose-foot {
@@ -553,33 +618,32 @@
   align-items: center;
   justify-content: center;
   width: auto;
-  height: 38px;
+  height: 32px;
   min-height: 0;
   margin: 0;
-  padding: 0 30px 0 24px;
+  padding: 0 calc(var(--insight-cut-sm) + 16px) 0 16px;
   overflow: hidden;
   border: 0;
   border-radius: 0;
-  background: var(--gl-accent);
+  background: var(--insight-paper);
   box-shadow: none;
-  color: var(--insight-on-accent);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%);
+  color: var(--insight-on);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--insight-cut-sm)), calc(100% - var(--insight-cut-sm)) 100%, 0 100%);
   font-family: var(--insight-font);
-  font-size: 12px;
-  font-weight: 750;
-  font-stretch: 114%;
-  letter-spacing: 0.08em;
+  font-size: var(--gl-is-t-body);
+  font-weight: 700;
+  letter-spacing: 0.1em;
   line-height: 1;
   text-transform: uppercase;
   cursor: pointer;
   transition: background-color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease);
 }
-.insight-compose .insight-send-btn:active { scale: 0.98; }
-.insight-compose .insight-send-btn:focus-visible { outline: 2px solid var(--insight-on-accent); outline-offset: -5px; }
+.insight-compose .insight-send-btn:active { scale: var(--gl-is-press); }
+.insight-compose .insight-send-btn:focus-visible { outline: 2px solid var(--insight-on); outline-offset: -5px; }
 @media (hover: hover) and (pointer: fine) {
-  .insight-compose .insight-send-btn:hover { background: color-mix(in oklab, var(--gl-accent) 82%, var(--gl-text-bright)); }
+  .insight-compose .insight-send-btn:hover { background: var(--insight-text); }
 }
-.insight-compose .insight-send-btn.insight-sent { background: var(--gl-good); }
+.insight-compose .insight-send-btn.insight-sent { background: var(--insight-good); }
 .insight-compose .insight-send-btn.insight-sent::after {
   content: "";
   position: absolute;

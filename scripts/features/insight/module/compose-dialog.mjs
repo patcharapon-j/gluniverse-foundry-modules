@@ -8,7 +8,6 @@ import { featurePath } from "../../../core/const.mjs";
 import { scaledMs } from "../../../core/theme.mjs";
 import { sendNotification } from "./socket.mjs";
 import { composeBody, isBlankBody } from "./body.mjs";
-import { applyTheme } from "./themes.mjs";
 import { actorsOf, playerOwners } from "./recipients.mjs";
 
 const { HandlebarsApplicationMixin, ApplicationV2 } = foundry.applications.api;
@@ -82,7 +81,6 @@ export class InsightComposeDialog extends HandlebarsApplicationMixin(Application
   /** @override */
   _onRender(context, options) {
     super._onRender?.(context, options);
-    applyTheme(this.element);
     const form = this.element.querySelector("form");
     const message = form?.querySelector('[name="message"]');
     message?.focus();
