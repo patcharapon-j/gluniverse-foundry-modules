@@ -15,12 +15,10 @@
  * of it. The two JS timers (an entrance's class, a leaving card's removal)
  * shadow CSS durations and go through `scaledMs` for that reason.
  *
- * Layering rule worth knowing before you touch the markup: the clean card's
- * blur is a `backdrop-filter` on `.glstage-comms-glass`, and an ancestor with
- * opacity, filter, clip-path or a mask becomes its backdrop root — the glass
- * then blurs nothing and pops sharp when the animation ends. So the card and
- * body only ever move (transform); fades and wipes are applied to the
- * children, never to an ancestor of the glass, in the clean style.
+ * Layering rule worth knowing before you touch the markup: the card and body
+ * only ever move (transform); fades and wipes are applied to the children in
+ * the clean style. A speaking card scales and lifts on its body while its
+ * neighbours dim their parts, and the two must never fight over one opacity.
  */
 
 import { coverPlacement, cropFor, viewBoxStyle } from "../../../core/face-frame-math.mjs";

@@ -182,7 +182,13 @@ renderer draws plain pictures and needs no pixels.
 node tools/stage-check.mjs
 node tools/stage-preview.mjs --assets=<dir> && node tools/preview-server.mjs
 node tools/director-preview.mjs        # then /.preview/director.html?tab=stage|cast|light|comms
+node tools/stage-comms-preview.mjs     # then /.preview/stage-comms.html?style=clean|holo|radio
 ```
+
+Every Stage sheet is on Ink and Signal: the name card aliases `--gl-is-*` as
+`--glstage-*` on `.glstage-root`, the comms stack as `--glstage-comms-*` on
+`.glstage-comms`, and the check refuses an Etched Glass token, a hex colour or
+type under 11px in any of them.
 
 The Director has no template. `director-view.mjs` builds its model and its
 markup as a string, the app sets it and binds events, and the director preview

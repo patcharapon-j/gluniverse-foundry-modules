@@ -5,12 +5,18 @@
    (scripts/features/stage/comms/comms-overlay.mjs), chosen by
    `data-style` on the root:
 
-     holo   a translucent projection — scanlines, corner brackets, an emitter
-     radio  a gritty transmission — static, a signal meter, a hard frame
-     clean  the suite's Etched Glass card
+     holo   a projection: scanlines, corner brackets, an emitter
+     radio  a gritty transmission: static, a signal meter, a hard frame
+     clean  an Ink and Signal plate: the portrait on a black slab
 
    Sits above the stage canvas (--gl-z-base) and Theatre's overlay (+1), below
    every piece of Foundry UI. Never takes a pointer.
+
+   Ink and Signal (docs/adr/0012-ink-and-signal-core.md): the core `--gl-is-*`
+   values aliased as `--glstage-comms-*` on this root, never on :root and never
+   restated. Holo and radio are diegetic looks (a projection, a transmission)
+   built on the same ink, type and signal hues; they keep their light because
+   they are the moment, not the chrome.
 
    Sizing: everything on a card is a multiple of `--glstage-comms-u`, one
    hundredth of the card's width, so a card scales as one picture. The width
@@ -18,19 +24,36 @@
      w = min(width, (avail − n·gap) / (n·k))
    where k is the style's height-to-width ratio.
 
-   Backdrop roots: the clean card blurs through `.glstage-comms-glass`, and any
-   ANCESTOR of it with opacity, filter, clip-path or a mask stops that blur
-   seeing the scene. Card and body therefore only ever transform; fades and
-   wipes go on their children in the clean style.
+   Fades go on a card's parts, never on the card or its body, which only ever
+   transform: a speaking card scales and lifts while its neighbours dim, and
+   the two must not fight over one opacity.
 
    Colour: each card carries the character's tint as --glstage-comms-tint
-   (written inline by the overlay). Each style derives its working colour
-   --glstage-comms-c from it, and everything else from that, on the card
-   itself — the :root-resolved --gl-glow/--gl-bloom/--gl-accent-soft/-faint
-   do not follow a scoped colour and are never read here.
+   (written inline by the overlay; paper when the GM gave none). Each style
+   derives its working colour --glstage-comms-c from it, and everything else
+   from that, on the card itself.
    ═══════════════════════════════════════════════════════════════════════ */
 
 .glstage-comms {
+  /* Ink and Signal, aliased */
+  --glstage-comms-ink-0: var(--gl-is-ink-0);
+  --glstage-comms-ink-1: var(--gl-is-ink-1);
+  --glstage-comms-ink-2: var(--gl-is-ink-2);
+  --glstage-comms-text: var(--gl-is-text);
+  --glstage-comms-paper: var(--gl-is-paper);
+  --glstage-comms-dim: var(--gl-is-dim);
+  --glstage-comms-on: var(--gl-is-on-slab);
+  --glstage-comms-line: var(--gl-is-line);
+  --glstage-comms-line-strong: var(--gl-is-line-strong);
+  --glstage-comms-shade: var(--gl-is-shade);
+  --glstage-comms-amber: var(--gl-is-amber);
+  --glstage-comms-red: var(--gl-is-red);
+  --glstage-comms-info: var(--gl-is-info);
+  --glstage-comms-font: var(--gl-is-font);
+  --glstage-comms-num: var(--gl-is-num);
+  --glstage-comms-cut-lg: var(--gl-is-cut-lg);
+  --glstage-comms-floor: var(--gl-is-t-meta);
+  /* layout */
   --glstage-comms-margin: 8vh;
   --glstage-comms-gap: 14px;
   --glstage-comms-dir: 1;
@@ -47,8 +70,8 @@
   z-index: calc(var(--gl-z-base) + 2);
   pointer-events: none;
   overflow: hidden;
-  font-family: var(--gl-display);
-  color: var(--gl-text-bright);
+  font-family: var(--glstage-comms-font);
+  color: var(--glstage-comms-text);
 }
 .glstage-comms[data-edge="left"] { --glstage-comms-dir: -1; }
 .glstage-comms[data-style="holo"] { --glstage-comms-k: 1.3; }
@@ -99,25 +122,26 @@
 /* ── the card ───────────────────────────────────────────────────────── */
 
 .glstage-comms-card {
-  --glstage-comms-tint: var(--gl-accent);
+  --glstage-comms-tint: var(--glstage-comms-paper);
   --glstage-comms-c: var(--glstage-comms-tint);
-  --glstage-comms-hot: color-mix(in oklab, var(--glstage-comms-c) 42%, rgb(var(--gl-tint-light)));
-  --glstage-comms-deep: color-mix(in oklab, var(--glstage-comms-c) 20%, var(--gl-ink-0));
+  --glstage-comms-hot: color-mix(in oklab, var(--glstage-comms-c) 42%, var(--glstage-comms-text));
+  --glstage-comms-deep: color-mix(in oklab, var(--glstage-comms-c) 20%, var(--glstage-comms-ink-0));
   --glstage-comms-veil: color-mix(in srgb, var(--glstage-comms-c) 30%, transparent);
   --glstage-comms-haze: color-mix(in srgb, var(--glstage-comms-c) 14%, transparent);
   position: relative;
   margin-block: calc(var(--glstage-comms-gap) / 2);
 }
-/* Holo light: the character's tint lifted toward pale cyan. Mixing toward the
-   pale end keeps a warm tint warm; toward full cyan, orange mixes to grey. */
-.glstage-comms[data-style="holo"] .glstage-comms-card { --glstage-comms-c: color-mix(in oklab, var(--glstage-comms-tint) 64%, var(--gl-cyan-hot)); }
-.glstage-comms[data-style="radio"] .glstage-comms-card { --glstage-comms-c: color-mix(in oklab, var(--glstage-comms-tint) 34%, var(--gl-warn)); }
+/* Holo light: the character's tint lifted toward paper. A projection is the
+   character's own colour made of light; it never borrows a suite hue. */
+.glstage-comms[data-style="holo"] .glstage-comms-card { --glstage-comms-c: color-mix(in oklab, var(--glstage-comms-tint) 64%, var(--glstage-comms-text)); }
+/* Radio: the tint warmed toward amber, a valve set's glow. */
+.glstage-comms[data-style="radio"] .glstage-comms-card { --glstage-comms-c: color-mix(in oklab, var(--glstage-comms-tint) 34%, var(--glstage-comms-amber)); }
 
 .glstage-comms-body {
   position: relative;
   isolation: isolate;
   transform-origin: calc(50% + 50% * var(--glstage-comms-dir)) 50%;
-  transition: transform var(--gl-d-swift) var(--gl-snap);
+  transition: transform var(--gl-d-swift) var(--gl-ease);
 }
 .glstage-comms[data-speaking] .glstage-comms-slot.is-speaking .glstage-comms-body {
   transform: translateX(calc(var(--glstage-comms-dir) * var(--glstage-comms-u) * -5)) scale(1.05);
@@ -127,7 +151,7 @@
 }
 
 /* Not speaking while someone else is: recede. Applied to the parts, never to
-   an ancestor of the glass (see the header). */
+   the card or its body (see the header). */
 .glstage-comms-glass,
 .glstage-comms-head,
 .glstage-comms-window,
@@ -221,20 +245,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
   text-transform: uppercase;
-  line-height: var(--gl-lh-tight);
+  line-height: 1.1;
+  transition: color var(--gl-d-brisk) var(--gl-ease);
 }
 .glstage-comms-name {
-  font-family: var(--gl-display);
-  font-weight: var(--gl-weight-bold);
-  font-size: max(11px, calc(var(--glstage-comms-u) * 8.2));
-  letter-spacing: var(--gl-track-wide);
+  font-weight: 700;
+  font-size: max(var(--glstage-comms-floor), calc(var(--glstage-comms-u) * 8.2));
+  letter-spacing: 0.12em;
 }
 .glstage-comms-title {
-  font-family: var(--gl-display);
-  font-weight: var(--gl-weight-medium);
-  font-size: max(8px, calc(var(--glstage-comms-u) * 4.6));
-  letter-spacing: var(--gl-track-xwide);
-  color: var(--gl-text-dim);
+  font-weight: 600;
+  font-size: max(var(--glstage-comms-floor), calc(var(--glstage-comms-u) * 4.6));
+  letter-spacing: 0.1em;
+  color: var(--glstage-comms-dim);
 }
 .glstage-comms-title[hidden] { display: none; }
 
@@ -377,11 +400,12 @@
   z-index: 3;
   top: calc(var(--glstage-comms-u) * 4);
   padding: calc(var(--glstage-comms-u) * 0.8) calc(var(--glstage-comms-u) * 2.2);
-  font-size: max(8px, calc(var(--glstage-comms-u) * 4.2));
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.26em;
+  font-size: max(var(--glstage-comms-floor), calc(var(--glstage-comms-u) * 4.2));
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  line-height: 1.1;
   text-transform: uppercase;
-  color: var(--gl-ink-0);
+  color: var(--glstage-comms-on);
   background: var(--glstage-comms-hot);
   box-shadow: 0 0 calc(var(--glstage-comms-u) * 4) var(--glstage-comms-c);
   opacity: 0;
@@ -407,7 +431,7 @@
   z-index: 2;
   height: 2px;
   margin: calc(var(--glstage-comms-u) * -0.5) 6% 0;
-  background: linear-gradient(90deg, transparent, var(--glstage-comms-hot) 20%, rgb(var(--gl-tint-light)) 50%, var(--glstage-comms-hot) 80%, transparent);
+  background: linear-gradient(90deg, transparent, var(--glstage-comms-hot) 20%, var(--glstage-comms-text) 50%, var(--glstage-comms-hot) 80%, transparent);
   box-shadow: 0 0 calc(var(--glstage-comms-u) * 3) var(--glstage-comms-c), 0 0 calc(var(--glstage-comms-u) * 8) var(--glstage-comms-veil);
 }
 .glstage-comms[data-style="holo"] .glstage-comms-base::before {
@@ -430,11 +454,11 @@
 }
 .glstage-comms[data-style="holo"] .glstage-comms-name {
   color: var(--glstage-comms-hot);
-  text-shadow: 0 0 calc(var(--glstage-comms-u) * 3) var(--glstage-comms-c), 0 1px 2px var(--gl-shadow);
+  text-shadow: 0 0 calc(var(--glstage-comms-u) * 3) var(--glstage-comms-c), 0 1px 2px var(--glstage-comms-shade);
 }
 .glstage-comms[data-style="holo"] .glstage-comms-title {
-  color: color-mix(in oklab, var(--glstage-comms-c) 62%, var(--gl-text-dim));
-  text-shadow: 0 1px 2px var(--gl-shadow);
+  color: color-mix(in oklab, var(--glstage-comms-c) 62%, var(--glstage-comms-dim));
+  text-shadow: 0 1px 2px var(--glstage-comms-shade);
 }
 .glstage-comms[data-style="holo"] .glstage-comms-wave i {
   background: var(--glstage-comms-hot);
@@ -480,13 +504,13 @@
   }
   36% {
     transform: scale(1, 1.03);
-    filter: brightness(1.7) drop-shadow(calc(var(--glstage-comms-u) * -2.4) 0 0 color-mix(in srgb, var(--gl-hazard) 70%, transparent)) drop-shadow(calc(var(--glstage-comms-u) * 2.4) 0 0 color-mix(in srgb, var(--gl-cyan) 70%, transparent));
+    filter: brightness(1.7) drop-shadow(calc(var(--glstage-comms-u) * -2.4) 0 0 color-mix(in srgb, var(--glstage-comms-red) 70%, transparent)) drop-shadow(calc(var(--glstage-comms-u) * 2.4) 0 0 color-mix(in srgb, var(--glstage-comms-info) 70%, transparent));
   }
   44% { opacity: 0.4; transform: scale(1, 0.99) translateX(calc(var(--glstage-comms-u) * 1.4)); }
   49% {
     opacity: 1;
     transform: scale(1, 1);
-    filter: brightness(1.3) drop-shadow(calc(var(--glstage-comms-u) * 1.6) 0 0 color-mix(in srgb, var(--gl-hazard) 60%, transparent)) drop-shadow(calc(var(--glstage-comms-u) * -1.6) 0 0 color-mix(in srgb, var(--gl-cyan) 60%, transparent));
+    filter: brightness(1.3) drop-shadow(calc(var(--glstage-comms-u) * 1.6) 0 0 color-mix(in srgb, var(--glstage-comms-red) 60%, transparent)) drop-shadow(calc(var(--glstage-comms-u) * -1.6) 0 0 color-mix(in srgb, var(--glstage-comms-info) 60%, transparent));
   }
   56% { opacity: 0.6; transform: translateX(calc(var(--glstage-comms-u) * -0.8)); }
   62% { opacity: 1; transform: none; }
@@ -506,8 +530,9 @@
 }
 
 /* ══ RADIO ══════════════════════════════════════════════════════════════
-   A transmission: a hard dark frame, a channel header, a warm noisy picture
+   A transmission: a hard ink frame, a channel header, a warm noisy picture
    behind interlace and static, a signal meter. Opens and closes as a wipe.
+   The TX lamp is the one red: this character is on air.
    ═══════════════════════════════════════════════════════════════════════ */
 
 .glstage-comms[data-style="radio"] .glstage-comms-body {
@@ -515,38 +540,22 @@
 }
 .glstage-comms[data-style="radio"] .glstage-comms-glass {
   background:
-    linear-gradient(to bottom, color-mix(in srgb, var(--glstage-comms-c) 10%, var(--gl-ink-1)), var(--gl-ink-0) 70%);
+    linear-gradient(to bottom, color-mix(in srgb, var(--glstage-comms-c) 8%, var(--glstage-comms-ink-1)), var(--glstage-comms-ink-0) 70%);
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--glstage-comms-c) 55%, transparent),
-    inset 0 0 0 calc(var(--glstage-comms-u) * 1.2) var(--gl-ink-0),
-    inset 0 0 0 calc(var(--glstage-comms-u) * 1.2 + 1px) color-mix(in srgb, var(--glstage-comms-c) 18%, transparent),
-    var(--gl-elev-3);
-  clip-path: polygon(
-    0 0,
-    calc(100% - var(--gl-cut-sm)) 0,
-    100% var(--gl-cut-sm),
-    100% 100%,
-    var(--gl-cut-sm) 100%,
-    0 calc(100% - var(--gl-cut-sm))
-  );
+    inset 0 0 0 1px color-mix(in srgb, var(--glstage-comms-c) 45%, transparent),
+    inset 0 0 0 calc(var(--glstage-comms-u) * 1.2) var(--glstage-comms-ink-0),
+    inset 0 0 0 calc(var(--glstage-comms-u) * 1.2 + 1px) color-mix(in srgb, var(--glstage-comms-c) 16%, transparent);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glstage-comms-cut-lg)), calc(100% - var(--glstage-comms-cut-lg)) 100%, 0 100%);
 }
-/* The chamfers' own edge, which the clip cut away. */
-.glstage-comms[data-style="radio"] .glstage-comms-glass::before,
-.glstage-comms[data-style="radio"] .glstage-comms-glass::after {
+/* The chamfer's own edge, which the clip cut away. */
+.glstage-comms[data-style="radio"] .glstage-comms-glass::before {
   content: "";
   position: absolute;
-  width: var(--gl-cut-sm);
-  height: var(--gl-cut-sm);
-}
-.glstage-comms[data-style="radio"] .glstage-comms-glass::before {
-  top: 0;
   right: 0;
-  background: linear-gradient(45deg, transparent calc(50% - 0.8px), color-mix(in srgb, var(--glstage-comms-c) 55%, transparent) calc(50% - 0.8px), color-mix(in srgb, var(--glstage-comms-c) 55%, transparent) calc(50% + 0.6px), transparent calc(50% + 0.6px));
-}
-.glstage-comms[data-style="radio"] .glstage-comms-glass::after {
   bottom: 0;
-  left: 0;
-  background: linear-gradient(45deg, transparent calc(50% - 0.6px), color-mix(in srgb, var(--glstage-comms-c) 55%, transparent) calc(50% - 0.6px), color-mix(in srgb, var(--glstage-comms-c) 55%, transparent) calc(50% + 0.8px), transparent calc(50% + 0.8px));
+  width: var(--glstage-comms-cut-lg);
+  height: var(--glstage-comms-cut-lg);
+  background: linear-gradient(-45deg, transparent calc(50% - 0.6px), color-mix(in srgb, var(--glstage-comms-c) 45%, transparent) calc(50% - 0.6px), color-mix(in srgb, var(--glstage-comms-c) 45%, transparent) calc(50% + 0.8px), transparent calc(50% + 0.8px));
 }
 
 .glstage-comms[data-style="radio"] .glstage-comms-head {
@@ -555,11 +564,11 @@
   gap: calc(var(--glstage-comms-u) * 2.4);
   height: calc(var(--glstage-comms-u) * 9);
   padding: 0 calc(var(--glstage-comms-u) * 1) calc(var(--glstage-comms-u) * 1.5);
-  font-size: max(8px, calc(var(--glstage-comms-u) * 4.6));
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.24em;
+  font-size: max(var(--glstage-comms-floor), calc(var(--glstage-comms-u) * 4.6));
+  font-weight: 700;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: color-mix(in oklab, var(--glstage-comms-c) 60%, var(--gl-text-dim));
+  color: color-mix(in oklab, var(--glstage-comms-c) 60%, var(--glstage-comms-dim));
   line-height: 1;
 }
 .glstage-comms-lamp {
@@ -568,7 +577,7 @@
   width: calc(var(--glstage-comms-u) * 3);
   height: calc(var(--glstage-comms-u) * 3);
   border-radius: 50%;
-  background: color-mix(in srgb, var(--gl-hazard) 22%, var(--gl-ink-2));
+  background: color-mix(in srgb, var(--glstage-comms-red) 22%, var(--glstage-comms-ink-2));
   box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-dark) / 0.5);
   transition: background var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
 }
@@ -580,17 +589,17 @@
     repeating-linear-gradient(90deg, color-mix(in srgb, var(--glstage-comms-c) 40%, transparent) 0 1px, transparent 1px calc(var(--glstage-comms-u) * 2.6)) center / 100% 60% no-repeat,
     linear-gradient(color-mix(in srgb, var(--glstage-comms-c) 30%, transparent), color-mix(in srgb, var(--glstage-comms-c) 30%, transparent)) center / 100% 1px no-repeat;
 }
-.glstage-comms-chan { font-variant-numeric: tabular-nums; }
+.glstage-comms-chan { font-family: var(--glstage-comms-num); font-variant-numeric: tabular-nums; letter-spacing: 0.08em; }
 .glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-lamp {
-  background: var(--gl-hazard);
-  box-shadow: 0 0 calc(var(--glstage-comms-u) * 2.4) var(--gl-hazard), 0 0 calc(var(--glstage-comms-u) * 6) color-mix(in srgb, var(--gl-hazard) 50%, transparent);
+  background: var(--glstage-comms-red);
+  box-shadow: 0 0 calc(var(--glstage-comms-u) * 2.4) var(--glstage-comms-red), 0 0 calc(var(--glstage-comms-u) * 6) color-mix(in srgb, var(--glstage-comms-red) 50%, transparent);
   animation: glstage-comms-lamp var(--gl-d-slow) var(--gl-ease-inout) infinite alternate;
 }
-.glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-tx { color: var(--glstage-comms-hot); }
+.glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-tx { color: var(--glstage-comms-text); }
 
 .glstage-comms[data-style="radio"] .glstage-comms-window {
   background:
-    radial-gradient(90% 80% at 50% 40%, color-mix(in srgb, var(--glstage-comms-c) 20%, var(--gl-ink-1)), var(--gl-ink-0));
+    radial-gradient(90% 80% at 50% 40%, color-mix(in srgb, var(--glstage-comms-c) 20%, var(--glstage-comms-ink-1)), var(--glstage-comms-ink-0));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--glstage-comms-c) 30%, transparent);
 }
 .glstage-comms[data-style="radio"] .glstage-comms-img {
@@ -612,6 +621,10 @@
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n' x='0' y='0' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3.2 0 0 0 -1.35'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   background-size: calc(var(--glstage-comms-u) * 46) calc(var(--glstage-comms-u) * 46);
   mix-blend-mode: screen;
+  /* Twice the window each way, so the static can jump by transform (on the
+     compositor) instead of by background-position (a style pass and a
+     repaint on every frame, per card, for as long as the call is up). */
+  inset: -50%;
 }
 .glstage-comms[data-style="radio"] .glstage-comms-noise {
   opacity: 0.16;
@@ -647,7 +660,7 @@
   padding: calc(var(--glstage-comms-u) * 3.6) calc(var(--glstage-comms-u) * 1) calc(var(--glstage-comms-u) * 0.6);
 }
 .glstage-comms[data-style="radio"] .glstage-comms-name { color: var(--glstage-comms-hot); }
-.glstage-comms[data-style="radio"] .glstage-comms-title { color: color-mix(in oklab, var(--glstage-comms-c) 45%, var(--gl-text-dim)); }
+.glstage-comms[data-style="radio"] .glstage-comms-title { color: color-mix(in oklab, var(--glstage-comms-c) 45%, var(--glstage-comms-dim)); }
 .glstage-comms[data-style="radio"] .glstage-comms-wave {
   grid-column: 1 / -1;
   grid-row: 2;
@@ -693,9 +706,8 @@
 .glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-glass {
   box-shadow:
     inset 0 0 0 1px var(--glstage-comms-hot),
-    inset 0 0 0 calc(var(--glstage-comms-u) * 1.2) var(--gl-ink-0),
-    inset 0 0 0 calc(var(--glstage-comms-u) * 1.2 + 1px) color-mix(in srgb, var(--glstage-comms-c) 45%, transparent),
-    var(--gl-elev-3);
+    inset 0 0 0 calc(var(--glstage-comms-u) * 1.2) var(--glstage-comms-ink-0),
+    inset 0 0 0 calc(var(--glstage-comms-u) * 1.2 + 1px) color-mix(in srgb, var(--glstage-comms-c) 45%, transparent);
 }
 .glstage-comms[data-speaking][data-style="radio"] .glstage-comms-slot.is-speaking .glstage-comms-img {
   filter: grayscale(0.3) sepia(0.3) contrast(1.18) brightness(1.04);
@@ -704,17 +716,18 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--glstage-comms-hot) 70%, transparent), 0 0 calc(var(--glstage-comms-u) * 6) var(--glstage-comms-veil);
 }
 
-/* Static: the noise tile jumps between held positions (a stepped hold drawn
-   with paired stops, so the timing stays a token). */
+/* Static: the noise layer jumps between held offsets (a stepped hold drawn
+   with paired stops, so the timing stays a token). The layer is twice the
+   window, so any offset within ±25% of it still covers the window. */
 @keyframes glstage-comms-static {
-  0%, 12.4%      { background-position: 0 0; }
-  12.5%, 24.9%   { background-position: 37% 61%; }
-  25%, 37.4%     { background-position: 81% 14%; }
-  37.5%, 49.9%   { background-position: 22% 88%; }
-  50%, 62.4%     { background-position: 66% 42%; }
-  62.5%, 74.9%   { background-position: 9% 27%; }
-  75%, 87.4%     { background-position: 93% 76%; }
-  87.5%, 100%    { background-position: 48% 5%; }
+  0%, 12.4%      { transform: translate(0, 0); }
+  12.5%, 24.9%   { transform: translate(-6.5%, 5.5%); }
+  25%, 37.4%     { transform: translate(15.5%, -18%); }
+  37.5%, 49.9%   { transform: translate(-14%, 19%); }
+  50%, 62.4%     { transform: translate(8%, -4%); }
+  62.5%, 74.9%   { transform: translate(-20.5%, -11.5%); }
+  75%, 87.4%     { transform: translate(21.5%, 13%); }
+  87.5%, 100%    { transform: translate(-1%, -22.5%); }
 }
 @keyframes glstage-comms-squelch {
   0%   { opacity: 0.95; }
@@ -784,57 +797,45 @@
 }
 
 /* ══ CLEAN ══════════════════════════════════════════════════════════════
-   Etched Glass: a blurred glass card with the portrait set into it, the
-   name laid over the portrait's foot, and one accent rule on the outer edge.
+   Ink and Signal: a black slab with the portrait set into it, the name laid
+   over the portrait's foot, the system's cut corner, and the character's
+   tint as the slab's one tone edge. Flat at rest; speaking lights the edge.
    ═══════════════════════════════════════════════════════════════════════ */
 
 .glstage-comms[data-style="clean"] .glstage-comms-body {
   padding: calc(var(--glstage-comms-u) * 3);
 }
 .glstage-comms[data-style="clean"] .glstage-comms-glass {
-  background:
-    linear-gradient(165deg,
-      color-mix(in srgb, color-mix(in srgb, var(--glstage-comms-c) 16%, var(--gl-ink-2)) 72%, transparent),
-      color-mix(in srgb, var(--gl-ink-1) 84%, transparent) 70%);
-  box-shadow: inset 0 0 0 1px var(--gl-edge), var(--gl-etch-soft);
-  backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
-  -webkit-backdrop-filter: blur(var(--gl-blur)) saturate(var(--gl-saturation));
-}
-.glstage-comms[data-edge="right"][data-style="clean"] .glstage-comms-glass {
-  clip-path: polygon(var(--gl-cut) 0, 100% 0, 100% 100%, 0 100%, 0 var(--gl-cut));
-}
-.glstage-comms[data-edge="left"][data-style="clean"] .glstage-comms-glass {
-  clip-path: polygon(0 0, calc(100% - var(--gl-cut)) 0, 100% var(--gl-cut), 100% 100%, 0 100%);
+  background: var(--glstage-comms-ink-1);
+  box-shadow:
+    inset 2px 0 0 color-mix(in srgb, var(--glstage-comms-c) 55%, transparent),
+    inset 0 0 0 1px var(--glstage-comms-line-strong);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glstage-comms-cut-lg)), calc(100% - var(--glstage-comms-cut-lg)) 100%, 0 100%);
+  transition: opacity var(--gl-d-brisk) var(--gl-ease), box-shadow var(--gl-d-brisk) var(--gl-ease);
 }
 /* The chamfer's own edge, which the clip cut away. */
 .glstage-comms[data-style="clean"] .glstage-comms-glass::before {
   content: "";
   position: absolute;
-  top: 0;
-  width: var(--gl-cut);
-  height: var(--gl-cut);
-}
-.glstage-comms[data-edge="right"][data-style="clean"] .glstage-comms-glass::before {
-  left: 0;
-  background: linear-gradient(-45deg, transparent calc(50% - 1.1px), var(--gl-edge) calc(50% - 1.1px), var(--gl-edge) calc(50% + 0.3px), transparent calc(50% + 0.3px));
-}
-.glstage-comms[data-edge="left"][data-style="clean"] .glstage-comms-glass::before {
   right: 0;
-  background: var(--gl-chamfer-edge);
+  bottom: 0;
+  width: var(--glstage-comms-cut-lg);
+  height: var(--glstage-comms-cut-lg);
+  background: linear-gradient(-45deg, transparent calc(50% - 0.6px), var(--glstage-comms-line-strong) calc(50% - 0.6px), var(--glstage-comms-line-strong) calc(50% + 0.8px), transparent calc(50% + 0.8px));
 }
 
 .glstage-comms[data-style="clean"] .glstage-comms-window {
-  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.06);
-  background: linear-gradient(to bottom, color-mix(in srgb, var(--glstage-comms-c) 10%, transparent), transparent 60%);
+  background: var(--glstage-comms-ink-0);
+  box-shadow: inset 0 0 0 1px var(--glstage-comms-line);
 }
 .glstage-comms[data-style="clean"] .glstage-comms-img {
   -webkit-mask-image: linear-gradient(to bottom, black 52%, transparent 94%);
   mask-image: linear-gradient(to bottom, black 52%, transparent 94%);
 }
-/* A tint that rises from the foot of the portrait while speaking. */
+/* The character's tint rising from the foot of the portrait while speaking. */
 .glstage-comms[data-style="clean"] .glstage-comms-tone {
   display: block;
-  background: linear-gradient(to top, color-mix(in srgb, var(--glstage-comms-c) 32%, transparent), transparent 50%);
+  background: linear-gradient(to top, color-mix(in srgb, var(--glstage-comms-c) 26%, transparent), transparent 46%);
   mix-blend-mode: screen;
   opacity: 0;
   transition: opacity var(--gl-d-swift) var(--gl-ease);
@@ -843,30 +844,53 @@
 
 .glstage-comms[data-style="clean"] .glstage-comms-plate {
   position: absolute;
-  left: calc(var(--glstage-comms-u) * 7);
-  right: calc(var(--glstage-comms-u) * 7);
-  bottom: calc(var(--glstage-comms-u) * 7);
+  left: calc(var(--glstage-comms-u) * 4);
+  right: calc(var(--glstage-comms-u) * 4);
+  bottom: calc(var(--glstage-comms-u) * 4);
   align-items: end;
+  padding: calc(var(--glstage-comms-u) * 2.6) calc(var(--glstage-comms-u) * 3);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-sm)), calc(100% - var(--gl-is-cut-sm)) 100%, 0 100%);
+  transition: opacity var(--gl-d-brisk) var(--gl-ease), filter var(--gl-d-brisk) var(--gl-ease), background-color var(--gl-d-brisk) var(--gl-ease);
+}
+/* On air: the speaker's name lands on a paper slab, the system's loudest
+   neutral, so the one voice in the stack reads from across the room and on
+   a 1080p capture. Everything else on the card stays ink. */
+.glstage-comms[data-speaking][data-style="clean"] .glstage-comms-slot.is-speaking .glstage-comms-plate {
+  background-color: var(--glstage-comms-paper);
+}
+.glstage-comms[data-speaking][data-style="clean"] .glstage-comms-slot.is-speaking :is(.glstage-comms-name, .glstage-comms-title) {
+  color: var(--glstage-comms-on);
+  text-shadow: none;
+}
+.glstage-comms[data-speaking][data-style="clean"] .glstage-comms-slot.is-speaking .glstage-comms-wave i {
+  background: var(--glstage-comms-on);
 }
 .glstage-comms[data-style="clean"] .glstage-comms-name {
-  font-size: max(11px, calc(var(--glstage-comms-u) * 8.6));
-  letter-spacing: var(--gl-track-normal);
-  text-shadow: 0 1px 2px var(--gl-shadow), 0 0 calc(var(--glstage-comms-u) * 6) rgb(var(--gl-tint-dark) / 0.7);
+  font-size: max(var(--glstage-comms-floor), calc(var(--glstage-comms-u) * 8.6));
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 2px var(--glstage-comms-shade), 0 0 calc(var(--glstage-comms-u) * 6) var(--glstage-comms-shade);
 }
+/* The epithet is content, not a label: sentence case at body weight, so a
+   whole "Envoy of the Court" fits a 188px card instead of an ellipsis. */
 .glstage-comms[data-style="clean"] .glstage-comms-title {
-  color: color-mix(in oklab, var(--glstage-comms-c) 30%, var(--gl-text-dim));
-  text-shadow: 0 1px 2px var(--gl-shadow);
+  font-size: max(var(--glstage-comms-floor), calc(var(--glstage-comms-u) * 5.4));
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  text-shadow: 0 1px 2px var(--glstage-comms-shade);
 }
 .glstage-comms[data-style="clean"] .glstage-comms-wave {
   align-items: flex-end;
-  height: calc(var(--glstage-comms-u) * 7);
+  height: calc(var(--glstage-comms-u) * 9);
   gap: calc(var(--glstage-comms-u) * 1.2);
   padding-bottom: calc(var(--glstage-comms-u) * 0.6);
 }
 .glstage-comms[data-style="clean"] .glstage-comms-wave i {
-  width: max(2px, calc(var(--glstage-comms-u) * 1.5));
+  width: max(3px, calc(var(--glstage-comms-u) * 2));
   transform-origin: 50% 100%;
   background: var(--glstage-comms-hot);
+  border-radius: 0;
   opacity: 0;
 }
 .glstage-comms[data-style="clean"] .glstage-comms-wave i:nth-child(n + 6) { display: none; }
@@ -876,32 +900,16 @@
 .glstage-comms[data-style="clean"] .glstage-comms-wave i:nth-child(4) { --glstage-comms-e: 0.75; }
 .glstage-comms[data-style="clean"] .glstage-comms-wave i:nth-child(5) { --glstage-comms-e: 0.5; }
 
-/* The accent rule on the outer edge: a hairline at rest, lit while speaking. */
-.glstage-comms[data-style="clean"] .glstage-comms-base {
-  display: block;
-  position: absolute;
-  top: calc(var(--glstage-comms-u) * 3);
-  bottom: calc(var(--glstage-comms-u) * 3);
-  width: 2px;
-  background: linear-gradient(to bottom, transparent, var(--glstage-comms-c) 30%, var(--glstage-comms-c) 70%, transparent);
-  opacity: 0.55;
-  transform: scaleY(0.6);
-  transition: transform var(--gl-d-swift) var(--gl-snap), opacity var(--gl-d-brisk) var(--gl-ease), box-shadow var(--gl-d-brisk) var(--gl-ease);
-}
-.glstage-comms[data-edge="right"][data-style="clean"] .glstage-comms-base { right: calc(var(--glstage-comms-u) * 1); }
-.glstage-comms[data-edge="left"][data-style="clean"] .glstage-comms-base { left: calc(var(--glstage-comms-u) * 1); }
-.glstage-comms[data-speaking][data-style="clean"] .glstage-comms-slot.is-speaking .glstage-comms-base {
-  opacity: 1;
-  transform: scaleY(1);
-  background: linear-gradient(to bottom, transparent, var(--glstage-comms-hot) 18%, var(--glstage-comms-hot) 82%, transparent);
-  box-shadow: 0 0 calc(var(--glstage-comms-u) * 3) var(--glstage-comms-c), 0 0 calc(var(--glstage-comms-u) * 8) var(--glstage-comms-veil);
-}
+/* Speaking: the tone edge at full strength and wider, and the slab's outline
+   in the tint. A tone change, not a glow. */
 .glstage-comms[data-speaking][data-style="clean"] .glstage-comms-slot.is-speaking .glstage-comms-glass {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glstage-comms-c) 45%, transparent), var(--gl-etch-soft);
+  box-shadow:
+    inset 3px 0 0 var(--glstage-comms-hot),
+    inset 0 0 0 1px color-mix(in srgb, var(--glstage-comms-c) 45%, transparent);
 }
 
 /* Arrival: slides in from the edge while its parts fade up. The card only
-   moves; the fades are on the parts (backdrop roots, see the header). */
+   moves; the fades are on the parts (see the header). */
 .glstage-comms[data-style="clean"] .glstage-comms-slot.is-entering .glstage-comms-card {
   animation: glstage-comms-clean-in var(--gl-d-reveal) var(--gl-ease) both;
   animation-delay: var(--glstage-comms-delay);
@@ -981,10 +989,10 @@
    spills over the meter instead of taking its ellipsis. */
 .glstage-comms[data-density="compact"][data-edge="right"] .glstage-comms-id { order: 2; text-align: right; }
 .glstage-comms[data-density="compact"] .glstage-comms-name {
-  font-size: max(11px, calc(var(--glstage-comms-u) * 6));
-  letter-spacing: var(--gl-track-normal);
+  font-size: max(var(--glstage-comms-floor), calc(var(--glstage-comms-u) * 6));
+  letter-spacing: 0.06em;
 }
-.glstage-comms[data-density="compact"] .glstage-comms-title { font-size: max(8px, calc(var(--glstage-comms-u) * 3.8)); }
+.glstage-comms[data-density="compact"] .glstage-comms-title { font-size: max(var(--glstage-comms-floor), calc(var(--glstage-comms-u) * 3.8)); }
 .glstage-comms[data-density="compact"] .glstage-comms-wave { height: calc(var(--glstage-comms-u) * 7); gap: calc(var(--glstage-comms-u) * 0.9); }
 .glstage-comms[data-density="compact"] .glstage-comms-wave i { width: max(1.5px, calc(var(--glstage-comms-u) * 0.9)); }
 .glstage-comms[data-density="compact"] .glstage-comms-signal { height: calc(var(--glstage-comms-u) * 6.5); }
@@ -1010,7 +1018,7 @@
   grid-area: head;
   height: calc(var(--glstage-comms-u) * 6);
   padding: 0;
-  font-size: max(8px, calc(var(--glstage-comms-u) * 3.2));
+  font-size: max(var(--glstage-comms-floor), calc(var(--glstage-comms-u) * 3.2));
 }
 .glstage-comms[data-density="compact"][data-style="radio"] .glstage-comms-plate {
   padding: calc(var(--glstage-comms-u) * 1.5) 0 0;
@@ -1022,7 +1030,6 @@
 .glstage-comms[data-density="compact"][data-style="clean"] .glstage-comms-body { padding: calc(var(--glstage-comms-u) * 2.5); }
 .glstage-comms[data-density="compact"][data-style="clean"] .glstage-comms-plate { position: relative; inset: auto; }
 .glstage-comms[data-density="compact"][data-style="clean"] .glstage-comms-img { -webkit-mask-image: none; mask-image: none; }
-.glstage-comms[data-density="compact"][data-style="clean"] .glstage-comms-base { top: calc(var(--glstage-comms-u) * 2.5); bottom: calc(var(--glstage-comms-u) * 2.5); }
 
 /* ── hidden quietly ─────────────────────────────────────────────────────
    A call added while the stack is hidden waits invisible, rather than

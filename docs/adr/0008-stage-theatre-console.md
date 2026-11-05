@@ -43,6 +43,15 @@ What the players see is not part of this skin. The Stage name card and the
 Theatre title, card and tag stay in the global theme, but drop the accent for a
 neutral paper rule and a neutral sans, because they sit over campaign art.
 
+Amended 2026-11-05: the Stage name card and the comms stack are on Ink and
+Signal too, aliased as `--glstage-*` on `.glstage-root` and `--glstage-comms-*`
+on `.glstage-comms` (ADR 0012). The clean comms card is an ink slab with the
+system's cut corner and the character's tint as its one tone edge. Holo and
+radio stay diegetic looks (a projection, a transmission) on the same ink, type
+and signals: a holo is the character's tint lifted toward paper, never the old
+cyan, and radio's on-air lamp is the signal red. `stage-check` refuses an
+Etched Glass token, a hex and type under 11px in all three Stage sheets.
+
 ## Consequences
 
 - `tools/theatre-check.mjs` holds the two ramps equal and refuses the skin on
