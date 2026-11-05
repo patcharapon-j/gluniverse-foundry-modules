@@ -278,6 +278,10 @@ state("GM · speaker picker open", {
   ] }
 }, true);
 
+// ?focus=1 puts keyboard focus on the pressed Say tab of "Player · IC Say, typing", the case where a
+// paper ring would vanish into a paper slab.
+if (qs.get("focus")) document.querySelectorAll('#states .glrp-mode[aria-pressed="true"][data-glrp-tone="say"]')[0]?.focus({ focusVisible: true });
+
 /* ── the stream: through the real reader ── */
 const LABELS = { Says: "Says", Does: "Does", Thinks: "Thinks", Narration: "Narration", Unknown: "Unknown", OutOfCharacter: "Out of character" };
 const who = (name, img) => ({ name, isNpc: false, img, imgKind: "portrait", focus: null });

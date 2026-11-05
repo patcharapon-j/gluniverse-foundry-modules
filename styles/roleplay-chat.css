@@ -27,7 +27,6 @@
   --glrp-ink-1: var(--gl-is-ink-1);
   --glrp-ink-2: var(--gl-is-ink-2);
   --glrp-ink-3: var(--gl-is-ink-3);
-  --glrp-ink-4: var(--gl-is-ink-4);
   --glrp-text: var(--gl-is-text);
   --glrp-paper: var(--gl-is-paper);
   --glrp-dim: var(--gl-is-dim);
@@ -135,15 +134,16 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   min-width: 0;
   height: 32px;
   padding: 0 10px 0 4px;
-  transition: background-color var(--gl-d-quick) var(--gl-ease), opacity var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-brisk) var(--gl-ease);
+  transition: background-color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-brisk) var(--gl-ease);
 }
 .glrp-bar .glrp-chip[aria-expanded="true"] { background: var(--glrp-selected); }
 .glrp-bar .glrp-chip:focus-visible { outline: var(--gl-is-focus-ring); outline-offset: -2px; }
 /* Out of character the chip is who you would be on the way back, so it steps back: the portrait
    fades and the name drops to dim. Its type keeps a readable tone rather than fading with it. */
-.glrp-bar[data-glrp-mode="ooc"] .glrp-chip:not([aria-expanded="true"]) .glrp-avatar { opacity: 0.5; }
-.glrp-bar[data-glrp-mode="ooc"] .glrp-chip:not([aria-expanded="true"]) .glrp-chip-name { color: var(--glrp-dim); font-weight: 500; }
-.glrp-chip .glrp-avatar { width: 24px; height: 24px; }
+.glrp-bar[data-glrp-mode="ooc"] .glrp-chip:not([aria-expanded="true"], :hover, :focus-visible) .glrp-avatar { opacity: 0.5; }
+.glrp-bar[data-glrp-mode="ooc"] .glrp-chip:not([aria-expanded="true"], :hover, :focus-visible) .glrp-chip-name { color: var(--glrp-dim); font-weight: 500; }
+.glrp-chip .glrp-avatar { width: 24px; height: 24px; transition: opacity var(--gl-d-quick) var(--gl-ease); }
+.glrp-chip .glrp-chip-name { transition: color var(--gl-d-quick) var(--gl-ease); }
 .glrp-chip-as {
   flex: none;
   font: 700 var(--gl-is-t-meta)/1 var(--glrp-sans);
@@ -265,7 +265,7 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
 .glrp-bar :is(.glrp-chip, .glrp-mode:not(:disabled), .glrp-picker-row):active { scale: var(--gl-is-press); }
 .glrp-ico { font-size: 10px; }
 @media (hover: hover) and (pointer: fine) {
-  .glrp-bar .glrp-chip:hover { background: var(--glrp-hover); opacity: 1; }
+  .glrp-bar .glrp-chip:hover { background: var(--glrp-hover); }
   .glrp-bar .glrp-mode:hover:not(:disabled):not([aria-pressed="true"]) { color: var(--glrp-tab); background: var(--glrp-hover); }
 }
 
@@ -636,7 +636,6 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
   font: italic 500 17px/1.22 var(--glrp-serif);
   color: var(--glrp-think-ink);
 }
-.glrp-bub[data-glrp-mode="think"] .glrp-balloon-who { font-style: normal; }
 .glrp-puffs { display: grid; justify-items: center; gap: 3px; padding-top: 4px; }
 .glrp-puffs i {
   display: block;
