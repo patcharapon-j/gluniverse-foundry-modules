@@ -1215,6 +1215,26 @@ a live v14 session can prove it. The backdrop warm-up polls shader completion on
 a timer, not animation frames: a background tab starves rAF, and a warm-up that
 waits on it holds the whole spotlight. See `docs/SPOTLIGHT_ROLL.md`.
 
+**When touching Critical** (`features/critical/`, `styles/critical.css`,
+`templates/critical/`), re-run its check:
+
+```bash
+node tools/critical-check.mjs
+```
+
+Zero problems required. The skin is Ink and Signal, aliased as `--gluc-*` on
+`#gls-critical-overlay` and the two config windows. `cut-in.mjs` is pure and is
+the one statement of the beat's geometry: the PIXI still's mask (a child of the
+sprite), the video's clip and the chrome's rules all land on `bandOf`, so a
+change in one place moves all three. PIXI reads the backdrop from
+`--gluc-backdrop`, never a literal. The chrome is a tone slab: green for a PC's
+critical, red for an NPC's, and it prints a PC's name only. An NPC's name never
+reaches the markup (`cutInModel`), because the cut-in is drawn on every
+player's screen and the stream login. To see it: `node tools/critical-preview.mjs
+&& node tools/preview-server.mjs`, then `/.preview/critical.html` (`only`,
+`seek`, `focus`, `bench`). The preview plays the DOM path; the PIXI still needs
+a live session.
+
 **When touching Combat Intro** (`features/combat-intro/`, `styles/combat-intro*.css`,
 `styles/initiative-aegis.css`, the rail's Start button and arrival), re-run its
 check. Everything it covers fails silently:

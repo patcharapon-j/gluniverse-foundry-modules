@@ -205,7 +205,8 @@ div:is(.gluc-gm-config, .gluc-actor-config) {
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut)), calc(100% - var(--gl-is-cut)) 100%, 0 100%);
 }
 
-.gluc-gm-config h3 {
+/* Section names: the window title is the page's h1, so these are h2s. */
+.gluc-gm-config section > h2 {
   margin: 0;
   border: 0;
   color: var(--gluc-faint);
