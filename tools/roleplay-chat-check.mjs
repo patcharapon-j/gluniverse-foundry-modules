@@ -489,7 +489,34 @@ for (const m of cssBare.matchAll(/(?:transition|animation)\s*:[^;]*;/g)) {
   ok(!/cubic-bezier|\b(ease|ease-in|ease-out|ease-in-out|linear)\b/.test(m[0].replace(/--gl-ease[a-z-]*/g, "")), `roleplay-chat.css: a raw easing in "${m[0].trim()}"`);
 }
 for (const m of cssBare.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)) ok(m[1].startsWith("glrp-"), `roleplay-chat.css: @keyframes ${m[1]} is not prefixed glrp-`);
-ok(/backdrop-filter:\s*blur\(calc\([^)]*--gl-glass-k/.test(cssBare) && !/backdrop-filter:\s*blur\(\d/.test(cssBare), "roleplay-chat.css: a backdrop blur not written against --gl-glass-k");
+ok(!/backdrop-filter:\s*blur\(\d/.test(cssBare), "roleplay-chat.css: a backdrop blur not written against --gl-glass-k");
+
+/* ── Ink and Signal ──────────────────────────────────────────────────────── */
+// The skin aliases the core `--gl-is-*` family on its own roots (docs/adr/0012). An Etched Glass token
+// read here is the old look leaking back; a restated value is drift the next core retune misses.
+for (const m of cssBare.matchAll(/var\((--gl-[a-z0-9-]+)/g)) {
+  const t = m[1];
+  const shared = /^--gl-(is-|d-|ease|tint-|glass-k|blur|z-|thai|lift|stagger)/.test(t);
+  ok(shared, `roleplay-chat.css: reads the Etched Glass token ${t} — alias the --gl-is-* family instead`);
+}
+for (const tone of ["ink-0", "ink-1", "ink-2", "ink-3", "paper", "dim", "faint", "steel", "line", "line-strong", "hover", "selected"]) {
+  ok(new RegExp(`--glrp-${tone}:\\s*var\\(--gl-is-${tone}\\)`).test(cssBare), `roleplay-chat.css: --glrp-${tone} does not alias --gl-is-${tone}`);
+}
+// The No Violet Rule: Think's tone is a signal hue from core, never a lilac mixed here.
+ok(/--glrp-think:\s*var\(--gl-is-info\)/.test(cssBare), "roleplay-chat.css: Think is not the core info hue");
+ok(/--glrp-do:\s*var\(--gl-is-amber\)/.test(cssBare), "roleplay-chat.css: Do is not the core amber");
+// The Floor Rule: nothing under 11px but an icon glyph.
+for (const m of cssBare.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+  const [, sel, body] = m;
+  for (const s of body.matchAll(/(?:font-size:\s*|font:[^;]*?\b)(\d+(?:\.\d+)?)px/g)) {
+    if (Number(s[1]) >= 11) continue;
+    ok(/glrp-(ico|hidden|chip-caret)|\bi\b/.test(sel), `roleplay-chat.css: ${s[1]}px type under ${sel.trim().slice(0, 60)} — the floor is 11px`);
+  }
+}
+// One focus ring and one disabled state for the whole suite.
+ok(!/outline:\s*1px/.test(cssBare) && /outline:\s*var\(--gl-is-focus-ring\)/.test(cssBare), "roleplay-chat.css: a focus outline that is not --gl-is-focus-ring");
+ok(/opacity:\s*var\(--gl-is-disabled\)/.test(cssBare) && !/:disabled\s*\{[^}]*opacity:\s*0\./.test(cssBare), "roleplay-chat.css: a disabled tab not at --gl-is-disabled");
+ok(/scale:\s*var\(--gl-is-press\)/.test(cssBare), "roleplay-chat.css: the switch's controls have no press state");
 
 /* ── i18n ────────────────────────────────────────────────────────────────── */
 for (const [family, values] of Object.entries(M.I18N_FAMILIES)) {
