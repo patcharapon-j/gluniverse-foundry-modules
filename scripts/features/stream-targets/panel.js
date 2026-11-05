@@ -30,6 +30,8 @@ export async function renderSection() {
     featurePath(TARGETS_FEATURE_ID, "templates/section.hbs"),
     {
       targeting,
+      // The room's range rows read as a percentage, and its input handler keeps that readout live.
+      weightPercent: Math.round(targeting.intensity * 100),
       canEdit: Boolean(game.user?.isGM),
       // With no stream client there is only one audience, so the control is
       // absent rather than a select with a single option.

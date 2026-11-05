@@ -54,8 +54,10 @@ Three rules on top of the ones below:
   the skin's aliases follow.
 
 The family is `--gl-is-*` rather than `--gl-ink-*` because Etched Glass already
-owns `--gl-ink-0` to `-3`. `scripts/core/theme.mjs` does not mirror it yet; a
-canvas or WebGL consumer that needs these colours reads them with `cssVar()`.
+owns `--gl-ink-0` to `-3`. `scripts/core/theme.mjs` mirrors the dark ground's
+hex values as `INK_SIGNAL` (`ink0`…`ink6`, the tones and the five signals) for
+canvas and WebGL consumers; `node tools/stream-targets-check.mjs` compares the
+mirror with `gl-tokens.css` value for value.
 
 To see every value read back from the shipped CSS, with a contrast grid for both
 grounds: `node tools/ink-signal-preview.mjs && node tools/preview-server.mjs`,
@@ -329,7 +331,7 @@ hardcode a suite colour in JS.
 import { PALETTE, hexToRgbFloat, cssVar, applyMotionTier } from "../../core/theme.mjs";
 ```
 
-`PALETTE` mirrors L0 · `hexToInt` / `hexToRgbFloat` for PIXI/GLSL · `mix`,
+`PALETTE` mirrors L0 · `INK_SIGNAL` mirrors `--gl-is-*` · `hexToInt` / `hexToRgbFloat` for PIXI/GLSL · `mix`,
 `lighten`, `darken`, `withAlpha` for derived tones · `cssVar()` reads the *live*
 (possibly rethemed) value when an element is in the document — prefer it there.
 

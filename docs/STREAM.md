@@ -139,7 +139,11 @@ changes, never on a sight refresh; PF2e Odds and Diorama both read it.
   level down and is accepted: a token's targets are its owners' targets, which
   is the rule `targetsOfToken` has always applied.
 - **Colours** follow disposition. Secret dispositions count as neutral, so a
-  line never reveals a hidden allegiance.
+  line never reveals a hidden allegiance. The defaults are Ink and Signal's
+  signals, read from `INK_SIGNAL` in `core/theme.mjs`: info blue for the party's
+  own attack, red for danger coming at it, green for help, steel for a neutral
+  or secret side. The ink rim and the paper hairline come from the same mirror.
+  The editor section takes the room's skin (ADR 0007) in both its homes.
 - **Visible to** — everyone / GMs and the stream / stream only. **The last two
   options are absent when Stream Client is disabled**, since there is no stream
   client to be an audience; a world that stored one falls back to *everyone* on

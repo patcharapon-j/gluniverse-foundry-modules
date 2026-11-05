@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import { test } from "node:test";
+import { INK_SIGNAL, hexToInt } from "../scripts/core/theme.mjs";
 
 const read = path => readFileSync(new URL(path, import.meta.url), "utf8");
 /** Module source as a plain script: single-line imports dropped (the sandbox supplies them), exports unwrapped. */
@@ -123,8 +124,10 @@ function createHarness({ users, calm = true }) {
     getShowLines: () => true,
     isConfiguredStreamUser: () => false,
     // constants.js namespaces onto the suite id, and the feature raises its own
-    // settings hook; both are imports the sandbox supplies.
+    // settings hook; both are imports the sandbox supplies, as is the core palette.
     SUITE_ID: "gluniverse-foundry-modules",
+    INK_SIGNAL,
+    hexToInt,
     TARGETS_HOOKS: {
       settingsChanged: "gluniverse-foundry-modules.targets.settingsChanged",
       linesChanged: "gluniverse-foundry-modules.targets.linesChanged"
@@ -693,8 +696,11 @@ function loadTargetLine() {
   const context = vm.createContext({
     console, Map, Set, JSON,
     // constants.js namespaces onto the suite id; the sandbox supplies the
-    // import that asScript strips.
+    // import that asScript strips, and the line's ink and paper come from the
+    // core palette the same way.
     SUITE_ID: "gluniverse-foundry-modules",
+    INK_SIGNAL,
+    hexToInt,
     animate: (target, params) => {
       const animation = {
         target,

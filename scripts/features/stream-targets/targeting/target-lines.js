@@ -1,4 +1,5 @@
 import { Budget } from "../../../core/budget.mjs";
+import { INK_SIGNAL, hexToInt } from "../../../core/theme.mjs";
 import { getActiveCombatant, getActiveSceneCombat, getCombatantToken } from "../../stream/combat-utils.js";
 import { HOOKS, MODULE_ID, TARGET_LINE_VISIBILITY } from "../../stream/constants.js";
 import { createTimer, onCanvasFrame, prefersCalmMotion } from "../../stream/motion/engine.js";
@@ -473,7 +474,8 @@ function sideOf(token) {
   return 0;
 }
 
+/** A colour the settings sanitizer let through as a number; anything unreadable draws in Ink and Signal's paper. */
 function hexToNumber(hex) {
   const value = Number.parseInt(String(hex ?? "").replace("#", ""), 16);
-  return Number.isFinite(value) ? value : 0xffffff;
+  return Number.isFinite(value) ? value : hexToInt(INK_SIGNAL.paper);
 }

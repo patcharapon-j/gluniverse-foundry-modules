@@ -15,6 +15,7 @@
  */
 
 import { SUITE_ID } from "../../core/const.mjs";
+import { INK_SIGNAL } from "../../core/theme.mjs";
 
 /**
  * Foundry only lets a package register settings, flags and sockets under its own
@@ -207,11 +208,16 @@ export const DEFAULT_TARGETING_SETTINGS = {
   showAllSources: false,
   /** Keep drawing with no encounter running. There is no current turn then, so every source draws. */
   outOfCombat: false,
-  colorFriendlyToHostile: "#4db8ff",
-  colorHostileToFriendly: "#ff4a5c",
-  colorSameSide: "#52f5a0",
-  colorOther: "#ffd35c",
-  /** Line width and glow multiplier, 0.25 to 2. */
+  /**
+   * Relationship colours are Ink and Signal's signals, one job each: info for the party's own attack (a fact
+   * with no verdict), red for danger coming at the party, green for help, steel for the quiet unknown (a
+   * neutral or a secret disposition, which must not read as a side).
+   */
+  colorFriendlyToHostile: INK_SIGNAL.info,
+  colorHostileToFriendly: INK_SIGNAL.red,
+  colorSameSide: INK_SIGNAL.green,
+  colorOther: INK_SIGNAL.steel,
+  /** Line width multiplier, 0.25 to 2. */
   intensity: 1
 };
 

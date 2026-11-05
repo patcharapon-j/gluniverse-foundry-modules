@@ -301,7 +301,7 @@ async function room() {
     canEdit: !readOnly
   });
   const targetsSection = Handlebars.compile(await text("/templates/stream-targets/section.hbs"))({
-    targeting: { ...DEFAULT_TARGETING_SETTINGS }, showVisibility: true, canEdit: !readOnly,
+    targeting: { ...DEFAULT_TARGETING_SETTINGS }, weightPercent: Math.round(DEFAULT_TARGETING_SETTINGS.intensity * 100), showVisibility: true, canEdit: !readOnly,
     visibilityOptions: [{ value: "everyone", label: "Everyone", selected: "selected" }, { value: "gmAndStream", label: "GM and stream" }]
   });
   // A gmOnly section a non-GM sees sits in a disabled fieldset, as renderPanelSectionsByTab wraps it.
@@ -359,7 +359,7 @@ async function roomBefore({ camera, chat, users, tokenRows, detectedUi, status, 
     statusLifetime: { min: 0.25, max: 1, step: 0.05, percent: 60 }, statusCards: true, canEdit: true
   });
   const targetsSection = Handlebars.compile(await text("/templates/stream-targets/section.hbs"))({
-    targeting: { ...DEFAULT_TARGETING_SETTINGS }, showVisibility: true, canEdit: true,
+    targeting: { ...DEFAULT_TARGETING_SETTINGS }, weightPercent: Math.round(DEFAULT_TARGETING_SETTINGS.intensity * 100), showVisibility: true, canEdit: true,
     visibilityOptions: [{ value: "everyone", label: "Everyone", selected: "selected" }]
   });
   const optionsFor = (labels, selected) => Object.entries(labels).map(([value, label]) => ({ value, label, selected: value === selected ? "selected" : "" }));

@@ -33,10 +33,17 @@ const html = `<!doctype html>
 <link rel="stylesheet" href="/styles/gl-tokens.css">
 <link rel="stylesheet" href="/styles/gl-motion.css">
 <link rel="stylesheet" href="/styles/pf2e-odds.css">
+<link rel="stylesheet" href="/styles/stream.css">
+<link rel="stylesheet" href="/styles/stream-targets.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <style>
-  html, body { margin: 0; background: #07080b; color: #b3b5c2; font: 500 12px/1.4 "Google Sans Flex", system-ui, sans-serif; }
+  /* Page chrome only: none of this ships. */
+  html, body { margin: 0; background: var(--gl-is-ink-0); color: var(--gl-is-dim); font: 500 var(--gl-is-t-body)/1.4 var(--gl-is-font); }
   .pv { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
-  .pv h2 { margin: 0; font: 700 11px/1 "Google Sans Flex", system-ui; letter-spacing: .14em; text-transform: uppercase; color: #6a6d7c; }
+  .pv > h2 { margin: 0; font: 700 var(--gl-is-t-meta)/1 var(--gl-is-font); letter-spacing: .1em; text-transform: uppercase; color: var(--gl-is-faint); }
+  /* the frame Foundry draws around an application */
+  .pv-app { display: flex; flex-direction: column; box-shadow: 0 24px 64px var(--gl-is-shade); }
+  .pv-app .window-header { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; font: 600 13px/1 var(--gl-is-font); }
   .stage { position: relative; width: 1380px; height: 640px; overflow: hidden; border-radius: 4px; }
   .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .err { color: #ff4d5a; font: 600 13px monospace; white-space: pre-wrap; }
@@ -124,6 +131,27 @@ window.addEventListener("error", (e) => err(e.error ?? e.message));
 window.addEventListener("unhandledrejection", (e) => err(e.reason));
 try {
   const q = new URLSearchParams(location.search);
+  // ── the editor: the shipped section.hbs in the standalone editor window, under the shipped sheets ──
+  if (q.get("view") === "panel") {
+    const { DEFAULT_TARGETING_SETTINGS, TARGET_LINE_VISIBILITY } = await import("/scripts/features/stream/constants.js");
+    const lang = Object.assign({}, await (await fetch("/lang/stream-targets.en.json")).json());
+    const localize = (k) => (k in lang ? lang[k] : k);
+    const Hb = await import("https://cdn.jsdelivr.net/npm/handlebars@4.7.8/+esm").then((m) => m.default ?? m);
+    Hb.registerHelper("localize", (k) => localize(k));
+    const tpl = Hb.compile(await (await fetch("/templates/stream-targets/section.hbs")).text());
+    const stream = q.get("stream") !== "0";
+    const canEdit = !q.has("readonly");
+    const targeting = { ...DEFAULT_TARGETING_SETTINGS, intensity: Number(q.get("weight")) || 1 };
+    const choices = stream ? Object.values(TARGET_LINE_VISIBILITY) : [TARGET_LINE_VISIBILITY.everyone];
+    const body = tpl({
+      targeting, canEdit, weightPercent: Math.round(targeting.intensity * 100), showVisibility: stream && choices.length > 1,
+      visibilityOptions: choices.map((value) => ({ value, label: localize("GLUNIVERSE_STREAM.targeting.visibility." + value), selected: value === targeting.visibility ? "selected" : "" }))
+    });
+    document.querySelector(".pv").innerHTML = '<h2>Targeting lines — editor window' + (stream ? "" : " · no stream client") + (canEdit ? "" : " · read-only") + '</h2>' +
+      '<form class="application gluniverse-stream-director gluniverse-stream-targets-editor pv-app" style="width:560px"><header class="window-header"><i class="fas fa-crosshairs"></i><span class="window-title">' +
+      localize("GLUNIVERSE_STREAM.settings.targetingSettings.name") + '</span></header><section class="window-content"><div class="gluniverse-stream-director-body">' + body + '</div></section></form>';
+    window.__ready = true;
+  } else {
   const bright = q.get("floor") === "bright";
   const zoom = Math.max(0.3, Math.min(3, Number(q.get("zoom")) || 1));
   const freeze = q.has("freeze");
@@ -151,14 +179,19 @@ try {
     gob: tok("gob", 460, 470, 100, "GB", -1),
     hag: tok("hag", 1220, 470, 100, "HA", -1),
     ally: tok("ally", 640, 140, 100, "AL", 1),
+    lamp: tok("lamp", 1280, 130, 100, "NE", 0),
   };
-  const COLORS = { fh: 0x4db8ff, hf: 0xff4a5c, same: 0x52f5a0, other: 0xffd35c };
+  // The shipped defaults, so the board shows the colours a world that never opened the editor draws.
+  const { DEFAULT_TARGETING_SETTINGS: D } = await import("/scripts/features/stream/constants.js");
+  const hex = (s) => parseInt(String(s).slice(1), 16);
+  const COLORS = { fh: hex(D.colorFriendlyToHostile), hf: hex(D.colorHostileToFriendly), same: hex(D.colorSameSide), other: hex(D.colorOther) };
   const PAIRS = [
     ["seri", "ogre", COLORS.fh],
     ["seri", "hag", COLORS.fh],
     ["tavi", "gob", COLORS.fh],
     ["ogre", "ally", COLORS.hf],
     ["seri", "seri", COLORS.same],
+    ["hag", "lamp", COLORS.other],
   ];
 
   const map = document.getElementById("map");
@@ -185,9 +218,9 @@ try {
     for (let y = 0; y < H / zoom; y += GRID) { mctx.beginPath(); mctx.moveTo(0, y); mctx.lineTo(W / zoom, y); mctx.stroke(); }
     for (const t of Object.values(T)) {
       const r = t.w / 2 - 6;
-      mctx.fillStyle = t.side > 0 ? "#3a4a5e" : "#5e3a3a";
+      mctx.fillStyle = t.side > 0 ? "#3a4a5e" : t.side < 0 ? "#5e3a3a" : "#4a4a4a";
       mctx.beginPath(); mctx.arc(t.center.x, t.center.y, r, 0, 7); mctx.fill();
-      mctx.lineWidth = 4; mctx.strokeStyle = t.side > 0 ? "#9fc4e8" : "#e8a39f"; mctx.stroke();
+      mctx.lineWidth = 4; mctx.strokeStyle = t.side > 0 ? "#9fc4e8" : t.side < 0 ? "#e8a39f" : "#c8c8c8"; mctx.stroke();
       mctx.fillStyle = "#f4f4f7"; mctx.font = "700 " + Math.round(r * 0.6) + "px 'Google Sans Flex', system-ui"; mctx.textAlign = "center"; mctx.textBaseline = "middle";
       mctx.fillText(t.label, t.center.x, t.center.y + 1);
     }
@@ -238,7 +271,7 @@ try {
     const acting = q.get("acting") ?? "seri";
     const hover = q.get("hover");
     const box = document.getElementById("badges");
-    const views = PAIRS.filter(([s, tg]) => s !== tg).map(([s, tg, color]) => {
+    const views = PAIRS.filter(([s, tg]) => s !== tg && SPEC[s + ">" + tg]).map(([s, tg, color]) => {
       const key = s + ">" + tg;
       const sp = SPEC[key];
       const model = buildModel({ probe: { mod: sp.mod, mods: sp.mods, dc: { value: sp.dc, slug: "armor" }, options: [] }, bareDc: sp.dc, who: sp.who, known: sp.known, label: sp.label, sub: sp.sub, dcLabel: "GLOD.stat.ac", playersKnown: gm ? sp.known : undefined });
@@ -288,6 +321,7 @@ try {
   }, 5200);
   document.getElementById("title").textContent = "Targeting lines — " + (bright ? "bright floor" : "dark floor") + " · zoom " + zoom;
   window.__ready = true;
+  }
 } catch (e) { err(e); }
 </script></body></html>
 `;

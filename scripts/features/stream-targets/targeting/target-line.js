@@ -1,15 +1,16 @@
 import { animate, remove } from "../../stream/motion/engine.js";
+import { INK_SIGNAL, hexToInt } from "../../../core/theme.mjs";
 import { TARGET_LINE_MOTION } from "./line-motion.js";
 import { HEAD_HALF_WIDTH_SQUARES, HEAD_LENGTH_SQUARES, createPath, lineGeometry, pointAt, ringRadius } from "./target-geometry.js";
 
 /**
- * The ink under every stroke. A fixed near-black rather than a tint, because a dark edge is what separates a
- * line from bright map art: on a parchment floor a pale line with no rim simply disappears. With PAPER it is the
- * only colour this file does not take from the relationship colour setting.
+ * The ink under every stroke: Ink and Signal's void (`--gl-is-ink-0`). A fixed near-black rather than a tint,
+ * because a dark edge is what separates a line from bright map art: on a parchment floor a pale line with no rim
+ * simply disappears. With PAPER it is the only colour this file does not take from the relationship colour setting.
  */
-const INK = 0x07080b;
-/** The light the hairline core is mixed towards: the suite's paper, not pure white. */
-const PAPER = 0xecedf2;
+const INK = hexToInt(INK_SIGNAL.ink0);
+/** The light the hairline core is mixed towards: Ink and Signal's paper (`--gl-is-paper`), not pure white. */
+const PAPER = hexToInt(INK_SIGNAL.paper);
 /** The brackets' alpha while a hand-off moves the origin and keeps the target. */
 const RETICLE_HANDOFF_ALPHA = 0.45;
 /** The brackets lock in from this multiple of their spread, and a released target's open back out to it. */
