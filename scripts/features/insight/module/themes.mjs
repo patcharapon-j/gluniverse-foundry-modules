@@ -44,11 +44,11 @@ const PRESETS = {
       // which reads the same in a horror one-shot and a sci-fi deck.
       "--insight-tone": "var(--gl-is-paper)",
       "--insight-body-style": "normal",
-      // White carries further than any hue over a lit map, so its edge
-      // burns lower than the shared default.
-      "--insight-burn": "0.5",
-      "--insight-reach-y": "18%",
-      "--insight-reach-x": "14%",
+      // White over a dimmed room turns to grey fog the moment it spreads, so
+      // its light stays low and close to the rim: a lit edge, not a haze.
+      "--insight-burn": "0.55",
+      "--insight-reach-y": "13%",
+      "--insight-reach-x": "10%",
     },
   },
 

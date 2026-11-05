@@ -133,6 +133,15 @@ const rendered = classTokens(template);
   }
   const choices = [...(settings.match(/insight\.edgeIntensity[\s\S]*?choices:\s*\{([^}]*)\}/) ?? [, ""])[1].matchAll(/(\w+)\s*:/g)].map((m) => m[1]);
   ok(choices.length === 3, "could not read the edgeIntensity choices (the scan is broken)");
+  // A preset is written inline on the stage, the intensity class lands on the
+  // same element, and inline wins: a tier that sets a preset's property does
+  // nothing under any preset that sets it too. Tiers scale, presets set.
+  const { PRESET_VARS } = await load(FEATURE + "themes.mjs");
+  for (const cls of Object.values(table)) {
+    if (!cls) continue;
+    const body = css.match(new RegExp(`\\.${cls}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+    for (const v of PRESET_VARS) ok(!body.includes(`${v}:`), `.${cls} sets ${v}, which every preset sets inline; the tier would do nothing`);
+  }
   for (const c of choices) ok(Object.hasOwn(table, c), `edgeIntensity offers "${c}", which INTENSITY_CLASS does not map`);
 }
 

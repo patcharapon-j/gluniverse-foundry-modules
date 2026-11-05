@@ -67,6 +67,11 @@
   --insight-reach-y: 20%;
   --insight-reach-x: 16%;
   --insight-burn: 1;
+  /* the Screen Edge Alert tier scales them; it never sets them, because a
+     preset writes them inline on the same element and inline wins */
+  --insight-tier-burn: 1;
+  --insight-tier-reach: 1;
+  --insight-rim: 3px;
 }
 
 /* ═══ The stage ════════════════════════════════════════════════════════════ */
@@ -101,30 +106,37 @@
   pointer-events: none;
 }
 
-/* the room dims toward its edges, which pulls the eye in to the card */
+/* the room goes dark toward its edges, so the light at the rim reads as light
+   and not as fog, and the eye is pulled in to the card */
 .insight-edge-veil {
-  background: radial-gradient(120% 95% at 50% 38%, transparent 42%,
-    color-mix(in oklab, var(--insight-ink-0) 64%, transparent) 100%);
+  background: radial-gradient(118% 92% at 50% 36%, transparent 34%,
+    color-mix(in oklab, var(--insight-ink-0) 50%, transparent) 70%,
+    color-mix(in oklab, var(--insight-ink-0) 84%, transparent) 100%);
 }
 
 /* the tone rising from all four sides, as one layer: one element to
    composite, and its breath is opacity alone */
 .insight-edge-glow {
-  --insight-a: color-mix(in oklab, var(--insight-tone) calc(40% * var(--insight-burn)), transparent);
-  --insight-b: color-mix(in oklab, var(--insight-tone) calc(12% * var(--insight-burn)), transparent);
+  --insight-k: calc(var(--insight-burn) * var(--insight-tier-burn));
+  --insight-ry: calc(var(--insight-reach-y) * var(--insight-tier-reach));
+  --insight-rx: calc(var(--insight-reach-x) * var(--insight-tier-reach));
+  --insight-a: color-mix(in oklab, var(--insight-tone) calc(40% * var(--insight-k)), transparent);
+  --insight-b: color-mix(in oklab, var(--insight-tone) calc(12% * var(--insight-k)), transparent);
   background:
-    linear-gradient(to bottom, var(--insight-a), var(--insight-b) calc(var(--insight-reach-y) * 0.3), transparent var(--insight-reach-y)),
-    linear-gradient(to top, var(--insight-a), var(--insight-b) calc(var(--insight-reach-y) * 0.3), transparent var(--insight-reach-y)),
-    linear-gradient(to right, var(--insight-a), var(--insight-b) calc(var(--insight-reach-x) * 0.3), transparent var(--insight-reach-x)),
-    linear-gradient(to left, var(--insight-a), var(--insight-b) calc(var(--insight-reach-x) * 0.3), transparent var(--insight-reach-x));
+    linear-gradient(to bottom, var(--insight-a), var(--insight-b) calc(var(--insight-ry) * 0.3), transparent var(--insight-ry)),
+    linear-gradient(to top, var(--insight-a), var(--insight-b) calc(var(--insight-ry) * 0.3), transparent var(--insight-ry)),
+    linear-gradient(to right, var(--insight-a), var(--insight-b) calc(var(--insight-rx) * 0.3), transparent var(--insight-rx)),
+    linear-gradient(to left, var(--insight-a), var(--insight-b) calc(var(--insight-rx) * 0.3), transparent var(--insight-rx));
   will-change: opacity;
 }
 
-/* one hairline around the whole screen */
+/* one solid line of the tone around the whole screen. The line is the alert
+   and is never dimmed by the burn (a 3px line cannot wash a frame); only the
+   light it throws inward is. */
 .insight-edge-rim {
   box-shadow:
-    inset 0 0 0 2px color-mix(in oklab, var(--insight-tone) calc(80% * var(--insight-burn)), transparent),
-    inset 0 0 22px color-mix(in oklab, var(--insight-tone) calc(26% * var(--insight-burn)), transparent);
+    inset 0 0 0 var(--insight-rim) var(--insight-tone),
+    inset 0 0 28px color-mix(in oklab, var(--insight-tone) calc(34% * var(--insight-burn) * var(--insight-tier-burn)), transparent);
 }
 
 /* ═══ The card ═════════════════════════════════════════════════════════════ */
@@ -192,7 +204,7 @@
   display: flex;
   align-items: stretch;
   justify-content: space-between;
-  min-height: 30px;
+  min-height: 32px;
   flex: none;
 }
 .insight-tag {
@@ -349,9 +361,9 @@
 /* ═══ Edge intensity (client setting) ══════════════════════════════════════ */
 
 .insight-intensity-subtle {
-  --insight-reach-y: 13%;
-  --insight-reach-x: 10%;
-  --insight-burn: 0.5;
+  --insight-tier-burn: 0.5;
+  --insight-tier-reach: 0.65;
+  --insight-rim: 2px;
 }
 .insight-intensity-subtle .insight-edge-veil { display: none; }
 .insight-intensity-off .insight-edge { display: none; }
