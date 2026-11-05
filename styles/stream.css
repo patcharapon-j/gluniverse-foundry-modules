@@ -1,10 +1,10 @@
 /*
  * GLUniverse Suite — stream: the capture client's overlay and the Control Room.
  *
- * A scoped black skin (docs/adr/0007-stream-view-skin.md), the same one Stream Pacer carries (ADR 0003):
- * the design system's neutral ramp and status hues mirrored as `--glus-*` tokens under the stream's own
- * roots, never on :root. Motion and timing come from the suite (`--gl-d-*`, `--gl-ease*`); motion the JS
- * plays reads OVERLAY_MOTION (constants.js) and CARD_MOTION (stream-cards/cards/card-motion.js).
+ * Ink and Signal (DESIGN.md), as a scoped skin (docs/adr/0007-stream-view-skin.md, 0012): core's
+ * `--gl-is-*` values aliased as `--glus-*` tokens under the stream's own roots, never on :root and never
+ * restated. Sizes, cuts and states are read straight from core. Motion and timing come from the suite
+ * (`--gl-d-*`, `--gl-ease*`); motion the JS plays reads OVERLAY_MOTION (constants.js) and CARD_MOTION (stream-cards/cards/card-motion.js).
  * Class prefix: .gluniverse-stream-* (and .glus-framing-* for the portrait framer).
  */
 
@@ -26,13 +26,14 @@
   --glus-line: var(--gl-is-line);
   --glus-line-strong: var(--gl-is-line-strong);
   --glus-hover: var(--gl-is-hover);
+  --glus-selected: var(--gl-is-selected);
   --glus-shade: var(--gl-is-shade);
 
   /* paper and the status hues (design system: color.status) */
   --glus-paper: var(--gl-is-paper);
+  --glus-on-slab: var(--gl-is-on-slab);
   --glus-amber: var(--gl-is-amber);
   --glus-red: var(--gl-is-red);
-  --glus-red-deep: #d6184a;
   --glus-green: var(--gl-is-green);
   --glus-steel: var(--gl-is-steel);
 
@@ -253,7 +254,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   translate: 0 var(--stream-dialog-y, 0px);
   max-width: min(90vw, 46rem);
   max-height: 86vh;
-  box-shadow: 0 1rem 3rem rgb(var(--gl-tint-dark) / 0.55);
+  box-shadow: 0 24px 64px var(--gl-is-shade);
 }
 
 .gluniverse-stream-centered-dialog.gluniverse-stream-image-presentation,
@@ -266,7 +267,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   min-height: 0 !important;
   display: flex;
   flex-direction: column;
-  background: rgb(var(--gl-tint-dark) / 0.55);
+  background: var(--gl-is-shade);
 }
 
 .gluniverse-stream-centered-dialog.gluniverse-stream-image-presentation .window-content,
@@ -325,16 +326,21 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   object-fit: contain;
 }
 
-/* The token HUD's tracking button sits in Foundry's HUD, outside every stream root: suite tokens only. */
+/*
+ * The token HUD's tracking button sits in Foundry's HUD, outside every stream root, so it reads core's
+ * Ink and Signal tokens directly. Tracked is a live cue for the camera: green, the system's "live".
+ */
 .gluniverse-stream-track-token.active,
 .gluniverse-stream-track-token:hover {
-  color: var(--gl-signal);
+  color: var(--gl-is-green);
 }
 
 /* ═══ The windows: Control Room, Chat Filter, portrait framer ═══════════════ */
 
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) {
-  --glus-field-h: 30px;
+  --glus-field-h: 32px;
+  /* a control's chamfer, the system's cut-sm on the lower right */
+  --glus-control-clip: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-sm)), calc(100% - var(--gl-is-cut-sm)) 100%, 0 100%);
   font-family: var(--glus-font);
   color: var(--glus-text);
 }
@@ -359,28 +365,38 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   box-sizing: border-box;
   height: var(--glus-field-h);
   min-width: 0;
-  padding: 0 8px;
-  border: 1px solid var(--glus-line-strong);
+  padding: 0 10px;
+  border: 0;
   border-radius: 0;
   background: var(--glus-ink-0);
   color: var(--glus-text);
   font: inherit;
   font-size: var(--gl-is-t-lead);
   font-variant-numeric: tabular-nums;
-  box-shadow: none;
-  transition: border-color var(--gl-d-quick) var(--gl-ease), background-color var(--gl-d-quick) var(--gl-ease);
+  box-shadow: inset 0 0 0 1px var(--glus-line-strong);
+  transition: box-shadow var(--gl-d-quick) var(--gl-ease), background-color var(--gl-d-quick) var(--gl-ease);
 }
-:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) :is(input, select):hover:not(:disabled) {
-  border-color: rgb(var(--gl-tint-light) / 0.28);
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) :is(input, select)::placeholder { color: var(--glus-faint); }
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select):hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px var(--glus-steel);
 }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) :is(input, select, button, a, [tabindex]):focus-visible {
   outline: var(--gl-is-focus-ring);
   outline-offset: var(--gl-is-focus-offset);
-  box-shadow: none;
 }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) :is(input, select):disabled {
-  opacity: 0.45;
+  opacity: var(--gl-is-disabled);
   cursor: default;
+}
+/*
+ * A director who cannot save still has to read the room, so a disabled field drops its well and reads
+ * as a printed value in Dim rather than fading to the disabled opacity.
+ */
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select):disabled {
+  opacity: 1;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--glus-line);
+  color: var(--glus-dim);
 }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) input[type="checkbox"] {
   width: 15px;
@@ -403,7 +419,11 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   white-space: nowrap;
 }
 
-/* Buttons: an ink slab with a hairline, paper type. Reset first; Foundry's own button rules are loud. */
+/*
+ * Buttons: a Raised Slate control with a hairline inset and the cut-sm chamfer, paper type (DESIGN.md,
+ * Buttons). Reset first; Foundry's own button rules are loud. The chamfer is a clip, which would also
+ * clip an outside focus ring, so a button's ring sits inside its edge.
+ */
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button {
   appearance: none;
   display: inline-flex;
@@ -415,46 +435,51 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   min-height: 0;
   margin: 0;
   padding: 0 12px;
-  border: 1px solid var(--glus-line-strong);
+  border: 0;
   border-radius: 0;
   background: var(--glus-ink-3);
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px var(--glus-line);
+  clip-path: var(--glus-control-clip);
   color: var(--glus-text);
   font: inherit;
-  font-size: var(--gl-is-t-lead);
-  font-weight: 550;
+  font-size: var(--gl-is-t-body);
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color var(--gl-d-quick) var(--gl-ease), border-color var(--gl-d-quick) var(--gl-ease),
-    color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease);
+  transition: background-color var(--gl-d-brisk) var(--gl-ease), box-shadow var(--gl-d-brisk) var(--gl-ease),
+    color var(--gl-d-brisk) var(--gl-ease), translate var(--gl-d-brisk) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease);
 }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button i { font-size: var(--gl-is-t-meta); color: var(--glus-dim); }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button:hover:not(:disabled) {
   background: var(--glus-ink-4);
-  border-color: rgb(var(--gl-tint-light) / 0.28);
+  box-shadow: inset 0 0 0 1px var(--glus-line-strong);
+  translate: 0 var(--gl-lift);
 }
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button:focus-visible { outline-offset: -3px; }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button:active:not(:disabled) { scale: var(--gl-is-press); }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button:disabled { opacity: var(--gl-is-disabled); cursor: default; }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button[aria-pressed="true"] {
   background: var(--glus-paper);
-  border-color: var(--glus-paper);
-  color: var(--glus-ink-0);
+  box-shadow: none;
+  color: var(--glus-on-slab);
 }
 :is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button[aria-pressed="true"] i { color: inherit; }
+:is(.gluniverse-stream-director, .gluniverse-stream-filter, .gluniverse-stream-framing) button[aria-pressed="true"]:focus-visible { outline-color: var(--glus-on-slab); }
 
-.gluniverse-stream-director .gluniverse-stream-btn--small { height: 26px; padding: 0 9px; font-size: var(--gl-is-t-body); }
-/* The one loud button: going live. Broadcast red, as on every desk that has one. */
+.gluniverse-stream-director .gluniverse-stream-btn--small { height: 26px; padding: 0 10px; font-size: var(--gl-is-t-body); }
+/* The one loud button: going live. Broadcast red, a solid tone slab with On Slab type. */
 .gluniverse-stream-director .gluniverse-stream-btn--primary {
-  background: var(--glus-red-deep);
-  border-color: var(--glus-red-deep);
-  color: var(--glus-text);
+  background: var(--glus-red);
+  box-shadow: none;
+  color: var(--glus-on-slab);
 }
 .gluniverse-stream-director .gluniverse-stream-btn--primary i { color: inherit; }
 .gluniverse-stream-director .gluniverse-stream-btn--primary:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--glus-red-deep) 85%, var(--glus-text));
-  border-color: transparent;
+  background: color-mix(in oklab, var(--glus-red) 86%, var(--glus-text));
+  box-shadow: none;
 }
+.gluniverse-stream-director .gluniverse-stream-btn--primary:focus-visible { outline-color: var(--glus-on-slab); }
 
 :is(.gluniverse-stream-director, .gluniverse-stream-filter) a[data-action] {
   color: var(--glus-text);
@@ -501,48 +526,74 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   --glus-onair-tone: var(--glus-steel);
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas: "lamp head actions" ". meta actions";
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "head actions" "meta actions";
   align-items: center;
   column-gap: 14px;
-  row-gap: 6px;
-  padding: 14px 16px;
+  row-gap: 10px;
+  padding: 14px 16px 14px 18px;
   background: var(--glus-ink-0);
   border-bottom: 1px solid var(--glus-line);
-  box-shadow: inset 3px 0 0 var(--glus-onair-tone);
-  transition: box-shadow var(--gl-d-swift) var(--gl-ease);
+  box-shadow: inset 2px 0 0 var(--glus-onair-tone);
+  transition: box-shadow var(--gl-d-swift) var(--gl-ease), background-color var(--gl-d-swift) var(--gl-ease);
+}
+/* On air, the strip takes one tone step towards its tone: the desk reads live from across the room. */
+.gluniverse-stream-onair:is([data-state="live"], [data-state="exposed"]) {
+  background: color-mix(in oklab, var(--glus-onair-tone) 7%, var(--glus-ink-0));
 }
 .gluniverse-stream-onair[data-state="live"] { --glus-onair-tone: var(--glus-red); }
 .gluniverse-stream-onair[data-state="exposed"] { --glus-onair-tone: var(--glus-amber); }
 .gluniverse-stream-onair:is([data-state="offline"], [data-state="unset"]) { --glus-onair-tone: var(--glus-faint); }
 
-.gluniverse-stream-onair-lamp {
-  grid-area: lamp;
-  position: relative;
-  width: 12px;
-  height: 12px;
-  background: var(--glus-onair-tone);
-  clip-path: polygon(0 0, 100% 0, 100% 70%, 70% 100%, 0 100%);
-  transition: background-color var(--gl-d-swift) var(--gl-ease);
-}
-/* Live breathes, slowly; it is the one thing on the window that moves on its own. */
-.gluniverse-stream-onair:is([data-state="live"], [data-state="exposed"]) .gluniverse-stream-onair-lamp {
-  animation: glus-room-onair var(--gl-dread) var(--gl-ease-inout) infinite alternate;
-}
+/*
+ * The tally. The state is the loudest fact on the desk, so it is a solid tone slab in the strip's tone
+ * with On Slab type (the Signal band's language, DESIGN.md), and its lamp is a dot inside the slab: the
+ * old free-standing lamp would be a second statement of the same fact, so it stays in the markup unseen.
+ */
+.gluniverse-stream-onair-lamp { display: none; }
 
 /* Wraps rather than clips: a long state ("Stream login offline") pushes the login under it, never off it. */
-.gluniverse-stream-onair-head { grid-area: head; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
+.gluniverse-stream-onair-head { grid-area: head; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
 .gluniverse-stream-onair-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  padding: 0 14px 0 11px;
+  background: var(--glus-onair-tone);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-sm)), calc(100% - var(--gl-is-cut-sm)) 100%, 0 100%);
+  color: var(--glus-on-slab);
   font-size: var(--gl-is-t-title);
   font-weight: 750;
   font-stretch: 116%;
   letter-spacing: 0.06em;
+  line-height: 1;
   text-transform: uppercase;
-  color: var(--glus-text);
   white-space: nowrap;
+  transition: background-color var(--gl-d-swift) var(--gl-ease);
 }
-.gluniverse-stream-onair[data-state="live"] .gluniverse-stream-onair-state { color: var(--glus-red); }
-.gluniverse-stream-onair[data-state="exposed"] .gluniverse-stream-onair-state { color: var(--glus-amber); }
+.gluniverse-stream-onair-state::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* On air, the dot breathes, slowly; it is the one thing on the window that moves on its own. */
+.gluniverse-stream-onair:is([data-state="live"], [data-state="exposed"]) .gluniverse-stream-onair-state::before {
+  animation: glus-room-onair var(--gl-dread) var(--gl-ease-inout) infinite alternate;
+}
+/* Off air is not a signal: the slab drops to raised ink and the dot to a hollow ring. */
+.gluniverse-stream-onair:not([data-state="live"], [data-state="exposed"]) .gluniverse-stream-onair-state {
+  background: var(--glus-ink-3);
+  box-shadow: inset 0 0 0 1px var(--glus-line-strong);
+  color: var(--glus-text);
+}
+.gluniverse-stream-onair:not([data-state="live"], [data-state="exposed"]) .gluniverse-stream-onair-state::before {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--glus-onair-tone);
+}
 .gluniverse-stream-onair-login {
   font-size: var(--gl-is-t-lead);
   color: var(--glus-dim);
@@ -562,7 +613,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 .gluniverse-stream-onair-meta > div { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
 .gluniverse-stream-onair-meta dt {
   font-size: var(--gl-is-t-meta);
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--glus-faint);
@@ -585,14 +636,15 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   max-width: none;
   margin: 0;
   padding: 10px 16px;
-  border-left: 3px solid var(--glus-amber);
-  background: color-mix(in oklab, var(--glus-amber) 8%, var(--glus-ink-1));
+  border: 0;
+  background: var(--glus-ink-2);
+  box-shadow: inset 2px 0 0 var(--glus-amber);
   color: var(--glus-text);
   opacity: 1;
   font-size: var(--gl-is-t-lead);
   line-height: 1.45;
 }
-.gluniverse-stream-director .gluniverse-stream-readonly strong { font-weight: 550; }
+.gluniverse-stream-director .gluniverse-stream-readonly strong { font-weight: 600; }
 
 /* ── Tabs ── */
 .gluniverse-stream-tabs {
@@ -609,14 +661,17 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   padding: 0 12px;
   border: 0;
   background: none;
+  box-shadow: none;
+  clip-path: none;
   color: var(--glus-faint);
   font-size: var(--gl-is-t-body);
-  font-weight: 650;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 .gluniverse-stream-director .gluniverse-stream-tab i { color: inherit; font-size: var(--gl-is-t-meta); }
-.gluniverse-stream-director .gluniverse-stream-tab:hover:not(:disabled) { background: none; color: var(--glus-dim); }
+.gluniverse-stream-director .gluniverse-stream-tab:hover:not(:disabled) { background: none; box-shadow: none; translate: none; color: var(--glus-dim); }
+.gluniverse-stream-director .gluniverse-stream-tab:focus-visible { outline-offset: -4px; }
 .gluniverse-stream-director .gluniverse-stream-tab::after {
   content: "";
   position: absolute;
@@ -640,7 +695,8 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   scrollbar-gutter: stable;
 }
 .gluniverse-stream-tabpanel[hidden] { display: none; }
-.gluniverse-stream-tabpanel:not([hidden]) { animation: glus-room-panel var(--gl-d-brisk) var(--gl-ease); }
+/* Set by the tab switch alone (director-app.js #showTab), so a re-render never replays it. */
+.gluniverse-stream-tabpanel[data-enter]:not([hidden]) { animation: glus-room-panel var(--gl-d-brisk) var(--gl-ease); }
 
 /*
  * A section is a run of controls under a small heading and a hairline, not a boxed card: the room is one
@@ -665,14 +721,14 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   font-size: var(--gl-is-t-meta);
   font-weight: 700;
   font-stretch: 116%;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--glus-dim);
 }
 .gluniverse-stream-director h2 small {
   margin-left: 6px;
   font-size: var(--gl-is-t-meta);
-  font-weight: 450;
+  font-weight: 500;
   font-stretch: 100%;
   letter-spacing: 0;
   text-transform: none;
@@ -773,8 +829,8 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   position: relative;
   width: 96px;
   height: 54px;
-  border: 1px solid var(--glus-line-strong);
   background: var(--glus-ink-0);
+  box-shadow: inset 0 0 0 1px var(--glus-line-strong);
 }
 .gluniverse-stream-corner {
   position: absolute;
@@ -794,7 +850,8 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 .gluniverse-stream-corner-pad .gluniverse-stream-corner input[type="radio"] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .gluniverse-stream-corner:has(input:checked) { background: var(--glus-paper); }
 .gluniverse-stream-corner:has(input:focus-visible) { outline: var(--gl-is-focus-ring); outline-offset: 2px; }
-.gluniverse-stream-corner:has(input:disabled) { cursor: default; opacity: 0.5; }
+.gluniverse-stream-corner:has(input:disabled) { cursor: default; opacity: var(--gl-is-disabled); }
+.gluniverse-stream-corner:has(input:disabled:checked) { opacity: 1; }
 
 .gluniverse-stream-filter-entry {
   display: flex;
@@ -802,9 +859,10 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 14px;
   background: var(--glus-ink-2);
-  border: 1px solid var(--glus-line);
+  box-shadow: inset 0 0 0 1px var(--glus-line);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut)), calc(100% - var(--gl-is-cut)) 100%, 0 100%);
   font-size: var(--gl-is-t-lead);
   font-variant-numeric: tabular-nums;
 }
@@ -837,8 +895,9 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 
 .gluniverse-stream-empty {
   margin: 0;
-  padding: 14px 12px;
-  border: 1px dashed var(--glus-line-strong);
+  padding: 14px;
+  background: var(--glus-ink-0);
+  box-shadow: inset 0 0 0 1px var(--glus-line);
   font-size: var(--gl-is-t-lead);
   color: var(--glus-faint);
 }
@@ -857,7 +916,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   border-bottom: 1px solid var(--glus-line);
   text-align: left;
   font-size: var(--gl-is-t-meta);
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--glus-faint);
@@ -872,27 +931,47 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 }
 .gluniverse-stream-director tbody tr { background: none; }
 .gluniverse-stream-director tbody tr:hover { background: var(--glus-hover); }
+/* A tracked token is a selected row: the selected veil plus the paper edge. */
+.gluniverse-stream-director tr[data-tracked] td { background: var(--glus-selected); }
 .gluniverse-stream-director tr[data-tracked] td:first-child { box-shadow: inset 2px 0 0 var(--glus-paper); }
 .gluniverse-stream-director td small { display: block; margin-top: 2px; font-size: var(--gl-is-t-body); color: var(--glus-faint); }
 .gluniverse-stream-cell-main { display: block; color: var(--glus-text); }
 .gluniverse-stream-cell-end { text-align: right; white-space: nowrap; width: 1%; }
 .gluniverse-stream-director td .gluniverse-stream-layer { width: 72px; height: 26px; }
 
+/* Tags: ink chips cut with the system's 115° wedge, meta type. */
 .gluniverse-stream-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+/* On the tracking table the tags sit on the cell itself, which has to stay a table cell or the row breaks. */
+td.gluniverse-stream-tags { display: table-cell; line-height: 1.9; }
 .gluniverse-stream-tags > span {
-  padding: 2px 6px;
-  border: 1px solid var(--glus-line-strong);
+  display: inline-block;
+  margin-inline-end: 4px;
+  padding: 3px 10px;
+  background: var(--glus-ink-3);
+  clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%);
   font-size: var(--gl-is-t-meta);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.06em;
+  line-height: 1.1;
   text-transform: uppercase;
   color: var(--glus-dim);
 }
 
-/* Allow / Block / Default: one control, three faces. */
-.gluniverse-stream-segmented { display: inline-flex; }
-.gluniverse-stream-director .gluniverse-stream-segmented button { height: 26px; padding: 0 9px; font-size: var(--gl-is-t-body); }
-.gluniverse-stream-director .gluniverse-stream-segmented button + button { margin-left: -1px; }
+/* Allow / Block / Default: one control, three flat ink cells; the chamfer belongs to the group. */
+.gluniverse-stream-segmented {
+  display: inline-flex;
+  gap: 1px;
+  background: var(--glus-line);
+  clip-path: var(--glus-control-clip);
+}
+.gluniverse-stream-director .gluniverse-stream-segmented button {
+  height: 26px;
+  padding: 0 10px;
+  font-size: var(--gl-is-t-body);
+  box-shadow: none;
+  clip-path: none;
+}
+.gluniverse-stream-director .gluniverse-stream-segmented button:hover:not(:disabled) { box-shadow: none; translate: none; }
 
 .gluniverse-stream-selector-rules { margin: 10px 0 0; padding: 0; list-style: none; }
 .gluniverse-stream-selector-rules li {
@@ -911,8 +990,9 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   width: 28px;
   height: 20px;
   padding: 0;
-  border: 1px solid var(--glus-line-strong);
+  border: 0;
   background: none;
+  box-shadow: inset 0 0 0 1px var(--glus-line-strong);
 }
 
 /*
@@ -927,7 +1007,10 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   margin-block: 4px 10px;
   font-size: var(--gl-is-t-lead);
 }
-.gluniverse-stream-number-grid > label { display: flex; align-items: center; gap: 8px; margin: 0; }
+.gluniverse-stream-number-grid > label { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--glus-text); }
+/* A label that carries its own control keeps its words on one line and lets the control give way. */
+.gluniverse-stream-number-grid > label:has(select, input[type="range"]) { white-space: nowrap; color: var(--glus-faint); font-size: var(--gl-is-t-body); }
+.gluniverse-stream-number-grid > label > :is(select, input[type="range"]) { flex: 1 1 auto; min-width: 0; }
 .gluniverse-stream-director .form-group { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
 .gluniverse-stream-director .form-group > label { flex: 0 0 140px; font-size: var(--gl-is-t-body); color: var(--glus-faint); }
 
@@ -939,7 +1022,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   padding-inline-end: 4px;
   font-size: var(--gl-is-t-lead);
 }
-.gluniverse-stream-filter-intro { margin: 0 0 6px; line-height: 1.5; color: var(--glus-dim); }
+.gluniverse-stream-filter-intro { max-width: 60ch; margin: 0 0 6px; line-height: 1.5; color: var(--glus-dim); }
 .gluniverse-stream-filter .gluniverse-stream-form-hint { margin: 0 0 8px; color: var(--glus-faint); font-size: var(--gl-is-t-body); }
 
 .gluniverse-stream-filter-presets {
@@ -972,7 +1055,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   border-bottom: 1px solid var(--glus-line-strong);
   text-align: left;
   font-size: var(--gl-is-t-meta);
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--glus-faint);
@@ -986,20 +1069,35 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 .gluniverse-stream-filter-bulk {
   display: flex !important;
   justify-content: center;
-  gap: 8px;
+  gap: 2px;
   margin-top: 4px;
   font-size: var(--gl-is-t-meta);
-  font-weight: 450;
+  font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
 }
+/* All / None: small ink cells rather than bare words, so a column flip is an easy target. */
+.gluniverse-stream-filter .gluniverse-stream-filter-bulk button {
+  height: 22px;
+  padding: 0 8px;
+  background: none;
+  box-shadow: none;
+  clip-path: none;
+  color: var(--glus-dim);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.gluniverse-stream-filter .gluniverse-stream-filter-bulk button:hover:not(:disabled) { background: var(--glus-ink-3); box-shadow: none; translate: none; color: var(--glus-text); }
+.gluniverse-stream-filter .gluniverse-stream-filter-bulk button:focus-visible { outline-offset: -2px; }
 .gluniverse-stream-filter-group-head th {
   padding: 16px 8px 6px;
   text-align: left;
   font-size: var(--gl-is-t-meta);
   font-weight: 700;
   font-stretch: 116%;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--glus-dim);
   border-bottom: 1px solid var(--glus-line);
@@ -1009,7 +1107,7 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 .gluniverse-stream-filter-content small {
   display: block;
   margin-top: 2px;
-  font-weight: 450;
+  font-weight: 500;
   font-stretch: 100%;
   letter-spacing: 0;
   text-transform: none;
@@ -1106,7 +1204,8 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 
 .gluniverse-stream-director .window-content { container-type: inline-size; }
 @container (max-width: 560px) {
-  .gluniverse-stream-onair { grid-template-areas: "lamp head" "lamp meta" "actions actions"; grid-template-columns: auto minmax(0, 1fr); }
+  .gluniverse-stream-onair { grid-template-areas: "head" "meta" "actions"; grid-template-columns: minmax(0, 1fr); }
+  .gluniverse-stream-onair-state { white-space: normal; padding-block: 6px; }
 }
 
 /* ═══ Keyframes (prefixed: keyframe names are global) ══════════════════════ */

@@ -957,6 +957,36 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   }
 }
 
+/* ------------------------------------------- the view on Ink and Signal ---- */
+// The view's own sheet (the overlay frame, the Control Room, the Chat Filter) is Ink and Signal
+// (DESIGN.md, docs/adr/0012). Each of these renders fine while it is drift: a `--glus-*` value
+// stated as a hex stops following core when core is retuned, an Etched Glass token brings the old
+// blue back into one corner of a black window, and a literal font size skips the type scale.
+{
+  const s = strip(read("styles/stream.css"));
+  for (const m of s.matchAll(/(--glus-[\w-]+)\s*:\s*([^;}]*)/g)) {
+    if (/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i.test(m[2])) {
+      fail(`styles/stream.css: ${m[1]} states a colour (${m[2].trim()}) — alias a --gl-is-* token or mix from one`);
+    }
+  }
+  const legacy = s.match(/--gl-(?:signal|accent|glow|bloom|holo|violet|cyan|ink-\d|surface|edge|text)\b[\w-]*/g);
+  if (legacy) fail(`styles/stream.css: Etched Glass token(s) ${[...new Set(legacy)].join(", ")} — the view is Ink and Signal`);
+  for (const m of s.matchAll(/font-size\s*:\s*([^;}]*)/g)) {
+    if (!/var\(--gl-is-t-|inherit|\bem\b/.test(m[1])) fail(`styles/stream.css: font-size ${m[1].trim()} is off the type scale — use a --gl-is-t-* token`);
+  }
+  if (/rgb\(var\(--gl-tint-light\)\s*\/\s*0?\.\d+\)/.test(s)) {
+    fail("styles/stream.css: a hand-mixed tint veil — use --gl-is-line / --gl-is-line-strong / --gl-is-hover / --gl-is-selected");
+  }
+  // The Control Room re-renders on every saved setting and status report. A panel arrival keyed on
+  // "not hidden" alone replays on each of those; it is keyed on the flag the tab switch sets.
+  for (const m of s.matchAll(/([^{}]*\.gluniverse-stream-tabpanel[^{}]*)\{[^}]*animation\s*:/g)) {
+    if (!/\[data-enter\]/.test(m[1])) fail("styles/stream.css: the tab panel's arrival is not keyed on [data-enter] — every render of the Control Room replays it");
+  }
+  if (!/panel\.dataset\.enter\s*=/.test(read("scripts/features/stream/director-app.js"))) {
+    fail("stream/director-app.js: #showTab no longer sets data-enter — a tab switch plays no arrival");
+  }
+}
+
 /* --------------------------------------------------------- named motion ---- */
 // Every duration the cards and the overlay play is a row in a motion table, read through a
 // tier-scaled lookup. A literal one ignores motion "none"; a name missing from its table throws

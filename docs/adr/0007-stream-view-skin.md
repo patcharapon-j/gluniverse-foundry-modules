@@ -26,8 +26,8 @@ under its own roots and its own prefix.
   `.gluniverse-stream-filter`, `.gluniverse-stream-framing`). Nothing is written
   on `:root`, and no foundation `--gl-*` token is redeclared.
 - The skin's tokens are `--glus-*`: the same neutral ink ramp, paper text and
-  tones as `--sp-*`, restated rather than shared, because a feature's tokens
-  stop at its own roots. A card's tone is routed through `--glus-rc-tone` (and
+  tones as `--sp-*`. Since 0012 they alias core's `--gl-is-*` on the stream's
+  roots rather than restating a value. A card's tone is routed through `--glus-rc-tone` (and
   `--glus-sc-tone`) on a data attribute, so a card retones with one attribute.
 - Shape is the suite's cut motif: a chamfered plate, and a 115° wedge on the
   tone tag. A clip that animates a plate (the strip unfolding) starts and ends on
@@ -43,7 +43,13 @@ under its own roots and its own prefix.
 - `tools/stream-check.mjs` refuses a `:root` rule, a foundation token
   declaration, an unprefixed keyframe, a raw duration or easing, a white veil
   and a blur not written against `--gl-glass-k` in the stream stylesheets, and a
-  literal duration in the card code.
+  literal duration in the card code. In `styles/stream.css` it also refuses a
+  `--glus-*` token stated as a colour rather than aliased, an Etched Glass token
+  (`--gl-signal`, `--gl-accent`, the glass ink), a font size off the
+  `--gl-is-t-*` scale and a hand-mixed tint veil.
+- The Control Room and the Chat Filter follow DESIGN.md's components: 32px
+  controls on Raised Slate with a hairline inset and the cut-sm chamfer, fields
+  in a Void well, tags on the 115° wedge, and going live as the one red slab.
 - A cloned chat card on a world with no roll cards keeps Foundry's own markup
   inside; only its frame takes the skin.
 - The skin is not a setting. There is one look, and it is the same in every

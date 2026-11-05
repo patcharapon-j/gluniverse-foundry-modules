@@ -20,8 +20,8 @@
         <th class="gluniverse-stream-filter-col">
           <span>{{label}}</span>
           <span class="gluniverse-stream-filter-bulk">
-            <a data-action="column" data-author="{{author}}" data-value="on" title="{{localize "GLUNIVERSE_STREAM.chatFilter.all"}}">{{localize "GLUNIVERSE_STREAM.chatFilter.all"}}</a>
-            <a data-action="column" data-author="{{author}}" data-value="off" title="{{localize "GLUNIVERSE_STREAM.chatFilter.none"}}">{{localize "GLUNIVERSE_STREAM.chatFilter.none"}}</a>
+            <button type="button" data-action="column" data-author="{{author}}" data-value="on" aria-label="{{label}}: {{localize "GLUNIVERSE_STREAM.chatFilter.all"}}">{{localize "GLUNIVERSE_STREAM.chatFilter.all"}}</button>
+            <button type="button" data-action="column" data-author="{{author}}" data-value="off" aria-label="{{label}}: {{localize "GLUNIVERSE_STREAM.chatFilter.none"}}">{{localize "GLUNIVERSE_STREAM.chatFilter.none"}}</button>
           </span>
         </th>
         {{/each}}

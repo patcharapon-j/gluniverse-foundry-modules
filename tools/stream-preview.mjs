@@ -23,6 +23,7 @@
  *   tab=shot|overlay|screen|access room: the tab to open on
  *   state=live|exposed|idle|unknown|offline|unset   room: the on-air state (default live)
  *   readonly                       room: a director whose edits cannot be saved
+ *   w=<px>, h=<px>                 room and filter: the window's size (default the shipped size)
  *   rev=before                     room and filter: origin/main's template and stylesheet, for a
  *                                  before/after pair (written by `--before`, see below)
  *
@@ -125,6 +126,7 @@ if (before) document.getElementById("stream-css").href = "/.preview/stream-befor
 const lang = Object.assign({},
   await (await fetch("/lang/stream.en.json")).json(),
   await (await fetch("/lang/stream-cards.en.json")).json(),
+  await (await fetch("/lang/stream-targets.en.json")).json(),
   await (await fetch("/lang/en.json")).json().catch(() => ({})));
 const localize = (key) => (key in lang ? lang[key] : key);
 const text = async (path) => (await fetch(path)).text();
@@ -246,8 +248,9 @@ function registerHelpers() {
 function windowFrame(title, icon, width, height, classes) {
   const app = document.createElement("form");
   app.className = "application " + classes;
-  app.style.width = width + "px";
-  app.style.height = height + "px";
+  // w and h override the window's shipped size, for the narrow layout and long content.
+  app.style.width = (Number(qs.get("w")) || width) + "px";
+  app.style.height = (Number(qs.get("h")) || height) + "px";
   app.innerHTML = '<header class="window-header"><i class="' + icon + '"></i><span class="window-title">' + title + '</span><i class="fas fa-times"></i></header><section class="window-content"></section>';
   return app;
 }
