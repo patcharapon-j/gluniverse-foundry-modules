@@ -635,7 +635,31 @@ section = "css";
     const sel = [...css.matchAll(/(^|[{}])\s*([^{}@;]+)\{/g)].map((m) => m[2].trim()).filter((s) => s && !/^(from|to|[\d.]+%)(\s*,\s*[\d.]+%)*$/.test(s));
     const stray = sel.flatMap(splitTop).map((s) => s.trim()).filter((s) => s && !/glstage/.test(s));
     ok(`${f}: every rule is under a glstage- class`, stray.length === 0, stray.slice(0, 5).join(" | "));
+
+    // Ink and Signal (docs/adr/0012): every Stage sheet reads the core `--gl-is-*`
+    // values, aliased under its own prefix, plus the shared motion, tint, glass
+    // and layering tokens. An Etched Glass token (`--gl-ink-1`, `--gl-accent`,
+    // `--gl-display`, `--gl-cyan`…) left behind paints one stray blue or one
+    // display-face line into a migrated surface, and nothing reports it.
+    const SHARED = /^--gl-(is-|d-|ease|snap|exit|linear|stagger|lift|loop|drift|breathe|tint-|glass-k|blur|z-|ui-scale|motion-scale|thai|tech)/;
+    const legacy = [...new Set([...css.matchAll(/var\(\s*(--gl-[A-Za-z0-9-]+)/g)].map((m) => m[1]).filter((v) => !SHARED.test(v)))];
+    ok(`${f}: reads no Etched Glass token`, legacy.length === 0, legacy.join(", "));
+    // The Alias Rule: a skin never restates a value, so no colour literal at all.
+    const hexes = css.replace(/url\([^)]*\)/g, "").match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
+    ok(`${f}: states no hex colour (aliases --gl-is-*)`, hexes.length === 0, hexes.join(", "));
+    // The Floor Rule: nothing under 11px, a fluid size's floor included.
+    const small = [...css.matchAll(/font-size\s*:\s*([^;]+);/g)].map((m) => m[1])
+      .filter((v) => [...v.matchAll(/(?:^|[(\s,])(\d+(?:\.\d+)?)px/g)].some((n) => Number(n[1]) < 11));
+    ok(`${f}: no type under the 11px floor`, small.length === 0, small.join(" | "));
   }
+  // Each player-facing sheet aliases the core family on its own root.
+  const aliases = (f, root) => {
+    const css = read(f);
+    const block = css.match(new RegExp(`\\n${root.replace(".", "\\.")}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+    return /--glstage-[a-z-]*text\s*:\s*var\(--gl-is-text\)/.test(block) && /--glstage-[a-z-]*font\s*:\s*var\(--gl-is-font\)/.test(block);
+  };
+  ok("stage.css aliases --gl-is-* on .glstage-root", aliases("styles/stage.css", ".glstage-root"));
+  ok("stage-comms.css aliases --gl-is-* on .glstage-comms", aliases("styles/stage-comms.css", ".glstage-comms"));
 }
 
 /* ── i18n: every key, literal and built at runtime, resolves ───────────── */

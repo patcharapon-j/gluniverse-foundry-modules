@@ -4,16 +4,25 @@
    Sits just above Foundry's board (#board is 0) and below every piece of
    Foundry UI; Theatre's overlay sits one above it (--gl-z-base + 1) so a
    Theatre dip hides the cast. Never takes a pointer.
+
+   Ink and Signal (docs/adr/0012-ink-and-signal-core.md): the core `--gl-is-*`
+   values aliased as `--glstage-*` on this root, never on :root and never
+   restated.
    ═══════════════════════════════════════════════════════════════════════ */
 
 .glstage-root {
+  --glstage-text: var(--gl-is-text);
+  --glstage-paper: var(--gl-is-paper);
+  --glstage-dim: var(--gl-is-dim);
+  --glstage-shade: var(--gl-is-shade);
+  --glstage-font: var(--gl-is-font);
   position: fixed;
   inset: 0;
   z-index: var(--gl-z-base);
   pointer-events: none;
   overflow: hidden;
-  font-family: var(--gl-display);
-  color: var(--gl-text-bright);
+  font-family: var(--glstage-font);
+  color: var(--glstage-text);
 }
 
 .glstage-canvas {
@@ -54,7 +63,7 @@
    the colour, and the card must read over any of it. */
 
 .glstage-plate {
-  --glstage-plate-face: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
+  --glstage-plate-face: var(--glstage-font);
   position: absolute;
   display: flex;
   flex-direction: column;
@@ -62,8 +71,8 @@
   gap: 6px;
   opacity: 0;
   transform: translateX(calc((1 - var(--glstage-plate-in, 0)) * -18px));
-  color: var(--gl-text-bright);
-  text-shadow: 0 1px 2px var(--gl-shadow), 0 0 24px rgb(var(--gl-tint-dark) / 0.55);
+  color: var(--glstage-text);
+  text-shadow: 0 1px 2px var(--glstage-shade), 0 0 24px var(--glstage-shade);
 }
 
 /* Close-up: lower left, sitting on the bottom letterbox bar. */
@@ -83,8 +92,8 @@
   display: block;
   width: calc(40px * var(--glstage-plate-in, 0));
   height: 3px;
-  background: rgb(var(--gl-tint-light) / 0.92);
-  box-shadow: 0 1px 2px var(--gl-shadow);
+  background: var(--glstage-paper);
+  box-shadow: 0 1px 2px var(--glstage-shade);
 }
 
 .glstage-plate-name {
@@ -108,7 +117,7 @@
   font-size: clamp(11px, 0.9vw, 16px);
   letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: var(--gl-text-dim);
+  color: var(--glstage-dim);
 }
 
 .glstage-plate[data-mode="focus"] .glstage-plate-rule,
