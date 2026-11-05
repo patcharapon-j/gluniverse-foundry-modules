@@ -115,12 +115,20 @@
 }
 #gltimer-hud.is-paused .gltimer-drain i { animation-play-state: paused; }
 
-/* time up: the drain is empty, so the plate keeps the tone itself */
+/* Time up is the system at full volume (DESIGN.md, the signal band): the whole
+   plate becomes one solid slab of the tone with the clock cut dark into it,
+   and the tag flips to an ink cut-out so it still reads against its own
+   colour. Every other state is an ink plate; this is the one that has to be
+   seen by a player looking at the map. */
 #gltimer-hud[data-tier="expired"] .gltimer-plate {
-  background:
-    linear-gradient(0deg, var(--gltimer-tone) 0 4px, transparent 4px),
-    linear-gradient(90deg, color-mix(in oklab, var(--gltimer-tone) 24%, transparent), color-mix(in oklab, var(--gltimer-tone) 10%, transparent)),
-    color-mix(in oklab, var(--gltimer-ink-1) 94%, transparent);
+  background: var(--gltimer-tone);
+  border-top-color: var(--gltimer-tone);
+  backdrop-filter: none;
+}
+#gltimer-hud[data-tier="expired"] .gltimer-face { color: var(--gltimer-on); }
+#gltimer-hud[data-tier="expired"] .gltimer-tag {
+  background: var(--gltimer-ink-0);
+  color: var(--gltimer-tone);
 }
 
 /* the last ten: a ring in the tone, pulsed on opacity only */
@@ -227,13 +235,13 @@
   background: linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.18), transparent);
   transform: skewX(-25deg);
 }
-/* the hit at zero: a ring in the tone that fades out */
+/* the hit at zero: the slab flashes paper from its edges and fades out */
 #gltimer-hud .gltimer-impact {
   position: absolute;
   inset: 0;
   pointer-events: none;
   opacity: 0;
-  box-shadow: inset 0 0 0 2px var(--gltimer-tone), inset 0 0 40px color-mix(in oklab, var(--gltimer-tone) 45%, transparent);
+  box-shadow: inset 0 0 0 2px var(--gltimer-paper), inset 0 0 40px color-mix(in oklab, var(--gltimer-paper) 55%, transparent);
 }
 
 /* ═══ The GM strip ═════════════════════════════════════════════════════════ */
