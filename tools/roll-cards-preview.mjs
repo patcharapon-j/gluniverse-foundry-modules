@@ -154,6 +154,8 @@ const settle = async (card, spec) => {
   if (spec.reroll) await card.update(spec.model, { reroll: true });
   if (spec.damage) {
     await card.addDamage(spec.damage);
+    // The count-up may still be ticking; land it on the real total once it has stopped.
+    await new Promise((r) => setTimeout(r, 1500));
     const t = card.element.querySelector(".glus-rc-damage-total");
     if (t) t.textContent = spec.damage.total;
   }

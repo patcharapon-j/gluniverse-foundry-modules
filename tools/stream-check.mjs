@@ -1006,6 +1006,15 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
       if (sel !== ".glus-rc-glow") fail(`${f}: "${sel}" paints a radial wash at rest — the No Glow Rule`);
     }
   }
+  // The Floor Rule, at the card's design size (scale 1, where --u is 19.2px): no text under 11px, so no
+  // font-size under 0.58u. Every length here is in --u, so a label that is 9px at design size is 4.5px
+  // at the overlay's default half size, which on a 1080p stream is noise, not a word.
+  const FLOOR_U = 11 / 19.2;
+  for (const f of ["styles/stream-cards.css", "styles/stream-cards-daggerheart.css"]) {
+    for (const m of strip(read(f)).matchAll(/font-size:\s*calc\(([0-9.]+)\s*\*\s*var\(--u\)\)/g)) {
+      if (Number(m[1]) < FLOOR_U) fail(`${f}: font-size ${m[1]}u is ${(Number(m[1]) * 19.2).toFixed(1)}px at design size — under the 11px floor (0.58u)`);
+    }
+  }
   const card = strip(read("scripts/features/stream-cards/cards/roll-card.js"));
   if (/"violet"/.test(card)) fail("roll-card.js: a blind roll's crack is violet — Ink and Signal has no violet; a blind roll is info blue");
   if (/glowRest\s*=/.test(card)) fail("roll-card.js: the crit's light rests on — it is a beat, and it fades back out");

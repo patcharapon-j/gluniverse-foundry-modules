@@ -193,7 +193,7 @@
 .glus-rc-player {
   font-weight: 700;
   font-stretch: 116%;
-  font-size: calc(0.48 * var(--u));
+  font-size: calc(0.58 * var(--u));
   letter-spacing: 0.08em;
   color: var(--glus-dim);
   text-transform: uppercase;
@@ -240,8 +240,9 @@
 .glus-rc-chip {
   font-weight: 750;
   font-stretch: 116%;
-  font-size: calc(0.4 * var(--u));
-  letter-spacing: 0.08em;
+  font-size: calc(0.58 * var(--u));
+  line-height: 1.1;
+  letter-spacing: 0.06em;
   color: var(--glus-rc-on-slab);
   padding: calc(0.08 * var(--u)) calc(0.3 * var(--u)) calc(0.08 * var(--u)) calc(var(--glus-wedge) * 0.6 + 0.2 * var(--u));
   clip-path: polygon(calc(var(--glus-wedge) * 0.6) 0, 100% 0, 100% 100%, 0 100%);
@@ -295,12 +296,19 @@
   clip-path: polygon(var(--glus-wedge) 0, 100% 0, 100% 100%, 0 100%);
   font-weight: 750;
   font-stretch: 116%;
-  font-size: calc(0.52 * var(--u));
-  line-height: 1.15;
-  letter-spacing: 0.07em;
+  font-size: calc(0.6 * var(--u));
+  line-height: 1.1;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   text-shadow: none;
-  white-space: nowrap;
+  /*
+   * A two-word verdict ("Critical Success") stacks on two lines rather than taking the name's room: the
+   * name is the one thing on the card nothing else on screen says, and on a critical it was cut to
+   * three letters. A one-word verdict never reaches the cap and stays one line.
+   */
+  max-width: calc(5.4 * var(--u));
+  text-align: right;
+  text-wrap: balance;
   transition: background-color var(--gl-d-swift) var(--gl-ease);
 }
 .glus-rc[data-pending] .glus-rc-degree-label { visibility: hidden; }
@@ -308,8 +316,8 @@
 .glus-rc-spell-line {
   font-weight: 650;
   font-stretch: 110%;
-  font-size: calc(0.48 * var(--u));
-  letter-spacing: 0.07em;
+  font-size: calc(0.58 * var(--u));
+  letter-spacing: 0.06em;
   white-space: nowrap;
   display: flex;
   align-items: baseline;
@@ -491,8 +499,8 @@
 .glus-rc-damage-key {
   font-weight: 700;
   font-stretch: 116%;
-  font-size: calc(0.44 * var(--u));
-  letter-spacing: 0.08em;
+  font-size: calc(0.58 * var(--u));
+  letter-spacing: 0.06em;
   color: var(--glus-faint);
   text-transform: uppercase;
 }
@@ -525,8 +533,9 @@
 .glus-rc-damage-crit {
   font-weight: 750;
   font-stretch: 116%;
-  font-size: calc(0.44 * var(--u));
-  letter-spacing: 0.08em;
+  font-size: calc(0.58 * var(--u));
+  line-height: 1.1;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--glus-rc-on-slab);
   background: var(--glus-rc-deg-crit-success);
@@ -697,7 +706,7 @@
 }
 .glus-sc-chip-mark {
   font-weight: 750;
-  font-size: calc(0.55 * var(--u));
+  font-size: calc(0.62 * var(--u));
   line-height: 1;
   color: var(--glus-sc-chip-tone);
 }
@@ -717,8 +726,8 @@
 .glus-sc-chip-state {
   font-weight: 700;
   font-stretch: 116%;
-  font-size: calc(0.42 * var(--u));
-  letter-spacing: 0.08em;
+  font-size: calc(0.58 * var(--u));
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--glus-dim);
 }
@@ -753,6 +762,17 @@
   font-stretch: 100%;
   font-size: calc(0.6 * var(--u));
   color: var(--glus-text);
+}
+
+/* A damage roll with no attack to merge into lists its parts under the tag. They wrap onto a second line
+ * rather than squeezing the creature's name, which is the only thing on the card that says whose it was. */
+.glus-rc[data-kind="damage"] .glus-rc-degree-meta {
+  display: block;
+  max-width: calc(7.5 * var(--u));
+  white-space: normal;
+  text-wrap: balance;
+  text-align: right;
+  line-height: 1.2;
 }
 
 /*
