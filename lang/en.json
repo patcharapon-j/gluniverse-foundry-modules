@@ -55,8 +55,6 @@
   "GLS.feature.statsblock-import.hint": "Import PF2e NPCs and hazards from pasted stat-block text.",
   "GLS.feature.loot-gen.title": "Loot Generator",
   "GLS.feature.loot-gen.hint": "System-aware loot generation and audited treasure proposals.",
-  "GLS.feature.tidy5e-slots.title": "Tidy 5e Inventory Slots",
-  "GLS.feature.tidy5e-slots.hint": "Slot-based encumbrance and wear-and-tear for the Tidy 5e sheet.",
   "GLS.feature.pf2e-flatten.title": "Flatten Proficiency (PF2e)",
   "GLS.feature.pf2e-flatten.hint": "Proficiency Without Level variant rule automation for PF2e.",
   "GLS.feature.pf2e-level-zero.title": "Level 0 Characters (PF2e)",

@@ -15,7 +15,6 @@ import "./stage/index.mjs";
 import "./stream-pacer/index.mjs";
 import "./statsblock-import/index.mjs";
 import "./loot-gen/index.mjs";
-import "./tidy5e-slots/index.mjs";
 import "./pf2e-flatten/index.mjs";
 import "./pf2e-level-zero/index.mjs";
 import "./critical/index.mjs";

@@ -206,7 +206,6 @@ rather than at the end.
 | stream-pacer       | sp.                          | null              | —               | off     |
 | statsblock-import  | sbi.                         | pf2e              | —               | off     |
 | loot-gen           | lg.                          | ["pf2e","dnd5e"]  | —               | off     |
-| tidy5e-slots       | tidy.                        | dnd5e             | tidy5e-sheet    | off     |
 | pf2e-flatten       | flatten.                     | pf2e              | —               | off     |
 | pf2e-level-zero    | l0.                          | pf2e              | —               | off     |
 | critical           | crit.                        | ["pf2e","dnd5e"]  | —               | off     |

@@ -100,8 +100,7 @@
 
   /* Holographic prism — the three stops of a shimmer/edge-spec gradient.
      A feature may remap these on its own scope to tint the shimmer to its
-     accent. `-a` and `-b` were referenced by tidy5e-slots without ever being
-     defined, which silently dropped that gradient; they live here now. */
+     accent. */
   --gl-holo-a: var(--gl-cyan);
   --gl-holo-b: var(--gl-violet);
   --gl-holo-c: #ff66b3;

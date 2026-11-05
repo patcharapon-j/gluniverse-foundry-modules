@@ -37,10 +37,6 @@
     "styles/statsblock-import.css",
     "styles/statsblock-import-reflavor.css",
     "styles/loot-gen.css",
-    "styles/tidy5e-slots-design-system.css",
-    "styles/tidy5e-slots-inventory-slots.css",
-    "styles/tidy5e-slots-components.css",
-    "styles/tidy5e-slots-etched-glass.css",
     "styles/pf2e-level-zero.css",
     "styles/critical.css",
     "styles/timer.css",
@@ -129,11 +125,6 @@
       "lang": "en",
       "name": "English",
       "path": "lang/loot-gen.en.json"
-    },
-    {
-      "lang": "en",
-      "name": "English",
-      "path": "lang/tidy5e-slots.en.json"
     },
     {
       "lang": "en",
@@ -311,14 +302,6 @@
   ],
   "relationships": {
     "recommended": [
-      {
-        "id": "tidy5e-sheet",
-        "type": "module",
-        "reason": "Required only for the Tidy 5e Inventory Slots feature.",
-        "compatibility": {
-          "minimum": "13.0.0"
-        }
-      },
       {
         "id": "dice-so-nice",
         "type": "module",
