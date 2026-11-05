@@ -96,6 +96,45 @@ for (const [path, want] of [
   ok(Number.isFinite(C.videoEdges(0).easeIn), "a zero-length clip still yields finite edges");
 }
 
+/* ── the chrome: what the cut-in says, and to whom ───────────────────────── */
+{
+  const t = (k) => `<${k}>`;
+  const npc = C.cutInModel({ isPC: false, actorName: "The Hidden Lich" }, t);
+  eq(npc.name, null, "an NPC's name never reaches the cut-in (it is drawn on every player's screen and the stream)");
+  ok(!C.cutInHTML(npc).includes("Hidden Lich") && !C.cutInHTML(npc).includes("gluc-cut-name"), "an NPC cut-in's markup carries no name");
+  eq(npc.tone, "npc", "an NPC critical takes the npc tone");
+  const pc = C.cutInModel({ isPC: true, actorName: ` <img src=x onerror=alert(1)> ` }, t);
+  eq(pc.tone, "pc", "a PC critical takes the pc tone");
+  ok(!/<img/.test(C.cutInHTML(pc)) && /&lt;img/.test(C.cutInHTML(pc)), "a PC name is escaped into the markup");
+  eq(C.cutInModel({ isPC: true, actorName: "  " }, t).name, null, "a blank PC name draws no name plate");
+  eq(C.cutInModel({}, t).tone, "npc", "an event with no side reads as an NPC and prints nothing");
+  ok(C.cutInHTML(pc).includes("&lt;GLUC.CutIn.Critical&gt;"), "the slab's word comes from the language file");
+  for (const tone of ["pc", "npc"]) ok(new RegExp(`\\.gluc-cut\\[data-tone="${tone}"\\]\\s*\\{[^}]*--gluc-tone:`).test(cssBare), `critical.css gives data-tone="${tone}" its tone`);
+  ok(/--gluc-good:\s*var\(--gl-is-green\)/.test(cssBare) && /--gluc-bad:\s*var\(--gl-is-red\)/.test(cssBare), "a PC critical is green and an NPC critical red (the Signal Rule)");
+
+  // The band, the video's clip and the chrome agree on every frame.
+  const motion = createCinematicMotion(1000);
+  const box = C.fitBox(1600, 900, 1920, 1200);
+  for (const ms of [0, 40, 120, 500, 850, 990]) {
+    const f = motion.sample(ms);
+    const band = C.bandOf(f, box, 1200);
+    const inset = Number(/inset\(([\d.]+)%/.exec(C.mediaStyle(f).clipPath)[1]) / 100;
+    const cy = 600 + f.lift;
+    const half = (box.h / 2) * f.scaleMul;
+    near(band.top, cy - half + 2 * inset * half, `${ms}ms: the band's top is the video clip's top`, 1e-6);
+    near(band.bottom, cy + half - 2 * inset * half, `${ms}ms: the band's bottom is the video clip's bottom`, 1e-6);
+    const s = C.chromeStyle(f, box, 1920, 1200);
+    near(Number(/translate3d\(0, ([-\d.]+)px/.exec(s.top.transform)[1]), band.top - 1, `${ms}ms: the top rule rides the band`, 0.06);
+    near(Number(/translate3d\(0, ([-\d.]+)px/.exec(s.bottom.transform)[1]), band.bottom - 1, `${ms}ms: the bottom rule rides the band`, 0.06);
+    eq(s.root.opacity, String(f.imgAlpha), `${ms}ms: the chrome fades with the art`);
+  }
+  motion.destroy();
+  const mod = sources["module.js"];
+  ok(/bandOf\(frame, box, sh\)/.test(mod), "module.js: the PIXI mask must be the band the video clips to");
+  ok((mod.match(/chrome\.apply\(frame\)/g) ?? []).length === 2, "module.js: both cut-in kinds drive the chrome from the beat");
+  ok((mod.match(/chrome\??\.remove\(\)/g) ?? []).length >= 2, "module.js: both cut-in kinds take the chrome down");
+}
+
 /* ── the duration readout ────────────────────────────────────────────────── */
 eq(C.durationLabel(1250), "1250 ms", "durationLabel");
 eq(C.durationLabel("800"), "800 ms", "durationLabel reads the slider's string value");

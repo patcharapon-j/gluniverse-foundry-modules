@@ -28,8 +28,12 @@
   --gluc-font: var(--gl-is-font);
   --gluc-num: var(--gl-is-num);
 
-  /* meaning: a call reaches every screen */
+  /* meaning: a call reaches every screen; a critical is the table's good news
+     on a PC and its danger on an NPC */
   --gluc-call: var(--gl-is-amber);
+  --gluc-good: var(--gl-is-green);
+  --gluc-bad: var(--gl-is-red);
+  --gluc-tone: var(--gluc-bad);
 
   /* The cut-in's backdrop. PIXI reads this off the overlay root (cut-in.mjs). */
   --gluc-backdrop: var(--gluc-ink-0);
@@ -42,6 +46,9 @@
   inset: 0;
   pointer-events: none;
   z-index: 99999;
+  /* The chrome is sized off the screen it covers (cqh), so it reads the same
+     at a 1080p capture and on a laptop. */
+  container-type: size;
 }
 
 #gls-critical-overlay canvas {
@@ -76,6 +83,70 @@
   background: transparent;
   pointer-events: none;
   will-change: transform, opacity, clip-path;
+}
+
+/* ── the chrome: the system's signal slab at full volume ──────────────────
+   Two tone rules ride the wipe's edges across the whole screen, and a slab
+   cut along 115° says what happened, with a PC's name under it. Everything
+   moves by inline transform from the beat (cut-in.mjs chromeStyle), so there
+   is no transition or keyframe here either. */
+.gluc-cut {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  font-family: var(--gluc-font);
+  opacity: 0;
+}
+.gluc-cut[data-tone="pc"] { --gluc-tone: var(--gluc-good); }
+.gluc-cut[data-tone="npc"] { --gluc-tone: var(--gluc-bad); }
+
+.gluc-cut-rule {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gluc-tone);
+  will-change: transform;
+}
+
+.gluc-cut-plate {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  will-change: transform, clip-path;
+}
+.gluc-cut-slab {
+  padding: 0.16em calc(0.62em + 0.36em) 0.12em 0.42em;
+  background: var(--gluc-tone);
+  color: var(--gluc-on-slab);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 0.62em) 100%, 0 100%);
+  font-size: clamp(32px, 7.5cqh, 88px);
+  font-weight: 800;
+  font-stretch: 116%;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.gluc-cut-name {
+  max-width: 60cqw;
+  overflow: hidden;
+  padding: 0.3em 1em 0.3em 0.7em;
+  background: var(--gluc-ink-0);
+  box-shadow: inset 3px 0 0 var(--gluc-tone);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-lg)), calc(100% - var(--gl-is-cut-lg)) 100%, 0 100%);
+  color: var(--gluc-text);
+  font-size: clamp(18px, 3.4cqh, 40px);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ═══ The windows ══════════════════════════════════════════════════════════ */

@@ -8,6 +8,8 @@
  * and flatters whichever copy was touched last.
  */
 
+import { escapeHTML } from "../../core/util.mjs";
+
 export const VIDEO_EXTENSIONS = Object.freeze(["webm", "mp4", "m4v", "ogv", "ogg", "mov"]);
 
 /** The beat's edges as fractions of the cut-in, at scale 1 (see motion.mjs). */
@@ -66,6 +68,70 @@ export function mediaStyle(frame) {
     opacity: String(frame.imgAlpha),
     transform: `translate(-50%, -50%) translateY(${frame.lift}px) scale(${frame.scaleMul})`,
     clipPath: `inset(${inset}% 0% ${inset}% 0%)`,
+  };
+}
+
+/**
+ * The band the wipe has opened, in screen pixels: the art's fit box, opened
+ * vertically from its centre by `wipe`, lifted and scaled with the art. Both
+ * kinds clip to it (the PIXI mask, the video's inset) and the chrome's rules
+ * ride its edges, so the three can never part.
+ */
+export function bandOf(frame, box, sh) {
+  const wipe = Math.min(1, Math.max(0, Number(frame.wipe) || 0));
+  const scale = Number(frame.scaleMul) || 1;
+  const cy = sh / 2 + (Number(frame.lift) || 0);
+  const half = (box.h / 2) * wipe * scale;
+  const w = box.w * scale;
+  return { x: box.x + (box.w - w) / 2, w, top: cy - half, bottom: cy + half };
+}
+
+/**
+ * What the cut-in says, beside the art. A critical is the table's good news
+ * when a player's character lands it and its danger when an NPC does, so the
+ * tone is the side, never a decoration.
+ *
+ * A PC's name is printed: the players already know their own characters. An
+ * NPC's never is. The GM may have hidden it on the token, and the cut-in is
+ * drawn on every player's screen and on the stream login; the art already
+ * says who it is as much as the GM chose to say.
+ */
+export function cutInModel(event, t) {
+  const isPC = event?.isPC === true;
+  const name = isPC ? String(event?.actorName ?? "").trim() : "";
+  return { tone: isPC ? "pc" : "npc", label: t("GLUC.CutIn.Critical"), name: name || null };
+}
+
+/** The chrome's markup. One layer per beat, mounted over the art. */
+export function cutInHTML(model) {
+  const name = model.name ? `<span class="gluc-cut-name">${escapeHTML(model.name)}</span>` : "";
+  return (
+    `<div class="gluc-cut" data-tone="${model.tone === "pc" ? "pc" : "npc"}" aria-hidden="true">` +
+    `<i class="gluc-cut-rule"></i><i class="gluc-cut-rule"></i>` +
+    `<div class="gluc-cut-plate"><span class="gluc-cut-slab">${escapeHTML(model.label)}</span>${name}</div>` +
+    `</div>`
+  );
+}
+
+/**
+ * One motion frame as the chrome's inline styles: the two rules on the band's
+ * edges, the plate pinned inside the band's lower-left corner and revealed
+ * left to right with the wipe. Transforms and opacity only, plus one small
+ * inset clip, so the beat stays on the compositor.
+ */
+export function chromeStyle(frame, box, sw, sh) {
+  const band = bandOf(frame, box, sh);
+  const inset = Math.min(48, Math.max(20, sh * 0.04));
+  const left = Math.max(inset, band.x + inset);
+  const reveal = (1 - Math.min(1, Math.max(0, Number(frame.wipe) || 0))) * 100;
+  return {
+    root: { opacity: String(frame.imgAlpha) },
+    top: { transform: `translate3d(0, ${(band.top - 1).toFixed(1)}px, 0)` },
+    bottom: { transform: `translate3d(0, ${(band.bottom - 1).toFixed(1)}px, 0)` },
+    plate: {
+      transform: `translate3d(${left.toFixed(1)}px, ${(Math.min(band.bottom, sh) - inset).toFixed(1)}px, 0) translateY(-100%)`,
+      clipPath: `inset(0% ${reveal.toFixed(2)}% 0% 0%)`,
+    },
   };
 }
 

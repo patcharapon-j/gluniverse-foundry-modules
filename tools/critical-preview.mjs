@@ -103,16 +103,19 @@ const NPC_ART = svg(800, 1200,
   `<polygon points="120,1200 400,640 680,1200" fill="#140808"/><circle cx="330" cy="400" r="22" fill="#ffcf80"/><circle cx="470" cy="400" r="22" fill="#ffcf80"/>` +
   `<text x="40" y="80" font-family="sans-serif" font-size="36" fill="#b88a8a">NPC art · 2:3 stand-in</text>`);
 
-const screen = (id, label, { art, seek }) =>
-  frame(id, label,
-    `<div class="preview-screen" data-art="${art}" ${seek != null ? `data-seek="${seek}"` : ""}>` +
+const screen = (id, label, { art, seek, pc = art === "pc", name = "Seri Vantor", size = "1280x720" }) => {
+  const [w, h] = size.split("x");
+  return frame(id, label,
+    `<div class="preview-screen" style="width:${w}px;height:${h}px" data-art="${art}" data-pc="${pc}" data-name="${name}" ${seek != null ? `data-seek="${seek}"` : ""}>` +
     `<div class="preview-map"></div><div id="gls-critical-overlay"></div></div>`);
+};
 
 const frames = [
   screen("pc-enter", "Cut-in · PC still, entering (80 ms of 1000)", { art: "pc", seek: 80 }),
   screen("pc-hold", "Cut-in · PC still, holding (500 ms)", { art: "pc", seek: 500 }),
   screen("pc-exit", "Cut-in · PC still, leaving (900 ms)", { art: "pc", seek: 900 }),
-  screen("npc-hold", "Cut-in · NPC portrait, holding (500 ms)", { art: "npc", seek: 500 }),
+  screen("npc-hold", "Cut-in · NPC portrait, holding: no name, ever (500 ms)", { art: "npc", seek: 500, name: "Ash Wyrm" }),
+  screen("pc-long", "Cut-in · PC with a long name, small screen (500 ms)", { art: "npc", pc: true, seek: 500, size: "960x540", name: "Ser Aldebrand Mournvale of the Ninth Ember Watch" }),
   screen("live", "Cut-in · the live beat, looping", { art: "pc" }),
   windowFrame("gm", "GM Configuration · as the GM opens it", "gluc-gm-config", t("GLUC.Settings.MenuName"), "fa-cog", render(gmTpl, gmContext), 520),
   windowFrame("actor-pc", "Critical Cinematic · a PC, opened by its player",
@@ -153,7 +156,9 @@ const html = `<!doctype html>
 ${frames.join("\n")}
 <script type="module">
   import { createCinematicMotion } from "../scripts/features/critical/motion.mjs";
-  import { durationLabel, fitBox, mediaStyle, videoEdges } from "../scripts/features/critical/cut-in.mjs";
+  import { chromeStyle, cutInHTML, cutInModel, durationLabel, fitBox, mediaStyle, videoEdges } from "../scripts/features/critical/cut-in.mjs";
+  const LANG = ${JSON.stringify(LANG)};
+  const t = (key) => key.split(".").reduce((o, p) => o?.[p], LANG) ?? key;
   // What GMConfigMenu#_onRender wires: the readout follows the thumb.
   for (const range of document.querySelectorAll('input[name="cinematicDuration"]')) {
     const out = range.closest(".form-fields").querySelector(".range-value");
@@ -181,14 +186,28 @@ ${frames.join("\n")}
     video.poster = art.src;
     layer.append(backdrop, video);
     host.append(layer);
-    const box = fitBox(art.w, art.h, el.clientWidth, el.clientHeight);
+    const sw = el.clientWidth, sh = el.clientHeight;
+    const box = fitBox(art.w, art.h, sw, sh);
     video.style.width = box.w.toFixed(2) + "px";
     video.style.height = box.h.toFixed(2) + "px";
+    // The same chrome mountChrome builds, from the same model and markup.
+    const tpl = document.createElement("template");
+    tpl.innerHTML = cutInHTML(cutInModel({ isPC: el.dataset.pc === "true", actorName: el.dataset.name }, t));
+    const root = tpl.content.firstElementChild;
+    host.append(root);
+    const [top, bottom] = root.querySelectorAll(".gluc-cut-rule");
+    const plate = root.querySelector(".gluc-cut-plate");
     const motion = createCinematicMotion(DURATION, { edges: videoEdges(DURATION) });
     const paint = (ms) => {
       const f = motion.sample(ms);
       backdrop.style.opacity = String(f.bgAlpha);
       Object.assign(video.style, mediaStyle(f));
+      const s = chromeStyle(f, box, sw, sh);
+      root.style.opacity = s.root.opacity;
+      top.style.transform = s.top.transform;
+      bottom.style.transform = s.bottom.transform;
+      plate.style.transform = s.plate.transform;
+      plate.style.clipPath = s.plate.clipPath;
     };
     const seek = forced ?? el.dataset.seek;
     if (seek != null) { paint(Number(seek)); continue; }

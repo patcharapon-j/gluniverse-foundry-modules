@@ -1,5 +1,7 @@
 import { createCinematicMotion } from "./motion.mjs";
-import { BACKDROP_VAR, colorToInt, durationLabel, fitBox, isVideoPath, mediaStyle, videoEdges } from "./cut-in.mjs";
+import {
+  BACKDROP_VAR, bandOf, chromeStyle, colorToInt, cutInHTML, cutInModel, durationLabel, fitBox, isVideoPath, mediaStyle, videoEdges
+} from "./cut-in.mjs";
 import { cssVar, motionScale } from "../../core/theme.mjs";
 import { onSocket, emitSocket } from "../../core/socket.mjs";
 import { clamp, clamp01, clampNumber } from "../../core/util.mjs";
@@ -514,24 +516,23 @@ async function runImageCinematic(event) {
   sprite.scale.set(baseScale);
   sprite.alpha = 0;
   stage.addChild(sprite);
-  const fitW = box.w;
-  const fitH = box.h;
   const mask = new PIXI.Graphics();
   stage.addChild(mask);
   sprite.mask = mask;
-  // The wipe only moves for part of the beat; redrawing an unchanged rect
-  // every frame rebuilds its geometry for nothing.
-  let maskH = -1;
-  const drawMask = (frac) => {
-    const clamped = Math.max(0, Math.min(1, frac));
-    const h = fitH * clamped;
-    if (h === maskH) return;
-    maskH = h;
-    const x = sw * 0.5 - fitW * 0.5;
-    const y = sh * 0.5 - h * 0.5;
-    mask.clear().beginFill(16777215, 1).drawRect(x, y, fitW, h).endFill();
+  // The mask is the band the video clips to (bandOf), so a still and a clip
+  // open, drift and leave identically and the chrome's rules sit on its edges.
+  // Redrawing an unchanged rect rebuilds its geometry for nothing, so it is
+  // keyed on the band to the half pixel.
+  let maskKey = "";
+  const drawMask = (frame) => {
+    const band = bandOf(frame, box, sh);
+    const key = `${Math.round(band.top * 2)}:${Math.round(band.bottom * 2)}:${Math.round(band.w * 2)}`;
+    if (key === maskKey) return;
+    maskKey = key;
+    mask.clear().beginFill(16777215, 1).drawRect(band.x, band.top, band.w, band.bottom - band.top).endFill();
   };
-  drawMask(0);
+  drawMask({ wipe: 0, scaleMul: 1, lift: 0 });
+  const chrome = mountChrome(container, event, box, sw, sh);
   playSfx(event.isPC ? "pc" : "gm");
   cinematicLive = true;
   if (!surface?.paused) app2.start();
@@ -556,13 +557,15 @@ async function runImageCinematic(event) {
       sprite.alpha = frame.imgAlpha;
       sprite.scale.set(baseScale * frame.scaleMul);
       sprite.position.y = sh * 0.5 + frame.lift;
-      drawMask(frame.wipe);
+      drawMask(frame);
+      chrome.apply(frame);
       if (elapsed >= event.durationMs) finish();
     });
     // A hidden tab must not hold every later queued cinematic hostage.
     const watchdog = setTimeout(finish, event.durationMs + VIDEO_WATCHDOG_SLACK_MS);
     app2.ticker.add(tick);
   });
+  chrome.remove();
   sprite.mask = null;
   stage.removeChildren();
   app2.stage.removeChildren();
@@ -612,6 +615,7 @@ async function runVideoCinematic(event) {
   let raf = null;
   let laidOutW = 0;
   let laidOutH = 0;
+  let chrome = null;
   const start = performance.now();
   try {
     await new Promise((resolve) => {
@@ -634,10 +638,13 @@ async function runVideoCinematic(event) {
         if (sw !== laidOutW || sh !== laidOutH) {
           laidOutW = sw;
           laidOutH = sh;
-          layoutVideo(video, sw, sh);
+          const box = layoutVideo(video, sw, sh);
+          chrome?.remove();
+          chrome = mountChrome(host, event, box, sw, sh);
         }
         backdrop.style.opacity = String(frame.bgAlpha);
         Object.assign(video.style, mediaStyle(frame));
+        chrome.apply(frame);
         if (t >= 1) {
           finish();
           return;
@@ -648,6 +655,7 @@ async function runVideoCinematic(event) {
     });
   } finally {
     if (raf != null) cancelAnimationFrame(raf);
+    chrome?.remove();
     motion.destroy();
     releaseVideo(video);
     layer.remove();
@@ -659,6 +667,32 @@ function layoutVideo(video, sw, sh) {
   const box = fitBox(video.videoWidth || 16, video.videoHeight || 9, sw, sh);
   video.style.width = `${box.w.toFixed(2)}px`;
   video.style.height = `${box.h.toFixed(2)}px`;
+  return box;
+}
+
+/**
+ * Mount the cut-in's chrome (cutInHTML) over the art and hand back the one
+ * call the beat makes per frame. Text comes from the receiving client's own
+ * language; an NPC's name never reaches the markup (cutInModel).
+ */
+function mountChrome(host, event, box, sw, sh) {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = cutInHTML(cutInModel(event, (key) => game.i18n.localize(key)));
+  const root = tpl.content.firstElementChild;
+  host.appendChild(root);
+  const [top, bottom] = root.querySelectorAll(".gluc-cut-rule");
+  const plate = root.querySelector(".gluc-cut-plate");
+  return {
+    apply(frame) {
+      const s = chromeStyle(frame, box, sw, sh);
+      root.style.opacity = s.root.opacity;
+      top.style.transform = s.top.transform;
+      bottom.style.transform = s.bottom.transform;
+      plate.style.transform = s.plate.transform;
+      plate.style.clipPath = s.plate.clipPath;
+    },
+    remove() { root.remove(); }
+  };
 }
 
 /**
