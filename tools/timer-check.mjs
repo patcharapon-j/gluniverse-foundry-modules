@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   formatParts, tierOf, toneOf, tagKeyOf, tagIconOf, drainOf, knockSecondOf,
-  hudHTML, stripHTML, STRIP, VIEW_KEYS, TIMER_MOTION, KNOCK_MS,
+  hudHTML, stripHTML, STRIP, VIEW_KEYS, TIMER_MOTION, KNOCK_MS, FINE_TICK_MS,
 } from "../scripts/features/timer/view.mjs";
 import { URGENT_MS, CRITICAL_MS, remainingOf } from "../scripts/features/timer/state.mjs";
 
@@ -113,10 +113,13 @@ eq(tagKeyOf("expired", false), "GLTIMER.hud.up", "time up says so");
 ok(/\.gltimer-tag-text\s*\{[^}]*min-width/.test(css), "the tag text has no min-width; Timer / Paused / Time up would resize the plate as the state changes");
 
 /* ── the drain ────────────────────────────────────────────────────────────── */
-eq(drainOf(30_000, 60_000), { from: 0.5, ms: 30_000 }, "half drained");
-eq(drainOf(90_000, 60_000), { from: 1, ms: 90_000 }, "time added past the length fills the bar, never overflows");
-eq(drainOf(0, 60_000), { from: 0, ms: 0 }, "empty at zero");
-eq(drainOf(10_000, 0), { from: 1, ms: 10_000 }, "a state with no total still drains");
+// One fixed keyframe (full to empty) over the whole length, entered part-way
+// by a negative delay: a keyframe that reads a custom property cannot run on
+// the compositor, and drains on the main thread every frame.
+eq(drainOf(30_000, 60_000), { total: 60_000, elapsed: 30_000 }, "half drained");
+eq(drainOf(90_000, 60_000), { total: 90_000, elapsed: 0 }, "time added past the length fills the bar, never overflows");
+eq(drainOf(0, 60_000), { total: 0, elapsed: 0 }, "empty at zero");
+eq(drainOf(10_000, 0), { total: 10_000, elapsed: 0 }, "a state with no total still drains");
 
 /* ── the knock ────────────────────────────────────────────────────────────── */
 eq(KNOCK_MS, CRITICAL_MS, "the knock and the red tier start together");
@@ -214,6 +217,15 @@ const markupClasses = new Set([...markup.matchAll(/class="([^"]+)"/g)].flatMap((
   ok(/\.data\s*=|textContent\s*=/.test(render), "the render writes the digits");
   ok(/\.gltimer-face\s*\{[^}]*contain\s*:/.test(css), "the face has no containment; every digit change re-lays the plate");
   ok(/@keyframes\s+gltimer-drain[^{]*\{[^}]*transform/.test(css), "the drain is not a transform keyframe on the compositor");
+  const keyframes = [...css.matchAll(/@keyframes\s+[\w-]+\s*\{((?:[^{}]*\{[^}]*\})*)[^}]*\}/g)].map((m) => m[1]).join("\n");
+  ok(!/var\(/.test(keyframes), "a keyframe reads a custom property; Chrome then runs it on the main thread every frame");
+  ok(/\.gltimer-face\s*\{[^}]*contain\s*:\s*strict/.test(css), "the face is not a relayout boundary (contain: strict with its own size); a digit re-lays the plate");
+  // The loop sleeps when nothing moves and wakes once a second above the last
+  // minute; only the hundredths need every frame.
+  ok(/_nextWake\(/.test(hud) && /setTimeout\(/.test(hud), "the HUD loop has no slower wake above the last minute");
+  ok(/FINE_TICK_MS/.test(hud.slice(hud.indexOf("_nextWake(rem"))), "the last minute redraws on every frame rather than at FINE_TICK_MS");
+  ok(FINE_TICK_MS >= 16 && FINE_TICK_MS <= 50, `FINE_TICK_MS ${FINE_TICK_MS} is outside 20 to 60 redraws a second`);
+  ok(/wake\(\)/.test(sources["index.mjs"]), "nothing wakes the HUD on a local pause, so a sleeping loop would not freeze the clock");
 }
 
 if (problems.length) {

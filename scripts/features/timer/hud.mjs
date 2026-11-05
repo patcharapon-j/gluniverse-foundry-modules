@@ -16,12 +16,12 @@
  */
 
 import {
-  getState, remainingOf, isLive, TimerCtrl, CHECKPOINT_MS,
+  getState, remainingOf, isLive, TimerCtrl, CHECKPOINT_MS, URGENT_MS,
 } from "./state.mjs";
 import * as Audio from "./audio.mjs";
 import { TimerMotion } from "./motion.mjs";
 import {
-  formatParts, tierOf, toneOf, tagKeyOf, tagIconOf, drainOf, knockSecondOf, hudHTML, STRIP,
+  formatParts, tierOf, toneOf, tagKeyOf, tagIconOf, drainOf, knockSecondOf, hudHTML, STRIP, FINE_TICK_MS,
 } from "./view.mjs";
 import { warn } from "../../core/const.mjs";
 
@@ -31,6 +31,7 @@ class TimerHUDClass {
   constructor() {
     this.el = null;
     this._raf = null;
+    this._timeout = null;
     this._state = null;
     this._lastRem = null;       // last computed remaining (held while frozen)
     this._lastMain = null;
@@ -69,6 +70,7 @@ class TimerHUDClass {
     mainEl.textContent = "";
     this._mainNode = mainEl.appendChild(document.createTextNode(""));
     this._fracNode = el.querySelector(".gltimer-frac").appendChild(document.createTextNode(""));
+    this._faceEl = el.querySelector(".gltimer-face");
     this._tagTextEl = el.querySelector(".gltimer-tag-text");
     this._tagIconEl = el.querySelector(".gltimer-tag-icon");
     this._drainEl = el.querySelector(".gltimer-drain");
@@ -109,18 +111,50 @@ class TimerHUDClass {
     // scheduled can take a while to hand out that first frame, and the plaque
     // should show the new value the moment it arrives. An inactive state still
     // gets this one pass, which is what hides the plaque.
+    this.wake();
+  }
+
+  /** Run a pass now. New state, and the world pausing or resuming on this
+   *  client (index.mjs's `pauseGame`), wake a loop that is sleeping. */
+  wake() {
     if (!this.el) return;
-    if (this._raf) cancelAnimationFrame(this._raf);
-    this._raf = null;
+    this._cancel();
     try { this._loop(); } catch (e) { warn("Timer | HUD update failed:", e); }
   }
 
-  /* Runs only while a timer is active. It keeps ticking through a pause (local
-     `game.paused` resumes without any new state arriving), but with no timer
-     at all it stops rather than waking sixty times a second for a whole
-     session to confirm there is still nothing to show. */
+  _cancel() {
+    if (this._raf) cancelAnimationFrame(this._raf);
+    if (this._timeout) clearTimeout(this._timeout);
+    this._raf = this._timeout = null;
+  }
+
+  /** null: sleep until woken; 0: the next frame; otherwise ms. */
+  _schedule(delay) {
+    if (delay === null) return;
+    if (delay === 0) this._raf = requestAnimationFrame(() => this._loop());
+    else this._timeout = setTimeout(() => this._loop(), delay);
+  }
+
+  /**
+   * When the clock next needs a pass. Held or over, nothing on it moves until
+   * new state or a pause change wakes it. Above the last minute it shows whole
+   * seconds, so it wakes once a second, just after the second turns (and on
+   * the threshold into the last minute). The hundredths redraw every
+   * FINE_TICK_MS, and the pass that reaches zero is never late. At zero the
+   * hit has played and the GM has written time up, which wakes it again.
+   */
+  _nextWake(rem, live) {
+    if (!live || rem <= 0) return null;
+    if (rem < URGENT_MS) return Math.min(FINE_TICK_MS, rem + 1);
+    return Math.min((rem % 1000) + 1, rem - URGENT_MS + 1);
+  }
+
+  /* Runs only while a timer is active, and only as often as the clock can
+     change (`_nextWake`). With no timer at all it stops rather than waking
+     sixty times a second for a whole session to confirm there is still
+     nothing to show. */
   _loop() {
-    this._raf = null;
+    this._raf = this._timeout = null;
     const el = this.el;
     if (!el) return;
     const s = this._state || (this._state = getState());
@@ -137,8 +171,14 @@ class TimerHUDClass {
       }
       return;
     }
-    // Scheduled before any work, so a throw below cannot stop the countdown.
-    this._raf = requestAnimationFrame(() => this._loop());
+    // The next pass is scheduled even if this one throws, so a throw cannot
+    // stop the countdown; a pass that throws retries on the next frame.
+    let next = 0;
+    try { next = this._pass(el, s); } finally { this._schedule(next); }
+  }
+
+  /** One pass: read the clock, draw it, play its beats. Returns `_nextWake`. */
+  _pass(el, s) {
     let revealed = false;
     if (el.style.display === "none") {
       el.style.display = "";
@@ -171,12 +211,17 @@ class TimerHUDClass {
         TimerCtrl.checkpoint();
       }
     }
+    return this._nextWake(rem, live);
   }
 
   /** Per frame: text nodes and attributes only, each written only when it changes. */
   _render(el, rem, s) {
     const { main, frac } = formatParts(rem);
-    if (main !== this._lastMain) { this._mainNode.data = main; this._lastMain = main; }
+    if (main !== this._lastMain) {
+      this._mainNode.data = main;
+      if ((main.length > 5) !== (this._lastMain?.length > 5)) this._faceEl.classList.toggle("is-long", main.length > 5);
+      this._lastMain = main;
+    }
     if (frac !== this._lastFrac) { this._fracNode.data = frac; this._lastFrac = frac; }
 
     const pausedView = !s.expired && rem > 0 && !(s.running && !s.worldPaused && !game.paused);
@@ -231,10 +276,10 @@ class TimerHUDClass {
    */
   _syncDrain(rem, s) {
     this._drainDirty = false;
-    const { from, ms } = drainOf(rem, s.totalMs);
+    const { total, elapsed } = drainOf(rem, s.totalMs);
     const bar = document.createElement("i");
-    bar.style.setProperty("--gltimer-drain-from", String(from));
-    bar.style.setProperty("--gltimer-drain-ms", `${ms}ms`);
+    bar.style.setProperty("--gltimer-drain-total", `${total}ms`);
+    bar.style.setProperty("--gltimer-drain-elapsed", `${elapsed}ms`);
     this._drainEl.replaceChildren(bar);
   }
 
@@ -265,8 +310,7 @@ class TimerHUDClass {
   destroy() {
     this._motion?.clear();
     this._motion = null;
-    if (this._raf) cancelAnimationFrame(this._raf);
-    this._raf = null;
+    this._cancel();
     this.el?.remove();
     this.el = null;
   }

@@ -85,6 +85,9 @@ Suite.register({
     // late joiners see the held value (clients also freeze instantly on their
     // own game.paused, independent of this write).
     Hooks.on("pauseGame", (paused) => {
+      // Every client freezes (or resumes) at once: a held clock's loop sleeps,
+      // so the pause has to wake it rather than wait for the GM's write.
+      TimerHUD.wake();
       if (game.user.isGM) TimerCtrl.setWorldPaused(paused);
     });
   },

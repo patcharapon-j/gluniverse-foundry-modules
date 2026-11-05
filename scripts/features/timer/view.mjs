@@ -22,6 +22,14 @@ export const TIMER_MOTION = Object.freeze({
   hit: 480,      // time up: the plate takes the hit
 });
 
+/**
+ * How often the hundredths are redrawn in the last minute (ms). Thirty times
+ * a second is past what anyone reads off a running SS.cc, and each redraw is a
+ * text layout: drawing them on every frame of a 144 Hz screen is five times
+ * the work for no visible difference.
+ */
+export const FINE_TICK_MS = 33;
+
 /** Seconds at the end during which the clock knocks (and the tick sounds). */
 export const KNOCK_MS = CRITICAL_MS;
 
@@ -76,15 +84,17 @@ export function tagIconOf(tier, paused) {
 }
 
 /**
- * The drain: how full the bar is now (0..1) and how long it takes to empty
- * from here (ms). Time added past the original length fills the bar rather
- * than overflowing it.
+ * The drain, as one full-to-empty keyframe: its whole length (ms) and how far
+ * into it the bar already is. The CSS enters it part-way with a negative
+ * delay, so the keyframe stays fixed and runs on the compositor. Time added
+ * past the original length fills the bar rather than overflowing it; at zero
+ * the length is zero and the bar sits empty.
  */
 export function drainOf(remMs, totalMs) {
-  const rem = Math.max(0, Number(remMs) || 0);
-  const total = Math.max(rem, Number(totalMs) || 0);
-  if (!total || !rem) return { from: 0, ms: 0 };
-  return { from: rem / total, ms: Math.round(rem) };
+  const rem = Math.max(0, Math.round(Number(remMs) || 0));
+  if (!rem) return { total: 0, elapsed: 0 };
+  const total = Math.max(rem, Math.round(Number(totalMs) || 0));
+  return { total, elapsed: total - rem };
 }
 
 /** The whole second a knock lands on, or null outside the last ten. */

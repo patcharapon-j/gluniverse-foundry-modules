@@ -109,9 +109,10 @@
   inset: 0;
   background: linear-gradient(0deg, var(--gltimer-tone) 0 4px, color-mix(in oklab, var(--gltimer-tone) 15%, transparent) 4px);
   transform-origin: 0 50%;
-  transform: scaleX(var(--gltimer-drain-from, 0));
-  animation: gltimer-drain var(--gltimer-drain-ms) var(--gl-linear) both;
-  transition: background var(--gl-d-brisk) var(--gl-ease);
+  transform: scaleX(0);
+  /* the whole length, entered part-way: the keyframe never changes, so it stays on the compositor */
+  animation: gltimer-drain var(--gltimer-drain-total) var(--gl-linear) both;
+  animation-delay: calc(var(--gltimer-drain-elapsed) * -1);
 }
 #gltimer-hud.is-paused .gltimer-drain i { animation-play-state: paused; }
 
@@ -187,21 +188,32 @@
   grid-column: 2;
   display: flex;
   align-items: baseline;
-  justify-content: flex-end;
+  justify-content: center;
   align-self: center;
   margin-left: calc(var(--gltimer-wedge) * -0.5);
   padding: 0 calc(var(--gltimer-cut) + 14px) 0 16px;
+  /* A relayout boundary with a size of its own: in the last minute the digits
+     change every frame, and only this box is laid out again, never the plate.
+     Sized for 99:59 (3.7em of tabular figures), so the plate also holds one
+     width through 10:00, 9:59 and the flip to SS.cc. */
+  inline-size: 3.7em;
+  block-size: 1em;
+  contain: strict;
+  /* its own layer: a digit repaint does not repaint the plate under its blur */
+  will-change: transform;
+  font-size: 44px;
   font-weight: 780;
   font-stretch: 120%;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   line-height: 1;
   color: var(--gltimer-tone);
-  contain: layout paint style;
   transition: color var(--gl-d-brisk) var(--gl-ease);
 }
+/* past 99:59 (time added on a long clock) the box grows rather than clips */
+#gltimer-hud .gltimer-face.is-long { inline-size: 4.6em; }
 #gltimer-hud .gltimer-main {
-  font-size: 44px;
+  font-size: 1em;
   letter-spacing: -0.02em;
 }
 #gltimer-hud .gltimer-frac {
@@ -423,7 +435,7 @@
 
 /* ── Keyframes (feature-scoped) ──────────────────────────────────────────── */
 @keyframes gltimer-drain {
-  from { transform: scaleX(var(--gltimer-drain-from, 0)); }
+  from { transform: scaleX(1); }
   to { transform: scaleX(0); }
 }
 @keyframes gltimer-breathe {
