@@ -39,9 +39,9 @@
   /* the neutral ramp and its tones (core: --gl-is-*) */
   --insight-ink-0: var(--gl-is-ink-0);
   --insight-ink-1: var(--gl-is-ink-1);
-  --insight-ink-2: var(--gl-is-ink-2);
   --insight-ink-3: var(--gl-is-ink-3);
   --insight-ink-4: var(--gl-is-ink-4);
+  --insight-ink-6: var(--gl-is-ink-6);
   --insight-text: var(--gl-is-text);
   --insight-paper: var(--gl-is-paper);
   --insight-dim: var(--gl-is-dim);
@@ -49,7 +49,6 @@
   --insight-line: var(--gl-is-line);
   --insight-line-strong: var(--gl-is-line-strong);
   --insight-hover: var(--gl-is-hover);
-  --insight-shade: var(--gl-is-shade);
   --insight-good: var(--gl-is-green);
   --insight-on: var(--gl-is-on-slab);
 
@@ -210,8 +209,10 @@
 .insight-tag {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 9px;
   min-width: 0;
+  max-width: 64%;
   padding: 0 calc(var(--insight-wedge) + 14px) 0 16px;
   background: var(--insight-tone);
   color: var(--insight-on);
@@ -235,9 +236,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* the tag keeps its label; a long "With …" gives way first */
 .insight-private {
-  display: flex;
-  align-items: center;
+  flex: 0 1 auto;
+  align-self: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 0 18px 0 12px;
   font-size: var(--gl-is-t-meta);
   font-weight: 700;
@@ -287,7 +292,10 @@
   font-style: var(--insight-body-style, normal);
   color: var(--insight-text);
   text-wrap: pretty;
+  scrollbar-width: thin;
+  scrollbar-color: var(--insight-ink-6) transparent;
 }
+.insight-card ::selection { background: var(--insight-paper); color: var(--insight-on); }
 .insight-head + .insight-body { margin-top: 18px; }
 .insight-body p { margin: 0 0 0.7em; }
 .insight-body p:last-child { margin-bottom: 0; }
