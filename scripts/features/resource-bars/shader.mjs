@@ -4,7 +4,7 @@
  * One quad per bar, everything computed per-pixel: the recessed well, the
  * health liquid, the chip trail, the temp-HP overlay, the segment ticks, the
  * low-health breath, the change wave, the impact and its debris, and the
- * chamfered Etched Glass frame. Doing it in a shader rather than in
+ * chamfered ink-and-steel frame. Doing it in a shader rather than in
  * PIXI.Graphics is what makes "shading" and "animates every frame" cheap
  * instead of a per-token retessellation.
  *
