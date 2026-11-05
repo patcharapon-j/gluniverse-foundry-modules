@@ -62,6 +62,16 @@ export class TimerPanel extends HandlebarsApplicationMixin(ApplicationV2) {
     };
   }
 
+  /** Enter in either field starts (or sets) the timer, as the button does. */
+  _onFirstRender(context, options) {
+    super._onFirstRender?.(context, options);
+    this.element.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" || !ev.target.closest?.(".gltimer-input")) return;
+      ev.preventDefault();
+      TimerPanel._onStart.call(this, ev);
+    });
+  }
+
   _readDurationMs() {
     const root = this.element;
     const m = Math.max(0, parseInt(root.querySelector('[name="min"]')?.value, 10) || 0);

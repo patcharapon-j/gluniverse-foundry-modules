@@ -158,6 +158,16 @@
   transition: background-color var(--gl-d-brisk) var(--gl-ease);
 }
 #gltimer-hud .gltimer-tag i { width: 18px; font-size: 18px; text-align: center; }
+/* While there is time, the tag is ink and only its edge is paper: a ten-minute
+   timer sits over the map all scene, and a white slab would outshout the clock
+   it labels. The slab lights only when the tone means something (the last
+   minute, the last ten, time up, held), so the step into amber is an event. */
+#gltimer-hud[data-tone="paper"] .gltimer-tag {
+  background: var(--gltimer-ink-3);
+  color: var(--gltimer-text);
+  box-shadow: inset 2px 0 0 var(--gltimer-paper);
+}
+#gltimer-hud[data-tone="paper"] .gltimer-tag i { color: var(--gltimer-dim); }
 /* Timer, Paused and Time up are different lengths; the tag keeps the longest
    one's width so the plate never resizes as the state changes */
 #gltimer-hud .gltimer-tag-text { min-width: 5.4em; }
@@ -188,8 +198,10 @@
 }
 #gltimer-hud .gltimer-frac {
   font-size: 24px;
+  font-weight: 700;
   letter-spacing: -0.01em;
-  color: color-mix(in oklab, var(--gltimer-tone) 72%, var(--gltimer-ink-1));
+  /* the tail steps down by size and weight, never by colour: a tone mixed
+     into ink falls under 3:1 on the time-up wash */
 }
 /* a held clock is quiet: the steel tone says it, the number stays readable */
 #gltimer-hud.is-paused .gltimer-face { color: var(--gltimer-dim); }
