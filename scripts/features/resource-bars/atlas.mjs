@@ -34,7 +34,7 @@ export function getAtlas() {
   canvas.width = CELL_W * GLYPHS.length;
   canvas.height = CELL_H;
   const ctx = canvas.getContext("2d");
-  ctx.font = "700 " + FONT_PX + "px " + cssVar("--gl-tech", "monospace");
+  ctx.font = "700 " + FONT_PX + "px " + cssVar("--gl-is-num", "monospace");
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.lineJoin = "round";

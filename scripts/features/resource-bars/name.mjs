@@ -4,8 +4,8 @@
  * Foundry's nameplate is a `PIXI.Text` centred under the token, in a font and a
  * position nothing else in this feature shares. Once the bars are an instrument,
  * a caption floating somewhere near them reads as a second, unrelated widget. So
- * the name moves onto the bar: uppercase, lightly tracked, in the readout's own
- * `--gl-tech`, sitting on the bar's top edge and followed by a hairline rule that
+ * the name moves onto the bar: uppercase, lightly tracked, in Ink and Signal's
+ * `--gl-is-font`, sitting on the bar's top edge and followed by a hairline rule that
  * runs toward the cut corner. A token with no bar gets the same name centred in
  * the same slot, as `── NAME ──`.
  *
@@ -97,7 +97,12 @@ export const NAME_LAYOUT = Object.freeze({
   bucketsPerOctave: 3,
   minRasterPx: 8,
   maxRasterPx: 160,
-  measurePx: 100,      // font size layout is measured at
+  /* Google Sans Flex has an optical-size axis the canvas sets from the font
+     size, and it widens small text: a name is ~13% wider at 10px than at 100px.
+     So layout is measured at 10px, the size a label is whole at on an ordinary
+     display at 100% zoom (a 7.2px cap). A larger raster is then a little
+     narrower than its fit, never wider, so nothing a fit allows overruns it. */
+  measurePx: 10,       // font size layout is measured at
   capRatio: 0.7,       // cap height / font size, when the font cannot be measured
 });
 
@@ -109,12 +114,12 @@ export const NAME_LAYOUT = Object.freeze({
 export const HERO_PAD_Y = 0.10;
 export const RAIL_PAD_Y = 0.15;
 
-/** Colours, from the palette mirror — never literals. */
+/** Colours, from the palette mirror (Ink and Signal) — never literals. */
 export const NAME_INK = Object.freeze({
-  text: PALETTE.text,
-  edge: PALETTE.ink0,
-  rule: PALETTE.textDim,    // the steel/ink family the bar's stroke is drawn in
-  marker: PALETTE.accent,
+  text: PALETTE.isText,
+  edge: PALETTE.isInk0,
+  rule: PALETTE.isSteel,    // the quiet tone the bar's frame is lit in
+  marker: PALETTE.isInfo,   // a fact with no verdict: players see a cipher here
   ruleAlpha: 0.55,
   gmDim: 0.7,               // the GM's view of a name players cannot read
 });
@@ -323,7 +328,9 @@ export function composeLabel({ mode, fit = null, seed = 0, epoch = 0, tick = 0, 
    Measuring and rasterising — need a document, never run at import
    ══════════════════════════════════════════════════════════════════════ */
 
-const labelFont = () => cssVar("--gl-tech", "monospace");
+/* Words are Ink and Signal's one voice, Google Sans Flex; the numbers beside
+   them stay in the tabular face (atlas.mjs). */
+const labelFont = () => cssVar("--gl-is-font", "sans-serif");
 
 function applyFont(ctx, px) {
   ctx.font = NAME_LAYOUT.weight + " " + px + "px " + labelFont();
@@ -431,6 +438,40 @@ function releaseRaster(r) {
   if (r.refs > 0) return;
   r.texture.destroy(true);
   rasters.delete(r.key);
+}
+
+/**
+ * The label face is a web font, and a name measured or rasterised before it
+ * loads keeps the fallback's widths and shapes for as long as it lives. So the
+ * host asks once at attach: if the face is not loaded yet, wait for it, then
+ * forget every measurement and redraw every raster into its own canvas (the
+ * textures the labels hold stay valid) and tell the host, whose labels re-fit.
+ * The same contract ticker.mjs keeps for DYING and DEAD.
+ */
+let faceWaiting = false;
+export function awaitLabelFace(onReady) {
+  const fonts = globalThis.document?.fonts;
+  if (faceWaiting || typeof fonts?.check !== "function" || typeof fonts.load !== "function") return;
+  const font = NAME_LAYOUT.weight + " " + NAME_LAYOUT.measurePx + "px " + labelFont();
+  let ready = true;
+  try { ready = fonts.check(font); } catch { return; }
+  if (ready) return;
+  faceWaiting = true;
+  fonts.load(font).then(() => {
+    faceWaiting = false;
+    widths.clear();
+    measurer = null;
+    for (const r of rasters.values()) {
+      const next = rasterLabel(r.text, r.px);
+      const own = r.info.canvas;
+      own.width = next.canvas.width;
+      own.height = next.canvas.height;
+      own.getContext("2d").drawImage(next.canvas, 0, 0);
+      r.info = { ...next, canvas: own };
+      r.texture.baseTexture.resource?.update?.();
+    }
+    onReady?.();
+  }, () => { faceWaiting = false; });
 }
 
 /** Drop every raster and measurement (canvas teardown, font load). */
@@ -680,6 +721,9 @@ export class NameLabel {
     else if (!c.text && this.motion.decoding) this.motion.finish();
     this._dirty = true;
   }
+
+  /** The face loaded under a fitted name: measure it again on the next flush. */
+  refit() { this.fit = null; this._dirty = true; }
 
   show(animate = false) { this.motion.show(animate); this._dirty = true; }
   hide(animate = false) { this.motion.hide(animate); this._dirty = true; }

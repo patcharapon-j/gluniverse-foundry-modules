@@ -64,6 +64,27 @@ export const PALETTE = Object.freeze({
   tealHot: "#b6fff2",
   mission: "#37d99a",
   holoC: "#ff66b3",
+
+  /* Ink and Signal (`--gl-is-*`, the dark ground). The suite's new system; see
+     DESIGN.md. Canvas features read these, never the Etched Glass hues above. */
+  isInk0: "#05060a",
+  isInk1: "#0a0b11",
+  isInk2: "#0f1017",
+  isInk3: "#15171f",
+  isInk4: "#1c1e28",
+  isInk5: "#272a36",
+  isInk6: "#353846",
+  isText: "#f4f4f7",
+  isPaper: "#ecedf2",
+  isDim: "#b3b5c2",
+  isFaint: "#7f8291",
+  isSteel: "#8e91a0",
+  isOnSlab: "#05060a",
+  isAmber: "#ffb020",
+  isRed: "#ff4d5a",
+  isGreen: "#2fb672",
+  isEmber: "#ff8a3d",
+  isInfo: "#4aa3ff",
 });
 
 /* ══════════════════════════════════════════════════════════════════════

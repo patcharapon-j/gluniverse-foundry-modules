@@ -96,7 +96,9 @@ export function layoutStrip(parts, widthOf) {
 
 /* ── Rasterising — needs a document ─────────────────────────────────────── */
 
-const fontOf = (px) => "700 " + px.toFixed(2) + "px " + cssVar("--gl-display", "sans-serif");
+/* The words are Ink and Signal's one voice, Google Sans Flex; the value inside
+   the ticker stays in the same face so a run reads as one line, not two. */
+const fontOf = (px) => "700 " + px.toFixed(2) + "px " + cssVar("--gl-is-font", "sans-serif");
 
 /**
  * Rasterise one strip onto a power-of-two canvas. Returns the canvas, the strip's

@@ -45,7 +45,7 @@ export function bakeCipherAtlas({ doc = globalThis.document, paint = null } = {}
   canvas.width = cellW * glyphs.length;
   canvas.height = cellH;
   const ctx = canvas.getContext("2d");
-  ctx.font = weight + " " + fontPx + "px " + cssVar("--gl-tech", "monospace");
+  ctx.font = weight + " " + fontPx + "px " + cssVar("--gl-is-num", "monospace");
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
   ctx.lineJoin = "round";

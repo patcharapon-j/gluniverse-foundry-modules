@@ -22,7 +22,7 @@
 
 import { SUITE_ID } from "../../core/const.mjs";
 import { DEFAULT_LIQUID, fragmentShader, READOUT_INSET, TICKER_BAND, VERTEX_SHADER } from "./shader.mjs";
-import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, DEAD_STEEL } from "./ramp.mjs";
+import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, DEAD_STEEL, READOUT_INK } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, RevealAnim, SHED_ORDER, TICKER_FULL } from "./anim.mjs";
 import { DIVIDER, FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
 import { readDead, readDying, readToken, sameReading } from "./data.mjs";
@@ -34,7 +34,7 @@ import { createBloomFilter } from "../../core/bloom.mjs";
 import { Budget } from "../../core/budget.mjs";
 import { filterProbe, warmPixi } from "../../core/warmup.mjs";
 /* ── Names ── */
-import { HERO_PAD_Y, NameLabel, nameGeometry, nameRowHeight, RAIL_PAD_Y, resetNameRasters } from "./name.mjs";
+import { awaitLabelFace, HERO_PAD_Y, NameLabel, nameGeometry, nameRowHeight, RAIL_PAD_Y, resetNameRasters } from "./name.mjs";
 import { cipherSeed, decideLabel, invalidateKnowledge, labelContext, labelReserved, reserveFacts, tokenFacts } from "./mystify.mjs";
 import { resetCipherAtlas } from "./cipher-atlas.mjs";
 
@@ -70,10 +70,12 @@ const CULL_PAD = 96;
 /** The three rows, in stacking order. */
 const ROLES = ["hero", "rail", "shield"];
 
-/** Readout ink: at rest, and the two colours an impact drags it toward. */
-const REST_INK = [0.97, 0.99, 1.0];
-const HIT_INK = [1.0, 0.52, 0.48];
-const HEAL_INK = [0.62, 1.0, 0.78];
+/** Readout ink: at rest, the two colours an impact drags it toward, and the
+    outline every numeral is cut on (ramp.mjs's READOUT_INK). */
+const REST_INK = hexToFloat3(READOUT_INK.rest);
+const HIT_INK = hexToFloat3(READOUT_INK.hit);
+const HEAL_INK = hexToFloat3(READOUT_INK.heal);
+const EDGE_INK = hexToFloat3(READOUT_INK.edge);
 
 /**
  * A stable per-token seed for the guard-break fracture, in the 0..100 range the
@@ -420,6 +422,11 @@ class BarHost {
        drawn before it loaded, ticker.mjs redraws every strip in place once it
        has, and a settled bar is not ticking to pick up the new aspect. */
     onStripsChanged(() => this.refreshAll());
+    /* Names are set in the Ink and Signal face, a web font too: the same wait,
+       then every label re-measures its fit. */
+    awaitLabelFace(() => {
+      for (const entry of this.entries.values()) if (entry.label) { entry.label.refit(); entry.label.flush(); }
+    });
     this.refreshAll();
   }
 
@@ -1326,7 +1333,7 @@ class BarHost {
       const shader = PIXI.Shader.from(TEXT_VERTEX_SHADER, TEXT_FRAGMENT_SHADER, {
         uAtlas: getAtlas().texture,
         uInk: buf,
-        uEdge: new Float32Array([0.02, 0.03, 0.05]),
+        uEdge: new Float32Array(EDGE_INK),
         uOpacity: opacity,
       });
       mesh = new PIXI.Mesh(geometry, shader);

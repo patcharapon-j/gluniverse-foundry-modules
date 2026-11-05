@@ -65,6 +65,7 @@ import { PRECISION, SCALE_PRELUDE, VERTEX_SHADER } from "../../core/glsl.mjs";
 import {
   FX_GLSL_BREAK_FIELD, FX_GLSL_BREAK_PULSE, FX_GLSL_DYING_FIELD, FX_GLSL_DYING_NOISE, FX_GLSL_NOISE,
 } from "../../core/fx-glsl.mjs";
+import { hexToRgbFloat, PALETTE } from "../../core/theme.mjs";
 
 /* Re-exported so this module stays the single import site for everything the
    feature compiles, as it was when it owned the constant. */
@@ -435,6 +436,9 @@ export const LIQUID_BODY = Object.freeze({
 });
 
 const f4 = (n) => n.toFixed(4);
+/* A palette hex as a GLSL vec3, so the chrome's inks are generated from the
+   mirror in core/theme.mjs rather than restated as floats. */
+const v3 = (hex) => "vec3(" + hexToRgbFloat(hex).map(f4).join(", ") + ")";
 
 /* The heartbeat at every level, crossfaded by uDyingLevel: one dyBeat per rate
    in DYING_BEATS, each weighted by how close the level index is to it. */
@@ -730,10 +734,14 @@ vec3 rbWarm(vec3 c, float t) {
   return vec3(max(c.r, c.r + (1.0 - c.r) * 0.5 * clamp(t, 0.0, 1.0)), c.g * (1.0 - 0.22 * clamp(t, 0.0, 1.0)), c.b * (1.0 - 0.30 * clamp(t, 0.0, 1.0)));
 }
 
-/* Etched Glass ink, mirrored from PALETTE.ink1 / ink2 in core/theme.mjs. The
-   trough, the frame and the fracture's seams use these; no liquid does. */
-const vec3 INK  = vec3(0.043, 0.059, 0.090);
-const vec3 INK0 = vec3(0.008, 0.027, 0.043);
+/* Ink and Signal's chrome, generated from PALETTE.isInk* / isSteel in
+   core/theme.mjs. The trough, the frame and the fracture's seams use these; no
+   liquid does. The frame is ink-6 below and steel along its lit top: a
+   hairline that separates the bar from any map, with no hue in it. */
+const vec3 INK = ${v3(PALETTE.isInk2)};
+const vec3 INK0 = ${v3(PALETTE.isInk0)};
+const vec3 FRAME = ${v3(PALETTE.isInk6)};
+const vec3 STEEL = ${v3(PALETTE.isSteel)};
 `;
 
 /* ── The liquids ────────────────────────────────────────────────────────────
@@ -1066,9 +1074,8 @@ void main(void) {
   float fy = clamp(p.y / fh, -1.0, 1.0);
 
   /* ── Palette ───────────────────────────────────────────────────────────
-     GOLD is PALETTE.signalPale. It is the only warm note and it appears in
-     exactly one place — the top of the stroke — which is what keeps it reading
-     as a material catching light rather than as a colour scheme.
+     The chrome has no hue (Ink and Signal's Signal Rule): the frame is ink and
+     steel, so the only colour on a bar is the reading.
 
      "Bloodied" (under half) is a state of the *liquid* — each shows it in its own
      idiom, paler and calmer, never darker — so the colour itself stays on the
@@ -1203,10 +1210,7 @@ void main(void) {
   /* ── Stroke ────────────────────────────────────────────────────────────
      The asymmetry that stops the bar reading as a form control comes from the
      cut corner, which does the job with none of the width end furniture cost. */
-  vec3 GOLD  = vec3(1.000, 0.914, 0.722);
-  vec3 STEEL = vec3(0.55, 0.62, 0.78);
-  vec3 strokeCol = mix(vec3(0.085, 0.100, 0.140),
-                       mix(STEEL, GOLD, 0.60), smoothstep(-0.75, 0.92, hb));
+  vec3 strokeCol = mix(FRAME, STEEL, smoothstep(-0.75, 0.92, hb));
 
   /* Register marks stepping outside the body at the quarters — the detail that
      says this was laid out on an instrument rather than drawn as a box. They
@@ -1414,7 +1418,7 @@ void main(void) {
      of the letters. uDead arrives 0 on the rails and on every living bar. */
   if (uDead > 0.001) {
     float dAmt = uDead * mBody;
-    vec3 deadStroke = mix(vec3(0.085, 0.100, 0.140), uSteel * 0.60, smoothstep(-0.75, 0.92, hb));
+    vec3 deadStroke = mix(FRAME * 0.60, uSteel * 0.60, smoothstep(-0.75, 0.92, hb));
     C = mix(C, deadStroke, mStroke * dAmt);
     C = mix(C, troughCol, mTrough * (1.0 - mFill) * dAmt);
 
