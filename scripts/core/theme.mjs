@@ -1,5 +1,6 @@
 /**
- * GLUniverse Suite — the JS side of the Etched Glass design system.
+ * GLUniverse Suite — the JS side of the design system (Etched Glass's
+ * PALETTE, and Ink and Signal's INK_SIGNAL).
  *
  * styles/gl-tokens.css is the source of truth for anything the browser paints.
  * This module exists for the things CSS custom properties cannot reach:
@@ -63,6 +64,37 @@ export const PALETTE = Object.freeze({
   tealHot: "#b6fff2",
   mission: "#37d99a",
   holoC: "#ff66b3",
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+   INK_SIGNAL — the JS mirror of the `--gl-is-*` family in gl-tokens.css
+   (the dark ground). Canvas work on a migrated feature reads these; a
+   change to a value in gl-tokens.css MUST change here too.
+   ══════════════════════════════════════════════════════════════════════ */
+export const INK_SIGNAL = Object.freeze({
+  /* Ink ramp */
+  ink0: "#05060a",
+  ink1: "#0a0b11",
+  ink2: "#0f1017",
+  ink3: "#15171f",
+  ink4: "#1c1e28",
+  ink5: "#272a36",
+  ink6: "#353846",
+
+  /* Tones */
+  text: "#f4f4f7",
+  paper: "#ecedf2",
+  dim: "#b3b5c2",
+  faint: "#7f8291",
+  steel: "#8e91a0",
+  onSlab: "#05060a",
+
+  /* Signals: each hue has one job (DESIGN.md, The Signal Rule). */
+  amber: "#ffb020",
+  red: "#ff4d5a",
+  green: "#2fb672",
+  ember: "#ff8a3d",
+  info: "#4aa3ff",
 });
 
 /* ══════════════════════════════════════════════════════════════════════

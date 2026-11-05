@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import { test } from "node:test";
+import { INK_SIGNAL, hexToInt } from "../scripts/core/theme.mjs";
 
 const read = path => readFileSync(new URL(path, import.meta.url), "utf8");
 /** Module source as a plain script: single-line imports dropped (the sandbox supplies them), exports unwrapped. */
@@ -123,8 +124,10 @@ function createHarness({ users, calm = true }) {
     getShowLines: () => true,
     isConfiguredStreamUser: () => false,
     // constants.js namespaces onto the suite id, and the feature raises its own
-    // settings hook; both are imports the sandbox supplies.
+    // settings hook; both are imports the sandbox supplies, as is the core palette.
     SUITE_ID: "gluniverse-foundry-modules",
+    INK_SIGNAL,
+    hexToInt,
     TARGETS_HOOKS: {
       settingsChanged: "gluniverse-foundry-modules.targets.settingsChanged",
       linesChanged: "gluniverse-foundry-modules.targets.linesChanged"
@@ -693,8 +696,11 @@ function loadTargetLine() {
   const context = vm.createContext({
     console, Map, Set, JSON,
     // constants.js namespaces onto the suite id; the sandbox supplies the
-    // import that asScript strips.
+    // import that asScript strips, and the line's ink and paper come from the
+    // core palette the same way.
     SUITE_ID: "gluniverse-foundry-modules",
+    INK_SIGNAL,
+    hexToInt,
     animate: (target, params) => {
       const animation = {
         target,
@@ -1069,6 +1075,9 @@ test("the line draws device-pixel hairlines in its own colours, over ink, and on
   // The body tapers out of the source: its colour band is narrower at the start than at the end.
   const band = strokes(core).filter(op => op.color === color).map(op => op.width);
   assert.ok(band[0] < band.at(-1), "the body leaves the source thin and arrives at full width");
+  // The taper steps through a few widths, one polyline each, rather than one stroke per sample span: every
+  // stroke is a shape PIXI tessellates with its own caps, every frame the line moves.
+  assert.ok(band.length <= 10, `the colour band is ${band.length} strokes; the taper should cost a handful`);
 
   assert.equal(render(2, 1.5), false, "a held line whose tokens are still redraws nothing");
 
@@ -1090,6 +1099,49 @@ test("the line draws device-pixel hairlines in its own colours, over ink, and on
   self.render({ source: token(50, 50), target: token(50, 50), scale: 1, gridSize: 100, resolution: 1 });
   assert.equal(self.coreGraphics.ops.some(op => op.op === "fill" && op.color === color), false, "no head on a self-target");
   assert.ok(strokes(self.coreGraphics).length > 0, "but the brackets are there");
+});
+
+test("the bed under the line is ink shade, never a halo of the line's own colour", () => {
+  const t = loadTargetLine();
+  const color = 0x4aa3ff;
+  const line = t.make({ color });
+  line.show();
+  Object.assign(line.state, { reach: 1, body: 1, ringAlpha: 1, ringScale: 1 });
+  line.render({ source: token(50, 50), target: token(550, 50), scale: 1, gridSize: 100, resolution: 1 });
+  const bed = line.underGraphics.ops.filter(op => op.op === "line" && op.width > 0);
+  assert.ok(bed.length > 0, "the line still sits on a bed, so it holds over busy art");
+  for (const op of bed) {
+    assert.equal(op.color, t.INK, "Ink and Signal's No Glow Rule: nothing glows at rest, so the bed is ink");
+    assert.ok(op.alpha <= 0.35, "a shade, not a second line");
+  }
+});
+
+test("the reticle is a plate's outline: square corners and one 45° cut at the bottom right", () => {
+  const t = loadTargetLine();
+  const line = t.make({ sourceId: "a", targetId: "a" });
+  line.show();
+  Object.assign(line.state, { reach: 1, body: 1, ringAlpha: 1, ringScale: 1 });
+  line.render({ source: token(500, 500), target: token(500, 500), scale: 1, gridSize: 100, resolution: 1 });
+  const ops = line.coreGraphics.ops;
+  // One stroke pass: the colour's (the ink rim and the hairline repeat the same shape).
+  const colourPass = ops.slice(ops.findIndex((op, i) => op.op === "line" && i > 0 && op.color !== t.INK && op.width > 0));
+  const brackets = [];
+  colourPass.forEach((op, i) => {
+    if (op.op !== "moveTo" || brackets.length >= 4) return;
+    const run = [op];
+    for (let j = i + 1; colourPass[j]?.op === "lineTo"; j++) run.push(colourPass[j]);
+    brackets.push(run);
+  });
+  assert.equal(brackets.length, 4, "four corner brackets");
+  const cut = brackets.filter(run => run.length === 4);
+  assert.equal(cut.length, 1, "exactly one corner is cut, as on a plate");
+  const [, b, c] = cut[0];
+  assert.ok(c.x > 500 && c.y > 500 && b.x > 500 && b.y > 500, "the cut corner is the bottom right");
+  assert.ok(Math.abs(Math.abs(c.x - b.x) - Math.abs(c.y - b.y)) < 1e-9 && c.x !== b.x, "a 45° cut");
+  for (const run of brackets.filter(r => r.length === 3)) {
+    const [a, corner, d] = run;
+    assert.ok((a.y === corner.y && corner.x === d.x) || (a.x === corner.x && corner.y === d.y), "the other corners are square");
+  }
 });
 
 test("a style that has not changed does not force a redraw", () => {

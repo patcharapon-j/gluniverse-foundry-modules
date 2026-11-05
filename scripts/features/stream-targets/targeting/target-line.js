@@ -1,15 +1,16 @@
 import { animate, remove } from "../../stream/motion/engine.js";
+import { INK_SIGNAL, hexToInt } from "../../../core/theme.mjs";
 import { TARGET_LINE_MOTION } from "./line-motion.js";
 import { HEAD_HALF_WIDTH_SQUARES, HEAD_LENGTH_SQUARES, createPath, lineGeometry, pointAt, ringRadius } from "./target-geometry.js";
 
 /**
- * The ink under every stroke. A fixed near-black rather than a tint, because a dark edge is what separates a
- * line from bright map art: on a parchment floor a pale line with no rim simply disappears. With PAPER it is the
- * only colour this file does not take from the relationship colour setting.
+ * The ink under every stroke: Ink and Signal's void (`--gl-is-ink-0`). A fixed near-black rather than a tint,
+ * because a dark edge is what separates a line from bright map art: on a parchment floor a pale line with no rim
+ * simply disappears. With PAPER it is the only colour this file does not take from the relationship colour setting.
  */
-const INK = 0x07080b;
-/** The light the hairline core is mixed towards: the suite's paper, not pure white. */
-const PAPER = 0xecedf2;
+const INK = hexToInt(INK_SIGNAL.ink0);
+/** The light the hairline core is mixed towards: Ink and Signal's paper (`--gl-is-paper`), not pure white. */
+const PAPER = hexToInt(INK_SIGNAL.paper);
 /** The brackets' alpha while a hand-off moves the origin and keeps the target. */
 const RETICLE_HANDOFF_ALPHA = 0.45;
 /** The brackets lock in from this multiple of their spread, and a released target's open back out to it. */
@@ -17,12 +18,22 @@ const RETICLE_OPEN_SCALE = 1.45;
 /** During the lock, the brackets' alpha reaches 1 this many times sooner than their spread settles. */
 const RETICLE_LOCK_ALPHA_RATE = 1.8;
 /** A bracket's arm, as a share of its half-span. */
-const BRACKET_ARM_SHARE = 0.34;
+const BRACKET_ARM_SHARE = 0.36;
+/** The chamfer on the bottom-right bracket, as a share of its arm: the plates' cut corner, scaled to the lock. */
+const BRACKET_CUT_SHARE = 0.5;
+/** The colour band and the brackets, in soft units (screen pixels at zoom 1): wide enough that the hue, not the
+ *  paper hairline down its middle, is what reads. */
+const BAND_U = 3.2;
+const BRACKET_U = 2.2;
 /** The head fades in over the last stretch of the reach, so it lands with the line. */
 const HEAD_FADE_FROM = 0.82;
 /** The body is thin where it leaves the source and reaches full width over this share of its length. */
 const TAPER_SHARE = 0.4;
 const TAPER_FROM = 0.4;
+/** How many widths the taper steps through: under a device pixel apart on a full-weight band, so it reads smooth. */
+const TAPER_STEPS = 6;
+/** The ink shade bed's two bands, wide then narrow: a soft contact shade that deepens towards the line. */
+const BED_ALPHA = [0.14, 0.2];
 /** How far the core is mixed towards PAPER, for the one-device-pixel hairline down the middle. */
 const BRIGHT_MIX = 0.62;
 
@@ -265,13 +276,14 @@ export class TargetLine {
       const end = path.length * reach;
       const taperTo = Math.max(1, path.length * TAPER_SHARE);
 
-      // The bed: a wide, faint band of the line's own colour, so it holds over busy art without a blur pass.
-      strokePath(under, path, 0, end, 9 * u, color, 0.1 * body, point);
-      strokePath(under, path, 0, end, 5 * u, color, 0.14 * body, point);
+      // The bed: a wide, soft band of ink shade, so the line holds over busy art without a blur pass. It is ink,
+      // never the line's own colour: a coloured band at rest is a glow, which Ink and Signal does not draw.
+      strokePath(under, path, 0, end, 9 * u, INK, BED_ALPHA[0] * body, point);
+      strokePath(under, path, 0, end, 5 * u, INK, BED_ALPHA[1] * body, point);
       // Ink rim, colour, hairline: the body tapers out of the source, so its direction reads without the head.
       // Never thinner than two device pixels, or the hairline down the middle would be wider than its band.
-      strokeTapered(core, path, end, taperTo, (2.6 * u) + (2.5 * hl), 4.5 * hl, INK, 0.6 * body, point, this.#from);
-      strokeTapered(core, path, end, taperTo, 2.6 * u, 2 * hl, color, 0.95 * body, point, this.#from);
+      strokeTapered(core, path, end, taperTo, (BAND_U * u) + (2.5 * hl), 4.5 * hl, INK, 0.6 * body, point, this.#from);
+      strokeTapered(core, path, end, taperTo, BAND_U * u, 2 * hl, color, 0.95 * body, point, this.#from);
       strokePath(core, path, 0, end, hl, bright, 0.9 * body, point);
 
       pointAt(path, 0, point);
@@ -291,8 +303,8 @@ export class TargetLine {
     const ringAlpha = clamp01(state.ringAlpha);
     if (ringAlpha > 0.001) {
       const half = ringRadius(targetSize) * Math.max(0, Number(state.ringScale) || 0);
-      drawBrackets(core, to.x, to.y, half, (1.8 * u) + (2.5 * hl), INK, 0.55 * ringAlpha);
-      drawBrackets(core, to.x, to.y, half, 1.8 * u, color, 0.95 * ringAlpha);
+      drawBrackets(core, to.x, to.y, half, (BRACKET_U * u) + (2.5 * hl), INK, 0.55 * ringAlpha);
+      drawBrackets(core, to.x, to.y, half, BRACKET_U * u, color, 0.95 * ringAlpha);
       drawBrackets(core, to.x, to.y, half, hl, bright, 0.9 * ringAlpha);
     }
     return true;
@@ -409,16 +421,19 @@ function strokePath(graphics, path, start, end, width, color, alpha, point) {
 
 /**
  * Stroke `path` up to `end` at a width that grows from TAPER_FROM of `width` at the source to all of it at
- * `taperTo`, then holds, never under `floor`. Each sample span is its own stroke with round caps, so the joins
+ * `taperTo`, then holds, never under `floor`. The width steps through TAPER_STEPS widths rather than changing
+ * per sample: spans that share a step are one polyline, so the taper costs a handful of shapes for PIXI to
+ * tessellate instead of one per span. Each step starts on the last one's end with round caps, so the joins
  * stay closed.
  */
 function strokeTapered(graphics, path, end, taperTo, width, floor, color, alpha, point, prev) {
   width = Math.max(width, floor);
   if (end < 0.01 || alpha <= 0.001 || width <= 0) return;
-  const { xs, ys, arcs } = path;
+  const { xs, arcs } = path;
   const last = xs.length - 1;
   pointAt(path, 0, prev);
   let at = 0;
+  let step = -1;
   // Past the taper the width no longer changes: one stroke carries the rest.
   for (let i = 1; i <= last && at < end; i++) {
     const next = Math.min(end, arcs[i]);
@@ -426,9 +441,14 @@ function strokeTapered(graphics, path, end, taperTo, width, floor, color, alpha,
       strokePath(graphics, path, at, end, width, color, alpha, point);
       return;
     }
-    const share = TAPER_FROM + ((1 - TAPER_FROM) * smooth(clamp01(((at + next) / 2) / taperTo)));
-    setLine(graphics, Math.max(floor, width * share), color, alpha);
-    graphics.moveTo(prev.x, prev.y);
+    const grown = smooth(clamp01(((at + next) / 2) / taperTo));
+    const nextStep = Math.min(TAPER_STEPS, Math.round(grown * TAPER_STEPS));
+    if (nextStep !== step) {
+      step = nextStep;
+      const share = TAPER_FROM + ((1 - TAPER_FROM) * (step / TAPER_STEPS));
+      setLine(graphics, Math.max(floor, width * share), color, alpha);
+      graphics.moveTo(prev.x, prev.y);
+    }
     pointAt(path, next, point);
     graphics.lineTo(point.x, point.y);
     prev.x = point.x;
@@ -451,7 +471,10 @@ function fillCircle(graphics, x, y, radius, color, alpha) {
   graphics.endFill();
 }
 
-/** Four corner brackets on the square of half-span `half` round (x, y): the suite's cut motif, as a lock. */
+/**
+ * Four corner brackets on the square of half-span `half` round (x, y), square except the bottom-right one, which
+ * is cut at 45°: the outline of an Ink and Signal plate, with its one chamfered corner, closed round the target.
+ */
 function drawBrackets(graphics, x, y, half, width, color, alpha) {
   if (alpha <= 0.001 || half <= 0 || width <= 0) return;
   const arm = half * BRACKET_ARM_SHARE;
@@ -460,8 +483,10 @@ function drawBrackets(graphics, x, y, half, width, color, alpha) {
     for (const sy of [-1, 1]) {
       const cx = x + (sx * half);
       const cy = y + (sy * half);
+      const cut = sx > 0 && sy > 0 ? arm * BRACKET_CUT_SHARE : 0;
       graphics.moveTo(cx - (sx * arm), cy);
-      graphics.lineTo(cx, cy);
+      graphics.lineTo(cx - (sx * cut), cy);
+      if (cut > 0) graphics.lineTo(cx, cy - (sy * cut));
       graphics.lineTo(cx, cy - (sy * arm));
     }
   }

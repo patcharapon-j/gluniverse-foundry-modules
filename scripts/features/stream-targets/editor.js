@@ -25,7 +25,9 @@ export function TargetingEditor() {
   Cls = class TargetingLinesEditor extends ApplicationV2 {
     static DEFAULT_OPTIONS = {
       id: "gluniverse-targeting-lines-editor",
-      classes: ["gluniverse-stream-director"],
+      // The room's skin (stream.css) plus this editor's own root (stream-targets.css), which pads the body the
+      // room's tab panels would otherwise pad.
+      classes: ["gluniverse-stream-director", "gluniverse-stream-targets-editor"],
       tag: "form",
       window: { title: "GLUNIVERSE_STREAM.settings.targetingSettings.name", icon: "fas fa-crosshairs" },
       position: { width: 560, height: "auto" }
@@ -43,6 +45,13 @@ export function TargetingEditor() {
     async _onFirstRender(context, options) {
       await super._onFirstRender(context, options);
       this.element.addEventListener("change", (event) => this.#onChange(event));
+      // The weight readout follows the slider while it moves, as the room's does; the value saves on change.
+      this.element.addEventListener("input", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement) || target.type !== "range" || !target.name) return;
+        const output = target.closest("label")?.querySelector(`output[data-for="${target.name}"]`);
+        if (output) output.textContent = `${Math.round(Number(target.value) * 100)}%`;
+      });
       this.element.addEventListener("submit", (event) => event.preventDefault());
     }
 

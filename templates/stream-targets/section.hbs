@@ -1,20 +1,25 @@
-<section class="gluniverse-stream-panel gluniverse-stream-targets-section">
+<section class="gluniverse-stream-panel gluniverse-stream-targets-section" {{#unless targeting.enabled}}data-off{{/unless}}>
   <h2>{{localize "GLUNIVERSE_STREAM.targeting.title"}}</h2>
-  <div class="gluniverse-stream-number-grid">
-    <label><input type="checkbox" name="targeting.enabled" {{#if targeting.enabled}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.targeting.enabled"}}</label>
-    <label title="{{localize "GLUNIVERSE_STREAM.targeting.showAllSourcesHint"}}"><input type="checkbox" name="targeting.showAllSources" {{#if targeting.showAllSources}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.targeting.showAllSources"}}</label>
-    <label title="{{localize "GLUNIVERSE_STREAM.targeting.outOfCombatHint"}}"><input type="checkbox" name="targeting.outOfCombat" {{#if targeting.outOfCombat}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.targeting.outOfCombat"}}</label>
-    {{#if showVisibility}}
-    <label>{{localize "GLUNIVERSE_STREAM.targeting.visibility.label"}} <select name="targeting.visibility" {{#unless canEdit}}disabled{{/unless}}>{{#each visibilityOptions}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/each}}</select></label>
-    {{/if}}
-    <label>{{localize "GLUNIVERSE_STREAM.targeting.intensity"}} <input type="range" name="targeting.intensity" value="{{targeting.intensity}}" min="0.25" max="2" step="0.05" title="{{localize "GLUNIVERSE_STREAM.targeting.intensityHint"}}" {{#unless canEdit}}disabled{{/unless}}></label>
+  <div class="gluniverse-stream-targets-switches">
+    <label class="gluniverse-stream-targets-switch"><input type="checkbox" name="targeting.enabled" {{#if targeting.enabled}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}><span>{{localize "GLUNIVERSE_STREAM.targeting.enabled"}}</span></label>
+    <label class="gluniverse-stream-targets-switch"><input type="checkbox" name="targeting.showAllSources" {{#if targeting.showAllSources}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}><span>{{localize "GLUNIVERSE_STREAM.targeting.showAllSources"}}<small>{{localize "GLUNIVERSE_STREAM.targeting.showAllSourcesHint"}}</small></span></label>
+    <label class="gluniverse-stream-targets-switch"><input type="checkbox" name="targeting.outOfCombat" {{#if targeting.outOfCombat}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}><span>{{localize "GLUNIVERSE_STREAM.targeting.outOfCombat"}}<small>{{localize "GLUNIVERSE_STREAM.targeting.outOfCombatHint"}}</small></span></label>
   </div>
+  {{#if showVisibility}}
+  <div class="gluniverse-stream-fields">
+    <label class="gluniverse-stream-field"><span>{{localize "GLUNIVERSE_STREAM.targeting.visibility.label"}}</span><select name="targeting.visibility" {{#unless canEdit}}disabled{{/unless}}>{{#each visibilityOptions}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/each}}</select></label>
+  </div>
+  {{/if}}
+  <label class="gluniverse-stream-range" title="{{localize "GLUNIVERSE_STREAM.targeting.intensityHint"}}"><span>{{localize "GLUNIVERSE_STREAM.targeting.intensity"}}</span>
+    <input type="range" name="targeting.intensity" value="{{targeting.intensity}}" min="0.25" max="2" step="0.05" {{#unless canEdit}}disabled{{/unless}}>
+    <output data-for="targeting.intensity">{{weightPercent}}%</output>
+  </label>
   <h3>{{localize "GLUNIVERSE_STREAM.targeting.colors"}}</h3>
-  <div class="gluniverse-stream-number-grid">
+  <div class="gluniverse-stream-targets-colors">
     <label class="gluniverse-stream-color"><input type="color" name="targeting.colorFriendlyToHostile" value="{{targeting.colorFriendlyToHostile}}" {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.targeting.color.friendlyToHostile"}}</label>
     <label class="gluniverse-stream-color"><input type="color" name="targeting.colorHostileToFriendly" value="{{targeting.colorHostileToFriendly}}" {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.targeting.color.hostileToFriendly"}}</label>
     <label class="gluniverse-stream-color"><input type="color" name="targeting.colorSameSide" value="{{targeting.colorSameSide}}" {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.targeting.color.sameSide"}}</label>
     <label class="gluniverse-stream-color"><input type="color" name="targeting.colorOther" value="{{targeting.colorOther}}" {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.targeting.color.other"}}</label>
   </div>
-  <p class="gluniverse-stream-form-hint"><small>{{localize "GLUNIVERSE_STREAM.targeting.hint"}}{{#unless showVisibility}} {{localize "GLUNIVERSE_STREAM.targeting.hintNoStream"}}{{/unless}}</small></p>
+  <p class="gluniverse-stream-form-hint">{{localize "GLUNIVERSE_STREAM.targeting.hint"}}{{#unless showVisibility}} {{localize "GLUNIVERSE_STREAM.targeting.hintNoStream"}}{{/unless}}</p>
 </section>

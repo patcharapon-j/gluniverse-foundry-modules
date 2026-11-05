@@ -105,10 +105,12 @@ only and stays off the canvas during a drag or ruler.
 
 ## Targeting lines
 
-An arc from the combatant whose turn it is to each token it targets: an ink rim
-for busy maps, a band in the relationship colour that tapers towards the source,
-a one-pixel hairline, and four corner brackets that close on the target as the
-line lands. A landed line is still. It draws out, locks on and stops; nothing
+An arc from the combatant whose turn it is to each token it targets: an ink
+shade bed and an ink rim for busy maps, a band in the relationship colour that
+tapers towards the source, a one-pixel hairline, and four corner brackets that
+close on the target as the line lands. The brackets trace an Ink and Signal
+plate: square corners and one 45° cut at the bottom right. Nothing in the line
+glows; the bed is ink, never the line's colour. A landed line is still. It draws out, locks on and stops; nothing
 loops, there is no filter pass, and the launch holds a `Budget.claimMotion`
 only while something is moving. Every duration is in
 `targeting/line-motion.js`. The set of lines is announced on
@@ -139,7 +141,11 @@ changes, never on a sight refresh; PF2e Odds and Diorama both read it.
   level down and is accepted: a token's targets are its owners' targets, which
   is the rule `targetsOfToken` has always applied.
 - **Colours** follow disposition. Secret dispositions count as neutral, so a
-  line never reveals a hidden allegiance.
+  line never reveals a hidden allegiance. The defaults are Ink and Signal's
+  signals, read from `INK_SIGNAL` in `core/theme.mjs`: info blue for the party's
+  own attack, red for danger coming at it, green for help, steel for a neutral
+  or secret side. The ink rim and the paper hairline come from the same mirror.
+  The editor section takes the room's skin (ADR 0007) in both its homes.
 - **Visible to** — everyone / GMs and the stream / stream only. **The last two
   options are absent when Stream Client is disabled**, since there is no stream
   client to be an audience; a world that stored one falls back to *everyone* on

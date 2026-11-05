@@ -1,6 +1,94 @@
 /*
- * GLUniverse Suite — stream-targets.
+ * GLUniverse Suite — stream-targets: the targeting lines' editor section.
  *
- * Tokens and utilities come from styles/gl-tokens.css; keyframes from
- * styles/gl-motion.css. Class prefix: .gluniverse-stream-*
+ * Ink and Signal. The section has two homes (the stream Control Room's Overlay tab and this feature's own
+ * editor window), and both carry the stream view's room skin (stream.css, ADR 0007). What lives here is only
+ * what the room does not already state: the editor window's body and the relationship swatches. Values are
+ * the core's `--gl-is-*`, aliased under `--gltg-*` on this feature's own roots, never on :root.
+ * The lines themselves are PIXI, coloured from the JS mirror (core/theme.mjs INK_SIGNAL).
+ * Class prefix: .gluniverse-stream-targets-*
  */
+
+:is(.gluniverse-stream-targets-section, .gluniverse-stream-targets-editor) {
+  --gltg-ink-0: var(--gl-is-ink-0);
+  --gltg-text: var(--gl-is-text);
+  --gltg-dim: var(--gl-is-dim);
+  --gltg-faint: var(--gl-is-faint);
+  --gltg-line-strong: var(--gl-is-line-strong);
+}
+
+/* The editor window: the room pads its tab panels, so a section on its own needs the same inset. */
+.gluniverse-stream-targets-editor .gluniverse-stream-director-body {
+  height: auto;
+  padding: 2px 16px 4px;
+}
+
+/* ── The switches: one per row, each with what it changes written under it, so nothing hides in a tooltip ── */
+.gluniverse-stream-targets-switches {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+.gluniverse-stream-targets-switch {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  margin: 0;
+  font-size: var(--gl-is-t-lead);
+  color: var(--gltg-text);
+  cursor: pointer;
+}
+.gluniverse-stream-director .gluniverse-stream-targets-switch input[type="checkbox"] { margin-top: 1px; }
+.gluniverse-stream-targets-switch > span { display: grid; gap: 3px; line-height: 1.25; }
+.gluniverse-stream-targets-switch small {
+  font-size: var(--gl-is-t-body);
+  line-height: 1.4;
+  color: var(--gltg-faint);
+}
+.gluniverse-stream-targets-switch:has(input:disabled) { cursor: default; }
+
+/* A control that cannot be used says so in its words as well as its box. */
+:is(.gluniverse-stream-targets-switch, .gluniverse-stream-targets-section label.gluniverse-stream-color):has(input:disabled) {
+  color: var(--gltg-dim);
+}
+.gluniverse-stream-director .gluniverse-stream-targets-section label.gluniverse-stream-color input[type="color"]:disabled { cursor: default; }
+
+/* With the lines switched off, everything under the master switch is a setting for later: it steps back. */
+.gluniverse-stream-targets-section[data-off] > :not(h2, .gluniverse-stream-targets-switches),
+.gluniverse-stream-targets-section[data-off] .gluniverse-stream-targets-switch:not(:first-child) {
+  opacity: 0.55;
+}
+
+/* The closing note: a readable measure rather than the window's width. */
+.gluniverse-stream-director .gluniverse-stream-targets-section .gluniverse-stream-form-hint { max-width: 54ch; }
+
+/* ── The relationship swatches: two columns of a cut chip and its name ── */
+.gluniverse-stream-targets-colors {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin: 0 0 4px;
+}
+.gluniverse-stream-director .gluniverse-stream-targets-section label.gluniverse-stream-color {
+  min-width: 0;
+  font-size: var(--gl-is-t-lead);
+  color: var(--gltg-text);
+}
+.gluniverse-stream-director .gluniverse-stream-targets-section label.gluniverse-stream-color input[type="color"] {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: var(--gltg-ink-0);
+  box-shadow: inset 0 0 0 1px var(--gltg-line-strong);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-xs)), calc(100% - var(--gl-is-cut-xs)) 100%, 0 100%);
+  cursor: pointer;
+}
+.gluniverse-stream-targets-section input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.gluniverse-stream-targets-section input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 0; }
+.gluniverse-stream-targets-section input[type="color"]::-moz-color-swatch { border: 0; border-radius: 0; }
+.gluniverse-stream-director .gluniverse-stream-targets-section label.gluniverse-stream-color input[type="color"]:focus-visible {
+  clip-path: none;
+}

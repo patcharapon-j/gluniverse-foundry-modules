@@ -61,6 +61,33 @@ ok(/if \(signature === this\.announced\) return;/.test(linesSrc), "linesChanged 
 ok(/Hooks\.callAll\(TARGETS_HOOKS\.linesChanged,[\s\S]{0,200}sourceId, targetId, color: style\?\.color/.test(linesSrc), "the linesChanged payload changed shape: { sourceId, targetId, color } is what the odds and Diorama read");
 ok(/#announce\(new Map\(\)\)/.test(linesSrc), "teardown never announces the empty set: the odds and Diorama keep lines that are gone");
 
+/* ── Ink and Signal ───────────────────────────────────────────────────── */
+
+// The canvas cannot read a custom property, so its colours come from the JS
+// mirror of `--gl-is-*`. A mirror that drifted from gl-tokens.css paints the
+// line in a colour no other surface uses, and nothing reports it.
+const { INK_SIGNAL, hexToInt } = await import(pathToFileURL(join(ROOT, "scripts/core/theme.mjs")).href);
+const tokensCss = read("styles/gl-tokens.css");
+const darkRoot = tokensCss.slice(0, tokensCss.indexOf(".gl-is-paper"));
+const camel = (s) => s.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+for (const m of darkRoot.matchAll(/--gl-is-([a-z0-9-]+):\s*(#[0-9a-f]{6})\s*;/gi)) {
+  const key = camel(m[1]);
+  ok(INK_SIGNAL?.[key]?.toLowerCase() === m[2].toLowerCase(), `theme.mjs INK_SIGNAL.${key} is ${INK_SIGNAL?.[key]}, gl-tokens.css says ${m[2]}`);
+}
+
+// No hue is restated in the line: the ink rim and paper hairline are the core's.
+ok(!/0x[0-9a-f]{6}\b/i.test(lineSrc + linesSrc), "the line hardcodes a colour: take it from INK_SIGNAL in core/theme.mjs");
+ok(/INK_SIGNAL\.ink0/.test(lineSrc) && /INK_SIGNAL\.paper/.test(lineSrc), "the line's ink and paper are not INK_SIGNAL.ink0 / .paper");
+
+// Each relationship is a signal with one job: red is danger to the party,
+// green is help, info is a fact with no verdict, steel is the quiet unknown.
+const { DEFAULT_TARGETING_SETTINGS: D } = await import(pathToFileURL(join(ROOT, "scripts/features/stream/constants.js")).href);
+const want = { colorFriendlyToHostile: "info", colorHostileToFriendly: "red", colorSameSide: "green", colorOther: "steel" };
+for (const [key, tone] of Object.entries(want)) {
+  ok(D[key] === INK_SIGNAL[tone], `the ${key} default is ${D[key]}, not Ink and Signal's ${tone} (${INK_SIGNAL[tone]})`);
+}
+ok(new Set(Object.keys(want).map((k) => D[k])).size === 4, "two relationship defaults share a colour: a player cannot tell them apart");
+
 /* ── the panel ────────────────────────────────────────────────────────── */
 
 const hbs = read("templates/stream-targets/section.hbs");
