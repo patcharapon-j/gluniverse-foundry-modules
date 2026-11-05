@@ -545,8 +545,9 @@
 .glct-calendar .cal-badge-note { opacity: 0.8; }
 .glct-calendar .cal-grid { display: grid; gap: 3px; }
 .glct-calendar .cal-wd {
-  text-align: center; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--glct-faint); padding-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* weekday names run long (Earthday, Stardrift): sentence case, aligned with the day numbers */
+  text-align: left; font-size: var(--gl-is-t-meta); font-weight: 600; letter-spacing: 0;
+  color: var(--glct-faint); padding: 0 0 5px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .glct-calendar .cal-wd.weekend { color: var(--glct-dim); }
 .glct-calendar .cal-cell {

@@ -18,7 +18,7 @@
   {{/if}}
 
   <div class="cal-grid">
-    {{#each weekdayNames}}<div class="cal-wd{{#if this.rest}} weekend{{/if}}">{{this.label}}</div>{{/each}}
+    {{#each weekdayNames}}<div class="cal-wd{{#if this.rest}} weekend{{/if}}" title="{{this.label}}">{{this.label}}</div>{{/each}}
     {{#each cells}}
       <div class="cal-cell{{#unless this.inMonth}} blank{{/unless}}{{#if this.isToday}} today{{/if}}{{#if this.isWeekend}} weekend{{/if}}{{#if this.isSelected}} selected{{/if}}"
            {{#if this.inMonth}}data-action="selectDay" data-day="{{this.day}}"{{/if}}>

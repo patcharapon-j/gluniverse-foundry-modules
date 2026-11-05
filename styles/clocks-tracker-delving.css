@@ -227,6 +227,8 @@
 /* While the reels spin the row grows to hold them, then settles back as the
    overlay fades; the baked chips stay hidden under the reels. */
 .glct-delvecard .glct-cc-dice.dx-tumbling { min-height: 56px; }
+/* an emptied pool rolls no dice: drop the row rather than leave a hole */
+.glct-delvecard .glct-cc-dice:not(:has(.glct-cc-d)):not(.dx-tumbling) { display: none; }
 .glct-delvecard .glct-cc-dice.dx-tumbling > .glct-cc-d { opacity: 0; }
 
 /* Each die is a reel: a window onto a strip of numbers that spins up and
