@@ -1,0 +1,274 @@
+#!/usr/bin/env node
+/**
+ * Critical: consistency check.
+ *
+ * What it covers fails silently. A PIXI backdrop that hardcodes its colour
+ * keeps the old black while every DOM surface moved to the skin's ink; a class
+ * the runtime or a template emits with no rule behind it is a bare Foundry
+ * control in an Ink and Signal window; a skin that restates a value drifts from
+ * core the next time core is retuned; a missing `GLUC.*` key prints itself; a
+ * video edge that stops being capped turns a 20s clip's fade-in into three
+ * seconds. This drives the pure cut-in module and the real motion under Node
+ * and reads the glue for what cannot be driven.
+ *
+ * It cannot show you the cut-in: `node tools/critical-preview.mjs` does.
+ *
+ *   node tools/critical-check.mjs
+ */
+
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = fileURLToPath(new URL("../", import.meta.url));
+const FEATURE = "scripts/features/critical";
+const problems = [];
+let checks = 0;
+const fail = (msg) => problems.push(msg);
+const read = (p) => readFileSync(join(ROOT, p), "utf8");
+const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/([^:"'`\\])\/\/.*$/gm, "$1");
+const ok = (cond, what) => {
+  checks++;
+  if (!cond) fail(what);
+};
+const eq = (actual, expected, what) => {
+  checks++;
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a !== e) fail(`${what}: expected ${e}, got ${a}`);
+};
+const near = (a, b, what, eps = 1e-6) => ok(Math.abs(a - b) < eps, `${what}: ${a} != ${b}`);
+
+const C = await import(new URL(`../${FEATURE}/cut-in.mjs`, import.meta.url));
+const { engine } = await import(new URL("../scripts/vendor/animejs/engine/engine.js", import.meta.url));
+engine.useDefaultMainLoop = false;
+const { createCinematicMotion } = await import(new URL(`../${FEATURE}/motion.mjs`, import.meta.url));
+
+const sources = Object.fromEntries(
+  readdirSync(join(ROOT, FEATURE)).filter((f) => /\.m?js$/.test(f)).map((f) => [f, strip(read(`${FEATURE}/${f}`))])
+);
+const templates = Object.fromEntries(
+  readdirSync(join(ROOT, "templates/critical")).map((f) => [f, read(`templates/critical/${f}`)])
+);
+const css = read("styles/critical.css");
+const cssBare = css.replace(/\/\*[\s\S]*?\*\//g, "");
+const tokens = read("styles/gl-tokens.css");
+const lang = JSON.parse(read("lang/critical.en.json"));
+const coreLang = JSON.parse(read("lang/en.json"));
+
+/* ── purity ──────────────────────────────────────────────────────────────── */
+// cut-in.mjs is what the preview draws through. The moment it reads the world,
+// the preview restates it and flatters whichever copy was touched last.
+for (const file of ["cut-in.mjs", "motion.mjs"]) {
+  ok(!/\b(game|canvas|ui|foundry|Hooks|document|window|PIXI|CONFIG)\s*[.?[]/.test(sources[file]), `${file}: reads the world, the DOM or PIXI; it must stay pure`);
+}
+
+/* ── what counts as a video ──────────────────────────────────────────────── */
+for (const [path, want] of [
+  ["worlds/x/crit.webm", true],
+  ["https://cdn.example/a/B.MP4?token=1#t=2", true],
+  ["clip.mov", true],
+  ["portrait.webp", false],
+  ["art/some.webm.png", false],
+  ["noext", false],
+  ["", false],
+  [null, false],
+]) eq(C.isVideoPath(path), want, `isVideoPath(${JSON.stringify(path)})`);
+
+/* ── aspect fit ──────────────────────────────────────────────────────────── */
+{
+  const wide = C.fitBox(1920, 1080, 1280, 720);
+  near(wide.scale, 2 / 3, "16:9 art on a 16:9 screen fits by width");
+  near(wide.x, 0, "16:9 fit has no side bars");
+  const tall = C.fitBox(1000, 2000, 1600, 900);
+  near(tall.h, 900, "a portrait fits the screen height");
+  near(tall.x, (1600 - 450) / 2, "a portrait is centred");
+  const unknown = C.fitBox(0, 0, 800, 600);
+  eq(unknown.scale, 1, "an unknown source fits at scale 1");
+}
+
+/* ── video edges: fractions while short, real-time caps once long ─────────── */
+{
+  const short = C.videoEdges(1000);
+  for (const key of Object.keys(C.EDGE_FRACTIONS)) near(short[key], C.EDGE_FRACTIONS[key], `a 1s clip keeps the ${key} fraction`);
+  const long = C.videoEdges(20000);
+  for (const key of Object.keys(C.VIDEO_EDGE_MS)) near(long[key] * 20000, C.VIDEO_EDGE_MS[key], `a 20s clip caps ${key} at ${C.VIDEO_EDGE_MS[key]}ms`);
+  ok(Number.isFinite(C.videoEdges(0).easeIn), "a zero-length clip still yields finite edges");
+}
+
+/* ── the chrome: what the cut-in says, and to whom ───────────────────────── */
+{
+  const t = (k) => `<${k}>`;
+  const npc = C.cutInModel({ isPC: false, actorName: "The Hidden Lich" }, t);
+  eq(npc.name, null, "an NPC's name never reaches the cut-in (it is drawn on every player's screen and the stream)");
+  ok(!C.cutInHTML(npc).includes("Hidden Lich") && !C.cutInHTML(npc).includes("gluc-cut-name"), "an NPC cut-in's markup carries no name");
+  eq(npc.tone, "npc", "an NPC critical takes the npc tone");
+  const pc = C.cutInModel({ isPC: true, actorName: ` <img src=x onerror=alert(1)> ` }, t);
+  eq(pc.tone, "pc", "a PC critical takes the pc tone");
+  ok(!/<img/.test(C.cutInHTML(pc)) && /&lt;img/.test(C.cutInHTML(pc)), "a PC name is escaped into the markup");
+  eq(C.cutInModel({ isPC: true, actorName: "  " }, t).name, null, "a blank PC name draws no name plate");
+  eq(C.cutInModel({}, t).tone, "npc", "an event with no side reads as an NPC and prints nothing");
+  ok(C.cutInHTML(pc).includes("&lt;GLUC.CutIn.Critical&gt;"), "the slab's word comes from the language file");
+  for (const tone of ["pc", "npc"]) ok(new RegExp(`\\.gluc-cut\\[data-tone="${tone}"\\]\\s*\\{[^}]*--gluc-tone:`).test(cssBare), `critical.css gives data-tone="${tone}" its tone`);
+  ok(/--gluc-good:\s*var\(--gl-is-green\)/.test(cssBare) && /--gluc-bad:\s*var\(--gl-is-red\)/.test(cssBare), "a PC critical is green and an NPC critical red (the Signal Rule)");
+
+  // The band, the video's clip and the chrome agree on every frame.
+  const motion = createCinematicMotion(1000);
+  const box = C.fitBox(1600, 900, 1920, 1200);
+  for (const ms of [0, 40, 120, 500, 850, 990]) {
+    const f = motion.sample(ms);
+    const band = C.bandOf(f, box, 1200);
+    const inset = Number(/inset\(([\d.]+)%/.exec(C.mediaStyle(f).clipPath)[1]) / 100;
+    const cy = 600 + f.lift;
+    const half = (box.h / 2) * f.scaleMul;
+    near(band.top, cy - half + 2 * inset * half, `${ms}ms: the band's top is the video clip's top`, 1e-6);
+    near(band.bottom, cy + half - 2 * inset * half, `${ms}ms: the band's bottom is the video clip's bottom`, 1e-6);
+    const s = C.chromeStyle(f, box, 1920, 1200);
+    near(Number(/translate3d\(0, ([-\d.]+)px/.exec(s.top.transform)[1]), band.top - 1, `${ms}ms: the top rule rides the band`, 0.06);
+    near(Number(/translate3d\(0, ([-\d.]+)px/.exec(s.bottom.transform)[1]), band.bottom - 1, `${ms}ms: the bottom rule rides the band`, 0.06);
+    eq(s.root.opacity, String(f.imgAlpha), `${ms}ms: the chrome fades with the art`);
+  }
+  // Through the hold nothing but the drift moves: the writer re-writes nothing else.
+  const writes = [];
+  const node = (name) => ({ style: new Proxy({}, { set: (o, p, v) => { writes.push(`${name}.${String(p)}`); o[p] = v; return true; } }) });
+  const nodes = { root: node("root"), top: node("top"), bottom: node("bottom"), plate: node("plate"), video: node("video"), backdrop: node("backdrop") };
+  const writeChrome = C.styleWriter(nodes);
+  const writeMedia = C.styleWriter(nodes);
+  const full = C.fitBox(1920, 1080, 1920, 1080);
+  for (let ms = 300; ms <= 700; ms += 1000 / 60) {
+    const f = motion.sample(ms);
+    writeMedia({ backdrop: { opacity: String(f.bgAlpha) }, video: C.mediaStyle(f) });
+    writeChrome(C.chromeStyle(f, full, 1920, 1080));
+  }
+  const held = new Set(writes.filter((w, i) => writes.indexOf(w) !== i));
+  for (const still of ["video.clipPath", "video.opacity", "backdrop.opacity", "plate.clipPath", "root.opacity"]) {
+    ok(!held.has(still), `${still} is re-written through the hold though it does not change`);
+  }
+  ok(held.has("video.transform"), "the drift still moves through the hold");
+  motion.destroy();
+  const mod = sources["module.js"];
+  ok(/styleWriter\(\{ backdrop, video \}\)/.test(mod) && /styleWriter\(\{ root, top, bottom/.test(mod), "module.js: both the media and the chrome write through styleWriter");
+  // The PIXI mask is the art's own rect opened by the wipe, parented to the
+  // sprite: in screen space that is exactly bandOf (the drift carries it).
+  ok(/sprite\.addChild\(mask\)/.test(mod) && /drawRect\(-tw \/ 2, \(-th \/ 2\) \* wipe, tw, th \* wipe\)/.test(mod), "module.js: the PIXI mask must be the sprite-local band the video clips to");
+  ok(!/mask\.destroy/.test(mod.slice(mod.indexOf("async function runImageCinematic"), mod.indexOf("async function runVideoCinematic"))), "module.js: the mask is the sprite's child and must not be destroyed twice");
+  {
+    // Sprite-local band, carried by the sprite's transform, equals bandOf.
+    const m = createCinematicMotion(1000);
+    const tw = 1600, th = 900, sw = 1920, sh = 1200;
+    const box = C.fitBox(tw, th, sw, sh);
+    for (const ms of [30, 500, 900]) {
+      const f = m.sample(ms);
+      const s = box.scale * f.scaleMul;
+      const top = sh / 2 + f.lift + s * (-th / 2) * f.wipe;
+      const band = C.bandOf(f, box, sh);
+      near(top, band.top, `${ms}ms: the sprite-local mask lands on the band`, 1e-6);
+    }
+    m.destroy();
+  }
+  ok((mod.match(/chrome\.apply\(frame\)/g) ?? []).length === 2, "module.js: both cut-in kinds drive the chrome from the beat");
+  ok((mod.match(/chrome\??\.remove\(\)/g) ?? []).length >= 2, "module.js: both cut-in kinds take the chrome down");
+}
+
+/* ── the duration readout ────────────────────────────────────────────────── */
+eq(C.durationLabel(1250), "1250 ms", "durationLabel");
+eq(C.durationLabel("800"), "800 ms", "durationLabel reads the slider's string value");
+eq(C.durationLabel(undefined), "0 ms", "durationLabel never prints NaN");
+ok(/addEventListener\("input"[^;]*durationLabel\(/.test(sources["module.js"]), "module.js: the slider readout must follow input, not the last save");
+ok(/\{\{durationLabel\}\}/.test(templates["gm-config.html"]), "gm-config.html: the readout must render durationLabel");
+
+/* ── colour from a token, for PIXI ───────────────────────────────────────── */
+eq(C.colorToInt("#05060a"), 0x05060a, "colorToInt reads #rrggbb");
+eq(C.colorToInt(" #fff "), 0xffffff, "colorToInt reads #rgb");
+eq(C.colorToInt("", 0), 0, "a missing token falls back to black");
+eq(C.colorToInt("rgb(1 2 3)", 7), 7, "a non-hex value falls back");
+
+/* ── the DOM frame and the motion agree ──────────────────────────────────── */
+{
+  const motion = createCinematicMotion(1000);
+  const open = C.mediaStyle(motion.sample(500));
+  eq(open.clipPath, "inset(0% 0% 0% 0%)", "the wipe is fully open mid-beat");
+  ok(Number(open.opacity) === 1, "the art is opaque mid-beat");
+  const shut = C.mediaStyle({ ...motion.sample(0), wipe: -2 });
+  eq(shut.clipPath, "inset(50% 0% 50% 0%)", "a wipe below 0 is clamped shut");
+  const end = motion.sample(1000);
+  near(end.bgAlpha, 0, "the backdrop is gone at the end of the beat");
+  near(end.imgAlpha, 0, "the art is gone at the end of the beat");
+  motion.destroy();
+  ok(/EDGE_FRACTIONS\.easeIn/.test(sources["motion.mjs"]), "motion.mjs reads its edges from cut-in.mjs, not a second copy");
+}
+
+/* ── the runtime goes through the seam ───────────────────────────────────── */
+{
+  const mod = sources["module.js"];
+  const imagePath = mod.slice(mod.indexOf("async function runImageCinematic"), mod.indexOf("async function runVideoCinematic"));
+  ok(imagePath.length > 100 && !/beginFill\(\s*(0|0x0+)\s*,/.test(imagePath), "module.js: the PIXI backdrop hardcodes black instead of reading the skin");
+  ok(/cssVar\(\s*BACKDROP_VAR/.test(mod), "module.js: the PIXI backdrop must read BACKDROP_VAR off the overlay root");
+  ok(!/VIDEO_EXTENSIONS\s*=/.test(mod) && !/function (isVideoPath|videoEdges|aspectFitScale)\b/.test(mod), "module.js restates a cut-in.mjs helper");
+  ok(/mediaStyle\(frame\)/.test(mod), "module.js: the video tick must style through mediaStyle()");
+  ok(css.includes(`${C.BACKDROP_VAR}:`), `critical.css must declare ${C.BACKDROP_VAR}`);
+}
+
+/* ── the skin ────────────────────────────────────────────────────────────── */
+ok(!/:root\b/.test(cssBare), "critical.css writes on :root");
+ok(!/#[0-9a-f]{3,8}\b/i.test(cssBare), "critical.css states a hex: alias a --gl-is-* token instead");
+ok(!/rgba?\(\s*255\s*,\s*255\s*,\s*255/.test(cssBare), "critical.css has a raw white veil");
+ok(!/prefers-reduced-motion/.test(cssBare), "critical.css honours prefers-reduced-motion; the suite does not");
+ok(!/@font-face|@import/.test(cssBare), "critical.css declares a font or an import");
+for (const m of cssBare.matchAll(/@keyframes\s+([\w-]+)/g)) ok(m[1].startsWith("gluc-"), `@keyframes ${m[1]} is not prefixed gluc-`);
+for (const m of cssBare.matchAll(/(transition|animation)(-duration|-delay)?\s*:[^;]*?\b\d+(\.\d+)?m?s\b/g)) fail(`raw duration in critical.css: ${m[0].slice(0, 80)}`);
+for (const m of cssBare.matchAll(/cubic-bezier\(/g)) fail("raw easing in critical.css; use --gl-ease*");
+{
+  const declared = new Set([...cssBare.matchAll(/(--gluc-[\w-]+)\s*:/g)].map((m) => m[1]));
+  for (const m of new Set([...cssBare.matchAll(/var\((--gluc-[\w-]+)/g)].map((m) => m[1]))) ok(declared.has(m), `${m} is read but never declared`);
+  const core = new Set([...tokens.matchAll(/(--gl-[\w-]+)\s*:/g)].map((m) => m[1]));
+  for (const m of new Set([...cssBare.matchAll(/var\((--gl-[\w-]+)/g)].map((m) => m[1]))) ok(core.has(m), `${m} is not a core token`);
+  // An alias is `--gluc-x: var(--gl-is-y | --gluc-z)` and nothing else.
+  for (const m of cssBare.matchAll(/(--gluc-[\w-]+)\s*:\s*([^;]+);/g)) {
+    ok(/^var\(--(gl-is|gluc)-[\w-]+\)$/.test(m[2].trim()), `${m[1]} restates a value (${m[2].trim()}); alias core instead`);
+  }
+}
+
+/* ── every class the runtime and the templates emit has a rule ───────────── */
+{
+  const emitted = new Set();
+  for (const src of [...Object.values(sources), ...Object.values(templates)]) {
+    for (const m of src.matchAll(/(?<![\w-])gluc-[a-z][\w-]*/g)) emitted.add(m[0]);
+  }
+  for (const tpl of Object.values(templates)) {
+    for (const m of tpl.matchAll(/class="([^"{]+)"/g)) for (const c of m[1].split(/\s+/)) if (c) emitted.add(c);
+  }
+  // Icon glyphs and Foundry's own layout helper are not the skin's to style.
+  const skip = (cls) => /^fa[srb]?$|^fa-/.test(cls) || cls === "flexrow";
+  for (const cls of emitted) {
+    if (skip(cls)) continue;
+    ok(new RegExp(`\\.${cls}(?![\\w-])`).test(cssBare), `class "${cls}" is emitted but has no rule in critical.css`);
+  }
+  for (const cls of [...cssBare.matchAll(/\.(gluc-[\w-]+)/g)].map((m) => m[1])) ok(emitted.has(cls), `critical.css styles .${cls}, which nothing emits`);
+}
+
+/* ── i18n: every literal key resolves ────────────────────────────────────── */
+{
+  const get = (key) => key.split(".").reduce((o, k) => (o && typeof o === "object" ? o[k] : undefined), lang);
+  const keys = new Set();
+  for (const src of [...Object.values(sources), ...Object.values(templates)]) {
+    for (const m of src.matchAll(/["'`](GLUC\.[\w.]+)["'`]/g)) keys.add(m[1]);
+  }
+  ok(keys.size > 20, `only ${keys.size} GLUC keys found; the scan is broken`);
+  for (const key of keys) ok(typeof get(key) === "string", `${key} does not resolve in lang/critical.en.json`);
+  for (const key of ["GLS.feature.critical.title", "GLS.feature.critical.hint"]) ok(typeof coreLang[key] === "string", `${key} missing from lang/en.json`);
+}
+
+/* ── nothing at import ───────────────────────────────────────────────────── */
+{
+  const index = sources["index.mjs"];
+  ok(!/^\s*Hooks\.(on|once)/m.test(index) && !/^\s*Hooks\.(on|once)/m.test(sources["module.js"].split("\n").filter((l) => !/^\s{2,}/.test(l)).join("\n")), "a hook is registered at import time");
+}
+
+if (problems.length) {
+  console.error(`critical-check: ${problems.length} problem(s) in ${checks} checks`);
+  for (const p of problems) console.error(`  - ${p}`);
+  process.exit(1);
+}
+console.log(`critical-check: ${checks} checks, 0 problems`);
+process.exit(0);

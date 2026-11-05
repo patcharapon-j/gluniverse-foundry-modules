@@ -5,15 +5,16 @@
  */
 import { createTimeline } from "../../core/motion.mjs";
 import { clamp01 } from "../../core/util.mjs";
+import { EDGE_FRACTIONS } from "./cut-in.mjs";
 
 export function createCinematicMotion(durationMs, { edges = {}, scale = 1 } = {}) {
   const duration = Math.max(1, durationMs);
   const frame = { bgAlpha: 0, imgAlpha: 0, scaleMul: 0.94, wipe: 0, lift: 10 };
   const edge = (value, fallback) => duration * Math.min(0.45, Math.max(0, (value ?? fallback) * scale));
-  const enter = edge(edges.easeIn, 0.15);
-  const leave = edge(edges.easeOut, 0.2);
-  const bgIn = edge(edges.bgIn, 0.2);
-  const bgOut = edge(edges.bgOut, 0.28);
+  const enter = edge(edges.easeIn, EDGE_FRACTIONS.easeIn);
+  const leave = edge(edges.easeOut, EDGE_FRACTIONS.easeOut);
+  const bgIn = edge(edges.bgIn, EDGE_FRACTIONS.bgIn);
+  const bgOut = edge(edges.bgOut, EDGE_FRACTIONS.bgOut);
   const timeline = createTimeline({ autoplay: false });
   if (scale > 0) {
     timeline

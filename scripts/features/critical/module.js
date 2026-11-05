@@ -1,5 +1,8 @@
 import { createCinematicMotion } from "./motion.mjs";
-import { motionScale } from "../../core/theme.mjs";
+import {
+  BACKDROP_VAR, chromeStyle, colorToInt, cutInHTML, cutInModel, durationLabel, fitBox, isVideoPath, mediaStyle, styleWriter, videoEdges
+} from "./cut-in.mjs";
+import { cssVar, motionScale } from "../../core/theme.mjs";
 import { onSocket, emitSocket } from "../../core/socket.mjs";
 import { clamp, clamp01, clampNumber } from "../../core/util.mjs";
 import { Surfaces } from "../../core/gl-surfaces.mjs";
@@ -13,8 +16,6 @@ const SCHEMA_VERSION = 2;
 const DURATION_MIN_MS = 600;
 const DURATION_MAX_MS = 3e3;
 const DURATION_DEFAULT_MS = 1e3;
-const EASE_IN_FRACTION = 0.15;
-const EASE_OUT_FRACTION = 0.2;
 const QUEUE_MAX = 3;
 const DEDUPE_WINDOW_MS = 500;
 // Upper bound for how long we hold the cut-in waiting on Dice So Nice. The real
@@ -32,14 +33,6 @@ const VIDEO_DURATION_MAX_MS = 3e4;
 const VIDEO_LOAD_TIMEOUT_MS = 8e3;
 // Grace period past a video cut-in's own length before it is torn down anyway.
 const VIDEO_WATCHDOG_SLACK_MS = 2e3;
-// Edge budgets for the video path. The still-image path expresses its fades as
-// fractions of a duration capped at 3s; a 20s video would turn that 15% into a
-// 3s fade. These cap each edge in real time (see videoEdges).
-const VIDEO_EDGE_IN_MS = 400;
-const VIDEO_EDGE_OUT_MS = 500;
-const VIDEO_BG_IN_MS = 500;
-const VIDEO_BG_OUT_MS = 700;
-const VIDEO_EXTENSIONS = ["webm", "mp4", "m4v", "ogv", "ogg", "mov"];
 const SETTINGS = {
   GM_AVATAR: "crit.gmAvatar",
   PC_CRITICAL_SFX: "crit.pcCriticalSfx",
@@ -236,6 +229,7 @@ class GMConfigMenu extends Base$1 {
       },
       durationMin: DURATION_MIN_MS,
       durationMax: DURATION_MAX_MS,
+      durationLabel: durationLabel(getSetting(SETTINGS.CINEMATIC_DURATION)),
       videoDurationChoices: [
         {
           value: VIDEO_DURATION_MODES.VIDEO,
@@ -249,6 +243,13 @@ class GMConfigMenu extends Base$1 {
         }
       ]
     };
+  }
+  /** The slider's readout follows the thumb, not the last save. */
+  _onRender(context, options) {
+    super._onRender?.(context, options);
+    const range = this.element.querySelector('input[name="cinematicDuration"]');
+    const out = this.element.querySelector(".range-value");
+    if (range && out) range.addEventListener("input", () => { out.value = durationLabel(range.value); });
   }
   static async #onSubmit(_event, _form, formData) {
     const data = formData.object;
@@ -466,16 +467,7 @@ function readGlobalInterfaceVolume() {
   return 1;
 }
 const FALLBACK_IMAGE$1 = "icons/svg/mystery-man.svg";
-const BG_FADE_IN_FRACTION = 0.2;
-const BG_FADE_OUT_FRACTION = 0.28;
 const VIDEO_LAYER_CLASS = "gluc-video-layer";
-
-/** Does this asset path name a video the cut-in should play rather than blit? */
-function isVideoPath(path) {
-  const clean = String(path ?? "").split("?")[0].split("#")[0];
-  const ext = clean.slice(clean.lastIndexOf(".") + 1).toLowerCase();
-  return VIDEO_EXTENSIONS.includes(ext);
-}
 
 /**
  * Dispatch on asset kind. A video cut-in is DOM (`<video>` in the overlay
@@ -510,36 +502,36 @@ async function runImageCinematic(event) {
   app2.stage.addChild(stage);
   const { sw, sh } = screenSize();
   const backdrop = new PIXI.Graphics();
-  backdrop.beginFill(0, 1).drawRect(0, 0, sw, sh).endFill();
+  // PIXI cannot read CSS: the skin's ink is read off the overlay root per beat.
+  backdrop.beginFill(colorToInt(cssVar(BACKDROP_VAR, "", container)), 1).drawRect(0, 0, sw, sh).endFill();
   backdrop.alpha = 0;
   stage.addChild(backdrop);
   const sprite = new PIXI.Sprite(texture);
   sprite.anchor.set(0.5);
   sprite.position.set(sw * 0.5, sh * 0.5);
-  const baseScale = aspectFitScale(texture, sw, sh);
+  const tw = texture.baseTexture?.realWidth ?? texture.width ?? 0;
+  const th = texture.baseTexture?.realHeight ?? texture.height ?? 0;
+  const box = fitBox(tw, th, sw, sh);
+  const baseScale = box.scale;
   sprite.scale.set(baseScale);
   sprite.alpha = 0;
   stage.addChild(sprite);
-  const tw = texture.baseTexture?.realWidth ?? texture.width ?? 0;
-  const th = texture.baseTexture?.realHeight ?? texture.height ?? 0;
-  const fitW = tw * baseScale;
-  const fitH = th * baseScale;
+  // The mask is the band the video clips to (bandOf): the art's own rect,
+  // opened from its centre by the wipe. It is a child of the sprite, so the
+  // drift's scale and lift carry it for free and it is redrawn only while the
+  // wipe moves, not on every frame of the hold.
   const mask = new PIXI.Graphics();
-  stage.addChild(mask);
+  sprite.addChild(mask);
   sprite.mask = mask;
-  // The wipe only moves for part of the beat; redrawing an unchanged rect
-  // every frame rebuilds its geometry for nothing.
-  let maskH = -1;
-  const drawMask = (frac) => {
-    const clamped = Math.max(0, Math.min(1, frac));
-    const h = fitH * clamped;
-    if (h === maskH) return;
-    maskH = h;
-    const x = sw * 0.5 - fitW * 0.5;
-    const y = sh * 0.5 - h * 0.5;
-    mask.clear().beginFill(16777215, 1).drawRect(x, y, fitW, h).endFill();
+  let maskWipe = -1;
+  const drawMask = (frame) => {
+    const wipe = Math.round(clamp01(frame.wipe) * 1000) / 1000;
+    if (wipe === maskWipe) return;
+    maskWipe = wipe;
+    mask.clear().beginFill(16777215, 1).drawRect(-tw / 2, (-th / 2) * wipe, tw, th * wipe).endFill();
   };
-  drawMask(0);
+  drawMask({ wipe: 0 });
+  const chrome = mountChrome(container, event, box, sw, sh);
   playSfx(event.isPC ? "pc" : "gm");
   cinematicLive = true;
   if (!surface?.paused) app2.start();
@@ -564,19 +556,21 @@ async function runImageCinematic(event) {
       sprite.alpha = frame.imgAlpha;
       sprite.scale.set(baseScale * frame.scaleMul);
       sprite.position.y = sh * 0.5 + frame.lift;
-      drawMask(frame.wipe);
+      drawMask(frame);
+      chrome.apply(frame);
       if (elapsed >= event.durationMs) finish();
     });
     // A hidden tab must not hold every later queued cinematic hostage.
     const watchdog = setTimeout(finish, event.durationMs + VIDEO_WATCHDOG_SLACK_MS);
     app2.ticker.add(tick);
   });
+  chrome.remove();
   sprite.mask = null;
   stage.removeChildren();
   app2.stage.removeChildren();
+  // The mask is the sprite's child, so this takes it too.
   sprite.destroy?.({ children: true });
   backdrop.destroy?.({ children: true });
-  mask.destroy?.({ children: true });
   stage.destroy?.({ children: true });
   cinematicLive = false;
   app2.stop();
@@ -620,6 +614,8 @@ async function runVideoCinematic(event) {
   let raf = null;
   let laidOutW = 0;
   let laidOutH = 0;
+  let chrome = null;
+  const writeMedia = styleWriter({ backdrop, video });
   const start = performance.now();
   try {
     await new Promise((resolve) => {
@@ -642,13 +638,12 @@ async function runVideoCinematic(event) {
         if (sw !== laidOutW || sh !== laidOutH) {
           laidOutW = sw;
           laidOutH = sh;
-          layoutVideo(video, sw, sh);
+          const box = layoutVideo(video, sw, sh);
+          chrome?.remove();
+          chrome = mountChrome(host, event, box, sw, sh);
         }
-        backdrop.style.opacity = String(frame.bgAlpha);
-        video.style.opacity = String(frame.imgAlpha);
-        video.style.transform = `translate(-50%, -50%) translateY(${frame.lift}px) scale(${frame.scaleMul})`;
-        const inset = (1 - clamp01(frame.wipe)) * 50;
-        video.style.clipPath = `inset(${inset}% 0% ${inset}% 0%)`;
+        writeMedia({ backdrop: { opacity: String(frame.bgAlpha) }, video: mediaStyle(frame) });
+        chrome.apply(frame);
         if (t >= 1) {
           finish();
           return;
@@ -659,6 +654,7 @@ async function runVideoCinematic(event) {
     });
   } finally {
     if (raf != null) cancelAnimationFrame(raf);
+    chrome?.remove();
     motion.destroy();
     releaseVideo(video);
     layer.remove();
@@ -667,11 +663,28 @@ async function runVideoCinematic(event) {
 
 /** Size the element to its aspect-fit box so the wipe clips the frame, not the viewport. */
 function layoutVideo(video, sw, sh) {
-  const vw = video.videoWidth || 16;
-  const vh = video.videoHeight || 9;
-  const scale = Math.min(sw / vw, sh / vh);
-  video.style.width = `${(vw * scale).toFixed(2)}px`;
-  video.style.height = `${(vh * scale).toFixed(2)}px`;
+  const box = fitBox(video.videoWidth || 16, video.videoHeight || 9, sw, sh);
+  video.style.width = `${box.w.toFixed(2)}px`;
+  video.style.height = `${box.h.toFixed(2)}px`;
+  return box;
+}
+
+/**
+ * Mount the cut-in's chrome (cutInHTML) over the art and hand back the one
+ * call the beat makes per frame. Text comes from the receiving client's own
+ * language; an NPC's name never reaches the markup (cutInModel).
+ */
+function mountChrome(host, event, box, sw, sh) {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = cutInHTML(cutInModel(event, (key) => game.i18n.localize(key)));
+  const root = tpl.content.firstElementChild;
+  host.appendChild(root);
+  const [top, bottom] = root.querySelectorAll(".gluc-cut-rule");
+  const write = styleWriter({ root, top, bottom, plate: root.querySelector(".gluc-cut-plate") });
+  return {
+    apply(frame) { write(chromeStyle(frame, box, sw, sh)); },
+    remove() { root.remove(); }
+  };
 }
 
 /**
@@ -686,22 +699,6 @@ function videoDuration(event, video) {
   // Live/streamed sources report Infinity, an unloaded one NaN.
   if (!Number.isFinite(natural) || natural <= 0) return fixed;
   return clamp(natural, DURATION_MIN_MS, VIDEO_DURATION_MAX_MS);
-}
-
-/**
- * Fade fractions for a video, each capped to a real-time budget. The image path
- * runs at most 3s so its fractions stay short in absolute terms; on a 20s clip
- * the same 15% would be a three-second fade-in.
- */
-function videoEdges(durationMs) {
-  const span = Math.max(1, durationMs);
-  const cap = (fraction, ms) => Math.min(fraction, ms / span);
-  return {
-    easeIn: cap(EASE_IN_FRACTION, VIDEO_EDGE_IN_MS),
-    easeOut: cap(EASE_OUT_FRACTION, VIDEO_EDGE_OUT_MS),
-    bgIn: cap(BG_FADE_IN_FRACTION, VIDEO_BG_IN_MS),
-    bgOut: cap(BG_FADE_OUT_FRACTION, VIDEO_BG_OUT_MS)
-  };
 }
 
 /** Does this client play the clip's own audio for this event? */
@@ -741,12 +738,6 @@ async function startVideo(video) {
 }
 function screenSize() {
   return { sw: window.innerWidth, sh: window.innerHeight };
-}
-function aspectFitScale(texture, sw, sh) {
-  const tw = texture.baseTexture?.realWidth ?? texture.width ?? 0;
-  const th = texture.baseTexture?.realHeight ?? texture.height ?? 0;
-  if (!tw || !th) return 1;
-  return Math.min(sw / tw, sh / th);
 }
 async function loadImage(src) {
   try {

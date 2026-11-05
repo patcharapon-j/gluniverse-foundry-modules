@@ -90,6 +90,10 @@
       "Cancel": "Cancel"
     },
 
+    "CutIn": {
+      "Critical": "Critical"
+    },
+
     "Notifications": {
       "UnsupportedSystemWarning": "GLUniverse Critical supports the PF2e and D&D 5e systems. Cinematics are disabled for this system.",
       "PortraitLoadFailed": "Could not load image for cinematic.",
