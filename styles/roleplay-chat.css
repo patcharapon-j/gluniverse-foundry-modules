@@ -39,6 +39,8 @@
   --glrp-selected: var(--gl-is-selected);
   --glrp-shade: var(--gl-is-shade);
   --glrp-on: var(--gl-is-on-slab);
+  /* An older line steps back, and still reads at 4.5:1 over a map. */
+  --glrp-old: 0.62;
   /* The tones. One at a time, on the line it belongs to. */
   --glrp-say: var(--glrp-paper);
   --glrp-do: var(--gl-is-amber);
@@ -137,8 +139,10 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
 }
 .glrp-bar .glrp-chip[aria-expanded="true"] { background: var(--glrp-selected); }
 .glrp-bar .glrp-chip:focus-visible { outline: var(--gl-is-focus-ring); outline-offset: -2px; }
-/* Out of character the chip is who you would be on the way back, so it steps back. */
-.glrp-bar[data-glrp-mode="ooc"] .glrp-chip:not([aria-expanded="true"]) { opacity: 0.5; }
+/* Out of character the chip is who you would be on the way back, so it steps back: the portrait
+   fades and the name drops to dim. Its type keeps a readable tone rather than fading with it. */
+.glrp-bar[data-glrp-mode="ooc"] .glrp-chip:not([aria-expanded="true"]) .glrp-avatar { opacity: 0.5; }
+.glrp-bar[data-glrp-mode="ooc"] .glrp-chip:not([aria-expanded="true"]) .glrp-chip-name { color: var(--glrp-dim); font-weight: 500; }
 .glrp-chip .glrp-avatar { width: 24px; height: 24px; }
 .glrp-chip-as {
   flex: none;
@@ -187,7 +191,7 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   margin: 0;
   padding: 6px 8px;
   box-sizing: border-box;
-  font: 500 var(--gl-is-t-meta)/1.35 var(--glrp-sans);
+  font: 500 var(--gl-is-t-body)/1.35 var(--glrp-sans);
   color: var(--glrp-dim);
 }
 .glrp-locked i { flex: none; font-size: 10px; color: var(--glrp-faint); }
@@ -320,7 +324,7 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
 /* A clipped name cuts Thai tone marks off above a tight line box ("น้ำ" reads "นำ"). The padding
    widens the clip and the margin gives the space back, so nothing moves. */
 :is(.glrp-chip-name, .glrp-picker-name, .glrp-name) { padding-block: 0.2em; margin-block: -0.2em; }
-.glrp-picker-tag { margin-left: auto; color: var(--glrp-faint); background: transparent; box-shadow: inset 0 0 0 1px var(--glrp-line-strong); clip-path: none; padding-right: 6px; }
+.glrp-picker-tag { margin-left: auto; }
 
 /* ── the box: the line as it will be read ─────────────────────────────────
    A void field with the mode's spine down its left edge: solid for Say, a
@@ -598,7 +602,7 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
   color: color-mix(in oklab, var(--glrp-hue) 70%, var(--glrp-dim));
 }
 .glrp-balloon-txt { display: block; }
-.glrp-balloon.glrp-old { opacity: 0.5; }
+.glrp-balloon.glrp-old { opacity: var(--glrp-old); }
 /* The tail: a right-angled wedge whose upright edge drops onto the token's centre line. */
 .glrp-tail {
   width: 11px;
@@ -632,13 +636,13 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
   padding: 4px 18px 6px;
   text-align: center;
   background: radial-gradient(closest-side, rgb(var(--gl-tint-dark) / 0.66), rgb(var(--gl-tint-dark) / 0));
-  font: italic 500 18px/1.2 var(--glrp-serif);
+  font: italic 500 18px/1.25 var(--glrp-serif);
   color: var(--glrp-text);
   text-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.9), 0 0 10px rgb(var(--gl-tint-dark) / 0.6);
   overflow-wrap: anywhere;
   transition: opacity var(--gl-d-swift) var(--gl-ease);
 }
-.glrp-cap-line.glrp-old { opacity: 0.5; }
+.glrp-cap-line.glrp-old { opacity: var(--glrp-old); }
 
 /* ── the caption lane ──────────────────────────────────────────────────── */
 
@@ -690,7 +694,7 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
 .glrp-line[data-glrp-mode="say"] .glrp-line-txt::after { content: "”"; color: var(--glrp-dim); }
 .glrp-line:is([data-glrp-mode="do"], [data-glrp-mode="think"]) .glrp-line-txt { font: italic 500 18px/1.22 var(--glrp-serif); }
 .glrp-line[data-glrp-mode="think"] .glrp-line-txt { color: var(--glrp-think-ink); }
-.glrp-line.glrp-old { opacity: 0.5; }
+.glrp-line.glrp-old { opacity: var(--glrp-old); }
 
 /* Narrator: a film subtitle, no plate. */
 .glrp-line--narr {

@@ -71,6 +71,11 @@ const html = `<!doctype html>
   .state h3 { margin: 0 0 6px; font: 600 11px/1.3 "Google Sans Flex", sans-serif; letter-spacing: .08em; color: var(--gl-text-dim); text-transform: uppercase; }
   .state .frame { position: relative; background: rgb(var(--gl-tint-dark) / .9); outline: 1px solid rgb(var(--gl-tint-light) / .08); }
   .state .frame.tall { padding-top: 260px; }
+  /* A collapsed sidebar: Foundry moves the box into #chat-notifications, a grid straight over the
+     canvas. A bright parchment map is the hard case for the bar's own ink. The grid's rows are the
+     shipped stylesheet's (#chat-notifications:has(> .glrp-bar)), so this mock sets none. */
+  .state .frame.on-map { height: 300px; background: radial-gradient(60% 70% at 30% 30%, #efe2bf, #cdb98a 70%, #a98f5c); }
+  .state .frame.on-map #chat-notifications { position: absolute; inset: 0; display: grid; padding: 8px; box-sizing: border-box; --chat-input-height: 118px; }
   .cards { display: grid; grid-template-columns: 560px; gap: 10px; }
   .cards .gluniverse-stream-chat-root { position: relative; width: auto; top: auto; left: auto; }
   /* the preview places the overlay layer inside the mock screen rather than over the window */
@@ -241,6 +246,13 @@ const state = (title, opts, tall = false) => {
   composer($("form", wrap), opts);
   states.append(wrap);
 };
+// The sidebar collapsed: the bar and the box sit in #chat-notifications over the map.
+const onMap = (title, opts) => {
+  const wrap = h('<div class="state"><h3></h3><div class="frame on-map"><div id="chat-notifications"><div class="mock-log"></div></div></div></div>');
+  $("h3", wrap).textContent = title;
+  composer($("#chat-notifications", wrap), opts);
+  states.append(wrap);
+};
 state("Player · OOC", { state: { ic: false, sub: "say" }, speaker: SERI, typed: "แป๊บนะ brb" });
 state("Player · IC Say, typing", { state: { ic: true, sub: "say" }, speaker: SERI, typed: "Hold the line! *draws her blade* ถอยไปที่สะพาน" });
 state("Player · IC Do, typing", { state: { ic: true, sub: "do" }, speaker: SERI, typed: "draws her blade แล้วก้าวออกไป" });
@@ -250,7 +262,8 @@ state("Player · IC Do, empty", { state: { ic: true, sub: "do" }, speaker: SERI 
 state("Player · no character assigned", { state: { ic: true, sub: "say" }, speaker: null });
 state("GM · Narrator, pinned", { state: { ic: true, sub: "say" }, speaker: { name: "Narrator", img: null, narrator: true, source: "pinned" }, gm: true });
 state("Say to Think, the slab mid-slide", { state: { ic: true, sub: "think" }, speaker: SERI, slideFrom: "say" });
-state("GM · Narrator, out of character", { state: { ic: false, sub: "say" }, speaker: { name: "Narrator", img: null, narrator: true, source: "auto" }, gm: true, typed: "Five minute break" });
+onMap("Sidebar collapsed, over a bright map", { state: { ic: true, sub: "do" }, speaker: SERI, typed: "draws her blade" });
+state("GM · Narrator, out of character",{ state: { ic: false, sub: "say" }, speaker: { name: "Narrator", img: null, narrator: true, source: "auto" }, gm: true, typed: "Five minute break" });
 state("GM · speaker picker open", {
   state: { ic: true, sub: "say" }, gm: true, pickerOpen: true,
   speaker: { name: "Ogre Warrior", img: A.ogre, source: "auto" },
