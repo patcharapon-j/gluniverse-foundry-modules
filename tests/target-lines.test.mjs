@@ -1075,6 +1075,9 @@ test("the line draws device-pixel hairlines in its own colours, over ink, and on
   // The body tapers out of the source: its colour band is narrower at the start than at the end.
   const band = strokes(core).filter(op => op.color === color).map(op => op.width);
   assert.ok(band[0] < band.at(-1), "the body leaves the source thin and arrives at full width");
+  // The taper steps through a few widths, one polyline each, rather than one stroke per sample span: every
+  // stroke is a shape PIXI tessellates with its own caps, every frame the line moves.
+  assert.ok(band.length <= 10, `the colour band is ${band.length} strokes; the taper should cost a handful`);
 
   assert.equal(render(2, 1.5), false, "a held line whose tokens are still redraws nothing");
 

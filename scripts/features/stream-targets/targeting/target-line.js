@@ -30,6 +30,8 @@ const HEAD_FADE_FROM = 0.82;
 /** The body is thin where it leaves the source and reaches full width over this share of its length. */
 const TAPER_SHARE = 0.4;
 const TAPER_FROM = 0.4;
+/** How many widths the taper steps through: under a device pixel apart on a full-weight band, so it reads smooth. */
+const TAPER_STEPS = 6;
 /** The ink shade bed's two bands, wide then narrow: a soft contact shade that deepens towards the line. */
 const BED_ALPHA = [0.14, 0.2];
 /** How far the core is mixed towards PAPER, for the one-device-pixel hairline down the middle. */
@@ -419,16 +421,19 @@ function strokePath(graphics, path, start, end, width, color, alpha, point) {
 
 /**
  * Stroke `path` up to `end` at a width that grows from TAPER_FROM of `width` at the source to all of it at
- * `taperTo`, then holds, never under `floor`. Each sample span is its own stroke with round caps, so the joins
+ * `taperTo`, then holds, never under `floor`. The width steps through TAPER_STEPS widths rather than changing
+ * per sample: spans that share a step are one polyline, so the taper costs a handful of shapes for PIXI to
+ * tessellate instead of one per span. Each step starts on the last one's end with round caps, so the joins
  * stay closed.
  */
 function strokeTapered(graphics, path, end, taperTo, width, floor, color, alpha, point, prev) {
   width = Math.max(width, floor);
   if (end < 0.01 || alpha <= 0.001 || width <= 0) return;
-  const { xs, ys, arcs } = path;
+  const { xs, arcs } = path;
   const last = xs.length - 1;
   pointAt(path, 0, prev);
   let at = 0;
+  let step = -1;
   // Past the taper the width no longer changes: one stroke carries the rest.
   for (let i = 1; i <= last && at < end; i++) {
     const next = Math.min(end, arcs[i]);
@@ -436,9 +441,14 @@ function strokeTapered(graphics, path, end, taperTo, width, floor, color, alpha,
       strokePath(graphics, path, at, end, width, color, alpha, point);
       return;
     }
-    const share = TAPER_FROM + ((1 - TAPER_FROM) * smooth(clamp01(((at + next) / 2) / taperTo)));
-    setLine(graphics, Math.max(floor, width * share), color, alpha);
-    graphics.moveTo(prev.x, prev.y);
+    const grown = smooth(clamp01(((at + next) / 2) / taperTo));
+    const nextStep = Math.min(TAPER_STEPS, Math.round(grown * TAPER_STEPS));
+    if (nextStep !== step) {
+      step = nextStep;
+      const share = TAPER_FROM + ((1 - TAPER_FROM) * (step / TAPER_STEPS));
+      setLine(graphics, Math.max(floor, width * share), color, alpha);
+      graphics.moveTo(prev.x, prev.y);
+    }
     pointAt(path, next, point);
     graphics.lineTo(point.x, point.y);
     prev.x = point.x;
