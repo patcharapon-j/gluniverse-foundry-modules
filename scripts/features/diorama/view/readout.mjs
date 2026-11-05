@@ -1,6 +1,6 @@
 /**
- * Diorama — the view's cost readout as label/value rows, shared by the
- * Graphics panel and the perf overlay's Diorama section. Pure: it formats what
+ * Diorama — the view's cost readout as label/value rows, drawn by the
+ * Graphics panel. Pure: it formats what
  * `DioramaRenderer#profile()` returns and takes its localiser as an argument.
  */
 

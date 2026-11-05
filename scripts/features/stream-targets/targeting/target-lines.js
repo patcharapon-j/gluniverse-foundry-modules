@@ -30,7 +30,7 @@ export class TargetLineController {
   core = null;
   /** The last announced set, so an unchanged sync announces nothing (see #announce). */
   announced = null;
-  /** Whether a line redrew last frame: a line drawing out or back is canvas motion the perf governor must see. */
+  /** Whether a line redrew last frame: a line drawing out or back is canvas motion an idle-rate drop must see. */
   moving = false;
   stopListening = null;
   syncQueued = false;
@@ -369,8 +369,8 @@ export class TargetLineController {
 
   /**
    * A line drawing out, back or across is canvas motion with no input behind it on this client (another
-   * player's target, a turn change), so the perf governor's idle-rate drop has to see it or the launch
-   * stutters at Balanced. A line that has landed redraws nothing and claims nothing.
+   * player's target, a turn change), so any idle-rate drop has to see it or the launch stutters. A line
+   * that has landed redraws nothing and claims nothing.
    */
   #claimMotion(moving) {
     if (moving === this.moving) return;

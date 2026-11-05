@@ -68,8 +68,7 @@
     "styles/diorama-editor.css",
     "styles/diorama-env.css",
     "styles/diorama-props.css",
-    "styles/diorama-standee.css",
-    "styles/perf.css"
+    "styles/diorama-standee.css"
   ],
   "languages": [
     {
@@ -251,11 +250,6 @@
       "lang": "en",
       "name": "English",
       "path": "lang/diorama-buildings.en.json"
-    },
-    {
-      "lang": "en",
-      "name": "English",
-      "path": "lang/perf.en.json"
     },
     {
       "lang": "en",

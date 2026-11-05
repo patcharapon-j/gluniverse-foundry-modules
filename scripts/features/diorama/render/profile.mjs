@@ -5,7 +5,7 @@
  * context the renderer hands it.
  *
  * It costs nothing until someone looks. The renderer only times frames while
- * the Graphics panel's readout or the perf overlay is open
+ * the Graphics panel's readout is open or the shared budget is profiling
  * (`DioramaRenderer#setProfiling`, `Budget.profiling`); otherwise a frame pays
  * two integer increments.
  *

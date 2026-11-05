@@ -931,8 +931,7 @@ class BarHost {
       canvas.app.ticker.add(this._tick);
       this.ticking = true;
       this._lastTime = performance.now();
-      /* A ticking bar is moving on its own; the Performance feature's idle-rate
-         drop must not slow it. */
+      /* A ticking bar is moving on its own; no idle-rate drop may slow it. */
       Budget.claimMotion("resource-bars", true);
     } else if (!wanted && this.ticking) {
       this.stopTicker();

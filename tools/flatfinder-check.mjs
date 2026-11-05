@@ -467,7 +467,7 @@ for (const [, decl] of cssCode.matchAll(/(?:transition|animation)(?:-duration|-d
 if (/rgba?\(\s*255\s*,\s*255\s*,\s*255/.test(cssCode)) fail("css: a raw white veil; strike it from --gl-tint-light");
 if (/@font-face|@import/.test(cssCode)) fail("css: @font-face or @import in a feature sheet");
 if (/prefers-reduced-motion/.test(cssCode)) fail("css: the suite does not honour the OS reduced-motion preference");
-if (/backdrop-filter/.test(cssCode)) fail("css: a backdrop blur must be written against --gl-glass-k (perf-check)");
+if (/backdrop-filter/.test(cssCode)) fail("css: a backdrop blur must be written against --gl-glass-k (budget-check)");
 // Classes drawn vs classes styled, both ways (feature prefixes only).
 const drawn = new Set([...marks.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].split(/\s+/)).filter(Boolean));
 const styled = new Set([...cssCode.matchAll(/\.((?:ff|flatfinder)-[a-z0-9-]+|is-[a-z-]+|has-[a-z-]+)/g)].map((m) => m[1]));

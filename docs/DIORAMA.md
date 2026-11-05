@@ -40,7 +40,7 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   view centred on what the window was showing. Escape closes it before the view;
   it closes with the view and never opens on the stream capture. Foundry's canvas
   keeps rendering under the overlay the whole time (nothing in the suite pauses
-  it; the Performance feature's idle rate wakes on any input), so the window adds
+  it), so the window adds
   nothing per frame and the 3D view still renders on demand.
 - **Camera.** An orthographic tactics view: pitch presets 30° (default), 45° and 65°
   (R), yaw on the four diagonals (Q/E), or in 45° steps if the GM sets
@@ -599,12 +599,11 @@ real motion and both shed (`standeeSway`, `markerMotion`).
 
 The Graphics panel shows what the view costs right now: GPU and CPU time per
 drawn frame, frames per second, draw calls, triangles, shadow-map renders per
-second and the shed rung in force. The perf overlay shows the same rows under
-"3D view" (`features/perf/readouts.mjs` is how a feature adds a section). GPU
+second and the shed rung in force. GPU
 time is `EXT_disjoint_timer_query_webgl2`: one query per drawn frame, read back
 frames later and never waited on, all results in flight dropped on a disjoint
 event, and "n/a" where the browser does not offer the extension. Nothing is
-timed unless one of the two is open (`setProfiling`, `Budget.profiling`).
+timed unless the panel is open (`setProfiling`).
 
 ### Shaders on Windows
 

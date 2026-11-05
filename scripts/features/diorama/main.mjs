@@ -20,8 +20,6 @@ import { PropStore } from "./terrain/props-store.mjs";
 import { installRules, readyRules } from "./foundry/install.mjs";
 import { wireSocket } from "./view/sync.mjs";
 import { watchTargetLines } from "./integrations/target-lines.mjs";
-import { registerReadout } from "../perf/readouts.mjs";
-import { readoutRows } from "./view/readout.mjs";
 import { wireStandee } from "./view/standee-app.mjs";
 import { EntryChip } from "./view/entry.mjs";
 
@@ -267,12 +265,6 @@ export function onReady() {
     err("diorama: readyRules failed", e);
   }
   wireSocket(loadView, isOpen);
-  // The perf overlay's Diorama section: only while the view is open (it reads
-  // nothing otherwise, and the renderer times frames only while the overlay is up).
-  registerReadout(game.i18n.localize("GLDIO.graphics.readout.section"), () => {
-    const r = _view?.isOpen?.() ? _view.viewRenderer?.() : null;
-    return r ? readoutRows(r.profile(), (k) => game.i18n.localize(k)) : null;
-  });
   // The way in, labelled, on the 2D board (the scene-control button and Shift+V stay).
   _entry = new EntryChip({ onOpen: toggleOnce });
   refreshEntry();

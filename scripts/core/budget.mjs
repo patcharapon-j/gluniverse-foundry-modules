@@ -9,14 +9,14 @@
  * rung down" — so a struggling table shed in whatever order its features happened
  * to notice, and a GM had no lever at all.
  *
- * This is the one clock. It is ALWAYS imported and always works: with the
- * `perf` feature off it applies the policy every ladder shipped with (a 60 fps
- * target → shed above 22 ms, recover below 15 ms, no floor), so a world that
- * never turns Performance on gets the behaviour it had. The `perf` feature only
- * changes the POLICY — the target frame rate, a tier floor, the supersample
- * ceiling — never the mechanism, and every feature asks the same question the
- * same way whether it is on or not. A feature that asked "is perf on?" and
- * branched would be the silent seam this suite keeps documenting in CLAUDE.md.
+ * This is the one clock. It is ALWAYS imported and always works: it applies the
+ * policy every ladder shipped with (a 60 fps target → shed above 22 ms, recover
+ * below 15 ms, no floor). `setPolicy`, `setAmbient` and `setProfiling` are the
+ * seam a tuning layer would use to change the POLICY (the target frame rate, a
+ * floor, the supersample ceiling), never the mechanism; nothing in the suite
+ * calls them today, so every world runs LOCAL_POLICY. Every feature asks the
+ * same question the same way, so none of them may branch on whether a tuning
+ * layer exists.
  *
  * Dependency-free and side-effect-free at import: check tools and preview pages
  * load it under plain Node or a bare browser page. Nothing starts until a ladder
@@ -29,12 +29,12 @@
  *     feels, and it is the only thing that can say "too slow". It cannot say
  *     "there is headroom": at 60 Hz every interval is ~16.7 ms however little
  *     work the frame did, so a governor stepping UP on intervals never steps up.
- *   • WORK — main-thread time actually spent inside the canvas frame (bracketed
- *     on the PIXI ticker by the `perf` feature). This is what says "there is
- *     room to give quality back".
+ *   • WORK — main-thread time actually spent inside the canvas frame (fed
+ *     through `sampleWork` by whoever brackets the PIXI ticker). This is what
+ *     says "there is room to give quality back".
  *
- * Ladders react to the interval average (a reflex, frames); the `perf`
- * feature's governor reads percentiles of both (a policy, seconds).
+ * Ladders react to the interval average (a reflex, frames); a policy layer
+ * would read percentiles of both (seconds).
  */
 
 /** A gap longer than this is a stall or a hidden tab, not a slow frame. Fed to
@@ -54,8 +54,8 @@ export const MAX_STEPS = 32;
 /** Rolling-average weight of a new interval. */
 const EMA_NEW = 0.1;
 
-/** A policy is what the `perf` feature pushes. This is the one every feature
- *  shipped with, and the one in force whenever that feature is off. */
+/** A policy is what `setPolicy` pushes. This is the one every feature shipped
+ *  with, and the one in force unless something replaces it. */
 export const LOCAL_POLICY = Object.freeze({
   /** Tier id the policy came from, or null when no tier is in force. */
   tier: null,
@@ -168,8 +168,8 @@ function emit(reason) {
  *   • the feature's own minimum (a quality setting it already had),
  *   • the policy's floor (a tier: "this machine starts one rung down"),
  *   • the reflex (the shared stepper: "this frame is over budget right now").
- * A max rather than a sum is deliberate: a feature at its own "low" setting on a
- * Performance tier is one statement of "be cheap", not two.
+ * A max rather than a sum is deliberate: a feature at its own "low" setting under
+ * a policy floor is one statement of "be cheap", not two.
  */
 export class Ladder {
   /**
@@ -248,8 +248,8 @@ export function sample(dt) {
 }
 
 /**
- * Feed one frame's main-thread work, in ms. Only the `perf` feature brackets
- * the canvas ticker; with it off nothing reads this window.
+ * Feed one frame's main-thread work, in ms. Nothing in the suite brackets the
+ * canvas ticker today, so this window stays empty.
  */
 export function sampleWork(ms) {
   if (Number.isFinite(ms) && ms >= 0) _work.push(ms);
@@ -300,14 +300,14 @@ export const Budget = {
     return [..._ladders];
   },
 
-  /** The policy in force (LOCAL_POLICY unless the `perf` feature set one). */
+  /** The policy in force (LOCAL_POLICY unless `setPolicy` replaced it). */
   get policy() {
     return _policy;
   },
 
   /**
-   * Replace the policy. `null` restores LOCAL_POLICY, which is exactly what a
-   * world without the `perf` feature runs. Resets the reflex so a new target is
+   * Replace the policy. `null` restores LOCAL_POLICY, which is what every world
+   * runs by default. Resets the reflex so a new target is
    * not judged against an average built under the old one.
    */
   setPolicy(policy) {
@@ -370,7 +370,7 @@ export const Budget = {
      "Ambient" is motion that says nothing new — a shimmer, a drifting sheen,
      an idle loop. It pauses while the view moves (a pan is when a frame is
      most expensive and nobody is looking at the shimmer) and, where the
-     policy says so, while the client is hidden. The `perf` feature decides;
+     policy says so, while the client is hidden. `setAmbient` decides;
      features that run their own JS loops listen here. */
 
   /** False while ambient motion should hold still. */
@@ -378,7 +378,7 @@ export const Budget = {
     return _ambientOn;
   },
 
-  /** Set by the `perf` feature only. */
+  /** Set by a policy layer only; nothing in the suite calls it today. */
   setAmbient(allowed) {
     const v = !!allowed;
     if (v === _ambientOn) return;
@@ -388,10 +388,10 @@ export const Budget = {
 
   /* ── Continuous motion ──────────────────────────────────────────────
      A feature that animates ON THE CANVAS without anything moving — an idle
-     liquid flowing, an area's turbulence — claims motion while it does. The
-     `perf` feature's idle-rate drop reads this: at Balanced, whose promise is
-     "no visible change", a canvas with anything still animating on it is not
-     idle, because a lower rate would be visible on exactly that thing. */
+     liquid flowing, an area's turbulence — claims motion while it does. Any
+     idle-rate drop must read this: a canvas with anything still animating on
+     it is not idle, because a lower rate would be visible on exactly that
+     thing. */
 
   /** @param {string} id  @param {boolean} on */
   claimMotion(id, on) {

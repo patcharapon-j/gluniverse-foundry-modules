@@ -277,8 +277,8 @@ feature, with its own `diorama-check` run.
 - `Budget.ladder("fx", SHED_ORDER)`, shed in this order: `minor` particles,
   `tokenLight`, light bands, `debris`, `shake`, then a lower concurrent-effect
   cap. Never pixel size.
-- `Budget.claimMotion("fx", true)` while any effect is alive, so Balanced does
-  not stutter it.
+- `Budget.claimMotion("fx", true)` while any effect is alive, so an idle-rate
+  drop does not stutter it.
 - The motion tier scales nothing in time (sprite timing is the look). Motion
   "none" plays no effect at all.
 - Zoomed below 0.75 the `minor` particles drop out. Pixels never shrink.

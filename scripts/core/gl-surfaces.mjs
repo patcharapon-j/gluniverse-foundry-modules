@@ -23,8 +23,8 @@
  *     something moves has no next frame to put the picture back.
  *
  * The feature keeps every decision about WHAT to draw; the registry only ever
- * calls the callbacks it was handed. With the `perf` feature off, the
- * policy's `glRelease` is 0 (never release) and `pauseHidden` false, and
+ * calls the callbacks it was handed. Under the shipped policy (LOCAL_POLICY in
+ * the budget) `glRelease` is 0 (never release) and `pauseHidden` false, and
  * off-screen pausing is the only thing that happens — which is what every one
  * of these surfaces should have been doing anyway.
  *

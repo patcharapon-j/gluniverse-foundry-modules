@@ -39,5 +39,3 @@ import "./hexcrawl/index.mjs";
 import "./theatre/index.mjs";
 import "./roleplay-chat/index.mjs";
 import "./diorama/index.mjs";
-// Cross-cutting: tunes the canvas, the suite's own effects and Foundry's UI.
-import "./perf/index.mjs";

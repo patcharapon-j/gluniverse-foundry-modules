@@ -230,7 +230,6 @@ rather than at the end.
 | theatre            | th.                          | null              | —               | off     |
 | roleplay-chat      | rp.                          | null              | —               | off     |
 | diorama            | dio.                         | null              | —               | off     |
-| perf               | perf.                        | null              | —               | ON      |
 
 `⤷ <id>` in the requires column is a `requiresFeature` edge (a sibling suite
 feature that must be enabled), not a `requires` module id.

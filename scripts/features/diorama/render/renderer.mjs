@@ -838,7 +838,7 @@ export class DioramaRenderer {
 
   /* ------------------------------------------------------------ readout */
 
-  /** True while the readout is open here (setProfiling) or the perf overlay is (Budget.profiling). */
+  /** True while the readout is open here (setProfiling) or the shared budget is profiling (Budget.profiling). */
   get profiling() {
     return this._profiling || Budget.profiling;
   }

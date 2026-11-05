@@ -4,7 +4,7 @@
  *
  * Everything here fails silently: a filter pass that costs a frame on every
  * client and draws nothing wrong, a loop that runs forever with no motion
- * claim (Balanced then stutters it), a hairline sized in world units that
+ * claim (an idle-rate drop then stutters it), a hairline sized in world units that
  * vanishes zoomed out, a timing constant nothing reads, a set announced on
  * every sight refresh (the odds re-price and Diorama redraws per frame), and
  * a panel string that reads English in every language.
@@ -34,7 +34,7 @@ const linesSrc = strip(read("scripts/features/stream-targets/targeting/target-li
 
 ok(!/BlurFilter|\.filters\s*=/.test(lineSrc + linesSrc), "the line runs a PIXI filter: a full pass per frame for a soft edge the bed already draws");
 ok(!/loop:\s*(true|-?\d)/.test(lineSrc + linesSrc), "the line loops an animation: a landed line is still, and a loop needs a motion claim it does not hold");
-ok(/Budget\.claimMotion\(/.test(linesSrc), "the controller never claims motion: Balanced's idle rate drop stutters the launch");
+ok(/Budget\.claimMotion\(/.test(linesSrc), "the controller never claims motion: an idle-rate drop would stutter the launch");
 ok(/claimMotion\(false\)/.test(linesSrc), "the controller never releases its motion claim");
 
 /* ── hairlines ────────────────────────────────────────────────────────── */
