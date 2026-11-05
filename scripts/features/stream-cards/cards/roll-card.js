@@ -321,8 +321,9 @@ export class RollCard {
       // A damage roll with no attack card to merge into: the damage total is the headline.
       const degree = el("div", "glus-rc-degree");
       degree.append(el("span", "glus-rc-degree-label", model.damage.crit ? this.label(model.damage.critKey ?? "CritDouble") : this.label("Damage")));
+      // One span per part, so a list that wraps breaks between parts and never inside "4 cold".
       const meta = el("span", "glus-rc-degree-meta");
-      meta.textContent = (model.damage.parts ?? []).map((p) => `${p.amount} ${p.label ?? p.type}`).join(" · ");
+      for (const p of model.damage.parts ?? []) meta.append(el("span", "glus-rc-meta-part", `${p.amount} ${p.label ?? p.type}`));
       degree.append(meta);
       result.append(degree, el("div", "glus-rc-total", "0"));
       if (model.damage.crit) root.dataset.tone = "crit-success";
@@ -382,7 +383,7 @@ export class RollCard {
    * standing "Result", "Natural 20" and "Natural 1" labels only restated the number already drawn
    * large on the die beside them, in the widest type on the card, and the room they took came out of
    * the skill, spell, action or target on the left — which is the line a viewer cannot reconstruct
-   * from anything else on screen. The natural die keeps its gold and red tint, so a 20 and a 1 still
+   * from anything else on screen. The natural die keeps its amber and red tint, so a 20 and a 1 still
    * announce themselves.
    */
   buildDegree(roll) {

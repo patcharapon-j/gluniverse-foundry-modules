@@ -789,13 +789,15 @@
 /* A damage roll with no attack to merge into lists its parts under the tag. They wrap onto a second line
  * rather than squeezing the creature's name, which is the only thing on the card that says whose it was. */
 .glus-rc[data-kind="damage"] .glus-rc-degree-meta {
-  display: block;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   max-width: calc(7.5 * var(--u));
-  white-space: normal;
-  text-wrap: balance;
-  text-align: right;
+  row-gap: calc(0.08 * var(--u));
   line-height: 1.2;
 }
+.glus-rc-meta-part { white-space: nowrap; }
+/* The separator ends a line rather than starting the next one. */
+.glus-rc-meta-part:not(:last-child)::after { content: "\00B7"; margin-inline-start: calc(0.25 * var(--u)); color: var(--glus-faint); }
 
 /*
  * A chat message is words, and words need width. The result column gives up its `auto` sizing and
