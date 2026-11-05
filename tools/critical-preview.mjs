@@ -172,6 +172,8 @@ ${frames.join("\n")}
     document.body.classList.add("only");
     document.querySelector('[data-frame="' + only + '"]')?.classList.add("is-only");
   }
+  // ?focus=<selector> puts keyboard focus on a control, to judge its ring.
+  if (q.get("focus")) document.querySelector(q.get("focus"))?.focus({ focusVisible: true });
   const forced = q.get("seek");
   for (const el of document.querySelectorAll(".preview-screen")) {
     const host = el.querySelector("#gls-critical-overlay");

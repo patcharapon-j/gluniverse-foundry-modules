@@ -224,6 +224,11 @@ div:is(.gluc-gm-config, .gluc-actor-config) .form-group {
   gap: 4px 12px;
   margin: 0;
 }
+/* A switch row reads as one sentence with its box at the end, as Foundry's own
+   settings do, instead of breaking its label over a half-width column. */
+div:is(.gluc-gm-config, .gluc-actor-config) .form-group:has(> input[type="checkbox"]) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
 div:is(.gluc-gm-config, .gluc-actor-config) .form-group > label {
   color: var(--gluc-text);
   font-size: var(--gl-is-t-lead);
@@ -272,10 +277,19 @@ div:is(.gluc-gm-config, .gluc-actor-config) input::placeholder {
 div:is(.gluc-gm-config, .gluc-actor-config) :is(input, select):hover:not(:disabled) {
   box-shadow: inset 0 0 0 1px var(--gluc-dim);
 }
-div:is(.gluc-gm-config, .gluc-actor-config) :is(input, select, button):focus-visible {
+div:is(.gluc-gm-config, .gluc-actor-config) :is(input, select):focus-visible {
   outline: var(--gl-is-focus-ring);
   outline-offset: var(--gl-is-focus-offset);
   box-shadow: inset 0 0 0 1px var(--gluc-line-strong);
+}
+/* A button's cut corner is a clip-path, which clips an outside ring too; the
+   ring sits inside the control instead, in the colour that reads on its fill. */
+div:is(.gluc-gm-config, .gluc-actor-config) button:focus-visible {
+  outline: var(--gl-is-focus-ring);
+  outline-offset: -4px;
+}
+div:is(.gluc-gm-config, .gluc-actor-config) button[type="submit"]:focus-visible {
+  outline-color: var(--gluc-on-slab);
 }
 div:is(.gluc-gm-config, .gluc-actor-config) :is(input, select):disabled {
   opacity: var(--gl-is-disabled);
@@ -374,7 +388,8 @@ div:is(.gluc-gm-config, .gluc-actor-config) .sheet-footer {
 }
 div:is(.gluc-gm-config, .gluc-actor-config) .sheet-footer button { flex: none; }
 
-.gluc-test-button {
+/* Test plays only here, so it stands apart from the two that commit. */
+div:is(.gluc-gm-config, .gluc-actor-config) .gluc-test-button {
   margin-right: auto;
 }
 
