@@ -385,6 +385,29 @@ is null for an element that is not in the list yet), which
 `clocks-pacer-browser-check` pins. The skin is scoped to the feature's roots
 (docs/adr/0003-stream-pacer-skin.md). See `docs/STREAM_PACER.md`.
 
+**When touching Timer** (`features/timer/`, `styles/timer.css`,
+`templates/timer/`), re-run its check:
+
+```bash
+node tools/timer-check.mjs
+node tools/critical-timer-motion-check.mjs
+```
+
+Zero problems required. What to draw is `view.mjs` (pure: digits, tier, the one
+tone, the tag, the drain, the markup); `hud.mjs` reads the world and the clock.
+The skin is Ink and Signal under `--gltimer-*` on its own roots, and speaks
+Stream Pacer's countdown language: a knock a second in the last ten, a hit at
+zero, time up as a solid slab. Three things fail silently. The loop wakes only
+when the digits can change (once a second above a minute, every
+`FINE_TICK_MS` below, never while held), so a local pause has to wake it
+(`TimerHUD.wake()` on `pauseGame`). The drain is one fixed keyframe entered by a
+negative delay; a keyframe that reads a `var()` drains on the main thread every
+frame. The face is `contain: strict` with its own size, so a digit lays out only
+itself. To see it: `node tools/timer-preview.mjs && node tools/preview-server.mjs`,
+then `/.preview/timer.html` (`scene=sheet|calm|urgent|critical|paused|expired|gm|panel|moments`,
+`freeze=1` for stills). The browser half is `tools/timer-browser-check.mjs` in
+the motion workshop.
+
 **When touching Reflavor** (`features/statsblock-import/reflavor*.js`,
 `styles/statsblock-import-reflavor.css`), re-run its consistency check. The payload
 *teaches* the importer's grammar section by section, so a field renamed in

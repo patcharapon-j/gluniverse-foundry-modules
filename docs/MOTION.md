@@ -17,7 +17,7 @@ One system must own a given element/property while it animates. Suppress conflic
 | Stream Pacer | Each band lane owns its arrival (drop, wipe, sweep), flare and exit; a kept lane never replays its arrival. The Dire Peril splash is CSS keyframes sharing one length (`--sp-peril-stage`, from `TIMING.perilStage`) and one owner for its fade that ends once, by running out or by the peril ending under it. Running text and the countdown hairline are CSS on the compositor. |
 | Critical | One paused, seekable Anime.js beat sheet drives both portrait and video presentation from their existing renderer clocks; watchdogs release the queue in hidden tabs. |
 | Destiny Dice | Fresh results reveal once; repeat/historical renders remain static, with body motion tiers available before chat DOM attachment. |
-| Timer | Entrance, urgency emphasis and expiry accents are decorative. Remaining time, pause and expiry continue to derive from authoritative state. |
+| Timer | The arrival wipe, the tier flare, the knock in the last ten and the hit at zero are decorative (`TIMER_MOTION`), the same moments as Stream Pacer's countdown lane. The drain is CSS on the compositor. Remaining time, pause and expiry continue to derive from authoritative state. |
 
 Do not use animation progress to compute game state, determine dice results, enforce permissions, or time network operations. Do not add OS motion preference checks; retain the suite's explicit in-app settings.
 
