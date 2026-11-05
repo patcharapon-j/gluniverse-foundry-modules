@@ -40,26 +40,38 @@ skipped.destroy();
 let scale = 1;
 globalThis.getComputedStyle = () => ({ getPropertyValue: () => String(scale) });
 const targets = {
-  '.gltimer-face': { y: 0 },
-  '.gltimer-sheen-light': { x: '-130%', opacity: 0 },
-  '.gltimer-impact': { opacity: 0, scale: 1 },
+  '.gltimer-tag': { x: 0 },
+  '.gltimer-face': { y: 0, opacity: 1, scale: 1 },
+  '.gltimer-plate': { x: 0, scale: 1 },
+  '.gltimer-sheen-light': { x: '-120%', opacity: 0 },
+  '.gltimer-impact': { opacity: 0 },
   '.gltimer-main': { scale: 1 },
 };
-const timer = new TimerMotion({ querySelector: s => targets[s] });
+const timerRoot = { clipPath: 'inset(0% 0% 0% 0%)', querySelector: s => targets[s] };
+const timer = new TimerMotion(timerRoot);
 const tracked = [];
-for (const owner of [timer.entrance, timer.accent]) {
+for (const owner of [timer.entrance, timer.accent, timer.beat]) {
   const add = owner.add.bind(owner);
   owner.add = animation => { tracked.push(animation); return add(animation); };
 }
 timer.reveal();
 const entrance = tracked.at(-1);
-entrance.seek(920, true);
+entrance.seek(1200, true);
 near(targets['.gltimer-face'].y, 0, 'entrance face endpoint');
+near(targets['.gltimer-face'].opacity, 1, 'entrance face visible');
+near(targets['.gltimer-tag'].x, 0, 'entrance tag endpoint');
 near(targets['.gltimer-sheen-light'].opacity, 0, 'sheen vanishes');
+timer.emphasize();
+tracked.at(-1).seek(1200, true);
+near(targets['.gltimer-plate'].scale, 1, 'flare settles the plate');
+timer.knock();
+tracked.at(-1).seek(400, true);
+near(targets['.gltimer-face'].scale, 1, 'knock settles the clock');
 timer.emphasize(true);
-tracked.at(-1).seek(760, true);
+tracked.at(-1).seek(1200, true);
 near(targets['.gltimer-impact'].opacity, 0, 'expiry impact vanishes');
 near(targets['.gltimer-main'].scale, 1, 'expiry digits settle');
+near(targets['.gltimer-plate'].x, 0, 'expiry hit returns the plate to rest');
 timer.clear();
 near(targets['.gltimer-main'].scale, 1, 'cleanup restores scale');
 assert.equal(tracked.at(-1).paused, true, 'cleanup pauses expiry timeline');
@@ -67,7 +79,7 @@ assert.equal(tracked.at(-1).paused, true, 'cleanup pauses expiry timeline');
 // browser harness checks the ring returns to CSS opacity zero.
 scale = 0;
 const count = tracked.length;
-timer.reveal(); timer.emphasize(); timer.emphasize(true);
+timer.reveal(); timer.emphasize(); timer.emphasize(true); timer.knock();
 assert.equal(tracked.length, count, 'zero motion creates no decorative animations');
 const state = { active: true, running: true, remainingMs: 10000, anchor: 1000 };
 assert.equal(remainingOf(state, 6500), 4500, 'countdown follows its authoritative anchor');

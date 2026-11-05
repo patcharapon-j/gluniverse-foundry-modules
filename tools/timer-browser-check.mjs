@@ -6,7 +6,9 @@ export async function runTimerBrowserChecks() {
   const check = (v, message) => { if (!v) throw new Error(message); results.push(message); };
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const root = document.createElement('div');
-  root.innerHTML = '<div class="gltimer-face"><span class="gltimer-main">00</span></div><span class="gltimer-sheen-light"></span><div class="gltimer-impact"></div>';
+  const { hudHTML } = await import('../scripts/features/timer/view.mjs');
+  root.id = 'gltimer-hud';
+  root.innerHTML = hudHTML((k) => k);
   document.body.append(root);
   root.style.setProperty('--gl-motion-scale', '.1');
   const motion = new TimerMotion(root);

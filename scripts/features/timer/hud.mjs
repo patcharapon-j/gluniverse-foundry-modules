@@ -1,46 +1,31 @@
 /**
  * GLUniverse Suite — Timer feature: the shared countdown HUD.
  *
- * A single fixed top-center liquid-glass, edge-lit plaque shown to everyone. It
- * self-ticks via requestAnimationFrame from the authoritative state's
- * `anchor`+`remainingMs`, re-anchoring whenever new state arrives, so the DOM is
- * updated in place (text only) and the CSS urgency animations never restart.
+ * One ink plate, fixed top-center, shown to everyone, in the suite's Ink and
+ * Signal (DESIGN.md). It self-ticks via requestAnimationFrame from the
+ * authoritative state's `anchor`+`remainingMs`, re-anchoring whenever new state
+ * arrives, so the DOM is updated in place (text and attributes only) and no
+ * CSS animation restarts on a tick.
  *
- * Display: `M:SS` above 60 s, flipping to frantic `SS.cc` hundredths below it,
- * with a calm → urgent (amber) → critical (red, pulse+jitter) ramp and a gold
- * expire flash. The GM additionally sees an inline control strip (pause/resume,
- * ±time, edit, stop). Freezes on world pause OR the timer's own pause.
+ * Display: `M:SS` above 60 s, flipping to frantic `SS.cc` hundredths below it.
+ * The plate carries one tone (paper, then amber in the last minute, red in the
+ * last ten and at zero, steel while held), a tag that says what the number is
+ * doing, and a drain that empties left to right on the compositor. The GM
+ * additionally sees a control strip (pause/resume, ±time, edit, stop). Freezes
+ * on world pause OR the timer's own pause. What to draw is `view.mjs`'s.
  */
 
 import {
-  getState, remainingOf, isLive, TimerCtrl,
-  URGENT_MS, CRITICAL_MS, CHECKPOINT_MS,
+  getState, remainingOf, isLive, TimerCtrl, CHECKPOINT_MS,
 } from "./state.mjs";
 import * as Audio from "./audio.mjs";
 import { TimerMotion } from "./motion.mjs";
-import { TimerPanel } from "./panel.mjs";
+import {
+  formatParts, tierOf, toneOf, tagKeyOf, tagIconOf, drainOf, knockSecondOf, hudHTML, STRIP,
+} from "./view.mjs";
 import { warn } from "../../core/const.mjs";
 
-/** Split a remaining-ms into the large main field and the small fractional tail. */
-function formatParts(remMs) {
-  const rem = Math.max(0, remMs);
-  if (rem >= URGENT_MS) {
-    const total = Math.ceil(rem / 1000); // linger on the round value
-    const m = Math.floor(total / 60);
-    const s = total % 60;
-    return { main: `${m}:${String(s).padStart(2, "0")}`, frac: "" };
-  }
-  const s = Math.floor(rem / 1000);
-  const cc = Math.floor((rem % 1000) / 10);
-  return { main: String(s).padStart(2, "0"), frac: `.${String(cc).padStart(2, "0")}` };
-}
-
-function tierOf(remMs, expired) {
-  if (expired || remMs <= 0) return "expired";
-  if (remMs >= URGENT_MS) return "calm";
-  if (remMs > CRITICAL_MS) return "urgent";
-  return "critical";
-}
+const L = (k) => game.i18n.localize(k);
 
 class TimerHUDClass {
   constructor() {
@@ -51,70 +36,61 @@ class TimerHUDClass {
     this._lastMain = null;
     this._lastFrac = null;
     this._lastTier = null;
+    this._lastTone = null;
+    this._lastTag = null;
     this._lastPaused = null;
     this._lastShowPause = null;
     this._lastWholeSec = null;
     this._firedExpire = false;
     this._gmExpiredSent = false;
     this._lastCheckpoint = 0;
+    this._drainDirty = true;
+    /** The wall clock. The preview swaps it to hold a frame still. */
+    this.now = () => Date.now();
   }
 
   /** Create the overlay (idempotent). Call once at ready on every client. */
-  mount() {
+  mount(parent = document.body) {
     if (this.el) return;
-    const gm = game.user?.isGM;
+    const gm = !!game.user?.isGM;
     const el = document.createElement("div");
     el.id = "gltimer-hud";
-    el.className = "gltimer-hud gl-glass";
+    el.className = "gltimer-hud gl-type";
     el.setAttribute("data-tier", "calm");
+    el.setAttribute("data-tone", "paper");
     el.style.display = "none";
-    el.innerHTML = `
-      <div class="gltimer-rim" aria-hidden="true"></div>
-      <div class="gltimer-sheen" aria-hidden="true"><span class="gltimer-sheen-light"></span></div>
-      <div class="gltimer-impact" aria-hidden="true"></div>
-      <div class="gltimer-face">
-        <span class="gltimer-main">0:00</span><span class="gltimer-frac"></span>
-      </div>
-      ${gm ? this._stripHTML() : ""}`;
-    document.body.appendChild(el);
+    el.innerHTML = hudHTML(L, { gm });
+    parent.appendChild(el);
     this.el = el;
     this._motion = new TimerMotion(el);
-    this._mainEl = el.querySelector(".gltimer-main");
-    this._fracEl = el.querySelector(".gltimer-frac");
+    // Text nodes, written by `.data`: a digit change touches one node and
+    // nothing above it.
+    const mainEl = el.querySelector(".gltimer-main");
+    mainEl.textContent = "";
+    this._mainNode = mainEl.appendChild(document.createTextNode(""));
+    this._fracNode = el.querySelector(".gltimer-frac").appendChild(document.createTextNode(""));
+    this._tagTextEl = el.querySelector(".gltimer-tag-text");
+    this._tagIconEl = el.querySelector(".gltimer-tag-icon");
+    this._drainEl = el.querySelector(".gltimer-drain");
     if (gm) this._wireStrip();
     this._state = getState();
     this._lastRem = null;
     this._loop();
   }
 
-  _stripHTML() {
-    const t = (k) => game.i18n.localize(k);
-    return `<div class="gltimer-strip">
-      <button type="button" class="gl-btn gltimer-ctl gltimer-pause" data-act="pause" title="${t("GLTIMER.strip.pause")}"><i class="fa-solid fa-pause"></i></button>
-      <button type="button" class="gl-btn gltimer-ctl" data-act="sub60" title="${t("GLTIMER.strip.sub")}">−1:00</button>
-      <button type="button" class="gl-btn gltimer-ctl" data-act="sub10" title="${t("GLTIMER.strip.sub")}">−0:10</button>
-      <button type="button" class="gl-btn gltimer-ctl" data-act="add10" title="${t("GLTIMER.strip.add")}">+0:10</button>
-      <button type="button" class="gl-btn gltimer-ctl" data-act="add60" title="${t("GLTIMER.strip.add")}">+1:00</button>
-      <button type="button" class="gl-btn gltimer-ctl" data-act="edit" title="${t("GLTIMER.strip.edit")}"><i class="fa-solid fa-pen"></i></button>
-      <button type="button" class="gl-btn gltimer-ctl gltimer-stop" data-act="stop" title="${t("GLTIMER.strip.stop")}"><i class="fa-solid fa-xmark"></i></button>
-    </div>`;
-  }
-
   _wireStrip() {
     this._pauseBtn = this.el.querySelector(".gltimer-pause");
+    this._pauseIcon = this._pauseBtn?.querySelector("i");
+    const byAct = Object.fromEntries(STRIP.map((b) => [b.act, b]));
     this.el.querySelector(".gltimer-strip").addEventListener("click", (ev) => {
       const btn = ev.target.closest("[data-act]");
       if (!btn) return;
       const s = getState();
-      switch (btn.dataset.act) {
-        case "pause": (s.running ? TimerCtrl.pause() : TimerCtrl.resume()); break;
-        case "sub60": TimerCtrl.adjust(-60_000); break;
-        case "sub10": TimerCtrl.adjust(-10_000); break;
-        case "add10": TimerCtrl.adjust(10_000); break;
-        case "add60": TimerCtrl.adjust(60_000); break;
-        case "edit": TimerPanel.open(); break;
-        case "stop": TimerCtrl.clear(); break;
-      }
+      const act = btn.dataset.act;
+      if (act === "pause") (s.running ? TimerCtrl.pause() : TimerCtrl.resume());
+      else if (act === "edit") import("./panel.mjs").then((m) => m.TimerPanel.open()).catch((e) => warn("Timer | panel failed to open:", e));
+      else if (act === "stop") TimerCtrl.clear();
+      else if (byAct[act]?.ms) TimerCtrl.adjust(byAct[act].ms);
     });
   }
 
@@ -123,8 +99,9 @@ class TimerHUDClass {
     const next = { ...state };
     this._state = next;
     this._lastRem = null;            // force re-anchor on the next frame
+    this._drainDirty = true;         // and restart the drain from the new value
     if (!next.expired) { this._firedExpire = false; this._gmExpiredSent = false; }
-    if (isLive(next)) this._lastCheckpoint = Date.now();
+    if (isLive(next)) this._lastCheckpoint = this.now();
     if (!next.active) this._motion?.clear();
     // The loop sleeps while no timer exists; new state wakes it. The pass runs
     // now rather than on the next frame: a browser that has had nothing
@@ -151,7 +128,7 @@ class TimerHUDClass {
       if (el.style.display !== "none") {
         el.style.display = "none";
         el.classList.remove("is-paused");
-        this._lastMain = this._lastFrac = this._lastTier = null;
+        this._lastMain = this._lastFrac = this._lastTier = this._lastTone = this._lastTag = null;
         this._lastWholeSec = null;
         this._lastPaused = this._lastShowPause = null;
         this._motion?.clear();
@@ -161,12 +138,13 @@ class TimerHUDClass {
     }
     // Scheduled before any work, so a throw below cannot stop the countdown.
     this._raf = requestAnimationFrame(() => this._loop());
+    let revealed = false;
     if (el.style.display === "none") {
       el.style.display = "";
-      this._motion?.reveal();
+      revealed = true;
     }
 
-    const now = Date.now();
+    const now = this.now();
     // Local game.paused is layered on for an instant freeze; the GM also
     // persists worldPaused so late joiners see the frozen value.
     const live = !!(s.running && !s.worldPaused && !game.paused && !s.expired);
@@ -175,11 +153,13 @@ class TimerHUDClass {
       rem = Math.max(0, Number(s.remainingMs) - (now - (Number(s.anchor) || 0)));
       this._lastRem = rem;
     } else {
-      rem = this._lastRem != null ? this._lastRem : remainingOf(s);
+      rem = this._lastRem != null ? this._lastRem : remainingOf(s, now);
     }
 
     this._render(el, rem, s);
-    this._handleSound(rem, live, s);
+    if (this._drainDirty) this._syncDrain(rem, s);
+    if (revealed) this._motion?.reveal();
+    this._beats(rem, live, s);
 
     if (game.user?.isGM && live) {
       if (rem <= 0 && !this._gmExpiredSent) {
@@ -192,25 +172,11 @@ class TimerHUDClass {
     }
   }
 
+  /** Per frame: text nodes and attributes only, each written only when it changes. */
   _render(el, rem, s) {
     const { main, frac } = formatParts(rem);
-    if (main !== this._lastMain) { this._mainEl.textContent = main; this._lastMain = main; }
-    if (frac !== this._lastFrac) { this._fracEl.textContent = frac; this._lastFrac = frac; }
-
-    const tier = tierOf(rem, s.expired);
-    if (tier !== this._lastTier) {
-      el.setAttribute("data-tier", tier);
-      if (this._lastTier != null && tier !== "expired") this._motion?.emphasize();
-      // Leaving the urgent ramp → drop the per-frame heat override so the
-      // tier's stylesheet accent applies again.
-      if (this._lastTier === "urgent") el.style.removeProperty("--gl-accent");
-      this._lastTier = tier;
-    }
-    // Continuous amber→red heat across the urgent window (urgent tier only).
-    if (tier === "urgent") {
-      const pct = Math.round(((URGENT_MS - rem) / (URGENT_MS - CRITICAL_MS)) * 100);
-      el.style.setProperty("--gl-accent", `color-mix(in srgb, var(--gl-hazard) ${pct}%, var(--gl-signal))`);
-    }
+    if (main !== this._lastMain) { this._mainNode.data = main; this._lastMain = main; }
+    if (frac !== this._lastFrac) { this._fracNode.data = frac; this._lastFrac = frac; }
 
     const pausedView = !s.expired && rem > 0 && !(s.running && !s.worldPaused && !game.paused);
     if (pausedView !== this._lastPaused) {
@@ -218,30 +184,68 @@ class TimerHUDClass {
       this._lastPaused = pausedView;
     }
 
+    const tier = tierOf(rem, s.expired);
+    if (tier !== this._lastTier) {
+      el.setAttribute("data-tier", tier);
+      if (this._lastTier != null && tier !== "expired") this._motion?.emphasize();
+      this._lastTier = tier;
+    }
+
+    const tone = toneOf(tier, pausedView);
+    if (tone !== this._lastTone) { el.setAttribute("data-tone", tone); this._lastTone = tone; }
+
+    const tag = tagKeyOf(tier, pausedView);
+    if (tag !== this._lastTag) {
+      this._tagTextEl.textContent = L(tag);
+      this._tagIconEl.className = `gltimer-tag-icon ${tagIconOf(tier, pausedView)}`;
+      this._lastTag = tag;
+    }
+
     if (this._pauseBtn) {
       const showPause = s.running && !s.expired;
       if (showPause !== this._lastShowPause) {
-        this._pauseBtn.innerHTML = showPause
-          ? '<i class="fa-solid fa-pause"></i>'
-          : '<i class="fa-solid fa-play"></i>';
-        this._pauseBtn.title = game.i18n.localize(showPause ? "GLTIMER.strip.pause" : "GLTIMER.strip.resume");
+        this._pauseIcon.className = showPause ? "fa-solid fa-pause" : "fa-solid fa-play";
+        const label = L(showPause ? "GLTIMER.strip.pause" : "GLTIMER.strip.resume");
+        this._pauseBtn.title = label;
+        this._pauseBtn.setAttribute("aria-label", label);
         this._lastShowPause = showPause;
       }
     }
   }
 
-  _handleSound(rem, live, s) {
-    // Ticks: every whole-second crossing in the final 10 s while advancing.
-    if (live && rem > 0 && rem <= 10_000) {
-      const wsec = Math.ceil(rem / 1000);
+  /**
+   * Restart the drain from this value. Runs once per authoritative state, never
+   * per frame: the bar is one CSS animation on `transform`, so it empties on the
+   * compositor while the main thread only writes digits. A fresh element is the
+   * reliable way to restart a CSS animation from a new point. A held timer's
+   * bar is paused by the root's `is-paused`, which `_render` set just before.
+   */
+  _syncDrain(rem, s) {
+    this._drainDirty = false;
+    const { from, ms } = drainOf(rem, s.totalMs);
+    const bar = document.createElement("i");
+    bar.style.setProperty("--gltimer-drain-from", String(from));
+    bar.style.setProperty("--gltimer-drain-ms", `${ms}ms`);
+    this._drainEl.replaceChildren(bar);
+  }
+
+  /** The beats a whole second and zero land on: the tick and the knock, the alarm and the hit. */
+  _beats(rem, live, s) {
+    // Ticks and knocks: every whole-second crossing in the final 10 s while advancing.
+    const wsec = live ? knockSecondOf(rem) : null;
+    if (wsec != null) {
       if (this._lastWholeSec == null) this._lastWholeSec = wsec;
-      else if (wsec < this._lastWholeSec) { this._lastWholeSec = wsec; Audio.playTick(wsec); }
+      else if (wsec < this._lastWholeSec) {
+        this._lastWholeSec = wsec;
+        Audio.playTick(wsec);
+        this._motion?.knock();
+      }
     } else {
       this._lastWholeSec = null;
     }
 
-    // Alarm + burst flash once, when this client first reaches zero (locally or
-    // on receiving the expired state).
+    // Alarm + hit, once, when this client first reaches zero (locally or on
+    // receiving the expired state).
     if (rem <= 0 && (s.expired || live) && !this._firedExpire) {
       this._firedExpire = true;
       Audio.playAlarm();

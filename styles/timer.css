@@ -1,191 +1,403 @@
-/* ════════════════════════════════════════════════════════════════════════
-   GLUniverse Suite — Timer feature
-   A fixed top-center liquid-glass, edge-lit countdown plaque (everyone) with an
-   inline GM control strip, plus the GM create/exact-set panel. Built entirely on
-   the canonical --gl-* tokens / .gl-glass utility; the accent channel carries the
-   urgency ramp (calm cyan → urgent amber → critical red).
-   ════════════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   Timer: the shared countdown plate, the GM's strip, the GM's panel.
 
-/* ── The shared HUD overlay ──────────────────────────────────────────────── */
+   Ink and Signal (DESIGN.md, docs/adr/0012-ink-and-signal-core.md): the core
+   `--gl-is-*` values aliased as `--gltimer-*` on the feature's own roots and
+   never on :root, paper text, and hue only where it means something. The
+   plate speaks the same language as Stream Pacer's countdown lane: a tone tag
+   cut along 115°, the clock as the loudest thing on it, a wash that drains
+   left to right, a knock a second in the last ten and a hit at zero.
+
+   One tone per plate, set by `data-tone` (view.mjs `toneOf`): paper while
+   there is time, amber in the last minute, red in the last ten and at zero,
+   steel while held. Motion comes from the suite (`--gl-d-*`, `--gl-ease*`);
+   keyframes are prefixed `gltimer-`.
+
+   Roots: #gltimer-hud (the plate and the strip), .application.gltimer-panel
+   (the window frame) and .gltimer-panel-body (the panel).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:is(#gltimer-hud, .application.gltimer-panel, .gltimer-panel-body) {
+  --gltimer-ink-0: var(--gl-is-ink-0);
+  --gltimer-ink-1: var(--gl-is-ink-1);
+  --gltimer-ink-2: var(--gl-is-ink-2);
+  --gltimer-ink-3: var(--gl-is-ink-3);
+  --gltimer-ink-4: var(--gl-is-ink-4);
+  --gltimer-ink-5: var(--gl-is-ink-5);
+  --gltimer-text: var(--gl-is-text);
+  --gltimer-dim: var(--gl-is-dim);
+  --gltimer-faint: var(--gl-is-faint);
+  --gltimer-paper: var(--gl-is-paper);
+  --gltimer-steel: var(--gl-is-steel);
+  --gltimer-on: var(--gl-is-on-slab);
+  --gltimer-line: var(--gl-is-line);
+  --gltimer-line-strong: var(--gl-is-line-strong);
+  --gltimer-hover: var(--gl-is-hover);
+  --gltimer-shade: var(--gl-is-shade);
+
+  /* meaning: the core signal hues */
+  --gltimer-amber: var(--gl-is-amber);
+  --gltimer-red: var(--gl-is-red);
+  --gltimer-tone: var(--gltimer-paper);
+
+  /* type and shape */
+  --gltimer-font: var(--gl-is-font);
+  --gltimer-cut: var(--gl-is-cut-lg);
+  --gltimer-cut-sm: var(--gl-is-cut-sm);
+  --gltimer-wedge: 18px;   /* the 115° cut on the tag's right edge */
+
+  font-family: var(--gltimer-font);
+  color: var(--gltimer-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One statement per hue. */
+#gltimer-hud[data-tone="paper"] { --gltimer-tone: var(--gltimer-paper); }
+#gltimer-hud[data-tone="amber"] { --gltimer-tone: var(--gltimer-amber); }
+#gltimer-hud[data-tone="red"] { --gltimer-tone: var(--gltimer-red); }
+#gltimer-hud[data-tone="steel"] { --gltimer-tone: var(--gltimer-steel); }
+
+/* ═══ The plate ════════════════════════════════════════════════════════════ */
+
 #gltimer-hud {
   position: fixed;
   top: 16px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 70;
+  z-index: var(--gl-z-hud);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 30px 14px;
-  min-width: 200px;
-  --gl-accent: var(--gl-cyan);
-  /* The plaque is presentational; only the GM strip captures pointer events. */
+  align-items: stretch;
+  gap: 4px;
+  /* The plate is presentational; only the GM strip captures pointer events. */
   pointer-events: none;
   user-select: none;
-  box-shadow:
-    inset 0 1px 0 rgb(var(--gl-tint-light) / 0.16),
-    inset 0 -12px 28px rgb(var(--gl-tint-dark) / 0.42),
-    0 8px 34px rgb(var(--gl-tint-dark) / 0.5);
 }
 
-#gltimer-hud[data-tier="calm"] { --gl-accent: var(--gl-cyan); }
-#gltimer-hud[data-tier="urgent"] { --gl-accent: var(--gl-signal); }
-#gltimer-hud[data-tier="critical"],
-#gltimer-hud[data-tier="expired"] { --gl-accent: var(--gl-hazard); }
+#gltimer-hud .gltimer-plate {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  min-height: 64px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.045), transparent 60%),
+    color-mix(in oklab, var(--gltimer-ink-1) 94%, transparent);
+  border-top: 1px solid color-mix(in oklab, var(--gltimer-tone) 70%, transparent);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gltimer-cut)), calc(100% - var(--gltimer-cut)) 100%, 0 100%);
+  backdrop-filter: blur(calc(12px * var(--gl-glass-k)));
+  transition: border-top-color var(--gl-d-brisk) var(--gl-ease);
+}
 
-/* Edge-lit rim — a bright inner hairline + accent bloom that lives on the edges
-   and intensifies with the urgency tier. */
-.gltimer-rim {
+/* The drain: the clock's wash, emptying left to right over a 4px edge you can
+   still read when the wash is faint. It fills the clock's cell, not the
+   plate: the tag is the same tone, and a drain under it would spend the first
+   third of every countdown invisible. One element on `transform`, restarted
+   by the HUD only when the authoritative state moves, so it runs on the
+   compositor while the main thread writes digits. */
+#gltimer-hud .gltimer-drain {
+  position: relative;
+  grid-row: 1;
+  grid-column: 2;
+  margin-left: calc(var(--gltimer-wedge) * -1);
+  overflow: hidden;
+  pointer-events: none;
+}
+#gltimer-hud .gltimer-drain i {
   position: absolute;
   inset: 0;
-  border-radius: inherit;
+  background: linear-gradient(0deg, var(--gltimer-tone) 0 4px, color-mix(in oklab, var(--gltimer-tone) 15%, transparent) 4px);
+  transform-origin: 0 50%;
+  transform: scaleX(var(--gltimer-drain-from, 0));
+  animation: gltimer-drain var(--gltimer-drain-ms) var(--gl-linear) both;
+  transition: background var(--gl-d-brisk) var(--gl-ease);
+}
+#gltimer-hud.is-paused .gltimer-drain i { animation-play-state: paused; }
+
+/* time up: the drain is empty, so the plate keeps the tone itself */
+#gltimer-hud[data-tier="expired"] .gltimer-plate {
+  background:
+    linear-gradient(0deg, var(--gltimer-tone) 0 4px, transparent 4px),
+    linear-gradient(90deg, color-mix(in oklab, var(--gltimer-tone) 24%, transparent), color-mix(in oklab, var(--gltimer-tone) 10%, transparent)),
+    color-mix(in oklab, var(--gltimer-ink-1) 94%, transparent);
+}
+
+/* the last ten: a ring in the tone, pulsed on opacity only */
+#gltimer-hud .gltimer-plate::after {
+  content: "";
+  position: absolute;
+  inset: 0;
   pointer-events: none;
-  box-shadow:
-    inset 0 0 0 1px var(--gl-line-strong),
-    inset 0 0 18px color-mix(in srgb, var(--gl-accent) 32%, transparent),
-    0 0 22px var(--gl-glow);
+  opacity: 0;
+  box-shadow: inset 0 0 0 1px var(--gltimer-tone), inset 0 0 28px color-mix(in oklab, var(--gltimer-tone) 30%, transparent);
+}
+#gltimer-hud[data-tier="critical"]:not(.is-paused) .gltimer-plate::after {
+  animation: gltimer-breathe var(--gl-d-slow) var(--gl-ease-inout) infinite alternate;
 }
 
-#gltimer-hud[data-tier="calm"] .gltimer-rim {
-  animation: gltimer-edge var(--gl-breathe) var(--gl-ease-inout) infinite;
+/* the tag: a solid slab of the plate's tone, cut along 115° */
+#gltimer-hud .gltimer-tag {
+  position: relative;
+  grid-row: 1;
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 calc(var(--gltimer-wedge) + 16px) 0 20px;
+  background: var(--gltimer-tone);
+  color: var(--gltimer-on);
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--gltimer-wedge)) 100%, 0 100%);
+  font-size: var(--gl-is-t-lead);
+  font-weight: 750;
+  font-stretch: 116%;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: background-color var(--gl-d-brisk) var(--gl-ease);
 }
-#gltimer-hud[data-tier="urgent"] .gltimer-rim {
-  animation: gltimer-edge var(--gl-d-slow) var(--gl-ease) infinite;
-}
-#gltimer-hud[data-tier="critical"] .gltimer-rim {
-  animation: gltimer-edge var(--gl-d-glide) var(--gl-ease) infinite;
-}
+#gltimer-hud .gltimer-tag i { width: 18px; font-size: 18px; text-align: center; }
+/* Timer, Paused and Time up are different lengths; the tag keeps the longest
+   one's width so the plate never resizes as the state changes */
+#gltimer-hud .gltimer-tag-text { min-width: 5.4em; }
 
-/* Critical jitter — keeps the centering translate so the plaque shakes in place. */
-#gltimer-hud[data-tier="critical"] {
-  animation: gltimer-shake var(--gl-d-glide) steps(2, jump-none) infinite;
+/* the clock: the loudest thing on the plate */
+#gltimer-hud .gltimer-face {
+  position: relative;
+  grid-row: 1;
+  grid-column: 2;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  align-self: center;
+  margin-left: calc(var(--gltimer-wedge) * -0.5);
+  padding: 0 calc(var(--gltimer-cut) + 14px) 0 16px;
+  font-weight: 780;
+  font-stretch: 120%;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  line-height: 1;
+  color: var(--gltimer-tone);
+  contain: layout paint style;
+  transition: color var(--gl-d-brisk) var(--gl-ease);
 }
+#gltimer-hud .gltimer-main {
+  font-size: 44px;
+  letter-spacing: -0.02em;
+}
+#gltimer-hud .gltimer-frac {
+  font-size: 24px;
+  letter-spacing: -0.01em;
+  color: color-mix(in oklab, var(--gltimer-tone) 72%, var(--gltimer-ink-1));
+}
+/* a held clock is quiet: the steel tone says it, the number stays readable */
+#gltimer-hud.is-paused .gltimer-face { color: var(--gltimer-dim); }
 
-#gltimer-hud.is-paused .gltimer-rim { animation: gl-breathe var(--gl-dread) var(--gl-ease-inout) infinite; }
-#gltimer-hud.is-paused { animation: none; }
-#gltimer-hud.is-paused .gltimer-face { opacity: 0.55; }
-
-/* Entrance sheen sweep on (re)start. */
-.gltimer-sheen {
+/* the light that crosses the plate on arrival and on a flare */
+#gltimer-hud .gltimer-sheen {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
-  border-radius: inherit;
 }
-.gltimer-sheen-light {
+#gltimer-hud .gltimer-sheen-light {
   position: absolute;
-  inset: 0;
-  transform: translateX(-130%);
+  inset: 0 auto 0 0;
+  width: 30%;
   opacity: 0;
-  background: linear-gradient(
-    105deg,
-    transparent 38%,
-    color-mix(in srgb, var(--gl-accent) 55%, transparent) 50%,
-    transparent 62%
-  );
+  transform: translateX(-120%);
 }
-.gltimer-impact {
+#gltimer-hud .gltimer-sheen-light::before {
+  content: "";
+  position: absolute;
+  inset: -30% 0;
+  background: linear-gradient(90deg, transparent, rgb(var(--gl-tint-light) / 0.18), transparent);
+  transform: skewX(-25deg);
+}
+/* the hit at zero: a ring in the tone that fades out */
+#gltimer-hud .gltimer-impact {
   position: absolute;
   inset: 0;
-  border-radius: inherit;
   pointer-events: none;
   opacity: 0;
-  border: 1px solid var(--gl-signal-hot);
-  box-shadow: inset 0 0 26px var(--gl-signal), 0 0 34px var(--gl-glow);
+  box-shadow: inset 0 0 0 2px var(--gltimer-tone), inset 0 0 40px color-mix(in oklab, var(--gltimer-tone) 45%, transparent);
 }
 
-/* ── Digits ──────────────────────────────────────────────────────────────── */
-.gltimer-face {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  font-family: var(--gl-tech);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
-  line-height: 1;
-  transition: opacity var(--gl-d-quick) var(--gl-ease);
-}
-.gltimer-main {
-  font-size: 48px;
-  font-weight: var(--gl-weight-bold);
-  letter-spacing: 0.03em;
-  color: var(--gl-text-bright);
-  text-shadow: 0 0 16px var(--gl-glow);
-}
-.gltimer-frac {
-  font-size: 26px;
-  font-weight: var(--gl-weight-medium);
-  color: var(--gl-accent);
-  margin-left: 1px;
-  text-shadow: 0 0 12px var(--gl-glow);
-}
-#gltimer-hud[data-tier="critical"] .gltimer-main,
-#gltimer-hud[data-tier="expired"] .gltimer-main {
-  color: var(--gl-signal-pale);
-}
+/* ═══ The GM strip ═════════════════════════════════════════════════════════ */
 
-/* ── GM control strip ────────────────────────────────────────────────────── */
-.gltimer-strip {
+#gltimer-hud .gltimer-strip {
   display: flex;
+  justify-content: space-between;
   gap: 6px;
   pointer-events: auto;
-  flex-wrap: wrap;
-  justify-content: center;
 }
-.gltimer-ctl {
-  font-size: 11px;
-  padding: 4px 9px;
-  min-width: 0;
-}
-.gltimer-stop { color: var(--gl-hazard); border-color: color-mix(in srgb, var(--gl-hazard) 45%, var(--gl-edge)); }
-.gltimer-stop:hover:not(:disabled) { border-color: var(--gl-hazard); box-shadow: 0 0 14px color-mix(in srgb, var(--gl-hazard) 40%, transparent); }
+#gltimer-hud .gltimer-strip-group { display: flex; gap: 2px; }
 
-/* ── GM create / exact-set panel ─────────────────────────────────────────── */
-#gltimer-panel .window-content { padding: 0; background: var(--gl-ink-0); }
+/* Every control the feature ships, on the plate's strip and in the panel: a
+   Raised Slate slab cut at its corner, sized here because `.gl-btn` and
+   Foundry both leave a button's size to its host (and Foundry styles every
+   button at element level). Plain selector lists, not :is(): an :is() takes
+   its most specific argument's weight, and the HUD's id would then outrank
+   every panel rule below. */
+#gltimer-hud .gltimer-ctl,
+.gltimer-panel-body .gltimer-preset,
+.gltimer-panel-body .gltimer-action {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: auto;
+  height: 32px;
+  min-height: 0;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: var(--gltimer-ink-3);
+  box-shadow: inset 0 0 0 1px var(--gltimer-line);
+  color: var(--gltimer-text);
+  font-family: var(--gltimer-font);
+  font-size: var(--gl-is-t-body);
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gltimer-cut-sm)), calc(100% - var(--gltimer-cut-sm)) 100%, 0 100%);
+  transition:
+    background-color var(--gl-d-quick) var(--gl-ease),
+    color var(--gl-d-quick) var(--gl-ease),
+    translate var(--gl-d-quick) var(--gl-ease),
+    scale var(--gl-d-tap) var(--gl-ease);
+}
+#gltimer-hud .gltimer-ctl i,
+.gltimer-panel-body .gltimer-action i { font-size: var(--gl-is-t-body); }
+#gltimer-hud .gltimer-ctl:active,
+.gltimer-panel-body .gltimer-preset:active,
+.gltimer-panel-body .gltimer-action:active { scale: var(--gl-is-press); }
+#gltimer-hud .gltimer-ctl:focus-visible,
+.gltimer-panel-body .gltimer-preset:focus-visible,
+.gltimer-panel-body .gltimer-action:focus-visible {
+  outline: var(--gl-is-focus-ring);
+  outline-offset: var(--gl-is-focus-offset);
+}
+/* numbers on a control are tabular, so −0:10 and +1:00 hold one width */
+#gltimer-hud .gltimer-ctl,
+.gltimer-panel-body .gltimer-preset { font-stretch: 108%; font-variant-numeric: tabular-nums; }
+/* the strip sits over the map under the plate: smaller than a panel's controls */
+#gltimer-hud .gltimer-ctl { height: 28px; min-width: 28px; padding: 0 9px; }
+#gltimer-hud .gltimer-ctl.is-icon { padding: 0; }
+#gltimer-hud .gltimer-stop { color: var(--gltimer-red); }
+@media (hover: hover) and (pointer: fine) {
+  #gltimer-hud .gltimer-ctl:hover,
+  .gltimer-panel-body .gltimer-preset:hover,
+  .gltimer-panel-body .gltimer-action:hover { background: var(--gltimer-ink-4); translate: 0 var(--gl-lift); }
+  #gltimer-hud .gltimer-stop:hover,
+  .gltimer-panel-body .gltimer-action.is-clear:hover { background: var(--gltimer-red); color: var(--gltimer-on); }
+}
+
+/* ═══ The GM panel ═════════════════════════════════════════════════════════ */
+
+.application.gltimer-panel {
+  background: var(--gltimer-ink-1);
+  border: 1px solid var(--gltimer-line-strong);
+  box-shadow: 0 24px 64px var(--gltimer-shade), 0 0 0 1px rgb(var(--gl-tint-dark) / 0.5);
+}
+.application.gltimer-panel .window-header {
+  background: var(--gltimer-ink-0);
+  border-bottom: 1px solid var(--gltimer-line);
+  color: var(--gltimer-dim);
+}
+.application.gltimer-panel .window-header .window-title {
+  font-family: var(--gltimer-font);
+  font-size: var(--gl-is-t-body);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.application.gltimer-panel .window-content { padding: 0; background: none; }
+
+.gltimer-panel-body *,
+.gltimer-panel-body *::before,
+.gltimer-panel-body *::after { box-sizing: border-box; }
 .gltimer-panel-body {
-  --gl-accent: var(--gl-cyan);
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px;
-  font-family: var(--gl-display);
-  color: var(--gl-text);
+  padding: 14px 16px 16px;
+  background: var(--gltimer-ink-1);
 }
-.gltimer-panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.gltimer-field { display: flex; flex-direction: column; gap: 5px; }
-.gltimer-field > span {
-  font-size: 10.5px;
-  font-family: var(--gl-tech);
+.gltimer-panel-body .gltimer-panel-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 6px;
+}
+.gltimer-panel-body .gltimer-field { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.gltimer-panel-body .gltimer-field-label {
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--gl-text-dim);
+  color: var(--gltimer-faint);
 }
-.gltimer-field .gls-input { min-width: 0; width: 100%; font-size: 18px; text-align: center; }
-.gltimer-presets { display: flex; flex-wrap: wrap; gap: 8px; }
-.gltimer-preset { font-size: 11.5px; padding: 6px 12px; flex: 1 1 auto; }
-.gltimer-panel-actions { display: flex; gap: 8px; margin-top: 2px; }
-.gltimer-panel-actions .gl-btn { flex: 1 1 auto; }
+.gltimer-panel-body .gltimer-field-sep {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding-bottom: 3px;
+  font-size: var(--gl-is-t-display);
+  font-weight: 780;
+  line-height: 1;
+  color: var(--gltimer-faint);
+}
+.gltimer-panel-body .gltimer-input {
+  appearance: textfield;
+  width: 100%;
+  min-width: 0;
+  height: 48px;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: var(--gltimer-ink-0);
+  box-shadow: inset 0 0 0 1px var(--gltimer-line-strong);
+  color: var(--gltimer-text);
+  font-family: var(--gltimer-font);
+  font-size: var(--gl-is-t-display);
+  font-weight: 750;
+  font-stretch: 120%;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.gltimer-panel-body .gltimer-input::-webkit-inner-spin-button,
+.gltimer-panel-body .gltimer-input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+.gltimer-panel-body .gltimer-input:focus { box-shadow: inset 0 0 0 1px var(--gltimer-paper); outline: none; }
+.gltimer-panel-body .gltimer-input:focus-visible { outline: var(--gl-is-focus-ring); outline-offset: var(--gl-is-focus-offset); }
 
-/* ── Keyframes (feature-scoped; shared vocab lives in gl-tokens.css) ──────── */
-@keyframes gltimer-edge {
-  0%, 100% {
-    box-shadow:
-      inset 0 0 0 1px var(--gl-line-strong),
-      inset 0 0 14px color-mix(in srgb, var(--gl-accent) 28%, transparent),
-      0 0 16px var(--gl-bloom);
-  }
-  50% {
-    box-shadow:
-      inset 0 0 0 1px var(--gl-text-bright),
-      inset 0 0 24px color-mix(in srgb, var(--gl-accent) 55%, transparent),
-      0 0 36px var(--gl-glow);
-  }
+.gltimer-panel-body .gltimer-presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; }
+
+.gltimer-panel-body .gltimer-panel-actions { display: flex; gap: 6px; }
+.gltimer-panel-body .gltimer-panel-actions .gltimer-action { flex: 1 1 auto; }
+.gltimer-panel-body .gltimer-action.is-primary {
+  background: var(--gltimer-paper);
+  box-shadow: none;
+  color: var(--gltimer-on);
+  font-weight: 700;
 }
-@keyframes gltimer-shake {
-  0%, 100% { transform: translateX(-50%); }
-  25% { transform: translateX(-50%) translate(1.5px, -1px); }
-  50% { transform: translateX(-50%) translate(-1.5px, 1px); }
-  75% { transform: translateX(-50%) translate(1px, 1.5px); }
+.gltimer-panel-body .gltimer-action.is-clear { flex: 0 1 auto; color: var(--gltimer-red); }
+@media (hover: hover) and (pointer: fine) {
+  .gltimer-panel-body .gltimer-action.is-primary:hover { background: var(--gltimer-text); }
+}
+
+/* ── Keyframes (feature-scoped) ──────────────────────────────────────────── */
+@keyframes gltimer-drain {
+  from { transform: scaleX(var(--gltimer-drain-from, 0)); }
+  to { transform: scaleX(0); }
+}
+@keyframes gltimer-breathe {
+  from { opacity: 0.25; }
+  to { opacity: 1; }
 }

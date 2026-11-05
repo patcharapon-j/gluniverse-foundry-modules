@@ -14,7 +14,7 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 export class TimerPanel extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
     id: "gltimer-panel",
-    classes: ["gltimer-panel"],
+    classes: ["gltimer-panel", "gl-type"],
     window: { title: "GLTIMER.panel.title", icon: "fa-solid fa-stopwatch" },
     position: { width: 340, height: "auto" },
     actions: {
