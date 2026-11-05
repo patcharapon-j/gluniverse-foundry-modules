@@ -526,48 +526,74 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
   --glus-onair-tone: var(--glus-steel);
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas: "lamp head actions" ". meta actions";
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "head actions" "meta actions";
   align-items: center;
   column-gap: 14px;
-  row-gap: 6px;
-  padding: 14px 16px;
+  row-gap: 10px;
+  padding: 14px 16px 14px 18px;
   background: var(--glus-ink-0);
   border-bottom: 1px solid var(--glus-line);
   box-shadow: inset 2px 0 0 var(--glus-onair-tone);
-  transition: box-shadow var(--gl-d-swift) var(--gl-ease);
+  transition: box-shadow var(--gl-d-swift) var(--gl-ease), background-color var(--gl-d-swift) var(--gl-ease);
+}
+/* On air, the strip takes one tone step towards its tone: the desk reads live from across the room. */
+.gluniverse-stream-onair:is([data-state="live"], [data-state="exposed"]) {
+  background: color-mix(in oklab, var(--glus-onair-tone) 7%, var(--glus-ink-0));
 }
 .gluniverse-stream-onair[data-state="live"] { --glus-onair-tone: var(--glus-red); }
 .gluniverse-stream-onair[data-state="exposed"] { --glus-onair-tone: var(--glus-amber); }
 .gluniverse-stream-onair:is([data-state="offline"], [data-state="unset"]) { --glus-onair-tone: var(--glus-faint); }
 
-.gluniverse-stream-onair-lamp {
-  grid-area: lamp;
-  position: relative;
-  width: 12px;
-  height: 12px;
-  background: var(--glus-onair-tone);
-  clip-path: polygon(0 0, 100% 0, 100% 70%, 70% 100%, 0 100%);
-  transition: background-color var(--gl-d-swift) var(--gl-ease);
-}
-/* Live breathes, slowly; it is the one thing on the window that moves on its own. */
-.gluniverse-stream-onair:is([data-state="live"], [data-state="exposed"]) .gluniverse-stream-onair-lamp {
-  animation: glus-room-onair var(--gl-dread) var(--gl-ease-inout) infinite alternate;
-}
+/*
+ * The tally. The state is the loudest fact on the desk, so it is a solid tone slab in the strip's tone
+ * with On Slab type (the Signal band's language, DESIGN.md), and its lamp is a dot inside the slab: the
+ * old free-standing lamp would be a second statement of the same fact, so it stays in the markup unseen.
+ */
+.gluniverse-stream-onair-lamp { display: none; }
 
 /* Wraps rather than clips: a long state ("Stream login offline") pushes the login under it, never off it. */
-.gluniverse-stream-onair-head { grid-area: head; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
+.gluniverse-stream-onair-head { grid-area: head; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
 .gluniverse-stream-onair-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  padding: 0 14px 0 11px;
+  background: var(--glus-onair-tone);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-sm)), calc(100% - var(--gl-is-cut-sm)) 100%, 0 100%);
+  color: var(--glus-on-slab);
   font-size: var(--gl-is-t-title);
   font-weight: 750;
   font-stretch: 116%;
   letter-spacing: 0.06em;
+  line-height: 1;
   text-transform: uppercase;
-  color: var(--glus-text);
   white-space: nowrap;
+  transition: background-color var(--gl-d-swift) var(--gl-ease);
 }
-.gluniverse-stream-onair[data-state="live"] .gluniverse-stream-onair-state { color: var(--glus-red); }
-.gluniverse-stream-onair[data-state="exposed"] .gluniverse-stream-onair-state { color: var(--glus-amber); }
+.gluniverse-stream-onair-state::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* On air, the dot breathes, slowly; it is the one thing on the window that moves on its own. */
+.gluniverse-stream-onair:is([data-state="live"], [data-state="exposed"]) .gluniverse-stream-onair-state::before {
+  animation: glus-room-onair var(--gl-dread) var(--gl-ease-inout) infinite alternate;
+}
+/* Off air is not a signal: the slab drops to raised ink and the dot to a hollow ring. */
+.gluniverse-stream-onair:not([data-state="live"], [data-state="exposed"]) .gluniverse-stream-onair-state {
+  background: var(--glus-ink-3);
+  box-shadow: inset 0 0 0 1px var(--glus-line-strong);
+  color: var(--glus-text);
+}
+.gluniverse-stream-onair:not([data-state="live"], [data-state="exposed"]) .gluniverse-stream-onair-state::before {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--glus-onair-tone);
+}
 .gluniverse-stream-onair-login {
   font-size: var(--gl-is-t-lead);
   color: var(--glus-dim);
@@ -1175,7 +1201,8 @@ td.gluniverse-stream-tags { display: table-cell; line-height: 1.9; }
 
 .gluniverse-stream-director .window-content { container-type: inline-size; }
 @container (max-width: 560px) {
-  .gluniverse-stream-onair { grid-template-areas: "lamp head" "lamp meta" "actions actions"; grid-template-columns: auto minmax(0, 1fr); }
+  .gluniverse-stream-onair { grid-template-areas: "head" "meta" "actions"; grid-template-columns: minmax(0, 1fr); }
+  .gluniverse-stream-onair-state { white-space: normal; padding-block: 6px; }
 }
 
 /* ═══ Keyframes (prefixed: keyframe names are global) ══════════════════════ */
