@@ -246,6 +246,7 @@
   text-overflow: ellipsis;
   text-transform: uppercase;
   line-height: 1.1;
+  transition: color var(--gl-d-brisk) var(--gl-ease);
 }
 .glstage-comms-name {
   font-weight: 700;
@@ -255,7 +256,7 @@
 .glstage-comms-title {
   font-weight: 600;
   font-size: max(var(--glstage-comms-floor), calc(var(--glstage-comms-u) * 4.6));
-  letter-spacing: 0.16em;
+  letter-spacing: 0.1em;
   color: var(--glstage-comms-dim);
 }
 .glstage-comms-title[hidden] { display: none; }
