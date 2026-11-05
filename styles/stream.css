@@ -1022,7 +1022,7 @@ td.gluniverse-stream-tags { display: table-cell; line-height: 1.9; }
   padding-inline-end: 4px;
   font-size: var(--gl-is-t-lead);
 }
-.gluniverse-stream-filter-intro { max-width: 68ch; margin: 0 0 6px; line-height: 1.5; color: var(--glus-dim); }
+.gluniverse-stream-filter-intro { max-width: 60ch; margin: 0 0 6px; line-height: 1.5; color: var(--glus-dim); }
 .gluniverse-stream-filter .gluniverse-stream-form-hint { margin: 0 0 8px; color: var(--glus-faint); font-size: var(--gl-is-t-body); }
 
 .gluniverse-stream-filter-presets {
