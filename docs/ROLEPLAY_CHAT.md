@@ -11,9 +11,11 @@ thought can be shown without anyone saying it aloud.
 
 ## What the player sees
 
-**The look.** Black plates with paper type and the suite's chamfer on the lower
-right corner, quiet enough for any campaign. The only colour is the tone of the
-line: Say is paper, Do amber, Think lilac, the Narrator and table talk steel.
+**The look.** Ink and Signal (DESIGN.md): solid black ink plates with paper type
+and the suite's chamfer on the lower right corner, quiet enough for any campaign.
+Every value is an alias of the core `--gl-is-*` family under `--glrp-*` on the
+feature's own roots. The only colour is the tone of the line: Say is paper, Do
+amber, Think info blue, the Narrator dim and table talk steel.
 Every line carries its tone the same way, as a spine down its left edge, in the
 box, the log, the balloon and the caption lane alike: solid for Say, a heavier
 bar for Do, dashed for Think.
@@ -34,8 +36,8 @@ too:
 | --- | --- |
 | Say | A solid spine, the line between quotation marks |
 | Do | A heavier amber spine, the speaker's bold name in front, the narrated serif |
-| Think | A dashed spine, the narrated serif in lilac |
-| Narrator | A steel spine, the narrated serif |
+| Think | A dashed spine, the narrated serif in a blue-tinted paper |
+| Narrator | A dim spine, the narrated serif |
 | OOC | No spine, only the box's hairline |
 
 In character, a header inside the box names who is speaking and how ("SERI VALEN
@@ -88,9 +90,14 @@ in-character line is narration.
 | --- | --- |
 | Say | A black plate over the token with a tail onto it, the name above the line |
 | Do | A caption under the token, in serif italic, led by the name in amber |
-| Think | A plate with a dashed spine, trailing two beads, in lilac serif italic |
+| Think | A plate with a dashed spine, trailing two beads, in blue-tinted serif italic |
 | Narrator | A film subtitle in the caption lane above the hotbar |
 | OOC | Nothing. The log only |
+
+Over the map the speaker's name is a nameplate: a solid slab of the line's tone
+with the suite's 115° wedge, joined to the spine, on balloons and lane lines alike.
+It wipes in half a beat after its plate lands (`glrp-plate-in`). The chat log and
+the switch keep the name in plain type, because they are tools, not moments.
 
 A line whose token is not on the viewed scene, is hidden, cannot be seen, or is
 off screen goes to the caption lane instead, with the speaker's portrait. A line
@@ -98,9 +105,13 @@ lives 4 s plus 60 ms per character, capped at 12 s. Up to two lines stack on a
 token and three in the lane; an older line dims, the oldest leaves.
 
 Bubbles scale with the square root of the canvas zoom, clamped to 0.8 to 1.15, so
-they stay legible zoomed out and do not swamp the map zoomed in. They carry no
-backdrop blur: they move with every pan, and a blur under a moving element is
-redrawn on every frame. The lane is centred over the hotbar, never under an open
+they stay legible zoomed out and do not swamp the map zoomed in. Nothing here
+carries a backdrop blur, the lane and the switch included: every plate is solid
+ink, and a blur under a plate over the map is redrawn on every frame of a pan.
+That cost sits on the GPU and does not show in a preview's frame intervals
+(measured on the preview: about 4.2 ms per uncapped frame with or without it),
+so the check refuses a `backdrop-filter` outright. Placement itself is cheap:
+re-placing eleven stacks costs about 0.015 ms a frame. The lane is centred over the hotbar, never under an open
 sidebar (`laneBox`), and follows the suite's Interface Scale.
 
 **The chat log.** An in-character entry keeps Foundry's element (timestamp,
@@ -237,10 +248,10 @@ being silently eaten.
 **The notification area is a grid.** With the sidebar collapsed, Foundry moves the
 chat box into `#chat-notifications`, a two-row grid. The bar is given a row of its
 own there (`#chat-notifications:has(> .glrp-bar)`); without it it lands in the
-message row and pushes the box off screen. The bar carries its own glass for the
-same reason: there is no sidebar behind it, and several systems make the sidebar
-transparent anyway. The glass and the chamfer are on the bar's `::before`, because
-a clip-path on the bar itself would clip the picker that opens above it.
+message row and pushes the box off screen. The bar carries its own solid ink for
+the same reason: there is no sidebar behind it, and several systems make the
+sidebar transparent anyway. The ink and the chamfer are on the bar's `::before`,
+because a clip-path on the bar itself would clip the picker that opens above it.
 
 **`renderChatInput` fires every time the box moves** (sidebar, popout,
 notifications). The bar is a single element, moved to sit before whichever box
@@ -316,7 +327,10 @@ parsing, the composer cycle and speaker resolution; privacy and routing; timing,
 stacking and `LEAVE_MS`; key matching; Thai names on Do lines; the aside rule
 and its quote edges; the composer's header, icons and in-box marks; the typing
 indicator's announce and accept rules and its socket shape; that every markup string is escaped and
-every class it emits has a rule; the CSS rules of the design system; every
+every class it emits has a rule; the CSS rules of the design system, including
+Ink and Signal's (every `--glrp-*` ramp step an alias of `--gl-is-*`, no Etched
+Glass token, Think on the core info hue, nothing under 11px, the core focus,
+disabled and press states); every
 literal and dynamic `GLRP.*` key; and the wiring (`module.json`, the feature
 index, the GM-only panel section, off by default).
 

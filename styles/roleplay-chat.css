@@ -4,44 +4,49 @@
    bubbles over tokens, the caption lane, and the tones of the stream cards
    this feature's lines become.
 
-   The look. Black plates with paper type and a chamfered lower-right corner,
-   the suite's cut motif at its small sizes. Nothing here belongs to one
-   campaign: the only colour is the tone of the line being written or read,
-   and every line carries it the same way, as a spine down its left edge, in
-   the box, the log, the balloon and the lane alike. Say is paper, Do amber,
-   Think lilac, the Narrator and table talk are steel.
+   Ink and Signal (DESIGN.md, docs/adr/0012). Black ink plates with paper
+   type and the chamfered lower-right corner. Nothing here belongs to one
+   campaign: the only hue is the tone of the line being written or read, and
+   every line carries it the same way, as a spine down its left edge, in the
+   box, the log, the balloon and the lane alike. Say is paper, Do amber, Think
+   info blue, the Narrator dim, table talk steel.
 
    Two voices of type. Google Sans Flex is what the interface says and what a
    character says aloud; Cormorant Garamond italic is what the story narrates:
-   a Do line, a thought, the Narrator.
+   a Do line, a thought, the Narrator. The stream cards these lines become set
+   the same serif (docs/adr/0007).
 
-   Every custom property here is feature-local (`--glrp-*`), derived from the
-   suite's tokens and declared on this feature's own roots, never on :root.
+   Every custom property here is feature-local (`--glrp-*`), aliased from the
+   core `--gl-is-*` family on this feature's own roots, never on :root.
    ════════════════════════════════════════════════════════════════════════ */
 
 :is(.glrp-bar, #chat-message, .glrp-msg, .glrp-ooc, .glrp-layer, .glrp-lane, .glus-rc) {
-  --glrp-sans: "Google Sans Flex", var(--gl-display);
+  --glrp-sans: var(--gl-is-font);
   --glrp-serif: "Cormorant Garamond", var(--gl-thai), Georgia, "Times New Roman", serif;
-  /* The suite's ink ramp, pulled toward neutral black so a plate sits on any map. */
-  --glrp-ink-0: color-mix(in oklab, var(--gl-ink-0) 60%, rgb(var(--gl-tint-dark)));
-  --glrp-ink-1: color-mix(in oklab, var(--gl-ink-1) 78%, rgb(var(--gl-tint-dark)));
-  --glrp-ink-2: color-mix(in oklab, var(--gl-ink-2) 86%, rgb(var(--gl-tint-dark)));
-  --glrp-ink-3: color-mix(in oklab, var(--gl-ink-3) 62%, var(--gl-ink-2));
-  --glrp-glass: color-mix(in oklab, var(--glrp-ink-1) 92%, transparent);
-  --glrp-paper: var(--gl-text);
-  --glrp-dim: var(--gl-text-dim);
-  --glrp-faint: var(--gl-text-faint);
-  --glrp-line: rgb(var(--gl-tint-light) / 0.08);
-  --glrp-line-strong: rgb(var(--gl-tint-light) / 0.16);
-  --glrp-hover: rgb(var(--gl-tint-light) / 0.06);
-  --glrp-on: var(--glrp-ink-0);
+  --glrp-ink-0: var(--gl-is-ink-0);
+  --glrp-ink-1: var(--gl-is-ink-1);
+  --glrp-ink-2: var(--gl-is-ink-2);
+  --glrp-ink-3: var(--gl-is-ink-3);
+  --glrp-text: var(--gl-is-text);
+  --glrp-paper: var(--gl-is-paper);
+  --glrp-dim: var(--gl-is-dim);
+  --glrp-faint: var(--gl-is-faint);
+  --glrp-steel: var(--gl-is-steel);
+  --glrp-line: var(--gl-is-line);
+  --glrp-line-strong: var(--gl-is-line-strong);
+  --glrp-hover: var(--gl-is-hover);
+  --glrp-selected: var(--gl-is-selected);
+  --glrp-shade: var(--gl-is-shade);
+  --glrp-on: var(--gl-is-on-slab);
+  /* An older line steps back, and still reads at 4.5:1 over a map. */
+  --glrp-old: 0.62;
   /* The tones. One at a time, on the line it belongs to. */
-  --glrp-say: var(--gl-text);
-  --glrp-do: var(--gl-warn);
-  --glrp-think: color-mix(in oklab, var(--gl-violet) 82%, var(--gl-text));
-  --glrp-think-ink: color-mix(in oklab, var(--gl-violet) 32%, var(--gl-text));
-  --glrp-narr: color-mix(in oklab, var(--gl-text) 74%, var(--gl-text-dim));
-  --glrp-ooc: var(--gl-text-dim);
+  --glrp-say: var(--glrp-paper);
+  --glrp-do: var(--gl-is-amber);
+  --glrp-think: var(--gl-is-info);
+  --glrp-think-ink: color-mix(in oklab, var(--glrp-think) 30%, var(--glrp-text));
+  --glrp-narr: var(--glrp-dim);
+  --glrp-ooc: var(--glrp-steel);
 }
 /* The default hue at zero specificity. Set in the `:is()` above it would carry #chat-message's ID
    weight and beat every `[data-glrp-mode]` hue below, leaving the box grey in every mode. */
@@ -75,7 +80,7 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   border: 0;
   border-radius: 0;
   background: var(--glrp-ink-3);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-xs)), calc(100% - var(--gl-is-cut-xs)) 100%, 0 100%);
 }
 .glrp-mono {
   display: grid;
@@ -89,17 +94,17 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
    One plate: who is speaking on top, the mode strip under it.
    ════════════════════════════════════════════════════════════════════════ */
 
-/* The plate carries its own glass: a sidebar can be transparent (several systems make it so), and a
+/* The plate carries its own ink: a sidebar can be transparent (several systems make it so), and a
    collapsed sidebar puts the chat box straight over the canvas, where unbacked type disappears. The
-   glass and the cut live on ::before, because a clip-path on the bar itself would clip the picker. */
+   ink and the cut live on ::before, because a clip-path on the bar itself would clip the picker. */
 .glrp-bar {
   position: relative;
   isolation: isolate;
   display: grid;
-  gap: 3px;
-  padding: 3px;
+  gap: 4px;
+  padding: 4px;
   font-family: var(--glrp-sans);
-  color: var(--glrp-paper);
+  color: var(--glrp-text);
   pointer-events: all;
 }
 .glrp-bar::before {
@@ -107,10 +112,9 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(180deg, rgb(var(--gl-tint-light) / 0.04), transparent 70%), var(--glrp-glass);
-  box-shadow: inset 0 1px 0 var(--glrp-line-strong), inset 0 0 0 1px var(--glrp-line);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
-  backdrop-filter: blur(calc(10px * var(--gl-glass-k)));
+  background: var(--glrp-ink-1);
+  box-shadow: inset 0 0 0 1px var(--glrp-line-strong);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut)), calc(100% - var(--gl-is-cut)) 100%, 0 100%);
 }
 .glrp-row {
   position: relative;
@@ -125,22 +129,24 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   width: 100%;
   min-width: 0;
-  height: 30px;
-  padding: 0 9px 0 3px;
-  transition: background-color var(--gl-d-quick) var(--gl-ease), opacity var(--gl-d-quick) var(--gl-ease);
+  height: 32px;
+  padding: 0 10px 0 4px;
+  transition: background-color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-brisk) var(--gl-ease);
 }
-.glrp-bar .glrp-chip[aria-expanded="true"] { background: var(--glrp-hover); }
-.glrp-bar .glrp-chip:focus-visible { outline: 1px solid var(--glrp-paper); outline-offset: -1px; }
-/* Out of character the chip is who you would be on the way back, so it steps back. */
-.glrp-bar[data-glrp-mode="ooc"] .glrp-chip:not([aria-expanded="true"]) { opacity: 0.5; }
-.glrp-chip .glrp-avatar { width: 24px; height: 24px; }
+.glrp-bar .glrp-chip[aria-expanded="true"] { background: var(--glrp-selected); }
+.glrp-bar .glrp-chip:focus-visible { outline: var(--gl-is-focus-ring); outline-offset: -2px; }
+/* Out of character the chip is who you would be on the way back, so it steps back: the portrait
+   fades and the name drops to dim. Its type keeps a readable tone rather than fading with it. */
+.glrp-bar[data-glrp-mode="ooc"] .glrp-chip:not([aria-expanded="true"], :hover, :focus-visible) .glrp-avatar { opacity: 0.5; }
+.glrp-bar[data-glrp-mode="ooc"] .glrp-chip:not([aria-expanded="true"], :hover, :focus-visible) .glrp-chip-name { color: var(--glrp-dim); font-weight: 500; }
+.glrp-chip .glrp-avatar { width: 24px; height: 24px; transition: opacity var(--gl-d-quick) var(--gl-ease); }
+.glrp-chip .glrp-chip-name { transition: color var(--gl-d-quick) var(--gl-ease); }
 .glrp-chip-as {
   flex: none;
-  font: 750 9px/1 var(--glrp-sans);
-  font-stretch: 112%;
+  font: 700 var(--gl-is-t-meta)/1 var(--glrp-sans);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--glrp-faint);
@@ -151,17 +157,21 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 650 13px/1.1 var(--glrp-sans);
-  color: var(--glrp-paper);
+  font: 600 var(--gl-is-t-lead)/1.1 var(--glrp-sans);
+  color: var(--glrp-text);
 }
-.glrp-chip-tag {
+/* A tag: ink with a hairline, the 115° wedge on its right edge. */
+.glrp-chip-tag,
+.glrp-picker-tag,
+.glrp-ooc-tag {
   flex: none;
-  padding: 3px 5px 2px;
-  font: 750 8.5px/1 var(--glrp-sans);
-  font-stretch: 112%;
+  padding: 3px 10px 2px 6px;
+  font: 700 var(--gl-is-t-meta)/1 var(--glrp-sans);
   letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--glrp-dim);
-  box-shadow: inset 0 0 0 1px var(--glrp-line-strong);
+  background: var(--glrp-ink-3);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
 }
 .glrp-chip-caret {
   flex: none;
@@ -177,11 +187,11 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 30px;
+  min-height: 32px;
   margin: 0;
-  padding: 5px 8px;
+  padding: 6px 8px;
   box-sizing: border-box;
-  font: 500 11px/1.3 var(--glrp-sans);
+  font: 500 var(--gl-is-t-body)/1.35 var(--glrp-sans);
   color: var(--glrp-dim);
 }
 .glrp-locked i { flex: none; font-size: 10px; color: var(--glrp-faint); }
@@ -193,7 +203,7 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   grid-template-columns: repeat(var(--glrp-tabs, 4), minmax(0, 1fr));
   gap: 2px;
   padding: 2px;
-  background: rgb(var(--gl-tint-dark) / 0.35);
+  background: var(--glrp-ink-0);
   box-shadow: inset 0 0 0 1px var(--glrp-line);
 }
 /* The slab under the pressed tab, in the mode's tone. It slides from the old tab (composer.mjs sets
@@ -206,7 +216,7 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   width: calc((100% - 4px - (var(--glrp-tabs, 4) - 1) * 2px) / var(--glrp-tabs, 4));
   translate: calc(var(--glrp-at, 0) * (100% + 2px)) 0;
   background: var(--glrp-hue);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-xs)), calc(100% - var(--gl-cut-xs)) 100%, 0 100%);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-sm)), calc(100% - var(--gl-is-cut-sm)) 100%, 0 100%);
   pointer-events: none;
 }
 .glrp-ink.glrp-ink-slide { animation: glrp-ink-slide var(--gl-d-brisk) var(--gl-ease) both; }
@@ -224,17 +234,16 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
-  height: 26px;
+  height: 28px;
   cursor: pointer;
-  font: 750 10.5px/1 var(--glrp-sans);
-  font-stretch: 112%;
-  letter-spacing: 0.07em;
+  font: 700 var(--gl-is-t-meta)/1 var(--glrp-sans);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
   color: color-mix(in oklab, var(--glrp-tab) 48%, var(--glrp-dim));
-  transition: color var(--gl-d-quick) var(--gl-ease), background-color var(--gl-d-quick) var(--gl-ease);
+  transition: color var(--gl-d-quick) var(--gl-ease), background-color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-brisk) var(--gl-ease);
 }
 .glrp-mode > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .glrp-mode[data-glrp-tone="ooc"] { --glrp-tab: var(--glrp-ooc); }
@@ -249,11 +258,14 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
 @keyframes glrp-tab-on {
   from { color: var(--glrp-tab); }
 }
-.glrp-bar .glrp-mode:disabled { opacity: 0.3; cursor: default; }
-.glrp-bar .glrp-mode:focus-visible { outline: 1px solid var(--glrp-paper); outline-offset: -1px; }
+.glrp-bar .glrp-mode:disabled { opacity: var(--gl-is-disabled); cursor: default; }
+.glrp-bar .glrp-mode:focus-visible { outline: var(--gl-is-focus-ring); outline-offset: -2px; }
+/* On the slab a paper ring would vanish into a paper Say tab; it takes the slab's text colour. */
+.glrp-bar .glrp-mode[aria-pressed="true"]:focus-visible { outline-color: var(--glrp-on); }
+.glrp-bar :is(.glrp-chip, .glrp-mode:not(:disabled), .glrp-picker-row):active { scale: var(--gl-is-press); }
 .glrp-ico { font-size: 10px; }
 @media (hover: hover) and (pointer: fine) {
-  .glrp-bar .glrp-chip:hover { background: var(--glrp-hover); opacity: 1; }
+  .glrp-bar .glrp-chip:hover { background: var(--glrp-hover); }
   .glrp-bar .glrp-mode:hover:not(:disabled):not([aria-pressed="true"]) { color: var(--glrp-tab); background: var(--glrp-hover); }
 }
 
@@ -268,19 +280,18 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   overflow: hidden auto;
   padding: 4px;
   box-sizing: border-box;
-  background: color-mix(in oklab, var(--glrp-ink-1) 97%, transparent);
-  box-shadow: inset 0 1px 0 var(--glrp-line-strong), inset 0 0 0 1px var(--glrp-line), 0 14px 34px rgb(var(--gl-tint-dark) / 0.6);
+  background: var(--glrp-ink-1);
+  box-shadow: inset 0 0 0 1px var(--glrp-line-strong), 0 24px 64px var(--glrp-shade);
   scrollbar-width: thin;
   scrollbar-color: var(--glrp-line-strong) transparent;
   animation: gl-rise-in var(--gl-d-brisk) var(--gl-ease) both;
 }
 .glrp-bar .glrp-picker-head {
-  margin: 8px 6px 4px;
+  margin: 10px 6px 4px;
   padding: 0;
   border: 0;
-  font: 750 9px/1 var(--glrp-sans);
-  font-stretch: 112%;
-  letter-spacing: 0.12em;
+  font: 700 var(--gl-is-t-meta)/1 var(--glrp-sans);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--glrp-faint);
 }
@@ -291,19 +302,19 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   width: 100%;
   height: 32px;
-  padding: 0 7px;
-  font: 500 13px/1.1 var(--glrp-sans);
-  color: var(--glrp-paper);
-  transition: background-color var(--gl-d-quick) var(--gl-ease);
+  padding: 0 8px;
+  font: 500 var(--gl-is-t-lead)/1.1 var(--glrp-sans);
+  color: var(--glrp-text);
+  transition: background-color var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-brisk) var(--gl-ease);
 }
-.glrp-bar .glrp-picker-row:focus-visible { background: var(--glrp-hover); outline: 1px solid var(--glrp-paper); outline-offset: -1px; }
+.glrp-bar .glrp-picker-row:focus-visible { background: var(--glrp-hover); outline: var(--gl-is-focus-ring); outline-offset: -2px; }
 .glrp-bar .glrp-picker-row[aria-selected="true"] {
-  background: rgb(var(--gl-tint-light) / 0.07);
+  background: var(--glrp-selected);
   box-shadow: inset 2px 0 0 var(--glrp-paper);
-  font-weight: 650;
+  font-weight: 600;
 }
 @media (hover: hover) and (pointer: fine) {
   .glrp-bar .glrp-picker-row:hover { background: var(--glrp-hover); }
@@ -313,17 +324,10 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
 /* A clipped name cuts Thai tone marks off above a tight line box ("น้ำ" reads "นำ"). The padding
    widens the clip and the margin gives the space back, so nothing moves. */
 :is(.glrp-chip-name, .glrp-picker-name, .glrp-name) { padding-block: 0.2em; margin-block: -0.2em; }
-.glrp-picker-tag {
-  flex: none;
-  margin-left: auto;
-  font: 750 8.5px/1 var(--glrp-sans);
-  font-stretch: 112%;
-  letter-spacing: 0.08em;
-  color: var(--glrp-faint);
-}
+.glrp-picker-tag { margin-left: auto; }
 
 /* ── the box: the line as it will be read ─────────────────────────────────
-   A black field with the mode's spine down its left edge: solid for Say, a
+   A void field with the mode's spine down its left edge: solid for Say, a
    heavier bar for Do, dashed for Think, none out of character. A header names
    who is speaking and how, and the box sets the line the way the log will
    print it: Say in quotes, Do after the speaker's name, Do and Think in the
@@ -332,16 +336,16 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
 #chat-message[data-glrp-mode] > .editor-container {
   border: 0;
   border-radius: 0;
-  background-color: color-mix(in oklab, var(--glrp-hue) 4%, var(--glrp-ink-1));
+  background-color: var(--glrp-ink-0);
   background-image: linear-gradient(var(--glrp-spine-ink), var(--glrp-spine-ink));
   background-size: var(--glrp-spine) 100%;
   background-position: left top;
   background-repeat: no-repeat;
-  box-shadow: inset 0 0 0 1px var(--glrp-line);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
-  transition: background-color var(--gl-d-brisk) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease);
+  box-shadow: inset 0 0 0 1px var(--glrp-line-strong);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut)), calc(100% - var(--gl-is-cut)) 100%, 0 100%);
+  transition: box-shadow var(--gl-d-quick) var(--gl-ease);
 }
-#chat-message[data-glrp-mode] > .editor-container:focus-within { box-shadow: inset 0 0 0 1px var(--glrp-line-strong); }
+#chat-message[data-glrp-mode] > .editor-container:focus-within { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--glrp-hue) 50%, var(--glrp-line-strong)); }
 #chat-message[data-glrp-mode="think"] > .editor-container {
   background-image: repeating-linear-gradient(180deg, var(--glrp-spine-ink) 0 4px, transparent 4px 7px);
 }
@@ -350,28 +354,27 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
   padding-left: 12px;
   padding-right: 10px;
   font-family: var(--glrp-sans);
-  color: var(--glrp-paper);
+  color: var(--glrp-text);
 }
 /* The header. The content is absolutely placed inside the container, so it moves down by `top`
    rather than by padding: padded, a scrolled line would slide under the header. */
 #chat-message[data-glrp-mode]:not([data-glrp-mode="ooc"]) > .editor-container::before {
   content: var(--glrp-head, "");
   position: absolute;
-  top: 7px;
+  top: 8px;
   left: 12px;
   right: 10px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font: 750 9px/1 var(--glrp-sans);
-  font-stretch: 112%;
+  font: 700 var(--gl-is-t-meta)/1 var(--glrp-sans);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: color-mix(in oklab, var(--glrp-hue) 76%, var(--glrp-dim));
   pointer-events: none;
 }
-#chat-message[data-glrp-mode]:not([data-glrp-mode="ooc"]) > .editor-container .editor-content { top: 19px; }
-#chat-message[data-glrp-mode]:not([data-glrp-mode="ooc"]) > .editor-container::after { padding-top: 12px; }
+#chat-message[data-glrp-mode]:not([data-glrp-mode="ooc"]) > .editor-container .editor-content { top: 22px; }
+#chat-message[data-glrp-mode]:not([data-glrp-mode="ooc"]) > .editor-container::after { padding-top: 14px; }
 #chat-message[data-glrp-mode] > .editor-container::after {
   font-family: var(--glrp-sans);
   font-style: normal;
@@ -406,9 +409,9 @@ body.glrp-on #message-modes [data-mode="ic"] { display: none; }
 textarea#chat-message[data-glrp-mode] {
   border: 0;
   border-radius: 0;
-  background: color-mix(in oklab, var(--glrp-hue) 4%, var(--glrp-ink-1));
-  box-shadow: inset var(--glrp-spine) 0 0 var(--glrp-spine-ink), inset 0 0 0 1px var(--glrp-line);
-  color: var(--glrp-paper);
+  background: var(--glrp-ink-0);
+  box-shadow: inset var(--glrp-spine) 0 0 var(--glrp-spine-ink), inset 0 0 0 1px var(--glrp-line-strong);
+  color: var(--glrp-text);
 }
 textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-glrp-mode="narrator"]) {
   font: italic 500 17px/1.25 var(--glrp-serif);
@@ -429,9 +432,9 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
   padding: 8px 10px 10px 14px;
   border: 0;
   border-radius: 0;
-  background: color-mix(in oklab, var(--glrp-hue) 3%, var(--glrp-ink-1));
+  background: var(--glrp-ink-2);
   box-shadow: inset 0 0 0 1px var(--glrp-line);
-  color: var(--glrp-paper);
+  color: var(--glrp-text);
   font-family: var(--glrp-sans);
 }
 .chat-message.glrp-msg::before {
@@ -455,63 +458,61 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
 .chat-message.glrp-msg .message-metadata {
   flex: none;
   color: var(--glrp-faint);
-  font: 500 10.5px/1.2 var(--glrp-sans);
+  font: 500 var(--gl-is-t-meta)/1.2 var(--glrp-sans);
   font-variant-numeric: tabular-nums;
 }
 .chat-message.glrp-msg .message-metadata a { color: inherit; }
 .chat-message.glrp-msg .whisper-to,
-.chat-message.glrp-msg .flavor-text { flex: 0 0 100%; font: 11px/1.3 var(--glrp-sans); color: var(--glrp-dim); }
+.chat-message.glrp-msg .flavor-text { flex: 0 0 100%; font: var(--gl-is-t-meta)/1.3 var(--glrp-sans); color: var(--glrp-dim); }
 .glrp-head-wrap { flex: 1; min-width: 0; }
 .glrp-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .glrp-head .glrp-portrait { width: 26px; height: 26px; }
 .glrp-head .glrp-portrait.glrp-mono { font-size: 15px; }
-.glrp-who { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.glrp-who { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .glrp-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 650 13.5px/1.15 var(--glrp-sans);
-  color: var(--glrp-paper);
+  font: 600 var(--gl-is-t-lead)/1.15 var(--glrp-sans);
+  color: var(--glrp-text);
 }
 .glrp-hidden { font-size: 10px; color: var(--glrp-dim); }
 .glrp-label {
   flex: none;
-  font: 750 9px/1 var(--glrp-sans);
-  font-stretch: 112%;
+  font: 700 var(--gl-is-t-meta)/1 var(--glrp-sans);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: color-mix(in oklab, var(--glrp-hue) 78%, var(--glrp-dim));
 }
 .chat-message.glrp-msg .message-content.glrp-body {
-  font: 14px/1.45 var(--glrp-sans);
-  color: var(--glrp-paper);
+  font: 500 var(--gl-is-t-lead)/1.45 var(--glrp-sans);
+  color: var(--glrp-text);
 }
 .chat-message.glrp-msg .glrp-body p { margin: 0; }
 .chat-message.glrp-msg[data-glrp-mode="say"] .glrp-body::before { content: "“"; color: var(--glrp-dim); }
 .chat-message.glrp-msg[data-glrp-mode="say"] .glrp-body::after { content: "”"; color: var(--glrp-dim); }
 .chat-message.glrp-msg[data-glrp-mode="say"] .glrp-body > p { display: inline; }
 .chat-message.glrp-msg:is([data-glrp-mode="do"], [data-glrp-mode="think"]) .glrp-body {
-  font: italic 500 16.5px/1.3 var(--glrp-serif);
+  font: italic 500 17px/1.3 var(--glrp-serif);
 }
 .glrp-lead { font-weight: 700; font-style: inherit; color: var(--glrp-do); }
 .chat-message.glrp-msg[data-glrp-mode="think"] .glrp-body { color: var(--glrp-think-ink); }
 
 /* Narrator: a line of the book, centred between hairlines, no spine. */
 .chat-message.glrp-msg[data-glrp-mode="narrator"] {
-  padding: 10px 16px 13px;
+  padding: 10px 16px 14px;
   text-align: center;
   background: var(--glrp-ink-0);
 }
 .chat-message.glrp-msg[data-glrp-mode="narrator"]::before { display: none; }
-.chat-message.glrp-msg[data-glrp-mode="narrator"] .message-header { justify-content: center; margin-bottom: 7px; }
+.chat-message.glrp-msg[data-glrp-mode="narrator"] .message-header { justify-content: center; margin-bottom: 8px; }
 .glrp-rule {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  font: 750 9px/1 var(--glrp-sans);
-  font-stretch: 112%;
+  gap: 10px;
+  font: 700 var(--gl-is-t-meta)/1 var(--glrp-sans);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--glrp-dim);
@@ -521,39 +522,28 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
   content: "";
   width: 28px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--glrp-line-strong));
+  background: var(--glrp-line-strong);
 }
-.glrp-rule::after { transform: scaleX(-1); }
 .chat-message.glrp-msg[data-glrp-mode="narrator"] .glrp-body {
   font: italic 500 18px/1.3 var(--glrp-serif);
-  color: var(--glrp-paper);
+  color: var(--glrp-text);
 }
 
 /* Out of character keeps Foundry's look; it only gains a tag, beside the name. Foundry's header
    shares its width 3:2 between sender and metadata, which would strand the tag in the middle. */
 .chat-message.glrp-ooc .message-sender { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .glrp-ooc-tag {
-  flex: none;
   align-self: center;
-  margin: 0 auto 0 7px;
-  padding: 3px 5px 2px;
-  font: 750 8.5px/1 var(--glrp-sans);
-  font-stretch: 112%;
-  letter-spacing: 0.08em;
-  color: var(--glrp-dim);
-  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-light) / 0.16);
-}
-.theme-light .glrp-ooc-tag,
-.glrp-ooc.theme-light .glrp-ooc-tag {
-  color: var(--gl-ink-3);
-  box-shadow: inset 0 0 0 1px rgb(var(--gl-tint-dark) / 0.22);
+  margin: 0 auto 0 8px;
+  color: var(--glrp-on);
+  background: var(--glrp-ooc);
 }
 
 /* ════════════════════════════════════════════════════════════════════════
    OVER THE CANVAS
-   Plates that move with the map carry no backdrop blur: they are dense
-   enough to read without one, and a blur under a moving element is redrawn
-   from the pixels behind it on every frame of a pan.
+   Plates over the map are solid ink and carry no backdrop blur: ink reads
+   over any map without one, and a blur under a plate is redrawn from the
+   pixels behind it on every frame of a pan.
    ════════════════════════════════════════════════════════════════════════ */
 
 .glrp-layer {
@@ -589,70 +579,87 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
 .glrp-balloon {
   position: relative;
   max-width: 260px;
-  padding: 6px 13px 8px 14px;
-  background-color: var(--glrp-glass);
+  padding: 7px 14px 9px 14px;
+  background-color: var(--glrp-ink-1);
   background-image: linear-gradient(var(--glrp-spine-ink), var(--glrp-spine-ink));
   background-size: var(--glrp-spine) 100%;
   background-position: left top;
   background-repeat: no-repeat;
-  box-shadow: inset 0 1px 0 var(--glrp-line-strong);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
-  font: 15px/1.32 var(--glrp-sans);
-  color: var(--glrp-paper);
+  box-shadow: inset 0 0 0 1px var(--glrp-line-strong);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut)), calc(100% - var(--gl-is-cut)) 100%, 0 100%);
+  font: 500 var(--gl-is-t-title)/1.32 var(--glrp-sans);
+  color: var(--glrp-text);
   text-align: left;
   overflow-wrap: anywhere;
   transition: opacity var(--gl-d-swift) var(--gl-ease);
 }
-.glrp-balloon-who {
+/* The nameplate. Over the map the speaker's name is a solid slab of the line's tone, wedged on its
+   right and joined to the spine on its left, so who is talking reads from across the board. It wipes
+   in a beat after its plate lands: the one authored moment of a line's arrival. */
+:is(.glrp-balloon-who, .glrp-line-who) {
   display: block;
-  margin-bottom: 3px;
-  font: 750 9px/1 var(--glrp-sans);
-  font-stretch: 112%;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 16px 2px 12px;
+  font: 700 var(--gl-is-t-meta)/1.3 var(--glrp-sans);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: color-mix(in oklab, var(--glrp-hue) 70%, var(--glrp-dim));
+  color: var(--glrp-on);
+  background: var(--glrp-hue);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.glrp-balloon-who { max-width: calc(100% + 14px); margin: -7px 0 6px -14px; padding-left: 14px; }
+.glrp-enter :is(.glrp-balloon-who, .glrp-line-who) {
+  animation: glrp-plate-in var(--gl-d-brisk) var(--gl-ease) calc(var(--gl-d-swift) / 2) both;
+}
+@keyframes glrp-plate-in {
+  from { clip-path: polygon(0 0, 8px 0, 0 100%, 0 100%); }
 }
 .glrp-balloon-txt { display: block; }
-.glrp-balloon.glrp-old { opacity: 0.5; }
+.glrp-balloon.glrp-old { opacity: var(--glrp-old); }
 /* The tail: a right-angled wedge whose upright edge drops onto the token's centre line. */
 .glrp-tail {
   width: 11px;
   height: 8px;
   translate: 5.5px 0;
-  background: var(--glrp-glass);
+  background: var(--glrp-ink-1);
   clip-path: polygon(0 0, 100% 0, 0 100%);
 }
 
-/* Think: the narrated voice in lilac, a dashed spine, and two beads trailing off. */
+/* Think: the narrated voice in a cool tint, a dashed spine, and two beads trailing off. */
 .glrp-bub[data-glrp-mode="think"] .glrp-balloon {
   background-image: repeating-linear-gradient(180deg, var(--glrp-spine-ink) 0 4px, transparent 4px 7px);
   font: italic 500 17px/1.22 var(--glrp-serif);
   color: var(--glrp-think-ink);
 }
-.glrp-bub[data-glrp-mode="think"] .glrp-balloon-who { font-style: normal; }
 .glrp-puffs { display: grid; justify-items: center; gap: 3px; padding-top: 4px; }
 .glrp-puffs i {
   display: block;
   border-radius: 50%;
-  background: var(--glrp-glass);
+  background: var(--glrp-ink-1);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--glrp-think) 55%, transparent);
 }
 .glrp-puffs i:nth-child(1) { width: 8px; height: 8px; }
 .glrp-puffs i:nth-child(2) { width: 4px; height: 4px; }
 
-/* Do: narration under the token, no plate, the name in the amber of an action. */
+/* Do: narration under the token, no plate, the name in the amber of an action. The scrim under it is
+   shade from the dark tint channel, there only so the line reads on a bright map. */
 .glrp-bub[data-glrp-mode="do"] { max-width: 320px; }
 .glrp-cap-line {
   padding: 4px 18px 6px;
   text-align: center;
   background: radial-gradient(closest-side, rgb(var(--gl-tint-dark) / 0.66), rgb(var(--gl-tint-dark) / 0));
-  font: italic 500 18px/1.2 var(--glrp-serif);
-  color: var(--glrp-paper);
+  font: italic 500 18px/1.25 var(--glrp-serif);
+  color: var(--glrp-text);
   text-shadow: 0 1px 2px rgb(var(--gl-tint-dark) / 0.9), 0 0 10px rgb(var(--gl-tint-dark) / 0.6);
   overflow-wrap: anywhere;
   transition: opacity var(--gl-d-swift) var(--gl-ease);
 }
-.glrp-cap-line.glrp-old { opacity: 0.5; }
+.glrp-cap-line.glrp-old { opacity: var(--glrp-old); }
 
 /* ── the caption lane ──────────────────────────────────────────────────── */
 
@@ -677,14 +684,13 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
   max-width: 100%;
   padding: 6px 18px 7px 6px;
   box-sizing: border-box;
-  background-color: var(--glrp-glass);
+  background-color: var(--glrp-ink-1);
   background-image: linear-gradient(var(--glrp-spine-ink), var(--glrp-spine-ink));
   background-size: var(--glrp-spine) 100%;
   background-position: left top;
   background-repeat: no-repeat;
-  box-shadow: inset 0 1px 0 var(--glrp-line-strong);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-cut-sm)), calc(100% - var(--gl-cut-sm)) 100%, 0 100%);
-  backdrop-filter: blur(calc(12px * var(--gl-glass-k)));
+  box-shadow: inset 0 0 0 1px var(--glrp-line-strong);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut)), calc(100% - var(--gl-is-cut)) 100%, 0 100%);
   transition: opacity var(--gl-d-swift) var(--gl-ease);
 }
 .glrp-line[data-glrp-mode="think"] {
@@ -693,20 +699,13 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
 .glrp-line .glrp-line-art { width: 32px; height: 32px; margin-left: 4px; }
 .glrp-line .glrp-line-art.glrp-mono { font-size: 16px; }
 .glrp-line-body { min-width: 0; }
-.glrp-line-who {
-  margin-bottom: 3px;
-  font: 750 9px/1 var(--glrp-sans);
-  font-stretch: 112%;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: color-mix(in oklab, var(--glrp-hue) 70%, var(--glrp-dim));
-}
-.glrp-line-txt { font: 15.5px/1.3 var(--glrp-sans); color: var(--glrp-paper); overflow-wrap: anywhere; }
+.glrp-line-who { margin-bottom: 5px; }
+.glrp-line-txt { font: 500 var(--gl-is-t-title)/1.3 var(--glrp-sans); color: var(--glrp-text); overflow-wrap: anywhere; }
 .glrp-line[data-glrp-mode="say"] .glrp-line-txt::before { content: "“"; color: var(--glrp-dim); }
 .glrp-line[data-glrp-mode="say"] .glrp-line-txt::after { content: "”"; color: var(--glrp-dim); }
 .glrp-line:is([data-glrp-mode="do"], [data-glrp-mode="think"]) .glrp-line-txt { font: italic 500 18px/1.22 var(--glrp-serif); }
 .glrp-line[data-glrp-mode="think"] .glrp-line-txt { color: var(--glrp-think-ink); }
-.glrp-line.glrp-old { opacity: 0.5; }
+.glrp-line.glrp-old { opacity: var(--glrp-old); }
 
 /* Narrator: a film subtitle, no plate. */
 .glrp-line--narr {
@@ -715,7 +714,6 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
   background: radial-gradient(closest-side, rgb(var(--gl-tint-dark) / 0.72), rgb(var(--gl-tint-dark) / 0));
   box-shadow: none;
   clip-path: none;
-  backdrop-filter: none;
   text-align: center;
 }
 .glrp-line--narr .glrp-line-txt {
@@ -733,7 +731,7 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
   font-weight: 500;
   font-size: 1.1em;
   font-size-adjust: ex-height from-font;
-  color: color-mix(in oklab, var(--glrp-do) 62%, var(--gl-text));
+  color: color-mix(in oklab, var(--glrp-do) 62%, var(--glrp-text));
   margin-inline: 0.28em;
 }
 .glrp-aside:not([data-closes]) { margin-inline-start: 0; }
@@ -763,10 +761,10 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
   display: flex;
   gap: 3px;
   padding: 6px 8px 6px 9px;
-  background: var(--glrp-glass);
-  box-shadow: inset 0 1px 0 var(--glrp-line-strong), inset 0 0 0 1px var(--glrp-line);
+  background: var(--glrp-ink-1);
+  box-shadow: inset 0 0 0 1px var(--glrp-line-strong);
   /* the cut faces down-left, toward the token it is about */
-  clip-path: polygon(0 0, 100% 0, 100% 100%, var(--gl-cut-xs) 100%, 0 calc(100% - var(--gl-cut-xs)));
+  clip-path: polygon(0 0, 100% 0, 100% 100%, var(--gl-is-cut-xs) 100%, 0 calc(100% - var(--gl-is-cut-xs)));
   transform-origin: 0 100%;
   transform: translate(-30%, -70%) scale(var(--glrp-scale, 1));
   will-change: translate;
@@ -814,7 +812,7 @@ textarea#chat-message:is([data-glrp-mode="do"], [data-glrp-mode="think"], [data-
 .glus-rc[data-tone="say"] { --glus-rc-tone: var(--glrp-say); }
 .glus-rc[data-tone="do"] { --glus-rc-tone: var(--glrp-do); }
 .glus-rc[data-tone="think"] { --glus-rc-tone: var(--glrp-think); }
-.glus-rc[data-tone="narrator"] { --glus-rc-tone: var(--gl-text-dim); }
+.glus-rc[data-tone="narrator"] { --glus-rc-tone: var(--glrp-narr); }
 .glus-rc[data-tone="think"] .glus-rc-hair {
   background: repeating-linear-gradient(90deg, var(--glus-rc-tone) 0 calc(0.18 * var(--u)), transparent 0 calc(0.36 * var(--u)));
 }
