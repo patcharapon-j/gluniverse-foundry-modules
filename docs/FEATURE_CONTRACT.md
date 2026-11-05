@@ -220,7 +220,6 @@ rather than at the end.
 | vr-dents           | vr.dent                      | pf2e              | ⤷ pf2e-variant-rules | off |
 | vr-lasting-wounds  | vr.wound                     | pf2e              | ⤷ pf2e-variant-rules | off |
 | vr-boss-creatures  | vr.boss                      | pf2e              | ⤷ pf2e-variant-rules | off |
-| pf2e-arcane-surge  | surge.                       | pf2e              | —               | off     |
 | pf2e-creaturedex   | dex.                         | pf2e              | —               | off     |
 | spotlight-roll     | dr.                          | pf2e              | dice-so-nice (6.x, v14) | off |
 | combat-intro       | ci.                          | pf2e              | dice-so-nice (6.x, v14); feature initiative | off |

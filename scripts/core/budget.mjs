@@ -2,7 +2,7 @@
  * GLUniverse Suite — the shared frame budget.
  *
  * Before this module every feature that degraded under load measured the frame
- * on its own: pf2e-aoe kept a rolling average at 0.94/0.06, arcane-surge one at
+ * on its own: pf2e-aoe kept a rolling average at 0.94/0.06, another feature one at
  * 0.9/0.1 inside a `FrameBudget` class, resource-bars a third at 0.9/0.1 with a
  * literal 22 ms in the host. Three clocks of one frame, three sets of hysteresis,
  * and nothing that could tell all of them "this machine is a laptop, start one

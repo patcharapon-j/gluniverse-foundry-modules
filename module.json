@@ -43,7 +43,6 @@
     "styles/pf2e-recall.css",
     "styles/pf2e-aoe.css",
     "styles/pf2e-fx.css",
-    "styles/pf2e-arcane-surge.css",
     "styles/pf2e-variant-rules.css",
     "styles/pf2e-variant-rules-boss.css",
     "styles/pf2e-creaturedex.css",
@@ -162,11 +161,6 @@
       "lang": "en",
       "name": "English",
       "path": "lang/pf2e-fx.en.json"
-    },
-    {
-      "lang": "en",
-      "name": "English",
-      "path": "lang/pf2e-arcane-surge.en.json"
     },
     {
       "lang": "en",

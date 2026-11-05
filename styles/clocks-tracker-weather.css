@@ -114,12 +114,6 @@
 #glct-hud .date .wxmini.ominous .wxmini-label{background:none;-webkit-text-fill-color:#ffd9d4;color:#ffd9d4}
 #glct-hud .date .wxmini.ominous .wxmini-haz{display:inline-block}
 
-/* Sharing the stack with a stability readout: the bar's height is fixed, so the
-   weather row gives up its second label line and some icon to make room. */
-#glct-hud .date .wxstack:has(> .glas-slot:not(:empty)) .wxmini{gap:6px}
-#glct-hud .date .wxstack:has(> .glas-slot:not(:empty)) .wxmini-ico{width:18px;height:18px;border-radius:5px;font-size:10px}
-#glct-hud .date .wxstack:has(> .glas-slot:not(:empty)) .wxmini-label{-webkit-line-clamp:1;max-width:110px}
-
 /* ============================================================
    2) HEX FLOWER WINDOW — frameless glass dock.
    ============================================================ */
