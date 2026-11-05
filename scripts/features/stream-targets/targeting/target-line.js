@@ -24,6 +24,8 @@ const HEAD_FADE_FROM = 0.82;
 /** The body is thin where it leaves the source and reaches full width over this share of its length. */
 const TAPER_SHARE = 0.4;
 const TAPER_FROM = 0.4;
+/** The ink shade bed's two bands, wide then narrow: a soft contact shade that deepens towards the line. */
+const BED_ALPHA = [0.14, 0.2];
 /** How far the core is mixed towards PAPER, for the one-device-pixel hairline down the middle. */
 const BRIGHT_MIX = 0.62;
 
@@ -266,9 +268,10 @@ export class TargetLine {
       const end = path.length * reach;
       const taperTo = Math.max(1, path.length * TAPER_SHARE);
 
-      // The bed: a wide, faint band of the line's own colour, so it holds over busy art without a blur pass.
-      strokePath(under, path, 0, end, 9 * u, color, 0.1 * body, point);
-      strokePath(under, path, 0, end, 5 * u, color, 0.14 * body, point);
+      // The bed: a wide, soft band of ink shade, so the line holds over busy art without a blur pass. It is ink,
+      // never the line's own colour: a coloured band at rest is a glow, which Ink and Signal does not draw.
+      strokePath(under, path, 0, end, 9 * u, INK, BED_ALPHA[0] * body, point);
+      strokePath(under, path, 0, end, 5 * u, INK, BED_ALPHA[1] * body, point);
       // Ink rim, colour, hairline: the body tapers out of the source, so its direction reads without the head.
       // Never thinner than two device pixels, or the hairline down the middle would be wider than its band.
       strokeTapered(core, path, end, taperTo, (2.6 * u) + (2.5 * hl), 4.5 * hl, INK, 0.6 * body, point, this.#from);

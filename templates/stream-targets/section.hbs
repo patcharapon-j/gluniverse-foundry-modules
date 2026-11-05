@@ -1,9 +1,9 @@
 <section class="gluniverse-stream-panel gluniverse-stream-targets-section">
   <h2>{{localize "GLUNIVERSE_STREAM.targeting.title"}}</h2>
-  <div class="gluniverse-stream-checks">
-    <label><input type="checkbox" name="targeting.enabled" {{#if targeting.enabled}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.targeting.enabled"}}</label>
-    <label title="{{localize "GLUNIVERSE_STREAM.targeting.showAllSourcesHint"}}"><input type="checkbox" name="targeting.showAllSources" {{#if targeting.showAllSources}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.targeting.showAllSources"}}</label>
-    <label title="{{localize "GLUNIVERSE_STREAM.targeting.outOfCombatHint"}}"><input type="checkbox" name="targeting.outOfCombat" {{#if targeting.outOfCombat}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}> {{localize "GLUNIVERSE_STREAM.targeting.outOfCombat"}}</label>
+  <div class="gluniverse-stream-targets-switches">
+    <label class="gluniverse-stream-targets-switch"><input type="checkbox" name="targeting.enabled" {{#if targeting.enabled}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}><span>{{localize "GLUNIVERSE_STREAM.targeting.enabled"}}</span></label>
+    <label class="gluniverse-stream-targets-switch"><input type="checkbox" name="targeting.showAllSources" {{#if targeting.showAllSources}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}><span>{{localize "GLUNIVERSE_STREAM.targeting.showAllSources"}}<small>{{localize "GLUNIVERSE_STREAM.targeting.showAllSourcesHint"}}</small></span></label>
+    <label class="gluniverse-stream-targets-switch"><input type="checkbox" name="targeting.outOfCombat" {{#if targeting.outOfCombat}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}><span>{{localize "GLUNIVERSE_STREAM.targeting.outOfCombat"}}<small>{{localize "GLUNIVERSE_STREAM.targeting.outOfCombatHint"}}</small></span></label>
   </div>
   {{#if showVisibility}}
   <div class="gluniverse-stream-fields">

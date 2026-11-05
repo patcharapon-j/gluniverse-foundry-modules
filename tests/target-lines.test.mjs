@@ -1098,6 +1098,21 @@ test("the line draws device-pixel hairlines in its own colours, over ink, and on
   assert.ok(strokes(self.coreGraphics).length > 0, "but the brackets are there");
 });
 
+test("the bed under the line is ink shade, never a halo of the line's own colour", () => {
+  const t = loadTargetLine();
+  const color = 0x4aa3ff;
+  const line = t.make({ color });
+  line.show();
+  Object.assign(line.state, { reach: 1, body: 1, ringAlpha: 1, ringScale: 1 });
+  line.render({ source: token(50, 50), target: token(550, 50), scale: 1, gridSize: 100, resolution: 1 });
+  const bed = line.underGraphics.ops.filter(op => op.op === "line" && op.width > 0);
+  assert.ok(bed.length > 0, "the line still sits on a bed, so it holds over busy art");
+  for (const op of bed) {
+    assert.equal(op.color, t.INK, "Ink and Signal's No Glow Rule: nothing glows at rest, so the bed is ink");
+    assert.ok(op.alpha <= 0.35, "a shade, not a second line");
+  }
+});
+
 test("a style that has not changed does not force a redraw", () => {
   const t = loadTargetLine();
   const line = t.make({ color: 0x4db8ff });

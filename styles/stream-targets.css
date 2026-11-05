@@ -12,6 +12,7 @@
 :is(.gluniverse-stream-targets-section, .gluniverse-stream-targets-editor) {
   --gltg-ink-0: var(--gl-is-ink-0);
   --gltg-text: var(--gl-is-text);
+  --gltg-faint: var(--gl-is-faint);
   --gltg-line-strong: var(--gl-is-line-strong);
 }
 
@@ -20,6 +21,34 @@
   height: auto;
   padding: 2px 16px 4px;
 }
+
+/* ── The switches: one per row, each with what it changes written under it, so nothing hides in a tooltip ── */
+.gluniverse-stream-targets-switches {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+.gluniverse-stream-targets-switch {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  margin: 0;
+  font-size: var(--gl-is-t-lead);
+  color: var(--gltg-text);
+  cursor: pointer;
+}
+.gluniverse-stream-director .gluniverse-stream-targets-switch input[type="checkbox"] { margin-top: 1px; }
+.gluniverse-stream-targets-switch > span { display: grid; gap: 3px; line-height: 1.25; }
+.gluniverse-stream-targets-switch small {
+  font-size: var(--gl-is-t-body);
+  line-height: 1.4;
+  color: var(--gltg-faint);
+}
+.gluniverse-stream-targets-switch:has(input:disabled) { cursor: default; }
+
+/* The closing note: a readable measure rather than the window's width. */
+.gluniverse-stream-director .gluniverse-stream-targets-section .gluniverse-stream-form-hint { max-width: 54ch; }
 
 /* ── The relationship swatches: two columns of a cut chip and its name ── */
 .gluniverse-stream-targets-colors {
