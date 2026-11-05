@@ -25,12 +25,11 @@
  */
 
 import { SUITE_ID, warn } from "../../core/const.mjs";
-import { escapeHTML } from "../../core/util.mjs";
 import { motionScale } from "../../core/theme.mjs";
 import { DEFAULT_FACE, DEFAULT_SHAKE, FACES, FLAGS, SETTINGS, TIMING } from "./constants.mjs";
 import {
   hasTitle, newFolderId, newShotId, normalizeConfig, normalizeFolder, normalizeFolders, normalizeShot, normalizeShots,
-  normalizeState, orderShots, resolveHold, resolveLetterbox, resolveStyle, titleOf, isCanvasMode, cueDraws,
+  normalizeState, orderShots, resolveHold, resolveLetterbox, resolveStyle, cutLineMarkup, isCanvasMode, cueDraws,
 } from "./model.mjs";
 import { canvasTimelines, scaleTimeline, timelineFor } from "./timeline.mjs";
 import { measureSource } from "./canvas-mode.mjs";
@@ -560,9 +559,7 @@ export class TheatreStore {
 /* ── Chat line on a cut (th.chatOnCut) ──────────────────────────────────── */
 
 function postCutLine(scene, shot) {
-  const t = titleOf(shot);
-  const line = (cls, v) => (v ? `<div class="glth-chat-${cls}">${escapeHTML(v)}</div>` : "");
-  const content = `<div class="glth-chat-cut gl-type">${line("eyebrow", t.eyebrow)}${line("title", t.title)}${line("subtitle", t.subtitle)}</div>`;
+  const content = cutLineMarkup(shot);
   const data = { content, speaker: { scene: scene.id, alias: scene.navName || scene.name } };
   const styles = globalThis.CONST?.CHAT_MESSAGE_STYLES;
   if (styles?.OOC !== undefined) data.style = styles.OOC;

@@ -745,6 +745,30 @@ section = "seams";
   const rootSkin = /(^|[},\s]):root\b[^{]*\{[^}]*--glth-/.test(apps.replace(/\/\*[\s\S]*?\*\//g, ""));
   ok("the console skin is never written on :root", !rootSkin);
   const ov = read("styles/theatre.css");
+  // Ink and Signal (docs/adr/0012-ink-and-signal-core.md): the player-facing sheet aliases the core
+  // `--gl-is-*` family on its own roots, and reads none of Etched Glass's own tokens. A legacy token
+  // here repaints the title in the old cool white the day Etched Glass is retuned.
+  const ovCss = ov.replace(/\/\*[\s\S]*?\*\//g, "");
+  const legacy = [...new Set([...ovCss.matchAll(/var\(\s*(--gl-(?!is-|tint-|z-|d-|ease|exit|motion|lift|stagger|thai\b|tech\b)[a-z0-9-]+)/g)].map((m) => m[1]))];
+  ok("theatre.css reads no Etched Glass token (only --gl-is-*, tints, z, motion)", legacy.length === 0, legacy.join(", "));
+  const ovRoot = ovCss.match(/(^|\n)\s*:is\([^)]*\.glth-overlay[^)]*\)\s*\{([^}]*)\}/)?.[2] ?? "";
+  ok("the overlay's skin aliases the core family on its own root", /--glth-text:\s*var\(--gl-is-text\)/.test(ovRoot) && /--glth-font:\s*var\(--gl-is-font\)/.test(ovRoot));
+  ok("the overlay's skin is never written on :root", !/(^|[},\s]):root\b[^{]*\{[^}]*--glth-/.test(ovCss));
+  // The chat line a cut posts (th.chatOnCut): every class it writes is styled, and it is a sized plate.
+  const MC = await imp(`${FEAT}/model.mjs`);
+  const cutHtml = MC.cutLineMarkup({ eyebrow: "Act <I>", title: "Fane & Wilds", subtitle: "Dusk" });
+  ok("the chat cut line escapes what the GM typed", cutHtml.includes("Act &lt;I&gt;") && cutHtml.includes("Fane &amp; Wilds"));
+  ok("the chat cut line drops an empty line", !/glth-chat-eyebrow/.test(MC.cutLineMarkup({ title: "Only" })));
+  ok("store.mjs posts the pure chat cut line", /content = cutLineMarkup\(shot\)/.test(stripComments(read(`${FEAT}/store.mjs`))));
+  const cutClasses = [...new Set([...cutHtml.matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/)).filter((c) => c.startsWith("glth-")))];
+  const unstyled = cutClasses.filter((c) => !new RegExp(`\\.${c}\\b[^{]*\\{`).test(ovCss));
+  ok("every class of the chat cut line is styled", cutClasses.length === 4 && unstyled.length === 0, unstyled.join(", "));
+  const sized = cutClasses.slice(1).filter((c) => !new RegExp(`\\.${c}\\s*\\{[^}]*font-size:\\s*var\\(--gl-is-t-`).test(ovCss));
+  ok("the chat cut line sizes its own type from the core scale", sized.length === 0, sized.join(", "));
+  // The scene prompts (create, convert, leave) wear the console skin the filmstrip's prompts do.
+  const setup = stripComments(read(`${FEAT}/scene-setup.mjs`));
+  ok("every scene prompt carries the console skin's dialog class", (setup.match(/DialogV2\.(confirm|prompt)\(/g) ?? []).length === 2
+    && (setup.match(/classes:\s*\["glth-dialog"\]/g) ?? []).length === 2);
   ok("the overlay sits above Stage's overlay (z-index 1)", /z-index:\s*calc\(var\(--gl-z-base\)\s*\+\s*[1-9]/.test(ov) || /z-index:\s*([2-9]|[1-9]\d)\b/.test(ov));
   ok("the overlay never takes the pointer", /pointer-events:\s*none/.test(ov));
   const O = await imp(`${FEAT}/overlay/title-overlay.mjs`);

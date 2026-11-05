@@ -52,6 +52,13 @@ and signals: a holo is the character's tint lifted toward paper, never the old
 cyan, and radio's on-air lamp is the signal red. `stage-check` refuses an
 Etched Glass token, a hex and type under 11px in all three Stage sheets.
 
+Amended 2026-11-05: Theatre's player-facing surfaces (the title overlay and the
+chat line a cut posts) moved to Ink and Signal too, aliasing the core family as
+`--glth-*` on `.glth-overlay` and `.glth-chat-cut` in `styles/theatre.css`. The
+overlay still carries no hue. Its black dip and bars are film black from the
+tint channel rather than `ink-0`, so they stay the darkest thing on screen. The
+scene prompts (create, convert, leave) joined the console skin's `.glth-dialog`.
+
 ## Consequences
 
 - `tools/theatre-check.mjs` holds the two ramps equal and refuses the skin on

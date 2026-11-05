@@ -1,5 +1,15 @@
 /* ════════════════════════════════════════════════════════════════════════
-   Theatre — the title overlay (scripts/features/theatre/overlay/title-overlay.mjs)
+   Theatre — what the players see: the title overlay
+   (scripts/features/theatre/overlay/title-overlay.mjs) and the chat line a
+   cut posts (store.mjs, th.chatOnCut).
+
+   Ink and Signal (DESIGN.md, docs/adr/0012-ink-and-signal-core.md): the core
+   `--gl-is-*` family, aliased as `--glth-*` on these surfaces' own roots and
+   never on :root. The GM apps alias the same family in theatre-apps.css. The
+   overlay sits over campaign art, so it carries no hue: paper type, paper
+   rules, and film black. Film black is the tint channel, not `ink-0`: a dip and
+   the bars have to be the darkest thing on screen, and a capture card lifts a
+   near-black.
 
    One fixed layer on <body>: scrims, corner tag, black, letterbox bars, title,
    interlude card — in that paint order (DOM order; nothing here sets a
@@ -16,12 +26,28 @@
    whole screen, then drops back when the cue ends.
 
    The title faces are set inline from FACES (constants.mjs) — this sheet never
-   names a typeface. `--glth-lb` is the resting letterbox fraction, written by
-   the overlay, so placements clear the bars. `--glth-inset-r` is the width an
-   expanded sidebar covers at the right (TitleOverlay#setInset): titles, scrims
-   and the card are laid out in the screen left of it, over the picture the
-   camera centred there. Black and the bars span the whole screen.
+   names a title typeface. `--glth-lb` is the resting letterbox fraction,
+   written by the overlay, so placements clear the bars. `--glth-inset-r` is the
+   width an expanded sidebar covers at the right (TitleOverlay#setInset):
+   titles, scrims and the card are laid out in the screen left of it, over the
+   picture the camera centred there. Black and the bars span the whole screen.
    ════════════════════════════════════════════════════════════════════════ */
+
+:is(.glth-overlay, .glth-chat-cut) {
+  /* the neutral tones */
+  --glth-ink-2: var(--gl-is-ink-2);
+  --glth-text: var(--gl-is-text);
+  --glth-paper: var(--gl-is-paper);
+  --glth-dim: var(--gl-is-dim);
+  --glth-faint: var(--gl-is-faint);
+  --glth-line: var(--gl-is-line);
+  /* type and shape */
+  --glth-font: var(--gl-is-font);
+  --glth-cut: var(--gl-is-cut);
+  /* film black and the veils over the picture */
+  --glth-film: rgb(var(--gl-tint-dark));
+  --glth-shadow: rgb(var(--gl-tint-dark) / 0.45);
+}
 
 .glth-overlay {
   --glth-lb: 0;
@@ -32,9 +58,9 @@
   pointer-events: none;
   overflow: hidden;
   contain: strict;
-  color: var(--gl-text-bright);
-  /* The neutral sans the console skin reads in; each title face sets its own inline. */
-  font-family: "Google Sans Flex", var(--gl-thai), "Segoe UI", system-ui, sans-serif;
+  color: var(--glth-text);
+  /* The neutral sans; each title face sets its own inline. */
+  font-family: var(--glth-font);
 }
 .glth-overlay.glth-overlay--live {
   z-index: calc(var(--gl-z-splash) - 1);
@@ -63,12 +89,12 @@
 .glth-black {
   inset: 0;
   opacity: 0;
-  background: rgb(var(--gl-tint-dark));
+  background: var(--glth-film);
 }
 .glth-bar {
   left: 0;
   right: 0;
-  background: rgb(var(--gl-tint-dark));
+  background: var(--glth-film);
   will-change: transform;
 }
 .glth-bar--top { top: 0; transform-origin: 50% 0; }
@@ -78,7 +104,7 @@
 .glth-title {
   opacity: 0;
   max-width: none;
-  text-shadow: 0 2px 30px rgb(var(--gl-tint-dark) / 0.45);
+  text-shadow: 0 2px 30px var(--glth-shadow);
 }
 .glth-title--centre {
   left: calc((100% - var(--glth-inset-r)) / 2);
@@ -114,7 +140,7 @@
 .glth-title__eyebrow {
   font-size: clamp(11px, 1vw, 16px);
   line-height: 1.3;
-  color: rgb(var(--gl-tint-light) / 0.82);
+  color: color-mix(in srgb, var(--glth-paper) 82%, transparent);
 }
 .glth-title--chapter .glth-title__eyebrow,
 .glth-title--wipe .glth-title__eyebrow {
@@ -124,7 +150,7 @@
   font-size: clamp(12px, 1.15vw, 19px);
   line-height: 1.3;
   margin-top: 0.9em;
-  color: rgb(var(--gl-tint-light) / 0.78);
+  color: color-mix(in srgb, var(--glth-paper) 78%, transparent);
 }
 .glth-title--credits .glth-title__sub {
   margin-top: 0.5em;
@@ -139,14 +165,14 @@
   width: 62%;
   height: 1px;
   margin: 0.9em auto;
-  background: rgb(var(--gl-tint-light) / 0.7);
+  background: color-mix(in srgb, var(--glth-paper) 70%, transparent);
   transform-origin: 50% 50%;
 }
 .glth-title__underline {
   width: clamp(80px, 8.5vw, 160px);
   height: 2px;
   margin: 0.7em 0 0;
-  background: rgb(var(--gl-tint-light) / 0.9);
+  background: color-mix(in srgb, var(--glth-paper) 90%, transparent);
   transform-origin: 0 50%;
 }
 .glth-title__piece {
@@ -172,7 +198,7 @@
   line-height: 1.25;
   text-align: center;
   opacity: 0;
-  text-shadow: 0 2px 30px rgb(var(--gl-tint-dark) / 0.45);
+  text-shadow: 0 2px 30px var(--glth-shadow);
 }
 
 /* ── Corner location tag ──
@@ -181,12 +207,12 @@
   left: clamp(72px, 5vw, 120px);
   top: calc(clamp(56px, 7vh, 96px) + var(--glth-lb) * 100vh);
   opacity: 0;
-  font-size: var(--gl-fs-sm);
+  font-size: var(--gl-is-t-body);
   font-weight: 500;
   letter-spacing: 0.3em;
   text-transform: uppercase;
   white-space: nowrap;
-  color: rgb(var(--gl-tint-light) / 0.75);
+  color: color-mix(in srgb, var(--glth-paper) 75%, transparent);
   text-shadow: 0 1px 12px rgb(var(--gl-tint-dark) / 0.6);
 }
 .glth-tag::before {
@@ -196,5 +222,40 @@
   height: 1px;
   margin-right: 10px;
   vertical-align: middle;
-  background: rgb(var(--gl-tint-light) / 0.75);
+  background: color-mix(in srgb, var(--glth-paper) 75%, transparent);
+}
+
+/* ── The chat line a cut posts (th.chatOnCut) ──
+   An ink plate with the paper edge: a cut is a fact with no verdict, so it
+   carries no hue. Sized here, because a chat log sets its own type. */
+.glth-chat-cut {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px 10px 14px;
+  background: var(--glth-ink-2);
+  box-shadow: inset 2px 0 0 var(--glth-paper), inset 0 0 0 1px var(--glth-line);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glth-cut)), calc(100% - var(--glth-cut)) 100%, 0 100%);
+  color: var(--glth-text);
+  font-family: var(--glth-font);
+}
+.glth-chat-eyebrow {
+  color: var(--glth-faint);
+  font-size: var(--gl-is-t-meta);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.glth-chat-title {
+  color: var(--glth-text);
+  font-size: var(--gl-is-t-title);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.glth-chat-subtitle {
+  color: var(--glth-dim);
+  font-size: var(--gl-is-t-body);
+  font-weight: 500;
+  line-height: 1.4;
 }
