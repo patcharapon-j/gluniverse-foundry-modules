@@ -635,10 +635,11 @@ export class RollCard {
     const u = this.unit();
     const d = timing(this.element);
     if (m.fx === "gold" || m.fx === "red") {
-      const color = m.visibility === "ownBlind" ? "violet" : m.fx;
+      // A blind roll cracks in info blue, its own tone, so the crack cannot say which way it went.
+      const color = m.visibility === "ownBlind" ? "info" : m.fx;
       this.crack = crackRenderer.add(this.q(".glus-rc-fx"), { color });
-      const glowRest = this.crack ? 0.35 : 0.8;
-      tween(glow, { opacity: [{ from: 0, to: 1, duration: d("glowIn") }, { to: glowRest, duration: d("glowRest") }], ease: EASE_OUT });
+      // The light is the beat, not the card: it flares and goes, and the crack is what stays.
+      tween(glow, { opacity: [{ from: 0, to: 1, duration: d("glowIn") }, { to: 0, duration: d("glowRest") }], ease: EASE_OUT });
       tween(total, { scale: [1.45, 1], filter: ["brightness(1.8)", "brightness(1)"], duration: d("critPop"), ease: EASE_POP });
       if (m.fx === "red") {
         tween(this.main, {

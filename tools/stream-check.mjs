@@ -987,6 +987,30 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
   }
 }
 
+/* ------------------------------------------- the cards are Ink and Signal --- */
+// The cards alias core's `--gl-is-*` (docs/adr/0012-ink-and-signal-core.md). An Etched Glass hue read
+// straight off `:root` (the gold signal, violet, orchid, jade, cyan, the Daggerheart tyrant) renders
+// perfectly and is exactly the drift the migration exists to end: a second gold beside the crack's, a
+// violet the system does not have. Only the shared families stay: motion, tints, glass strength, faces.
+{
+  const SHARED = /^--gl-(is-|d-|ease|tint-|glass-k|blur|thai|motion-scale)/;
+  for (const f of ["styles/stream-cards.css", "styles/stream-cards-daggerheart.css"]) {
+    const s = strip(read(f));
+    for (const m of new Set([...s.matchAll(/var\((--gl-[a-z0-9-]+)/g)].map((x) => x[1]))) {
+      if (!SHARED.test(m)) fail(`${f}: reads the Etched Glass token ${m} — alias a --gl-is-* value under the card's own prefix`);
+    }
+    // The No Glow Rule: nothing glows at rest. The crit's light is a beat (`.glus-rc-glow`, which the
+    // card fades back out); a radial wash on a resting plate is a halo.
+    for (const m of s.matchAll(/([^{}]+)\{[^}]*radial-gradient/g)) {
+      const sel = m[1].trim();
+      if (sel !== ".glus-rc-glow") fail(`${f}: "${sel}" paints a radial wash at rest — the No Glow Rule`);
+    }
+  }
+  const card = strip(read("scripts/features/stream-cards/cards/roll-card.js"));
+  if (/"violet"/.test(card)) fail("roll-card.js: a blind roll's crack is violet — Ink and Signal has no violet; a blind roll is info blue");
+  if (/glowRest\s*=/.test(card)) fail("roll-card.js: the crit's light rests on — it is a beat, and it fades back out");
+}
+
 /* --------------------------------------------------------- named motion ---- */
 // Every duration the cards and the overlay play is a row in a motion table, read through a
 // tier-scaled lookup. A literal one ignores motion "none"; a name missing from its table throws

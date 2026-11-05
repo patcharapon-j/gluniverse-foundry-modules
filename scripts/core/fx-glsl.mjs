@@ -25,13 +25,14 @@ export const FX_SUPERSAMPLE = 1.25;
  * that must agree is three chances for one of them to drift while each file
  * still looks right on its own.
  *
- * `red` and `violet` are the stream roll card's critical failure and blind
- * roll; no other feature draws those yet.
+ * `red` and `info` are the stream roll card's critical failure and blind
+ * roll; no other feature draws those yet. `info` is Ink and Signal's info blue
+ * (`--gl-is-info`, #4aa3ff), the blind roll card's tone.
  */
 export const FX_BREAK_COLORS = Object.freeze({
   gold: Object.freeze({ base: [1.0, 0.694, 0.176], hot: [1.0, 0.878, 0.439] }),
   red: Object.freeze({ base: [1.0, 0.24, 0.28], hot: [1.0, 0.72, 0.74] }),
-  violet: Object.freeze({ base: [0.62, 0.45, 1.0], hot: [0.88, 0.83, 1.0] }),
+  info: Object.freeze({ base: [0.29, 0.639, 1.0], hot: [0.78, 0.89, 1.0] }),
 });
 
 // Shared value-noise helpers, interpolated into the fragment shaders below (and
