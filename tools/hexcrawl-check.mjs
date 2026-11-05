@@ -730,6 +730,10 @@ for (const f of markupFiles) {
   const buttons = arrivalSrc.match(/<button[^>]*>/g) ?? [];
   ok("every chat card button carries .glhex-card-btn", buttons.length > 0 && buttons.every((b) => /glhex-card-btn/.test(b)));
   ok("the chat card sizes its buttons (The Size-It-Yourself Rule)", /\.glhex-card-btn\s*\{[^}]*font-size/.test(allCss));
+  // The title leads; what the card is sits under it in sentence case. A
+  // spaced-caps kicker above it wrapped to two lines and buried the result.
+  ok("no card draws a kicker above its title", !/glhex-card-kicker/.test(arrivalSrc)
+    && (arrivalSrc.match(/glhex-card-title[\s\S]{0,200}?glhex-card-sub/g) ?? []).length === 2);
 }
 {
   // PIXI cannot read a custom property, so the map reads Ink and Signal

@@ -181,6 +181,9 @@
   font-weight: 700;
   line-height: 1.2;
 }
+/* What the card is, under what it says: sentence case, never a spaced-caps
+   kicker over the title. `.glhex-card-kicker` stays for cards already posted. */
+.glhex-card-sub { margin-top: 2px; color: var(--glhex-dim); font-size: var(--gl-is-t-body); }
 .glhex-card-kicker { margin-bottom: 4px; }
 .glhex-card-line { display: flex; align-items: center; gap: 6px; margin: 3px 0; color: var(--glhex-text); }
 .glhex-card-facts {
@@ -199,7 +202,7 @@
 .glhex-card-section p { margin: 0 0 4px; }
 .glhex-card-meta { margin-top: 4px; color: var(--glhex-dim); font-size: var(--gl-is-t-meta); }
 .glhex-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.glhex-card-hint { margin-top: 8px; color: var(--glhex-faint); font-size: var(--gl-is-t-meta); }
+.glhex-card-hint { margin-top: 8px; color: var(--glhex-faint); font-size: var(--gl-is-t-body); }
 
 /* A chat log would hand a button 14px: the card sizes its own
    (The Size-It-Yourself Rule). Cards posted before the move to Ink and Signal
@@ -272,6 +275,7 @@
   margin: 0;
   padding: 10px 12px 12px;
   border: 0;
+  border-radius: 0;
   background: var(--glhex-ink-2);
   box-shadow: inset 0 0 0 1px var(--glhex-line);
 }
@@ -296,8 +300,17 @@
   font-size: var(--gl-is-t-body);
 }
 .glhex-dialog :is(input[type="text"], input[type="number"], select):focus { outline: none; box-shadow: inset 0 0 0 1px var(--glhex-paper); }
-.glhex-sight-dialog .hint { margin: 8px 0 0; color: var(--glhex-faint); font-size: var(--gl-is-t-meta); }
+.glhex-sight-dialog .hint { margin: 8px 0 0; color: var(--glhex-faint); font-size: var(--gl-is-t-body); }
+/* The scene dialog offers three peer actions: one column of equal rows reads
+   as a choice, where a wrapped row of three widths read as leftovers. */
+.glhex-dialog .form-footer { display: grid; grid-auto-flow: row; gap: 6px; }
 .glhex-dialog .form-footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
   min-height: 32px;
   border: 0;
   border-radius: 0;

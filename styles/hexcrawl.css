@@ -631,13 +631,17 @@
   background: var(--glhex-faint);
   transition: translate var(--gl-d-brisk) var(--gl-snap), background-color var(--gl-d-brisk) var(--gl-ease);
 }
-.glhex-toggle.is-on .glhex-switch { background: var(--glhex-ink-4); box-shadow: inset 0 0 0 1px var(--glhex-paper); }
-.glhex-toggle.is-on .glhex-switch::after { background: var(--glhex-paper); translate: 12px 0; }
+/* On is a paper slab with an ink knob: the state reads at a glance, where a
+   paper outline round a paper knob read as an empty checkbox. */
+.glhex-toggle.is-on .glhex-switch { background: var(--glhex-paper); box-shadow: none; }
+.glhex-toggle.is-on .glhex-switch::after { background: var(--glhex-on-slab); translate: 12px 0; }
 
 /* Reveal staged: always clickable. Idle it is quiet; a queue is a call, so it
    becomes the amber slab the map's staged outlines are drawn in. */
 .glhex-root .glhex-reveal { min-height: 28px; padding: 0 10px; font-size: var(--gl-is-t-meta); }
 .glhex-root .glhex-reveal.is-idle { color: var(--glhex-faint); }
+/* Faint fails 4.5:1 on the ink-4 hover ground; the text lifts with it. */
+.glhex-root .glhex-reveal.is-idle:hover:not(:disabled) { color: var(--glhex-dim); }
 .glhex-root .glhex-reveal:not(.is-idle) {
   background: var(--glhex-call);
   box-shadow: none;
@@ -732,7 +736,7 @@
 .glhex-table td { padding: 0 6px; border: 0; background: none; font-weight: 500; text-align: left; }
 .glhex-table thead,
 .glhex-table thead tr,
-.glhex-table tr { background: none; text-shadow: none; }
+.glhex-table tr { border: 0; background: none; text-shadow: none; }
 .glhex-table tbody th { color: var(--glhex-text); font-size: var(--gl-is-t-body); font-weight: 600; white-space: nowrap; }
 .glhex-table td:nth-child(2) { width: 30%; }
 .glhex-table td:nth-child(3) { width: 30%; }

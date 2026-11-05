@@ -44,8 +44,8 @@ export function arrivalHTML(scene, record) {
   const rows = [];
 
   rows.push(`<header class="glhex-card-head"><i class="fa-solid fa-person-hiking"></i>`
-    + `<div><div class="glhex-card-kicker glhex-label">${escapeHTML(L("GLHEX.card.arrival"))}</div>`
-    + `<div class="glhex-card-title">${escapeHTML(title)}</div></div></header>`);
+    + `<div><div class="glhex-card-title">${escapeHTML(title)}</div>`
+    + `<div class="glhex-card-sub">${escapeHTML(L("GLHEX.card.arrival"))}</div></div></header>`);
 
   rows.push(`<div class="glhex-card-line">${glyphSvg(terrain.glyph, terrain.color)}<span>${escapeHTML(terrainName(map, terrain.id))}</span>`
     + (effectiveBlight(map, k) ? `<span class="glhex-tip-blight">${escapeHTML(L("GLHEX.tooltip.blight"))}</span>` : "")
@@ -105,8 +105,8 @@ export async function rollEncounter({ formula, trigger, key, scene: sceneId }) {
   const chips = results.map((v) => `<span class="glhex-die${v <= trigger ? " is-hit" : ""}">${v}</span>`).join("");
   const content = `<div class="glhex-card glhex-roll${hit ? " is-triggered" : " is-quiet"}">`
     + `<header class="glhex-card-head"><i class="fa-solid fa-dice"></i><div>`
-    + `<div class="glhex-card-kicker glhex-label">${escapeHTML(F("GLHEX.card.rolled", { formula }))}${where ? ` · ${escapeHTML(where)}` : ""}</div>`
-    + `<div class="glhex-card-title">${escapeHTML(L(hit ? "GLHEX.card.triggered" : "GLHEX.card.quiet"))}</div></div></header>`
+    + `<div class="glhex-card-title">${escapeHTML(L(hit ? "GLHEX.card.triggered" : "GLHEX.card.quiet"))}</div>`
+    + `<div class="glhex-card-sub">${escapeHTML(F("GLHEX.card.rolled", { formula }))}${where ? ` · ${escapeHTML(where)}` : ""}</div></div></header>`
     + `<div class="glhex-dice">${chips}</div>`
     + `<div class="glhex-card-hint">${escapeHTML(F("GLHEX.card.triggerHint", { trigger }))}</div></div>`;
   return ChatMessage.create({
