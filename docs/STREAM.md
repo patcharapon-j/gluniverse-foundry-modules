@@ -402,7 +402,9 @@ corner is on (the chat root carries `data-side`) and leaves the same way, then
 its height and margins close together, so the stack below it slides up instead
 of jumping. Nothing overshoots except the degree chip's small pop, and nothing
 is blurred: a filter on every card was the most expensive thing the overlay
-drew. Every animation the overlay waits on also has a timer behind it, so a
+drew, and a backdrop blur under a card's near-opaque plate cost about four times
+the frames on the card gallery's entrances (`tools/roll-cards-preview.mjs?play&bench`)
+for a blur nobody could see. Every animation the overlay waits on also has a timer behind it, so a
 background tab that never fires its finish still removes the card.
 
 The suite deliberately ignores the OS `prefers-reduced-motion` preference, so

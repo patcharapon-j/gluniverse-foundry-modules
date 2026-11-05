@@ -161,6 +161,22 @@ const settle = async (card, spec) => {
   }
 };
 
+// bench: record every frame interval while the entrances play, for a before/after on the card's cost.
+if (qs.has("bench")) {
+  const gaps = [];
+  let last = performance.now();
+  const t0 = last;
+  const tick = (now) => {
+    gaps.push(now - last);
+    last = now;
+    if (now - t0 < 5000) return requestAnimationFrame(tick);
+    gaps.sort((a, b) => a - b);
+    const q = (p) => gaps[Math.min(gaps.length - 1, Math.floor(p * gaps.length))].toFixed(1);
+    document.body.dataset.bench = JSON.stringify({ frames: gaps.length, p50: q(0.5), p95: q(0.95), max: q(1), over33: gaps.filter((g) => g > 33.4).length });
+  };
+  requestAnimationFrame(tick);
+}
+
 await Promise.all(CELLS.filter(([id]) => !only || only.includes(id)).map(async ([id, caption, spec]) => {
   const cell = document.createElement("section");
   cell.className = "pv-cell";

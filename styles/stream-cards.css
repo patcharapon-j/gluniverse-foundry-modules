@@ -59,9 +59,9 @@
   --glus-rc-deg-none: var(--glus-paper);
   --glus-rc-blind: var(--glus-rc-info);
 
-  /* One shadow for every glyph that can sit over the crack or over bright art. */
-  --glus-rc-text-shadow: 0 1px 0 rgb(var(--gl-tint-dark)), 0 0 4px rgb(var(--gl-tint-dark) / 0.9),
-    0 0 12px rgb(var(--gl-tint-dark) / 0.75);
+  /* One shadow for every glyph that can sit over the crack or over bright art. Two tight layers: the
+     total and the die repaint every frame while they count and spin, and a wide blur is paid each time. */
+  --glus-rc-text-shadow: 0 1px 0 rgb(var(--gl-tint-dark)), 0 0 4px rgb(var(--gl-tint-dark) / 0.9);
 
   /* The slab: a chamfer on the lower right, the suite's cut. Every plate below clips to its own. */
   --glus-cut: calc(0.62 * var(--u));
@@ -90,19 +90,19 @@
 
 /* ── Main strip ── */
 /*
- * No filter and no drop shadow on the card: its total counts and its die spins every frame, and a filter
- * on an ancestor of a moving layer re-rasterises the whole card on each of them. The slab is near-opaque
- * ink, which is what separates it from a bright map.
+ * No filter, no backdrop blur and no drop shadow on the card: its total counts and its die spins every
+ * frame, and a filter on an ancestor of a moving layer re-rasterises the whole card on each of them; a
+ * backdrop blur re-samples the map behind every plate on each of those frames too, for a plate that lets
+ * almost nothing through. The slab is near-opaque ink, which is what separates it from a bright map.
  */
 .glus-rc-main {
   position: relative;
   height: calc(4.4 * var(--u));
   display: grid;
   grid-template-columns: calc(5 * var(--u)) minmax(0, 1fr) auto;
-  background: color-mix(in oklab, var(--glus-ink-1) 94%, transparent);
+  background: color-mix(in oklab, var(--glus-ink-1) 97%, transparent);
   box-shadow: inset 0 0 0 1px var(--glus-line);
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glus-cut)), calc(100% - var(--glus-cut)) 100%, 0 100%);
-  backdrop-filter: blur(calc(12px * var(--gl-glass-k)));
   overflow: hidden;
 }
 
@@ -508,10 +508,9 @@
   align-items: center;
   gap: calc(0.55 * var(--u));
   padding: 0 calc(0.95 * var(--u)) 0 calc(0.8 * var(--u));
-  background: color-mix(in oklab, var(--glus-ink-2) 92%, transparent);
+  background: color-mix(in oklab, var(--glus-ink-2) 97%, transparent);
   box-shadow: inset 0 0 0 1px var(--glus-line);
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glus-cut)), calc(100% - var(--glus-cut)) 100%, 0 100%);
-  backdrop-filter: blur(calc(10px * var(--gl-glass-k)));
   overflow: hidden;
   text-shadow: var(--glus-rc-text-shadow);
 }
@@ -614,10 +613,9 @@
   align-items: center;
   gap: calc(0.5 * var(--u));
   padding: 0 calc(0.9 * var(--u)) 0 0;
-  background: color-mix(in oklab, var(--glus-ink-1) 94%, transparent);
+  background: color-mix(in oklab, var(--glus-ink-1) 97%, transparent);
   box-shadow: inset 0 0 0 1px var(--glus-line);
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--glus-cut)), calc(100% - var(--glus-cut)) 100%, 0 100%);
-  backdrop-filter: blur(calc(10px * var(--gl-glass-k)));
   overflow: hidden;
   text-shadow: var(--glus-rc-text-shadow);
 }

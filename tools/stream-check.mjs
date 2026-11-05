@@ -1015,6 +1015,12 @@ for (const f of ["styles/stream.css", "styles/stream-cards.css", "styles/stream-
       if (Number(m[1]) < FLOOR_U) fail(`${f}: font-size ${m[1]}u is ${(Number(m[1]) * 19.2).toFixed(1)}px at design size — under the 11px floor (0.58u)`);
     }
   }
+  // A card's total counts and its die spins every frame, so a backdrop blur under a near-opaque plate
+  // re-samples the map behind every card on each of them for a blur nobody can see. Measured on the
+  // gallery's 27 entrances (tools/roll-cards-preview.mjs?play&bench): ~4x the frames without it.
+  for (const f of ["styles/stream-cards.css", "styles/stream-cards-daggerheart.css"]) {
+    if (/backdrop-filter\s*:/.test(strip(read(f)))) fail(`${f}: a backdrop-filter on a card — the plate is near-opaque ink, and the blur is paid every frame the total counts`);
+  }
   const card = strip(read("scripts/features/stream-cards/cards/roll-card.js"));
   if (/"violet"/.test(card)) fail("roll-card.js: a blind roll's crack is violet — Ink and Signal has no violet; a blind roll is info blue");
   if (/glowRest\s*=/.test(card)) fail("roll-card.js: the crit's light rests on — it is a beat, and it fades back out");
