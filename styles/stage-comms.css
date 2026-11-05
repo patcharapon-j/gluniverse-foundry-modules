@@ -838,10 +838,26 @@
 
 .glstage-comms[data-style="clean"] .glstage-comms-plate {
   position: absolute;
-  left: calc(var(--glstage-comms-u) * 7);
-  right: calc(var(--glstage-comms-u) * 7);
-  bottom: calc(var(--glstage-comms-u) * 7);
+  left: calc(var(--glstage-comms-u) * 4);
+  right: calc(var(--glstage-comms-u) * 4);
+  bottom: calc(var(--glstage-comms-u) * 4);
   align-items: end;
+  padding: calc(var(--glstage-comms-u) * 2.6) calc(var(--glstage-comms-u) * 3);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-sm)), calc(100% - var(--gl-is-cut-sm)) 100%, 0 100%);
+  transition: opacity var(--gl-d-brisk) var(--gl-ease), filter var(--gl-d-brisk) var(--gl-ease), background-color var(--gl-d-brisk) var(--gl-ease);
+}
+/* On air: the speaker's name lands on a paper slab, the system's loudest
+   neutral, so the one voice in the stack reads from across the room and on
+   a 1080p capture. Everything else on the card stays ink. */
+.glstage-comms[data-speaking][data-style="clean"] .glstage-comms-slot.is-speaking .glstage-comms-plate {
+  background-color: var(--glstage-comms-paper);
+}
+.glstage-comms[data-speaking][data-style="clean"] .glstage-comms-slot.is-speaking :is(.glstage-comms-name, .glstage-comms-title) {
+  color: var(--glstage-comms-on);
+  text-shadow: none;
+}
+.glstage-comms[data-speaking][data-style="clean"] .glstage-comms-slot.is-speaking .glstage-comms-wave i {
+  background: var(--glstage-comms-on);
 }
 .glstage-comms[data-style="clean"] .glstage-comms-name {
   font-size: max(var(--glstage-comms-floor), calc(var(--glstage-comms-u) * 8.6));
