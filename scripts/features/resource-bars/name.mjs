@@ -124,6 +124,10 @@ export const NAME_INK = Object.freeze({
   gmDim: 0.7,               // the GM's view of a name players cannot read
 });
 
+/* The resting name ink as floats, once: flush() runs every frame a label moves,
+   on every token, and must not parse a hex there. */
+const NAME_REST = Object.freeze(hexToRgbFloat(NAME_INK.text));
+
 const ELLIPSIS = "…";
 const clamp01 = (n) => (n < 0 ? 0 : n > 1 ? 1 : n);
 const clamp = (n, lo, hi) => (n < lo ? lo : n > hi ? hi : n);
@@ -798,8 +802,7 @@ export class NameLabel {
 
     const left = g.centred ? g.centre - comp.final / 2 : g.left;
     const dim = c.dim ? NAME_INK.gmDim : 1;
-    const rest = hexToRgbFloat(NAME_INK.text);
-    for (let i = 0; i < 3; i++) this._ink[i] = rest[i] * dim;
+    for (let i = 0; i < 3; i++) this._ink[i] = NAME_REST[i] * dim;
 
     this.drawName(fit, comp.cut, left, g, alpha);
     this.drawGlyphs(comp.glyphs, left, g, alpha);

@@ -1521,13 +1521,17 @@ void main(void) {
      while it means something: a heal's bloom at the edge, and the low-health
      breath. At rest a bar casts nothing (Ink and Signal's No Glow Rule): twenty
      tokens are twenty readings, not twenty coloured smears. */
-  vec3 glowCol = mix(base, ALARM, uLow * 0.85);
-  float glow = exp(-outside / 0.045) * exp(-abs(p.x - fillX) / 0.14) * 0.9 * uBloom;
-  glow += exp(-outside / 0.050) * uLow * (0.30 + 0.70 * breathe) * 0.55 * hero;
-  /* A dead bar casts nothing: the liquid that lit it has run out. */
-  glow *= outMask * mix(0.45, 1.0, hero) * (1.0 - uDead * hero);
-  outC += glowCol * glow * 0.75;
-  outA += glow * 0.26;
+  /* Both terms are zero at rest, which is nearly every bar on the map, so the
+     uniform branch skips the three exps for the whole quad. */
+  if (uBloom + uLow > 0.0) {
+    vec3 glowCol = mix(base, ALARM, uLow * 0.85);
+    float glow = exp(-outside / 0.045) * exp(-abs(p.x - fillX) / 0.14) * 0.9 * uBloom;
+    glow += exp(-outside / 0.050) * uLow * (0.30 + 0.70 * breathe) * 0.55 * hero;
+    /* A dead bar casts nothing: the liquid that lit it has run out. */
+    glow *= outMask * mix(0.45, 1.0, hero) * (1.0 - uDead * hero);
+    outC += glowCol * glow * 0.75;
+    outA += glow * 0.26;
+  }
   /* The heartbeat carries past the body too, in orchid. */
   float dyHalo = exp(-outside / 0.060) * outMask * dyHeart * uDying;
   outC += uDyingCol * dyHalo * 0.50;

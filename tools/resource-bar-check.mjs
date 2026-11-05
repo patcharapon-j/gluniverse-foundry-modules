@@ -152,6 +152,9 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   const terms = [...glowBlock.matchAll(/glow\s*\+?=\s*([^;]+);/g)].map((m) => m[1]);
   if (!terms.length || terms.some((t) => !/uBloom|uLow/.test(t)) || terms.some((t) => /\(\s*0\.\d+\s*\+\s*0\.\d+\s*\*\s*uBloom\)/.test(t)))
     fail("A contact-glow term past the bar's body is lit at rest; every term must be scaled by uBloom or uLow.");
+  /* And because it is dark at rest, a resting bar must not pay for it. */
+  if (!/if \(uBloom \+ uLow > 0\.0\) \{\s*vec3 glowCol/.test(frag))
+    fail("The contact glow is evaluated on every bar at rest; gate it on uBloom + uLow so a quiet map skips its exps.");
 
   /* The ramp holds chroma between stops, so the amber-to-green step is not an olive. */
   if (!/float hold = RAMP_CHROMA_HOLD \* smoothstep\(0\.15, 0\.45, f\) \* smoothstep\(1\.0, 0\.6, f\);/.test(frag) || !/lab\.yz \*= mix\(1\.0, c \/ n, hold\);/.test(frag) || !(shader.RAMP_CHROMA_HOLD > 0)) fail("rampAt() no longer holds chroma between stops; the amber to green step sags into olive.");
