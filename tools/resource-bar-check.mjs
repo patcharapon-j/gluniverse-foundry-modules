@@ -387,7 +387,10 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   const declared = /attribute float aDim/.test(atlasSrc);
   const supplied = /addAttribute\("aDim"/.test(atlasSrc);
   const used = /vDim/.test(atlasSrc);
-  const weights = [...h.matchAll(/\bdim:\s*(\d*\.?\d+)/g)].map((m) => Number(m[1]));
+  /* The run's weights live in shader.mjs's READOUT_RUN; host.mjs must pass them. */
+  const runDims = /dim: R\.slashDim/.test(h) && /dim: R\.maxDim/.test(h)
+    ? [shader.READOUT_RUN.slashDim, shader.READOUT_RUN.maxDim] : [];
+  const weights = [...[...h.matchAll(/\bdim:\s*(\d*\.?\d+)/g)].map((m) => Number(m[1])), ...runDims];
   const faint = weights.filter((w) => w < 0.5);
   if (!declared || !supplied || !used)
     fail("The readout's per-glyph weight is incomplete (aDim must be declared, supplied by runGeometry and read as vDim); the maximum will draw at full strength and compete with the value.");
@@ -748,12 +751,12 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     };
     let count = 0;
     for (const w of [24, 48, 64, 128, 256]) for (const scale of [0.6, 1, 2]) {
-      const h = 24, inset = shader.READOUT_INSET * h;
+      const h = 24, inset = shader.READOUT_INSET * h, R = shader.READOUT_RUN;
       const geo = runGeometry([
-        { text: "999999", size: h * 0.48 * scale },
-        { text: "/", size: h * 0.25 * scale, bottom: true },
-        { text: "999999", size: h * 0.28 * scale, bottom: true },
-      ], { right: w - inset, mid: h / 2, center: false, maxWidth: Math.max(1, w - inset * 2), maxHeight: h * 0.70 });
+        { text: "999999", size: h * R.value * scale },
+        { text: "/", size: h * R.slash * scale, bottom: true },
+        { text: "999999", size: h * R.max * scale, bottom: true },
+      ], { right: w - inset, mid: h / 2, center: false, maxWidth: Math.max(1, w - inset * 2), maxHeight: h * R.maxHeight });
       const pos = geo.attributes.aVertexPosition;
       for (let i = 0; i < pos.length; i += 2) {
         if (pos[i] < inset - 1e-6 || pos[i] > w - inset + 1e-6 || pos[i + 1] < h * 0.15 - 1e-6 || pos[i + 1] > h * 0.85 + 1e-6)
@@ -761,6 +764,11 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
       }
       count++;
     }
+    const R = shader.READOUT_RUN;
+    if (!(R && R.value >= 0.56 && R.max <= R.value * 0.55 && R.slash <= R.max && R.maxHeight >= R.value))
+      fail("READOUT_RUN lost its hierarchy: the value is the reading, set at most of the bar's height, and the max steps well down from it.");
+    if (!/size: h \* R\.value \* numScale/.test(hostSrc) || !/size: h \* R\.max \* numScale/.test(hostSrc))
+      fail("host.mjs lays the readout from literals rather than READOUT_RUN; the preview and this check would measure a different run.");
     if (shader.BODY_INSET !== 0) fail("The visible frame is narrower than the token quad.");
     else ok(`right-aligned readout fits ${count} token-width / text-scale combinations`);
   } finally {

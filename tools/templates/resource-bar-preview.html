@@ -326,6 +326,8 @@ const TICKER_BAND = /*__TICKER_BAND__*/;
 /* Shared with the shader: what the readout has to clear is the corner the
    shader cuts out of the bar. */
 const READOUT_INSET = /*__READOUT_INSET__*/;
+/* shader.mjs's READOUT_RUN: the sizes and dims host.mjs lays the readout with. */
+const READOUT_RUN = /*__READOUT_RUN__*/;
 /* core/bloom.mjs's own numbers, inlined at generation time — never a copy. */
 const BLOOM_THRESHOLD = /*__BLOOM_THRESHOLD__*/;
 const BLOOM_KNEE = /*__BLOOM_KNEE__*/;
@@ -559,7 +561,7 @@ function drawRun(parts, rightPx, midPx, w, h, fitted = false) {
   if (fitted) {
     const pad = maxSize * (CELL_H / FONT_PX) * atlas.cellRatio;
     const fit = Math.min(1, Math.max(1, w - READOUT_INSET * h * 2) / Math.max(1, total + pad),
-      h * 0.70 / Math.max(1, maxSize * (CELL_H / FONT_PX)));
+      h * READOUT_RUN.maxHeight / Math.max(1, maxSize * (CELL_H / FONT_PX)));
     parts = parts.map(p => ({ ...p, size: p.size * fit }));
     total *= fit;
     maxSize *= fit;
@@ -1416,9 +1418,9 @@ function draw(now) {
       const to = a?.heal ? READOUT_INK.heal : READOUT_INK.hit;
       const ink = READOUT_INK.rest.map((c, i) => c + (to[i] - c) * heat);
       if (readAlpha > 0) drawRun([
-        { text: String(cur), size: h * 0.48 * ns, ink, opacity: readAlpha },
-        { text: "/", size: h * 0.25 * ns, ink, opacity: 0.52 * readAlpha, bottom: true },
-        { text: String(shownMax), size: h * 0.28 * ns, ink, opacity: 0.60 * readAlpha, bottom: true },
+        { text: String(cur), size: h * READOUT_RUN.value * ns, ink, opacity: readAlpha },
+        { text: "/", size: h * READOUT_RUN.slash * ns, ink, opacity: READOUT_RUN.slashDim * readAlpha, bottom: true },
+        { text: String(shownMax), size: h * READOUT_RUN.max * ns, ink, opacity: READOUT_RUN.maxDim * readAlpha, bottom: true },
       ], rightPx, h * 0.5, w, h, true);
 
       /* Floating deltas rise out of the bar and fade. The number that changed

@@ -40,7 +40,7 @@ const ROOT = new URL("../", import.meta.url);
 const arg = (name) => process.argv.find((a) => a.startsWith("--" + name + "="))?.split("=").slice(1).join("=");
 
 const {
-  FRAGMENT_SHADERS, LIQUIDS, DEFAULT_LIQUID, PREVIEW_VERTEX_SHADER, READOUT_INSET, TICKER_BAND, UNIFORMS,
+  FRAGMENT_SHADERS, LIQUIDS, DEFAULT_LIQUID, PREVIEW_VERTEX_SHADER, READOUT_INSET, READOUT_RUN, TICKER_BAND, UNIFORMS,
 } = await import(new URL("scripts/features/resource-bars/shader.mjs", ROOT).href);
 const { rampUniform, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, DEAD_STEEL, READOUT_INK, hexToFloat3 } = await import(new URL("scripts/features/resource-bars/ramp.mjs", ROOT).href);
 /* The bloom Foundry actually runs. The preview used to carry its own, gentler
@@ -142,6 +142,7 @@ function page(animImport, root) {
     /* The ticker's band, for the offset host.mjs's writeWords computes from it. */
     "/*__TICKER_BAND__*/": String(TICKER_BAND),
     "/*__READOUT_INSET__*/": String(READOUT_INSET),
+    "/*__READOUT_RUN__*/": JSON.stringify(READOUT_RUN),
     "/*__BLOOM_THRESHOLD__*/": String(DEFAULT_THRESHOLD),
     "/*__BLOOM_KNEE__*/": String(DEFAULT_KNEE),
     "/*__BLOOM_INTENSITY__*/": String(DEFAULT_INTENSITY),

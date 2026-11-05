@@ -21,7 +21,7 @@
  */
 
 import { SUITE_ID } from "../../core/const.mjs";
-import { DEFAULT_LIQUID, fragmentShader, READOUT_INSET, TICKER_BAND, VERTEX_SHADER } from "./shader.mjs";
+import { DEFAULT_LIQUID, fragmentShader, READOUT_INSET, READOUT_RUN, TICKER_BAND, VERTEX_SHADER } from "./shader.mjs";
 import { rampUniform, hexToFloat3, TEMP_COLOR, SHIELD_COLOR, RAIL_COLOR, BREAK_AMBER, BREAK_HOT, DYING_COLOR, DYING_HOT, DEAD_STEEL, READOUT_INK } from "./ramp.mjs";
 import { BarAnim, POPUP_LIFT, POPUP_RISE, RevealAnim, SHED_ORDER, TICKER_FULL } from "./anim.mjs";
 import { DIVIDER, FLAGS, LAYOUT, ROLE, SEGMENTS } from "./constants.mjs";
@@ -1243,11 +1243,12 @@ class BarHost {
     if (stamp !== entry.lastNumber || !entry.textMesh) {
       entry.lastNumber = stamp;
       // Both values share a baseline; fit the whole run inside the fill.
+      const R = READOUT_RUN;
       const geo = runGeometry([
-        { text: String(value), size: h * 0.48 * numScale },
-        { text: "/", size: h * 0.25 * numScale, dim: 0.52, bottom: true },
-        { text: String(shownMax), size: h * 0.28 * numScale, dim: 0.60, bottom: true },
-      ], { right, mid, center: false, maxWidth: Math.max(1, w - READOUT_INSET * h * 2), maxHeight: h * 0.70 });
+        { text: String(value), size: h * R.value * numScale },
+        { text: "/", size: h * R.slash * numScale, dim: R.slashDim, bottom: true },
+        { text: String(shownMax), size: h * R.max * numScale, dim: R.maxDim, bottom: true },
+      ], { right, mid, center: false, maxWidth: Math.max(1, w - READOUT_INSET * h * 2), maxHeight: h * R.maxHeight });
       entry.textMesh = this.swapTextMesh(entry, entry.textMesh, geo, entry._ink, 1);
       // The atlas run is centred on the same anchor as its mesh.
       entry.textMesh?.pivot.set(right, mid);

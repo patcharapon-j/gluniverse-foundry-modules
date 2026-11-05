@@ -521,14 +521,17 @@ The readout has its own channel, `anim.num`, separate from the fill's `frac`:
 the fill snaps on impact but the number counts, so a burst of small hits reads
 as one continuous fall rather than as a digit flickering.
 
-The **maximum is the scale, not the reading**, so it steps back: one size
-down, one step of opacity down, on the reading's baseline. One step, and the
-band matters in both directions. At full strength a small numeral is still
-high-contrast against the plate and competes with the number that actually
-changes; at the 0.22/0.30 this used to carry, the denominator becomes furniture
-you have to go looking for. 0.80 ranks the two and leaves both legible at a
-glance. The separator goes one further, to 0.62, because it is punctuation
-rather than information.
+The value is set at **instrument size**, 0.60 of the bar's height, so the
+reading is the largest thing on the bar after the liquid itself. The **maximum
+is the scale, not the reading**, so it steps well back: half the value's size
+(0.30), on the reading's baseline, at 0.60 of the ink. The band matters in both
+directions. At full strength a small numeral is still high-contrast against the
+plate and competes with the number that actually changes; at the 0.22/0.30 this
+once carried, the denominator becomes furniture you have to go looking for. The
+separator goes one further, to 0.52, because it is punctuation rather than
+information. All of it is `READOUT_RUN` in `shader.mjs`, which the host, the
+preview and the check read, and the check holds the hierarchy (value at least
+0.56, max at most 0.55 of it).
 
 The weight rides on `aDim`, a per-vertex attribute, because a run is one mesh
 with one `uInk`. Anything else means a second mesh and a second geometry to keep

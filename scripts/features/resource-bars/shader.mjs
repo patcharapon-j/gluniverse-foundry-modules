@@ -145,7 +145,7 @@ export const UNIFORMS = Object.freeze({
   uBreakHot: "vec3",  // fracture core gold, sRGB 0..1
   uDyingCol: "vec3",  // --gl-orchid, sRGB 0..1
   uDyingHot: "vec3",  // --gl-orchid-hot, sRGB 0..1
-  uSteel: "vec3",     // --gl-text-dim, sRGB 0..1: the flatline, DEAD and a dead bar's frame
+  uSteel: "vec3",     // --gl-is-steel, sRGB 0..1: the flatline, DEAD and a dead bar's frame
 });
 
 /** Frame shape and the numeric run's safe inset, in bar-height units.
@@ -153,6 +153,20 @@ export const UNIFORMS = Object.freeze({
 export const CUT = 0.20;
 export const BODY_INSET = 0.0;
 export const READOUT_INSET = 0.06;
+
+/**
+ * The readout's run, in bar heights: the value, then the slash and the max on
+ * its baseline, each with the share of the ink it keeps. The value is the
+ * reading and is set at instrument size, most of the bar's height; the max is
+ * context and steps well down and back. host.mjs lays the run from this, and
+ * the preview and the check read the same object.
+ */
+export const READOUT_RUN = Object.freeze({
+  value: 0.60,
+  slash: 0.27, slashDim: 0.52,
+  max: 0.30, maxDim: 0.60,
+  maxHeight: 0.70,
+});
 
 /**
  * The shield ribs' pitch, in bar heights.
