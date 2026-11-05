@@ -930,6 +930,8 @@ body.gluniverse-stream-active:not(.gluniverse-stream-restore) .gluniverse-stream
 }
 .gluniverse-stream-director tbody tr { background: none; }
 .gluniverse-stream-director tbody tr:hover { background: var(--glus-hover); }
+/* A tracked token is a selected row: the selected veil plus the paper edge. */
+.gluniverse-stream-director tr[data-tracked] td { background: var(--glus-selected); }
 .gluniverse-stream-director tr[data-tracked] td:first-child { box-shadow: inset 2px 0 0 var(--glus-paper); }
 .gluniverse-stream-director td small { display: block; margin-top: 2px; font-size: var(--gl-is-t-body); color: var(--glus-faint); }
 .gluniverse-stream-cell-main { display: block; color: var(--glus-text); }
