@@ -278,6 +278,15 @@
   width: 1px;
   background: var(--glus-line-strong);
   transform-origin: center;
+  transition: background-color var(--gl-d-swift) var(--gl-ease);
+}
+/* Once the outcome lands, the divider becomes the result's tone edge, full height to meet the top rule. */
+.glus-rc:is([data-tone="crit-success"], [data-tone="success"], [data-tone="failure"], [data-tone="crit-failure"],
+  [data-tone="hope"], [data-tone="fear"], [data-tone="hit"], [data-tone="miss"]):not([data-pending]) .glus-rc-result::before {
+  top: 0;
+  bottom: 0;
+  width: max(2px, calc(0.1 * var(--u)));
+  background: var(--glus-rc-tone);
 }
 .glus-rc-degree {
   display: grid;
@@ -464,6 +473,12 @@
   background: radial-gradient(90% 160% at 90% 50%, color-mix(in oklab, var(--glus-rc-tone) 26%, transparent), transparent 65%);
 }
 /* The tone's top rule: square to the slab, solid from the left and gone before the chamfer. */
+/*
+ * The tone's top rule. While nothing is decided (a total still counting, a card with no outcome) it is a
+ * quiet paper rule that fades out to the right. Once an outcome lands it is a solid tone edge across the
+ * whole plate, and with the tone edge down the result's left (below) it brackets the answer: the
+ * outcome reads from across the room before the tag's word does.
+ */
 .glus-rc-hair {
   left: 0;
   right: 0;
@@ -473,7 +488,12 @@
   transform-origin: left;
   background: linear-gradient(90deg, var(--glus-rc-tone), var(--glus-rc-tone) 34%, color-mix(in oklab, var(--glus-rc-tone) 30%, transparent) 72%, transparent);
 }
-.glus-rc[data-blind] .glus-rc-hair {
+.glus-rc:is([data-tone="crit-success"], [data-tone="success"], [data-tone="failure"], [data-tone="crit-failure"],
+  [data-tone="hope"], [data-tone="fear"], [data-tone="hit"], [data-tone="miss"]):not([data-pending]) .glus-rc-hair {
+  height: max(2px, calc(0.14 * var(--u)));
+  background: var(--glus-rc-tone);
+}
+.glus-rc[data-blind][data-tone] .glus-rc-hair {
   background: repeating-linear-gradient(90deg, var(--glus-rc-tone) 0 calc(0.5 * var(--u)), transparent 0 calc(0.8 * var(--u)));
 }
 
@@ -742,6 +762,8 @@
   background: linear-gradient(90deg, var(--glus-sc-tone), var(--glus-sc-tone) 30%, color-mix(in oklab, var(--glus-sc-tone) 30%, transparent) 70%, transparent);
   pointer-events: none;
 }
+/* A status that pulls one way is a decided thing too: the same solid edge the roll card's outcome takes. */
+.glus-sc:is([data-tone="applied"], [data-tone="cleared"]) .glus-sc-hair { background: var(--glus-sc-tone); }
 
 /*
  * ── Plain rolls and chat ──────────────────────────────────────────────────────

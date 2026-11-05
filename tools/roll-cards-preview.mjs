@@ -102,7 +102,7 @@ const dh = (who, out, hope, fear, extra = {}) => ({
   duality: { hope, fear, hopeDie: "d12", fearDie: "d12", out }, ...extra
 });
 const status = (key, actor, changes) => ({ status: { key, actor, changes } });
-const chg = (id, name, direction, value = null, kind = "condition") => ({ id, slug: id, name, kind, img: null, value, direction, eased: false });
+const chg = (id, name, direction, value = null, kind = "condition") => ({ id, slug: id, name, kind, img: null, value, direction, eased: direction === "lowered" || direction === "lost" });
 
 const CELLS = [
   ["crit", "Critical success, crack and crit damage", { model: check(SERI, { label: "Strike: Longsword" }, { natural: 20, total: 31, dc: 17, dcVisible: true, degree: 3 }, { target: { name: "Ogre Warrior" }, fx: "gold" }),
