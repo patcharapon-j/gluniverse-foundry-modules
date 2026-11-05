@@ -77,7 +77,8 @@ export function arrivalHTML(scene, record) {
   rows.push(`<footer class="glhex-card-actions">${actions.join("")}</footer>`);
   if (dice.formula) rows.push(`<div class="glhex-card-hint">${escapeHTML(F("GLHEX.card.triggerHint", { trigger: dice.trigger }))}</div>`);
 
-  return `<div class="glhex-card">${rows.join("")}</div>`;
+  // The card's one tone is the difficulty of the hex just entered.
+  return `<div class="glhex-card glhex-arrival"${rating ? ` data-glhex-rating="${rating}"` : ""}>${rows.join("")}</div>`;
 }
 
 const section = (label, body) => `<section class="glhex-card-section"><div class="glhex-label">${escapeHTML(label)}</div><div>${body}</div></section>`;

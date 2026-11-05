@@ -8,10 +8,10 @@
 /* Difficulty is a colour as well as a count: one ramp, stated once, read by the
    tooltip, the arrival card, the palette and the scene settings. Signals, not
    decoration: "extreme" reads as danger in every campaign. */
-:is(.glhex-root, .glhex-tooltip, .glhex-card) [data-glhex-rating="1"] { --glhex-rating: var(--glhex-green); }
-:is(.glhex-root, .glhex-tooltip, .glhex-card) [data-glhex-rating="2"] { --glhex-rating: var(--glhex-amber); }
-:is(.glhex-root, .glhex-tooltip, .glhex-card) [data-glhex-rating="3"] { --glhex-rating: var(--glhex-ember); }
-:is(.glhex-root, .glhex-tooltip, .glhex-card) [data-glhex-rating="4"] { --glhex-rating: var(--glhex-red); }
+:is(.glhex-root, .glhex-tooltip, .glhex-card) [data-glhex-rating="1"], .glhex-card[data-glhex-rating="1"] { --glhex-rating: var(--glhex-green); }
+:is(.glhex-root, .glhex-tooltip, .glhex-card) [data-glhex-rating="2"], .glhex-card[data-glhex-rating="2"] { --glhex-rating: var(--glhex-amber); }
+:is(.glhex-root, .glhex-tooltip, .glhex-card) [data-glhex-rating="3"], .glhex-card[data-glhex-rating="3"] { --glhex-rating: var(--glhex-ember); }
+:is(.glhex-root, .glhex-tooltip, .glhex-card) [data-glhex-rating="4"], .glhex-card[data-glhex-rating="4"] { --glhex-rating: var(--glhex-red); }
 .glhex-rating-word { color: var(--glhex-rating, inherit); font-weight: 600; }
 
 :is(.glhex-tooltip, .glhex-card) .glhex-pips { display: inline-flex; align-items: center; gap: 3px; }
@@ -180,6 +180,19 @@
   font-size: var(--gl-is-t-title);
   font-weight: 700;
   line-height: 1.2;
+}
+/* The one name or answer each card is about is set in Display: the hex the
+   party walked into, or whether the dice called an encounter. An arrival's
+   tone is the difficulty of that hex (The One Tone Rule), so its edge and its
+   mark say Rough or Extreme before a word is read. */
+.glhex-card.glhex-arrival[data-glhex-rating] { --glhex-tone: var(--glhex-rating); }
+:is(.glhex-arrival, .glhex-roll) .glhex-card-head { align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+:is(.glhex-arrival, .glhex-roll) .glhex-card-head > i { margin-top: 3px; font-size: 20px; }
+:is(.glhex-arrival, .glhex-roll) .glhex-card-title {
+  font-size: var(--gl-is-t-display);
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
 }
 /* What the card is, under what it says: sentence case, never a spaced-caps
    kicker over the title. `.glhex-card-kicker` stays for cards already posted. */
