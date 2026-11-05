@@ -82,6 +82,7 @@ class TimerHUDClass {
     this._pauseBtn = this.el.querySelector(".gltimer-pause");
     this._pauseIcon = this._pauseBtn?.querySelector("i");
     const byAct = Object.fromEntries(STRIP.map((b) => [b.act, b]));
+    this._takeBtns = STRIP.filter((b) => b.ms < 0).map((b) => this.el.querySelector(`[data-act="${b.act}"]`)).filter(Boolean);
     this.el.querySelector(".gltimer-strip").addEventListener("click", (ev) => {
       const btn = ev.target.closest("[data-act]");
       if (!btn) return;
@@ -209,6 +210,14 @@ class TimerHUDClass {
         this._pauseBtn.title = label;
         this._pauseBtn.setAttribute("aria-label", label);
         this._lastShowPause = showPause;
+      }
+      // At time up there is nothing to resume (TimerCtrl.resume refuses an
+      // expired timer); adding time is what re-arms it.
+      // Taking time off a clock at zero does nothing either.
+      const expired = tier === "expired";
+      if (this._pauseBtn.disabled !== expired) {
+        this._pauseBtn.disabled = expired;
+        for (const b of this._takeBtns) b.disabled = expired;
       }
     }
   }

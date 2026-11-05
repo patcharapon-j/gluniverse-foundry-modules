@@ -41,10 +41,24 @@ export async function runTimerBrowserChecks() {
     const frozen = hud._lastMain + hud._lastFrac;
     await wait(50);
     check(hud._lastMain + hud._lastFrac === frozen, 'Timer paused digits remain frozen while presentation is independent');
+    hud.onState({ active:true,running:false,expired:true,worldPaused:false,remainingMs:0,totalMs:5000,anchor:Date.now() });
+    check(hud.el.dataset.tone === 'red' && hud.el.dataset.tier === 'expired', 'Timer time up reads red');
     hud.onState({active:false});
     const stopDeadline = performance.now() + 1000;
     do { await wait(30); } while (hud.el.style.display !== 'none' && performance.now() < stopDeadline);
     check(hud.el.style.display === 'none', 'Timer stop hides HUD and clears motion');
   } finally { hud.destroy(); }
+  // The GM's strip: at time up there is nothing to resume or take away.
+  const wasGM = game.user.isGM;
+  game.user.isGM = true;
+  const gm = new TimerHUD.constructor();
+  try {
+    gm.mount();
+    gm.el.style.setProperty('--gl-motion-scale','0');
+    gm.onState({ active:true,running:true,expired:false,worldPaused:false,remainingMs:30000,totalMs:60000,anchor:Date.now() });
+    check(!gm.el.querySelector('[data-act="pause"]').disabled, 'Timer GM pause is live while running');
+    gm.onState({ active:true,running:false,expired:true,worldPaused:false,remainingMs:0,totalMs:60000,anchor:Date.now() });
+    check(gm.el.querySelector('[data-act="pause"]').disabled && gm.el.querySelector('[data-act="sub10"]').disabled && !gm.el.querySelector('[data-act="add10"]').disabled, 'Timer GM strip at time up offers only adding time, edit and stop');
+  } finally { gm.destroy(); game.user.isGM = wasGM; }
   return results;
 }

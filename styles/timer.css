@@ -293,14 +293,23 @@
 }
 #gltimer-hud .gltimer-ctl i,
 .gltimer-panel-body .gltimer-action i { font-size: var(--gl-is-t-body); }
-#gltimer-hud .gltimer-ctl:active,
+#gltimer-hud .gltimer-ctl:active:not(:disabled),
 .gltimer-panel-body .gltimer-preset:active,
-.gltimer-panel-body .gltimer-action:active { scale: var(--gl-is-press); }
+.gltimer-panel-body .gltimer-action:active:not(:disabled) { scale: var(--gl-is-press); }
+/* The focus ring is drawn inside: an outline sits outside the box, where the
+   control's own clip-path (the cut corner) cuts it away. Paper over an ink
+   rim, so it reads on a Raised Slate control and on the paper primary alike. */
 #gltimer-hud .gltimer-ctl:focus-visible,
 .gltimer-panel-body .gltimer-preset:focus-visible,
 .gltimer-panel-body .gltimer-action:focus-visible {
-  outline: var(--gl-is-focus-ring);
-  outline-offset: var(--gl-is-focus-offset);
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--gltimer-paper), inset 0 0 0 4px var(--gltimer-ink-0);
+}
+#gltimer-hud .gltimer-ctl:disabled,
+.gltimer-panel-body .gltimer-action:disabled {
+  opacity: var(--gl-is-disabled);
+  cursor: default;
+  translate: none;
 }
 /* numbers on a control are tabular, so −0:10 and +1:00 hold one width */
 #gltimer-hud .gltimer-ctl,
@@ -310,9 +319,9 @@
 #gltimer-hud .gltimer-ctl.is-icon { padding: 0; }
 #gltimer-hud .gltimer-stop { color: var(--gltimer-red); }
 @media (hover: hover) and (pointer: fine) {
-  #gltimer-hud .gltimer-ctl:hover,
+  #gltimer-hud .gltimer-ctl:hover:not(:disabled),
   .gltimer-panel-body .gltimer-preset:hover,
-  .gltimer-panel-body .gltimer-action:hover { background: var(--gltimer-ink-4); translate: 0 var(--gl-lift); }
+  .gltimer-panel-body .gltimer-action:hover:not(:disabled) { background: var(--gltimer-ink-4); translate: 0 var(--gl-lift); }
   #gltimer-hud .gltimer-stop:hover,
   .gltimer-panel-body .gltimer-action.is-clear:hover { background: var(--gltimer-red); color: var(--gltimer-on); }
 }
