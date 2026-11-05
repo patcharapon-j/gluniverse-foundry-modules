@@ -21,7 +21,7 @@ liquid in the health colour (see **Liquids**), and **one cut corner, top-right**
 The chrome has no hue: the trough is `--gl-is-ink-0` to `-2`, the frame is a
 hairline that runs from `--gl-is-ink-6` below to `--gl-is-steel` along its lit
 top, and the readout and names are `--gl-is-text` on an `--gl-is-ink-0`
-outline. Every one of them is generated from `core/theme.mjs`'s palette mirror,
+outline. Every one of them is generated from `core/theme.mjs`'s `INK_SIGNAL` mirror,
 never restated in GLSL, so the only colour on a bar is the reading.
 
 The bar is **axis-aligned**. It used to lean, by a shear of 0.32 shared between

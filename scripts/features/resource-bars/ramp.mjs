@@ -4,7 +4,8 @@
  * The fill's hue is a function of the health fraction (a resource bar's job is
  * legibility at 40px across a table, so meaning beats theme purity here — see
  * docs/RESOURCE_BARS.md). Every stop is an existing suite hue from
- * `core/theme.mjs`'s PALETTE; nothing new is introduced, and
+ * `core/theme.mjs` (INK_SIGNAL, plus PALETTE for the safe ramp's cyan and the
+ * hues pinned to the initiative tracker); nothing new is introduced, and
  * `tools/resource-bar-check.mjs` pins that those values still equal the ones in
  * `styles/gl-tokens.css`.
  *
@@ -15,7 +16,7 @@
  * OKLab triples and only pays for the inverse transform.
  */
 
-import { PALETTE, mix } from "../../core/theme.mjs";
+import { INK_SIGNAL as IS, PALETTE, mix } from "../../core/theme.mjs";
 
 /**
  * The two ramps, low health first (index 0 = empty, last = full).
@@ -33,8 +34,8 @@ import { PALETTE, mix } from "../../core/theme.mjs";
  * read as "neutral" in exactly the ramp that exists to stay legible.
  */
 export const RAMPS = Object.freeze({
-  default: Object.freeze([PALETTE.isRed, PALETTE.isEmber, PALETTE.isAmber, PALETTE.isGreen]),
-  safe: Object.freeze([PALETTE.isEmber, PALETTE.isAmber, PALETTE.cyan, PALETTE.isInfo]),
+  default: Object.freeze([IS.red, IS.ember, IS.amber, IS.green]),
+  safe: Object.freeze([IS.ember, IS.amber, PALETTE.cyan, IS.info]),
 });
 
 /**
@@ -51,9 +52,9 @@ export const RAMPS = Object.freeze({
  * should read as related. Temp is the lighter tint because it is drawn as a
  * pane over the liquid and has to read on top of it.
  */
-export const TEMP_COLOR = mix(PALETTE.isInfo, PALETTE.isText, 0.45);
-export const SHIELD_COLOR = PALETTE.isInfo;
-export const RAIL_COLOR = PALETTE.isDim;
+export const TEMP_COLOR = mix(IS.info, IS.text, 0.45);
+export const SHIELD_COLOR = IS.info;
+export const RAIL_COLOR = IS.dim;
 
 /**
  * The two golds the guard-break fracture is drawn in.
@@ -91,7 +92,7 @@ export const DYING_HOT = PALETTE.orchidHot;
  * else on a dead bar has a hue — the one state on the map that is not a colour
  * is the one that is over.
  */
-export const DEAD_STEEL = PALETTE.isSteel;
+export const DEAD_STEEL = IS.steel;
 
 /**
  * The readout's inks. At rest it is paper text on an ink outline; an impact
@@ -102,10 +103,10 @@ export const DEAD_STEEL = PALETTE.isSteel;
  * size.
  */
 export const READOUT_INK = Object.freeze({
-  rest: PALETTE.isText,
-  hit: mix(PALETTE.isRed, PALETTE.isText, 0.3),
-  heal: mix(PALETTE.isGreen, PALETTE.isText, 0.45),
-  edge: PALETTE.isInk0,
+  rest: IS.text,
+  hit: mix(IS.red, IS.text, 0.3),
+  heal: mix(IS.green, IS.text, 0.45),
+  edge: IS.ink0,
 });
 
 /* ── sRGB ⇄ OKLab ────────────────────────────────────────────────────────

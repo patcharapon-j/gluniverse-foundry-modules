@@ -34,7 +34,7 @@
  */
 
 import { animate as anime } from "../../core/motion.mjs";
-import { cssVar, hexToInt, hexToRgbFloat, PALETTE } from "../../core/theme.mjs";
+import { cssVar, hexToInt, hexToRgbFloat, INK_SIGNAL } from "../../core/theme.mjs";
 import { CUT, PRECISION } from "./shader.mjs";
 import { TEXT_FRAGMENT_SHADER, TEXT_VERTEX_SHADER } from "./atlas.mjs";
 import { CIPHER_ADVANCE_OF_CAP, cipherGeometry, getCipherAtlas } from "./cipher-atlas.mjs";
@@ -116,10 +116,10 @@ export const RAIL_PAD_Y = 0.15;
 
 /** Colours, from the palette mirror (Ink and Signal) — never literals. */
 export const NAME_INK = Object.freeze({
-  text: PALETTE.isText,
-  edge: PALETTE.isInk0,
-  rule: PALETTE.isSteel,    // the quiet tone the bar's frame is lit in
-  marker: PALETTE.isInfo,   // a fact with no verdict: players see a cipher here
+  text: INK_SIGNAL.text,
+  edge: INK_SIGNAL.ink0,
+  rule: INK_SIGNAL.steel,    // the quiet tone the bar's frame is lit in
+  marker: INK_SIGNAL.info,   // a fact with no verdict: players see a cipher here
   ruleAlpha: 0.55,
   gmDim: 0.7,               // the GM's view of a name players cannot read
 });

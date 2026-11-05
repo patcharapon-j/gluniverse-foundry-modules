@@ -92,38 +92,38 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   /* The first declaration is the dark ground on :root; `.gl-is-paper` restates
      the family further down for light hosts, and the canvas is never one. */
   const cssHex = (name) => tokensCss.match(new RegExp(`--gl-${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1]?.toLowerCase();
-  const { PALETTE } = await import(new URL("scripts/core/theme.mjs", ROOT).href);
+  const { PALETTE, INK_SIGNAL: IS } = await import(new URL("scripts/core/theme.mjs", ROOT).href);
   const lc = (v) => String(v).toLowerCase();
   const before = problems;
 
-  /* The palette mirror: every --gl-is-* hex has its PALETTE twin, equal. */
+  /* The palette mirror: every --gl-is-* hex has its INK_SIGNAL twin, equal. */
   const isTokens = [...tokensCss.matchAll(/--gl-is-([a-z]+(?:-[a-z0-9]+)*):\s*#[0-9a-fA-F]{6}/g)].map((m) => m[1]);
-  const camel = (n) => "is" + n.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join("");
+  const camel = (n) => n.split("-").map((w, i) => (i ? w[0].toUpperCase() + w.slice(1) : w)).join("");
   for (const name of new Set(isTokens)) {
     const key = camel(name);
-    if (!(key in PALETTE)) fail(`core/theme.mjs has no PALETTE.${key} for --gl-is-${name}; canvas features cannot read the Ink and Signal value.`);
-    else if (lc(PALETTE[key]) !== cssHex("is-" + name)) fail(`PALETTE.${key} is ${PALETTE[key]} but --gl-is-${name} is ${cssHex("is-" + name)}. The JS mirror has drifted from the stylesheet.`);
+    if (!(key in IS)) fail(`core/theme.mjs has no INK_SIGNAL.${key} for --gl-is-${name}; canvas features cannot read the Ink and Signal value.`);
+    else if (lc(IS[key]) !== cssHex("is-" + name)) fail(`INK_SIGNAL.${key} is ${IS[key]} but --gl-is-${name} is ${cssHex("is-" + name)}. The JS mirror has drifted from the stylesheet.`);
   }
 
   /* The health ramp is the four signals in order of danger: red, ember, amber,
      green. Health is the one quantity on a bar that is a verdict. */
-  const want = [PALETTE.isRed, PALETTE.isEmber, PALETTE.isAmber, PALETTE.isGreen].map(lc);
+  const want = [IS.red, IS.ember, IS.amber, IS.green].map(lc);
   if (ramp.RAMPS.default.map(lc).join() !== want.join())
     fail(`The default health ramp is ${ramp.RAMPS.default.join(", ")}, not --gl-is-red / -ember / -amber / -green.`);
   /* The safe ramp leaves the red/green axis: ember, amber, a cool bridge, info. */
   const safe = ramp.RAMPS.safe.map(lc);
-  if (safe[0] !== lc(PALETTE.isEmber) || safe[1] !== lc(PALETTE.isAmber) || safe[3] !== lc(PALETTE.isInfo))
+  if (safe[0] !== lc(IS.ember) || safe[1] !== lc(IS.amber) || safe[2] !== lc(PALETTE.cyan) || safe[3] !== lc(IS.info))
     fail(`The colour-blind-safe ramp is ${ramp.RAMPS.safe.join(", ")}; its ends must be --gl-is-ember / -amber … -info.`);
 
   /* Off-ramp colours: the secondary rail carries no verdict, so no hue; the
      shield and temp HP are a neutral fact, so info. */
-  if (lc(ramp.RAIL_COLOR) !== lc(PALETTE.isDim)) fail(`RAIL_COLOR is ${ramp.RAIL_COLOR}, not --gl-is-dim. bar2 is whatever the GM bound it to; a hue there says something false about it.`);
-  if (lc(ramp.SHIELD_COLOR) !== lc(PALETTE.isInfo)) fail(`SHIELD_COLOR is ${ramp.SHIELD_COLOR}, not --gl-is-info.`);
-  const tempHue = ramp.hexToOklab(ramp.TEMP_COLOR), infoHue = ramp.hexToOklab(PALETTE.isInfo);
+  if (lc(ramp.RAIL_COLOR) !== lc(IS.dim)) fail(`RAIL_COLOR is ${ramp.RAIL_COLOR}, not --gl-is-dim. bar2 is whatever the GM bound it to; a hue there says something false about it.`);
+  if (lc(ramp.SHIELD_COLOR) !== lc(IS.info)) fail(`SHIELD_COLOR is ${ramp.SHIELD_COLOR}, not --gl-is-info.`);
+  const tempHue = ramp.hexToOklab(ramp.TEMP_COLOR), infoHue = ramp.hexToOklab(IS.info);
   const hueOf = ([, a, b]) => Math.atan2(b, a) * 180 / Math.PI;
   if (Math.abs(hueOf(tempHue) - hueOf(infoHue)) > 12 || !(tempHue[0] > infoHue[0]))
     fail(`TEMP_COLOR (${ramp.TEMP_COLOR}) is not a lighter tint of --gl-is-info; temp HP and the shield are one idea and must read as related.`);
-  if (lc(ramp.DEAD_STEEL) !== lc(PALETTE.isSteel)) fail(`DEAD_STEEL is ${ramp.DEAD_STEEL}, not --gl-is-steel.`);
+  if (lc(ramp.DEAD_STEEL) !== lc(IS.steel)) fail(`DEAD_STEEL is ${ramp.DEAD_STEEL}, not --gl-is-steel.`);
 
   /* Readout, delta and name inks: from the palette, never float literals. */
   const hostCode = strip(hostSrc);
@@ -131,7 +131,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     fail("host.mjs states a readout or delta ink as a float literal; route it through PALETTE (core/theme.mjs).");
   const nameMod = await import(new URL("scripts/features/resource-bars/name.mjs", ROOT).href);
   const ni = nameMod.NAME_INK;
-  if (lc(ni.text) !== lc(PALETTE.isText) || lc(ni.edge) !== lc(PALETTE.isInk0) || lc(ni.rule) !== lc(PALETTE.isSteel) || lc(ni.marker) !== lc(PALETTE.isInfo))
+  if (lc(ni.text) !== lc(IS.text) || lc(ni.edge) !== lc(IS.ink0) || lc(ni.rule) !== lc(IS.steel) || lc(ni.marker) !== lc(IS.info))
     fail(`NAME_INK is ${JSON.stringify(ni)}; the label is --gl-is-text on --gl-is-ink-0, its rule --gl-is-steel and the GM's cipher marker --gl-is-info.`);
 
   /* The shader's chrome: the trough and frame inks are generated from PALETTE,
@@ -140,8 +140,8 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   if (/GOLD\s*=|vec3\(\s*1\.000,\s*0\.914,\s*0\.722\)|vec3\(\s*0\.55,\s*0\.62,\s*0\.78\)/.test(frag))
     fail("The bar's stroke still carries the Etched Glass gold or blue steel; the frame is ink and steel.");
   const v3 = (hex) => ramp.hexToFloat3(hex).map((c) => c.toFixed(4)).join(", ");
-  for (const [nm, hex] of [["INK", PALETTE.isInk2], ["INK0", PALETTE.isInk0], ["FRAME", PALETTE.isInk6], ["STEEL", PALETTE.isSteel], ["ALARM", PALETTE.isRed]])
-    if (!frag.includes(`const vec3 ${nm} = vec3(${v3(hex)});`)) fail(`The shader's ${nm} is not generated from PALETTE (${hex}).`);
+  for (const [nm, hex] of [["INK", IS.ink2], ["INK0", IS.ink0], ["FRAME", IS.ink6], ["STEEL", IS.steel], ["ALARM", IS.red]])
+    if (!frag.includes(`const vec3 ${nm} = vec3(${v3(hex)});`)) fail(`The shader's ${nm} is not generated from INK_SIGNAL (${hex}).`);
   if (/vec3\(\s*1\.00,\s*0\.(16|20),\s*0\.(20|24)\)/.test(frag)) fail("The low-health warning still uses a literal red; it is ALARM, --gl-is-red.");
   if (/mix\(C,\s*vec3\(0\.0\),\s*\(1\.0 - segMask\)/.test(frag)) fail("The dividers are pure black; they are INK0.");
 
@@ -2149,7 +2149,7 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
   const idx = strip(await src("scripts/features/resource-bars/index.mjs"));
   const mainSrc = strip(await src("scripts/features/resource-bars/main.mjs"));
   const constants = await import(new URL("scripts/features/resource-bars/constants.mjs", ROOT).href);
-  const { PALETTE } = await import(new URL("scripts/core/theme.mjs", ROOT).href);
+  const { PALETTE, INK_SIGNAL } = await import(new URL("scripts/core/theme.mjs", ROOT).href);
   const lang = JSON.parse(await src("lang/resource-bars.en.json"));
   const h = strip(hostSrc);
   const state = (value, max, doomed = 0) => ({ value, max, doomed, slots: max + doomed, flatline: value >= max });
@@ -2295,10 +2295,10 @@ const breakMod = await import(new URL("scripts/features/resource-bars/break.mjs"
     if (css !== String(PALETTE.orchid).toLowerCase()) no(`PALETTE.orchid (${PALETTE.orchid}) does not mirror --gl-orchid (${css}).`);
     if (!/uDyingCol:\s*new Float32Array\(hexToFloat3\(DYING_COLOR\)\)/.test(h) || !/uDyingHot:\s*new Float32Array\(hexToFloat3\(DYING_HOT\)\)/.test(h))
       no("host.mjs does not feed uDyingCol / uDyingHot from ramp.mjs's DYING_COLOR / DYING_HOT.");
-    if (ramp.DEAD_STEEL !== PALETTE.isSteel)
-      no(`ramp.mjs's DEAD_STEEL is ${ramp.DEAD_STEEL}, not PALETTE.isSteel; the flatline is the suite's quiet tone, not a hue of its own.`);
+    if (ramp.DEAD_STEEL !== INK_SIGNAL.steel)
+      no(`ramp.mjs's DEAD_STEEL is ${ramp.DEAD_STEEL}, not INK_SIGNAL.steel; the flatline is the suite's quiet tone, not a hue of its own.`);
     const steel = tokensCss.match(/--gl-is-steel:\s*(#[0-9a-fA-F]{6})/)?.[1]?.toLowerCase();
-    if (steel !== String(PALETTE.isSteel).toLowerCase()) no(`PALETTE.isSteel (${PALETTE.isSteel}) does not mirror --gl-is-steel (${steel}).`);
+    if (steel !== String(INK_SIGNAL.steel).toLowerCase()) no(`INK_SIGNAL.steel (${INK_SIGNAL.steel}) does not mirror --gl-is-steel (${steel}).`);
     if (!/uSteel:\s*new Float32Array\(hexToFloat3\(DEAD_STEEL\)\)/.test(h)) no("host.mjs does not feed uSteel from ramp.mjs's DEAD_STEEL.");
     if ("DYING_INK" in ramp || /DYING_INK/.test(h))
       no("The orchid readout ink is back. While dying the words are the reading, and the numeric readout fades out under them rather than turning orchid.");

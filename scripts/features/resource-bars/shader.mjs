@@ -65,7 +65,7 @@ import { PRECISION, SCALE_PRELUDE, VERTEX_SHADER } from "../../core/glsl.mjs";
 import {
   FX_GLSL_BREAK_FIELD, FX_GLSL_BREAK_PULSE, FX_GLSL_DYING_FIELD, FX_GLSL_DYING_NOISE, FX_GLSL_NOISE,
 } from "../../core/fx-glsl.mjs";
-import { hexToRgbFloat, PALETTE } from "../../core/theme.mjs";
+import { hexToRgbFloat, INK_SIGNAL } from "../../core/theme.mjs";
 
 /* Re-exported so this module stays the single import site for everything the
    feature compiles, as it was when it owned the constant. */
@@ -768,18 +768,18 @@ vec3 rbWarm(vec3 c, float t) {
   return vec3(max(c.r, c.r + (1.0 - c.r) * 0.5 * clamp(t, 0.0, 1.0)), c.g * (1.0 - 0.22 * clamp(t, 0.0, 1.0)), c.b * (1.0 - 0.30 * clamp(t, 0.0, 1.0)));
 }
 
-/* Ink and Signal's chrome, generated from PALETTE.isInk* / isSteel in
-   core/theme.mjs. The trough, the frame and the fracture's seams use these; no
-   liquid does. The frame is ink-6 below and steel along its lit top: a
-   hairline that separates the bar from any map, with no hue in it. */
-const vec3 INK = ${v3(PALETTE.isInk2)};
-const vec3 INK0 = ${v3(PALETTE.isInk0)};
-const vec3 FRAME = ${v3(PALETTE.isInk6)};
-const vec3 STEEL = ${v3(PALETTE.isSteel)};
+/* Ink and Signal's chrome, generated from INK_SIGNAL in core/theme.mjs. The
+   trough, the frame and the fracture's seams use these; no liquid does. The
+   frame is ink-6 below and steel along its lit top: a hairline that separates
+   the bar from any map, with no hue in it. */
+const vec3 INK = ${v3(INK_SIGNAL.ink2)};
+const vec3 INK0 = ${v3(INK_SIGNAL.ink0)};
+const vec3 FRAME = ${v3(INK_SIGNAL.ink6)};
+const vec3 STEEL = ${v3(INK_SIGNAL.steel)};
 /* The low-health warning on the frame and its breath: Ink and Signal's alarm
    red. (The arterial red the fill itself sinks into stays deeper than any
    signal on purpose; it is the liquid, not the chrome.) */
-const vec3 ALARM = ${v3(PALETTE.isRed)};
+const vec3 ALARM = ${v3(INK_SIGNAL.red)};
 `;
 
 /* ── The liquids ────────────────────────────────────────────────────────────
