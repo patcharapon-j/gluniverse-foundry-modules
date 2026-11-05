@@ -19,7 +19,11 @@
    here. Resource Trackers has its own skin (.glct-trk-skin, ADR 0004).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-:is(#glct-hud, #glct-weather-hud, .glct-calendar, .glct-events, .glct-caledit, .glct-settime,
+/* :where() keeps the declarations at zero specificity, so a class that means
+   something (an ominous card, a weather card's own colour) can set its tone on
+   the same element. An :is() here takes the specificity of #glct-hud and wins
+   over every one of those, silently. */
+:where(#glct-hud, #glct-weather-hud, .glct-calendar, .glct-events, .glct-caledit, .glct-settime,
     .glct-wxeditor, .glct-delveditor-app, .glct-chatcard, .glct-delve-ctx) {
   /* the neutral ramp, leaning black */
   --glct-ink-0: var(--gl-is-ink-0);
@@ -58,15 +62,25 @@
 
   /* an element's tone; the classes that mean something set it */
   --glct-tone: var(--glct-paper);
-
+}
+:is(#glct-hud, #glct-weather-hud, .glct-calendar, .glct-events, .glct-caledit, .glct-settime,
+    .glct-wxeditor, .glct-delveditor-app, .glct-chatcard, .glct-delve-ctx) {
   font-family: var(--glct-font);
   color: var(--glct-text);
   -webkit-font-smoothing: antialiased;
 }
 
-/* The one chamfer: square, with the bottom-right corner cut. */
-:is(#glct-hud, #glct-weather-hud, .glct-calendar, .glct-events, .glct-caledit, .glct-settime,
-    .glct-wxeditor, .glct-delveditor-app, .glct-chatcard, .glct-delve-ctx) {
+/* An element's cut size. It does not inherit, so a chip inside the bar takes
+   the default cut rather than the bar's large one. */
+@property --glct-k { syntax: "<length>"; inherits: false; initial-value: 5px; }
+
+/* The one chamfer: square, with the bottom-right corner cut. A var() resolves
+   where the property is declared, so it is declared on every element under the
+   roots: an element that sets --glct-k gets its own cut, not the root's. */
+:where(#glct-hud, #glct-weather-hud, .glct-calendar, .glct-events, .glct-caledit, .glct-settime,
+    .glct-wxeditor, .glct-delveditor-app, .glct-chatcard, .glct-delve-ctx),
+:where(#glct-hud, #glct-weather-hud, .glct-calendar, .glct-events, .glct-caledit, .glct-settime,
+    .glct-wxeditor, .glct-delveditor-app, .glct-chatcard, .glct-delve-ctx) * {
   --glct-chamfer: polygon(0 0, 100% 0, 100% calc(100% - var(--glct-k, 5px)), calc(100% - var(--glct-k, 5px)) 100%, 0 100%);
 }
 
