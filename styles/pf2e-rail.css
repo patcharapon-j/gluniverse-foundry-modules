@@ -217,11 +217,11 @@
 .gph-gem.drop::before { animation: gph-drop var(--gl-d-brisk) var(--gl-ease); }
 @keyframes gph-land { 0% { scale: 1.9; filter: brightness(1.8); } 100% { scale: 1; filter: none; } }
 @keyframes gph-drop { 0% { background: color-mix(in srgb, var(--gph-amber) 60%, transparent); } 100% { } }
-/* Read-only (somebody else's character): the drawers and the fold still
-   open and a spell still peeks on hover, but nothing else acts, so nothing
-   else answers the pointer as a press would; the nameplate says so. */
-.gph[data-readonly] .gph-gem { cursor: default; }
-.gph[data-readonly] :is(.gph-vitals, .gph-strikes, .gph-turnbar, .gph-tabs, .gph-pane) button:not([data-drawer], [data-spell]) { pointer-events: none; }
+/* Read-only (somebody else's character): the drawers open and close, the
+   fold folds and a spell still peeks on hover, but nothing else acts, so
+   nothing else answers the pointer as a press would; the nameplate says so.
+   The exclusions are the host's own gate (host.mjs onClick). */
+.gph[data-readonly] button:not([data-drawer], [data-act="fold"], [data-act="close"], [data-spell]) { pointer-events: none; }
 .gph[data-readonly] [data-spell] { cursor: default; }
 .gph-watch { justify-self: start; height: 18px; padding: 0 6px; display: flex; align-items: center; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1;
   color: var(--gph-dim); background: var(--gph-scrim); box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: var(--gph-clip-xs); }

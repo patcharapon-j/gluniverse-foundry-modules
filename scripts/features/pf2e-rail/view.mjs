@@ -381,7 +381,7 @@ export const SKILLTAB = (s, t) => `
    press uses it through PF2e. */
 const ITEM_CARD = (i, t) => {
   const costSaid = i.cost != null ? t(costKey(i.cost), { cost: i.cost }) : "";
-  return `<button type="button" class="gph-card is-item${i.qty === 0 ? " is-spent" : ""}" data-item="${esc(i.id)}"${/^[123]$/.test(String(i.cost)) ? ` data-cost="${i.cost}"` : ""}
+  return `<button type="button" class="gph-card is-item${i.qty === 0 ? " is-spent" : ""}" data-item="${esc(i.id)}" title="${esc(i.name)}"${/^[123]$/.test(String(i.cost)) ? ` data-cost="${i.cost}"` : ""}
     aria-label="${esc([i.name, costSaid, i.qty != null ? t("GLRAIL.items.left", { n: i.qty }) : ""].filter(Boolean).join(", "))}">
     <span class="gph-art"${i.img ? ` style="background-image:url('${esc(i.img)}')"` : ""}></span>
     ${i.qty != null ? `<span class="gph-pen" aria-hidden="true">×${i.qty}</span>` : ""}

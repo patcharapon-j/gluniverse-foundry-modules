@@ -50,9 +50,10 @@ contract; the check holds every reader to it path for path).
 - **Down and observing** are states of the whole rail. A dying or dead
   character's rail carries `data-down`: the strikes and deck dim behind the
   dying plate, and the gems, checks and drawers stay lit. A rail the user
-  does not own is `data-readonly`: the host ignores every press but the
-  drawers and the fold, so those presses stop answering the pointer (a
-  spell still peeks on hover) and the nameplate says Observing.
+  does not own is `data-readonly`: the host ignores every press but opening
+  or closing a drawer and the fold, so every other press stops answering
+  the pointer (a spell still peeks on hover) and the nameplate says
+  Observing.
 - **Foes**: disposition is read off `token.document`, never the placeable.
 - **Hazard Disable** text runs through `inlineText`, so
   `@Check[thievery|dc:18]` reads "Thievery DC 18" instead of printing raw.

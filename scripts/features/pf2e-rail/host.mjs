@@ -565,7 +565,7 @@ export class RailHost {
     const b = e.target.closest("button");
     if (!b || !this.model) return;
     const d = b.dataset, actor = this.subj?.actor, m = this.model;
-    if (m.readonly && !b.matches("[data-drawer],[data-act='fold']")) return;
+    if (m.readonly && !b.matches("[data-drawer],[data-act='fold'],[data-act='close']")) return;
     try {
       if (d.act === "fold") { await game.settings.set(SUITE_ID, SETTINGS.folded, !m.folded); return; }
       if (d.act === "close") { if (this.fs.open) this.closeFinder(); else { this.open.drawer = null; this.render(); } return; }
