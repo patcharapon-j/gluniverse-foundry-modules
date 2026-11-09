@@ -67,3 +67,18 @@ export class Turn {
 
 /** The key of the turn being taken now. */
 export const turnKey = (combat) => (combat ? `${combat.id}:${combat.round}:${combat.turn}` : null);
+
+/** Is the turn after the current one this actor's? The tracker's order is
+ *  `turns`, the current turn `index`; a defeated combatant is passed over
+ *  where the tracker skips them (core's `skipDefeated`), as the next press of
+ *  Next Turn would. The current combatant itself is never "next". */
+export function upNext(turns, index, isMine, { skipDefeated = false } = {}) {
+  const n = turns?.length ?? 0;
+  if (n < 2 || !Number.isInteger(index) || index < 0 || index >= n) return false;
+  for (let k = 1; k < n; k++) {
+    const c = turns[(index + k) % n];
+    if (skipDefeated && c?.isDefeated) continue;
+    return !!isMine(c);
+  }
+  return false;
+}

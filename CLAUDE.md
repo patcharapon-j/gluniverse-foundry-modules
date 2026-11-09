@@ -1922,7 +1922,13 @@ while it is mounted. The turn's light (`light.mjs`) is one WebGL2 canvas
 stacked *under* `.gph-rail`, which is what keeps its smoke behind the figure
 and the cards; it is a pass, never a state, and the check pins its uniforms
 and the stacking but cannot compile it, so after touching the shader look at
-`/.preview/pf2e-rail.html?light=in&lt=0.3`. To see it: `node tools/pf2e-rail-preview.mjs && node
+`/.preview/pf2e-rail.html?light=in&lt=0.3` (and `light=home`). Every moment —
+the turn's start and end, going down, on deck, a Hero Point, a dying bead, a
+creature's turn on the GM's screen — is decided once, by the pure
+`momentsOf(was, now)` in `moments.mjs`, which the host and the preview both
+call; never decide one in the host alone. Headless Chrome runs slowly enough
+that the frame budget sheds the light, so a live capture there shows nothing
+unless the probe overrides `light.ladder.allows`. To see it: `node tools/pf2e-rail-preview.mjs && node
 tools/preview-server.mjs`. See `docs/PF2E_RAIL.md`.
 
 **When touching the shared frame budget or any feature's shedding**

@@ -130,6 +130,8 @@
   "GLRAIL.turnbar.reactionReady": "Reaction ready.",
   "GLRAIL.turnbar.pip": "Action {i} of {max}",
   "GLRAIL.turnbar.map": "MAP",
+  "GLRAIL.turnbar.next": "You’re next",
+  "GLRAIL.turnbar.nextSaid": "Your turn comes after this one. Get ready.",
   "GLRAIL.skill.title": "Skill actions",
   "GLRAIL.skill.find": "Find a skill action",
   "GLRAIL.skill.placeholder": "Trip, demoralize, recall…",

@@ -7,8 +7,11 @@
  * and the whole thing has gone within the cinematic beat and a half. When the
  * character goes down the same pass runs in red, heavier with smoke, and the
  * plates dim behind it (the CSS half, `is-going-down`); when they come back,
- * the ignition plays again. It is a moment, never a state: at rest the canvas
- * is clear, so it never tints a portrait (ADR 0013).
+ * the ignition plays again. When the turn ends the light goes home: a
+ * dimmer, quicker pass runs the other way and gathers into the portrait. On
+ * the GM's screen a creature's turn plays the ignition in its disposition's
+ * colour. It is a moment, never a state: at rest the canvas is clear, so it
+ * never tints a portrait (ADR 0013).
  *
  * One WebGL2 canvas, prepended to the `.gph` root after every render and kept
  * BEHIND `.gph-rail`: the plates are opaque, so the light shows only on and
@@ -31,6 +34,14 @@ import { FEATURE_ID, SHED_ORDER } from "./const.mjs";
 export const LIGHT_SPAN = 1.6;
 /** …of which the spark spends this fraction running the edge; the rest is afterglow. */
 export const LIGHT_RUN = 0.45;
+/** The light going home is this much of a full pass long… */
+export const HOME_PACE = 0.6;
+/** …and this bright. */
+export const HOME_GAIN = 0.7;
+/** The colour a pass is lit in: by kind, or on the GM's rail by the
+ *  creature's disposition. Each is a skin token with its mirror in core. */
+export const LIGHT_TONE = Object.freeze({ in: "--gph-paper", home: "--gph-paper", out: "--gph-red", hostile: "--gph-red", friendly: "--gph-green", neutral: "--gph-steel", secret: "--gph-steel" });
+const MIRROR = { "--gph-paper": "paper", "--gph-red": "red", "--gph-green": "green", "--gph-steel": "steel" };
 /** Plate edges the shader reads; the rail draws at most six. */
 export const MAX_SEGS = 8;
 /** The canvas never renders above this device-pixel ratio. */
@@ -48,6 +59,7 @@ uniform float uDpr;
 uniform float uT;      // 0..1 through the pass
 uniform float uTime;   // seconds, for the smoke's drift
 uniform float uOut;    // 0 ignition, 1 lights out
+uniform float uHome;   // 1: the turn is over and the light runs home
 uniform float uX0;
 uniform float uX1;
 uniform vec4 uSeg[${MAX_SEGS}]; // x0, x1, rim y (gl coords), unused
@@ -67,11 +79,14 @@ void main() {
   vec2 px = gl_FragCoord.xy;
   float d = uDpr;
   float run = clamp(uT / ${LIGHT_RUN.toFixed(3)}, 0.0, 1.0);
-  /* the spark leaves the portrait fast and slows as it reaches the far end */
-  float front = mix(uX0, uX1, 1.0 - (1.0 - run) * (1.0 - run));
-  float moving = 1.0 - smoothstep(0.85, 1.0, run);
+  /* the spark leaves the portrait fast and slows as it reaches the far end;
+     going home it runs the other way and speeds up into the portrait */
+  float ease = mix(1.0 - (1.0 - run) * (1.0 - run), run * run, uHome);
+  float front = mix(mix(uX0, uX1, ease), mix(uX1, uX0, ease), uHome);
+  /* the head lets go at the far end; going home, only once it is home */
+  float moving = 1.0 - smoothstep(mix(0.85, 0.97, uHome), 1.0, run);
   float fade = 1.0 - smoothstep(0.4, 1.0, uT);
-  float behind = front - px.x;
+  float behind = (front - px.x) * (1.0 - 2.0 * uHome);
   float passed = smoothstep(-2.0 * d, 2.0 * d, behind);
   float dx = px.x - front;
   float trail = passed * exp(-max(behind, 0.0) / (420.0 * d));
@@ -106,27 +121,23 @@ void main() {
     float flare = exp(-length(vec2(dx, dy - 2.0 * d)) / (11.0 * d)) * 0.9;
     float rimL = (max(head * 1.2 * headK, rimK) * (core + bloom) + flare * headK) * exp(-o / (9.0 * d));
     float curtain = trail * fade * exp(-up / (46.0 * d)) * flick * 0.32 * exp(-o / (36.0 * d + up * 0.6));
-    light = max(light, rimL + curtain);
+    /* going home, the light gathers behind the figure on the plate it ends on */
+    float gather = uHome * step(s.x, uX0) * step(uX0, s.y) * smoothstep(0.85, 1.0, run) * (1.0 - smoothstep(0.55, 1.0, uT))
+      * exp(-abs(px.x - uX0) / (64.0 * d)) * (exp(-up / (10.0 * d)) + 0.6 * exp(-up / (48.0 * d))) * 2.6;
+    light = max(light, rimL + curtain + gather);
     float tall = (20.0 + 84.0 * rise) * d;
     smoke = max(smoke, passed * exp(-up / tall) * fade * exp(-o / (24.0 * d + up * 0.8)));
     mote = max(mote, passed * exp(-max(behind, 0.0) / (220.0 * d)) * exp(-up / (70.0 * d)) * fade * exp(-o / (20.0 * d + up)));
     lit = max(lit, exp(-up / (34.0 * d)) * (0.45 + 0.55 * trail) * exp(-o / (12.0 * d + up * 0.5)));
   }
-  light *= mix(1.0, 0.85, uOut);
-  mote *= dot_;
-  float smokeA = wisp * smoke * mix(0.42, 0.62, uOut);
+  light *= mix(1.0, 0.85, uOut) * mix(1.0, ${HOME_GAIN.toFixed(3)}, uHome);
+  mote *= dot_ * (1.0 - uHome);
+  float smokeA = wisp * smoke * mix(0.42, 0.62, uOut) * mix(1.0, 0.45, uHome);
   vec3 smokeC = mix(uInk, uLight, mix(0.25, 0.85, lit) * mix(1.0, 0.6, uOut));
   vec3 col = uLight * (light + mote * 1.3) + smokeC * smokeA;
   float a = clamp(light + mote + smokeA, 0.0, 1.0);
   oColor = vec4(min(col, vec3(a)), a);
 }`;
-
-/** "dying" / "dead" while a player's own rail is down, else "". */
-export const downOf = (m) => (m && m.role !== "gm" && (m.plinth?.dead || m.plinth?.dying) ? (m.plinth.dead ? "dead" : "dying") : "");
-
-/** What a change of state plays: going down puts the lights out, coming
- *  back lights them again; dying to dead is still down and plays nothing. */
-export const relight = (was, now) => (!was && now ? "out" : was && !now ? "in" : null);
 
 const rgb = (el, name, fallback) => {
   const v = cssVar(name, "", el);
@@ -196,13 +207,15 @@ export class RailLight {
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     const u = {};
-    for (const n of ["uDpr", "uT", "uTime", "uOut", "uX0", "uX1", "uSeg", "uN", "uLight", "uInk"]) u[n] = gl.getUniformLocation(p, n);
+    for (const n of ["uDpr", "uT", "uTime", "uOut", "uHome", "uX0", "uX1", "uSeg", "uN", "uLight", "uInk"]) u[n] = gl.getUniformLocation(p, n);
     this.gl = gl; this.u = u;
     return true;
   }
 
-  /** Play a pass over the rail under `root`: "in" (the ignition) or "out". */
-  play(root, kind = "in") {
+  /** Play a pass over the rail under `root`: "in" (the ignition), "out"
+   *  (going down) or "home" (the turn is over). `tone` is a disposition, for
+   *  a creature's turn on the GM's rail (`LIGHT_TONE`). */
+  play(root, kind = "in", { tone = null } = {}) {
     if (!root || !this.canvas || document.hidden || root.hasAttribute("data-folded")) return false;
     if (!this.ladder.allows("light")) return false;
     this.surface?.use();
@@ -223,30 +236,37 @@ export class RailLight {
       if (segs.length === MAX_SEGS) break;
     }
     if (!segs.length) return false;
+    const home = kind === "home";
     const x0 = Math.min(...segs.map((s) => s[0])), x1 = Math.max(...segs.map((s) => s[1]));
-    const span = Math.max(1, scaledMs(1200, root) * LIGHT_SPAN);
+    const span = Math.max(1, scaledMs(1200, root) * LIGHT_SPAN * (home ? HOME_PACE : 1));
+    /* going home, the light ends in the portrait rather than at the rail's edge */
+    const fig = root.querySelector(".gph-fig")?.getBoundingClientRect();
+    const X0 = home && fig?.width ? (fig.left + fig.width / 2 - box.left) * dpr : x0 - 12 * dpr, X1 = x1 + 12 * dpr;
     /* each plate's edge takes the light (and, going down, dims) the moment
-       the spark reaches it: the inverse of the shader's ease-out */
-    const X0 = x0 - 12 * dpr, X1 = x1 + 12 * dpr;
+       the spark reaches it: the inverse of the shader's easing (ease-out
+       leaving; ease-in going home, which meets a plate's right end first) */
     els.forEach((el, i) => {
-      const f = Math.max(0, Math.min(1, (segs[i][0] - X0) / (X1 - X0)));
-      el.style.setProperty("--gph-lit-d", `${Math.round((1 - Math.sqrt(1 - f)) * LIGHT_RUN * span)}ms`);
+      const f = Math.max(0, Math.min(1, home ? (X1 - segs[i][1]) / (X1 - X0) : (segs[i][0] - X0) / (X1 - X0)));
+      el.style.setProperty("--gph-lit-d", `${Math.round((home ? Math.sqrt(f) : 1 - Math.sqrt(1 - f)) * LIGHT_RUN * span)}ms`);
     });
+    const colour = LIGHT_TONE[tone] ?? LIGHT_TONE[kind] ?? LIGHT_TONE.in;
 
     const gl = this.gl, u = this.u;
     gl.viewport(0, 0, W, H);
     gl.uniform1f(u.uDpr, dpr);
     gl.uniform1f(u.uOut, kind === "out" ? 1 : 0);
+    gl.uniform1f(u.uHome, home ? 1 : 0);
     gl.uniform1f(u.uX0, X0);
     gl.uniform1f(u.uX1, X1);
     gl.uniform4fv(u.uSeg, new Float32Array(Array.from({ length: MAX_SEGS }, (_, i) => segs[i] ?? [0, 0, 0, 0]).flat()));
     gl.uniform1i(u.uN, segs.length);
-    gl.uniform3fv(u.uLight, rgb(root, kind === "out" ? "--gph-red" : "--gph-paper", kind === "out" ? INK_SIGNAL.red : INK_SIGNAL.paper));
+    gl.uniform3fv(u.uLight, rgb(root, colour, INK_SIGNAL[MIRROR[colour]] ?? INK_SIGNAL.paper));
     gl.uniform3fv(u.uInk, rgb(root, "--gl-is-ink-0", INK_SIGNAL.ink0));
 
     this.stop();
     root.removeAttribute("data-light"); root.classList.remove("is-going-down"); void root.offsetWidth;
     root.dataset.light = kind;
+    if (tone) root.style.setProperty("--gph-lit-c", `var(${colour})`);
     if (kind === "out") root.classList.add("is-going-down");
     this.span = span;
     const t0 = performance.now();
@@ -293,6 +313,7 @@ export class RailLight {
       const root = this.canvas?.closest(".gph");
       root?.classList.remove("is-going-down");
       root?.removeAttribute("data-light");
+      root?.style.removeProperty("--gph-lit-c");
     }
   }
 

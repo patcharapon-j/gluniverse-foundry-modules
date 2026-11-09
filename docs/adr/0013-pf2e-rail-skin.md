@@ -46,12 +46,26 @@ it has to read over any map, dark or parchment, and never move the scene.
   say the count. Hero Points are the gems alone, and at rest the rail holds no
   light at all. The one exception is the turn's light (`light.mjs`), asked
   for as the rail's broadcast moment: when your turn comes round a paper spark
-  runs the plates' top edges with lit smoke rising behind it, and when you go
-  down the same pass runs in red as the plates dim. It is never a state: the
-  pass is over within one and a half cinematic beats and leaves the canvas
-  clear. It stands behind the rail, so it never lies over a face or a card,
+  runs the plates' top edges with lit smoke rising behind it, when it ends the
+  light runs home into the portrait, dimmer and quicker, and when you go down
+  the same pass runs in red as the plates dim. On the GM's screen a creature's
+  turn plays it in the creature's disposition (red, green, steel: the same
+  signals its card edge already carries). It is never a state: the pass is
+  over within one and a half cinematic beats and leaves the canvas clear. It stands behind the rail, so it never lies over a face or a card,
   and its colours are the skin's paper, red and ink. A second light on the
   rail, or this one held as a state, is a change to this record.
+- **On deck is paper, and not light.** While the turn after the current one
+  is yours, the turn bar's label is "You're next" in an outlined paper slab
+  (the filled slab is your turn), the diamonds you are about to have are drawn
+  in paper and its top edge breathes; becoming next knocks the bar twice.
+  Paper because it is your turn, coming. It is a state, so it is CSS on the
+  bar and never the canvas light.
+- **A Hero Point spent is amber in motion**: the gem cracks, and its light
+  streaks to the press whose roll it rerolls and lands there amber for a
+  beat. That is still the Hero Points' one signal, on the roll it bought.
+- **The live attack is the biggest number on its row**: the MAP step the next
+  attack rolls at is the widest press at title size, the spent steps shrink,
+  and the columns slide as attacks land.
 - **The rail is 112px and never taller**: four rows of 24px presses in every
   plate (strikes, actions with their toggles), which is what a PF2e character
   reaches for in a turn. It was 96px (three rows) and was raised once, on
@@ -98,10 +112,10 @@ it has to read over any map, dark or parchment, and never move the scene.
   ignition: when the turn comes round, the light runs the rail's edges (above),
   the bar's edge sweeps paper and the diamonds light in turn. Under load the
   light is the first thing shed and the CSS half still plays. Around it: a diamond drains when an action is spent,
-  the next-MAP marker slides under the strike presses, a lost length of Hit
+  the next-MAP marker and the strike columns slide, a lost length of Hit
   Points stays lit red and drains after the fill, a heal sweeps up from green,
   the deck's tab marker travels, a cast card leaves the hand upward, a roll
-  echoes its total on the press that made it, and the dying beads beat. The
+  echoes its total on the press that made it, and the dying beads beat (a bead lit burns while the edges flicker red, one put out exhales). The
   finder rises with its columns arriving in turn and each rank rule drawing
   in; its selection slides between actions rather than jumping; a fresh pin
   pops. The numeral and chip-trail tweens read `--gl-d-*` from the element, so the motion

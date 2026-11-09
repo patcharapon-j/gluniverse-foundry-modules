@@ -23,13 +23,16 @@ import { fileURLToPath } from "node:url";
 import * as V from "../scripts/features/pf2e-rail/view.mjs";
 import * as S from "../scripts/features/pf2e-rail/shape.mjs";
 import * as R from "../scripts/features/pf2e-rail/read.mjs";
-import { Turn, economyOf, turnKey } from "../scripts/features/pf2e-rail/turn.mjs";
+import { Turn, economyOf, turnKey, upNext } from "../scripts/features/pf2e-rail/turn.mjs";
 import { answers, echoOf } from "../scripts/features/pf2e-rail/echo.mjs";
 import { combatOf, isTurnOf, shouldMount, subjectOf } from "../scripts/features/pf2e-rail/subject.mjs";
 import { PEEK_PRESSES, ROW_KEYS, actionPeek, effectRows, inventoryRows, macroSlots, spellPeek, strikePeek } from "../scripts/features/pf2e-rail/peeks.mjs";
 import { PRESSES } from "../scripts/features/pf2e-rail/presses.mjs";
 import { FEATURE_ID, PREFIX, SHED_ORDER } from "../scripts/features/pf2e-rail/const.mjs";
-import { downOf, relight } from "../scripts/features/pf2e-rail/light.mjs";
+import { downOf, momentsOf, relight } from "../scripts/features/pf2e-rail/moments.mjs";
+import { LIGHT_TONE } from "../scripts/features/pf2e-rail/light.mjs";
+import * as Drive from "../scripts/features/pf2e-rail/drive.mjs";
+import { INK_SIGNAL } from "../scripts/core/theme.mjs";
 import { FLAGS, SETTINGS } from "../scripts/features/pf2e-rail/settings.mjs";
 import * as K from "../scripts/features/pf2e-rail/skill-actions.mjs";
 const { SKILL_ACTIONS } = K;
@@ -48,7 +51,7 @@ const section = (title, fn) => {
 const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/([^:"'`])\/\/[^\n"'`]*$/gm, "$1");
 
 const DIR = "scripts/features/pf2e-rail/";
-const src = Object.fromEntries(["view.mjs", "read.mjs", "turn.mjs", "echo.mjs", "subject.mjs", "peeks.mjs", "presses.mjs", "shape.mjs", "skill-actions.mjs", "host.mjs", "index.mjs", "settings.mjs", "const.mjs", "drive.mjs", "light.mjs"].map((f) => [f, read(DIR + f)]));
+const src = Object.fromEntries(["view.mjs", "read.mjs", "turn.mjs", "echo.mjs", "subject.mjs", "peeks.mjs", "presses.mjs", "shape.mjs", "skill-actions.mjs", "host.mjs", "index.mjs", "settings.mjs", "const.mjs", "drive.mjs", "light.mjs", "moments.mjs"].map((f) => [f, read(DIR + f)]));
 const css = read("styles/pf2e-rail.css");
 const lang = JSON.parse(read("lang/pf2e-rail.en.json"));
 const seen = new Set();
@@ -558,10 +561,89 @@ section("the light is a moment, behind the rail", () => {
   ok(/position:\s*relative/.test(rail) && z(rail) > z(lightRule), "the rail stacks over the light, so its smoke stays behind the figure and the cards");
   ok(/root\.prepend\(this\.canvas\)/.test(code), "the canvas goes in first, under the rail");
   const host = strip(src["host.mjs"]);
-  ok(/this\.light\.attach\(root\)/.test(host) && /D\.ignite\(this\.root\); this\.light\.play\(this\.root, "in"\)/.test(host) && /relight\(was, downOf\(model\)\)/.test(host), "the host attaches the light after every render, plays it on the turn and on going down or getting up");
+  ok(/this\.light\.attach\(root\)/.test(host), "the host attaches the light after every render");
   ok(relight("", "dying") === "out" && relight("dying", "") === "in" && relight("dying", "dead") === null && relight("", "") === null && relight("dead", "") === "in", "the lights go out on going down and come back on getting up, never between dying and dead");
   ok(downOf({ role: "player", plinth: { dying: { value: 1 } } }) === "dying" && downOf({ role: "gm", plinth: { dead: true } }) === "" && downOf({ role: "player", plinth: {} }) === "", "only a player's own rail goes down");
   ok(/\.gph\[data-light\][^{]*\{[^}]*animation: gph-rimlit[^}]*var\(--gph-lit-d/.test(css) && /--gph-lit-d/.test(code), "each plate's edge takes the light when the spark reaches it");
+});
+
+/* Every moment fails silently: a transition read the wrong way round plays
+   the turn going home on someone whose turn just started, a class the drive
+   restarts that no rule animates is a moment that never shows, a host and a
+   preview deciding moments separately drift apart, and a MAP grid whose live
+   track is not where the marker's arithmetic assumes underlines the wrong
+   attack. */
+section("the moments", () => {
+  const P = (tb, plinth = {}) => ({ role: "player", turnbar: tb ? { mode: "encounter", economy: { max: 3, spent: 0, reaction: true }, map: 0, ...tb } : null, plinth });
+  const mine = P({ mine: true }), theirs = P({ mine: false }), next = P({ mine: false, next: true });
+  let m = momentsOf(theirs, mine, { fresh: true });
+  ok(m.light === "in" && m.ignite && !m.call, "a new turn plays the ignition and the light in");
+  m = momentsOf(mine, theirs);
+  ok(m.light === "home" && !m.ignite, "the turn ending plays the light going home");
+  m = momentsOf(mine, P({ mine: false }, { dying: { value: 1, max: 4 } }));
+  ok(m.light === "out", "going down as the turn ends puts the lights out; it never goes home");
+  ok(momentsOf(mine, mine).light === null && momentsOf(theirs, theirs).light === null, "nothing plays while the turn stands");
+  ok(momentsOf(theirs, next).call && !momentsOf(next, next).call && !momentsOf(next, theirs).call, "the on-deck knock plays once, as you become next");
+  ok(!momentsOf(theirs, P({ mine: true, next: true })).call, "a turn of your own is never on deck");
+  ok(momentsOf(theirs, next).light === null, "being next is no light: the canvas light is a moment, never a state");
+  m = momentsOf(P(null, { hero: [2, 3] }), P(null, { hero: [1, 3] }));
+  ok(m.hero?.from === 2 && m.hero?.to === 1, "a Hero Point spent cracks a gem");
+  ok(momentsOf(P(null, { hero: [1, 3] }), P(null, { hero: [2, 3] })).hero === null, "a Hero Point gained cracks nothing");
+  const dy = (v) => P(null, { dying: { value: v, max: 4 } });
+  ok(momentsOf(dy(2), dy(3)).dying?.to === 3 && momentsOf(dy(2), dy(1)).dying?.to === 1, "a dying bead lit burns and one put out exhales");
+  ok(momentsOf(dy(3), P(null, { dead: true, dying: { value: 4, max: 4 } })).dying === null, "death plays no bead");
+  m = momentsOf(dy(1), P({ mine: false }, {}));
+  ok(m.light === "in" && !m.dying, "stabilising brings the light back");
+  const G = (turn) => ({ role: "gm", plinth: {}, foes: { foes: [{ id: "a", disp: "hostile", ...(turn === "a" ? { turn: true } : {}) }, { id: "b", disp: "friendly", ...(turn === "b" ? { turn: true } : {}) }] } });
+  m = momentsOf(G("a"), G("b"), { fresh: true });
+  ok(m.light === "in" && m.tone === "friendly" && m.card === "b" && !m.ignite, "a creature's turn on the GM's screen plays the light in its disposition and calls its card");
+  ok(momentsOf(G("a"), G(null), { fresh: true }).light === null, "a turn that is not a creature in the hand plays nothing on the GM's screen");
+  ok(momentsOf(G("a"), G("b")).light === null && momentsOf(G("a"), mine, { fresh: true }).light === null, "the GM's light needs a new turn, and a change of rail plays nothing");
+  for (const d of ["hostile", "friendly", "neutral", "secret"]) {
+    const v = LIGHT_TONE[d];
+    ok(!!v && new RegExp(`${v.replace(/-/g, "\\-")}:`).test(css), `the ${d} light's colour ${v} is a skin token`);
+  }
+  for (const k of ["paper", "red", "green", "steel"]) ok(/^#[0-9a-f]{6}$/i.test(INK_SIGNAL[k] ?? ""), `the light's ${k} has its mirror in core`);
+  const mo = strip(src["moments.mjs"]);
+  ok(!/(?<![.\w])(game|canvas|foundry|ui|Hooks)\./.test(mo), "moments.mjs is pure: the preview plays the shipped moments");
+  for (const f of ["ignite", "callCard", "callUp", "spendHero", "dyingBeat"]) ok(typeof Drive[f] === "function" && mo.includes(`D.${f}(`), `playMoments plays ${f}`);
+  ok(/light\?\.play\(root, mo\.light, \{ tone: mo\.tone \}\)/.test(mo), "playMoments plays the light in its tone");
+  const drv = strip(src["drive.mjs"]);
+  for (const [cls, rule] of [["is-calling", /\.gph-turnbar\.is-calling \{[^}]*animation/], ["is-called", /\.gph-card\.is-foe\.is-called \{[^}]*animation/], ["crack", /\.gph-gem\.crack::after \{[^}]*animation/], ["is-heroic", /\.is-heroic \{[^}]*animation/], ["is-burn", /i\.is-burn \{[^}]*animation/], ["is-exhale", /i\.is-exhale::after \{[^}]*animation/], ["is-flicker", /\.gph\.is-flicker[^{]*\{[^}]*animation/]]) {
+    ok(drv.includes(`"${cls}"`), `the drive restarts ${cls}`);
+    ok(rule.test(css), `${cls} has a rule that animates it`);
+  }
+  ok(/\.gph-streak \{/.test(css) && /scaledMs\(/.test(drv), "the streak is styled, and the moments' lengths follow the motion tier");
+  const host = strip(src["host.mjs"]);
+  ok(/playMoments\(this\.root, momentsOf\(was, model, \{ fresh: this\.fresh \}\), \{ light: this\.light, heroAt: this\.heroAt\(\) \}\)/.test(host), "the host plays the moments it reads between two rails of one subject");
+  ok(/momentsOf\(was, next, \{ fresh \}\)/.test(read("tools/pf2e-rail-preview.mjs")) && /playMoments\(/.test(read("tools/pf2e-rail-preview.mjs")), "the preview decides moments with the same module");
+  ok(/this\.gmKey !== undefined && k !== this\.gmKey/.test(host), "the GM's light waits for a turn to change, never the first read");
+  ok(/context\?\.isReroll/.test(host) && /within: TIMING\.rerollWindow/.test(host) && /this\.lastEcho = \{/.test(host), "a Hero Point reroll echoes on the press the first roll did");
+  /* up next */
+  const T = (ids, dead = []) => ids.map((id) => ({ id, isDefeated: dead.includes(id) }));
+  const me = (c) => c?.id === "me";
+  ok(upNext(T(["a", "me", "b"]), 0, me) && !upNext(T(["a", "me", "b"]), 1, me) && !upNext(T(["a", "me", "b"]), 2, me), "up next is the turn after the current one, and never the current one");
+  ok(upNext(T(["me", "a", "b"]), 2, me), "up next wraps the round");
+  ok(!upNext(T(["a", "x", "me"]), 0, me, { skipDefeated: true }) && upNext(T(["a", "x", "me"], ["x"]), 0, me, { skipDefeated: true }) && !upNext(T(["a", "x", "me"], ["x"]), 0, me), "a defeated combatant is passed over only where the tracker skips them");
+  ok(!upNext(T(["me"]), 0, me) && !upNext([], 0, me) && !upNext(T(["a", "me"]), -1, me), "no next in a combat of one or before it starts");
+  const tbN = R.turnbarOf({}, { mode: "encounter", turn: { mine: false, next: true, current: "Kyra" }, econ: { max: 3, spent: 0, reaction: true } });
+  const tbM = R.turnbarOf({}, { mode: "encounter", turn: { mine: true, next: true }, econ: { max: 3, spent: 0, reaction: true } });
+  ok(tbN.next === true && !tbM.next, "the turn bar is on deck only while the turn is somebody else's");
+  const tt = (k) => k;
+  const onDeck = V.TURNBAR(tbN, (k, d) => (d?.name ? `${k}:${d.name}` : k)), mineBar = V.TURNBAR(tbM, tt);
+  ok(/is-next/.test(onDeck) && /<span>GLRAIL\.turnbar\.next<\/span>/.test(onDeck) && !/is-next|GLRAIL\.turnbar\.next</.test(mineBar), "the on-deck bar's label says you're next, and your own turn's never does");
+  ok(/title="GLRAIL\.turnbar\.theirs:Kyra"/.test(onDeck) && /GLRAIL\.turnbar\.nextSaid/.test(onDeck), "on deck, whose turn it is now is still said (title and screen reader)");
+  ok(/\.gph-turnbar\.is-next::before \{[^}]*animation/.test(css), "the on-deck edge breathes while it is true");
+  /* the live attack: the grid's live track is where the marker's arithmetic puts it */
+  for (const k of [0, 1, 2]) {
+    const rule = k === 0 ? css.match(/\n\.gph-stk \{ grid-template-columns: ([^;]+);/)?.[1] : css.match(new RegExp(`\\.gph\\[data-map="${k}"\\] \\.gph-stk \\{ grid-template-columns: ([^;]+);`))?.[1];
+    const tracks = rule?.match(/minmax\([^)]*\)|var\([^)]*\)|\S+/g) ?? [];
+    const steps = tracks.slice(1, 4).map((x) => x.match(/--gph-m-(\w+)/)?.[1]);
+    const want = [0, 1, 2].map((i) => (i < k ? "spent" : i === k ? "live" : "next"));
+    ok(steps.join() === want.join(), `MAP ${k}: the steps are ${want.join(", ")} (got ${steps.join(", ") || "nothing"})`);
+  }
+  ok(/\.gph-mapmark \{[^}]*width: var\(--gph-m-live\)[^}]*\(2 - var\(--gph-map\)\) \* \(var\(--gph-m-next\) \+ 2px\)/.test(css), "the marker is the live step's width and steps over next steps only");
+  ok(/\.gph-stk \{[^}]*transition: grid-template-columns var\(--gl-d-move\)/.test(css) && /--gph-map var\(--gl-d-move\)/.test(css), "the columns and the marker slide on one beat");
 });
 
 console.log(problems.length ? `\n${problems.length} problem(s):\n  ${problems.join("\n  ")}` : `\nall ${passed} checks passed`);

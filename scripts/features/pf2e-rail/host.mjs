@@ -29,9 +29,10 @@ import * as D from "./drive.mjs";
 import * as S from "./shape.mjs";
 import * as K from "./skill-actions.mjs";
 import { TIMING } from "./const.mjs";
-import { RailLight, downOf, relight } from "./light.mjs";
+import { RailLight } from "./light.mjs";
+import { momentsOf, playMoments } from "./moments.mjs";
 import { costOf, readGM, readPlayer, SKILLS, withSkills } from "./read.mjs";
-import { Turn, economyOf, turnKey } from "./turn.mjs";
+import { Turn, economyOf, turnKey, upNext } from "./turn.mjs";
 import { answers, echoOf } from "./echo.mjs";
 import { combatOf, isTurnOf, subjectOf } from "./subject.mjs";
 import { actionPeek, effectRows, inventoryRows, macroSlots, spellPeek, strikePeek } from "./peeks.mjs";
@@ -46,6 +47,11 @@ const t = (k, d) => (d ? game.i18n.format(k, d) : game.i18n.localize(k));
 const loc = (k) => (typeof k === "string" ? game.i18n.localize(k) : "");
 const camel = (slug) => slug.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 const str = (v) => (v == null ? "" : String(v));
+/* Core's tracker setting: Next Turn passes over the defeated. */
+const skipDefeated = () => { try { return !!game.settings.get("core", "combatTrackerConfig")?.skipDefeated; } catch { return false; } };
+/* PF2e's reroll (a Hero Point, a mythic point) posts a new message whose
+   check context says so; it answers the press the first roll echoed on. */
+const isReroll = (m) => !!(m?.flags?.pf2e?.context?.isReroll || m?.rolls?.[0]?.options?.isReroll);
 const safe = async (fn) => { try { return await fn(); } catch { return null; } };
 const range = (r) => (r && Number.isFinite(r.lo) && Number.isFinite(r.hi) ? (r.lo === r.hi ? r.lo : { lo: r.lo, hi: r.hi }) : null);
 const WORDS = () => [0, 1, 2, 3].map((i) => t(`GLRAIL.degree.${i}`));
@@ -72,6 +78,11 @@ export class RailHost {
     this.peek = null;
     this.fs = { open: false, query: "", group: "all", sel: 0, settled: false, expanded: [] };
     this.pending = null;
+    /* the press the last roll echoed on: a Hero Point spent on its reroll streaks there */
+    this.lastEcho = null;
+    /* the turn the GM's screen last read (undefined until the first read) */
+    this.gmKey = undefined;
+    this.fresh = false;
     this.hooks = [];
     this.gen = 0;
     this.raf = 0;
@@ -278,6 +289,9 @@ export class RailHost {
     const { actor, token } = subj;
     if (subj.role === "gm") {
       const combat = game.combat?.started ? game.combat : null;
+      const k = turnKey(combat);
+      this.fresh = !!k && this.gmKey !== undefined && k !== this.gmKey;
+      this.gmKey = k;
       const { target, know } = this.targetFor(actor, true);
       const tokens = canvas?.tokens?.placeables ?? [];
       const data = actor ? await this.dataOf(actor) : { formulas: new Map() };
@@ -288,6 +302,7 @@ export class RailHost {
     }
     const combat = combatOf(game.combats?.contents ?? [], actor, token, canvas?.scene?.id);
     const mine = !!combat && isTurnOf(combat.combatant, actor, token);
+    const next = !!combat && !mine && upNext(list(combat.turns), combat.turn, (c) => isTurnOf(c, actor, token), { skipDefeated: skipDefeated() });
     const turn = this.turnOf(actor);
     this.fresh = turn.sync(turnKey(combat), mine) && this.subjectKey === `player:${actor.uuid}`;
     const base = economyOf(list(actor.itemTypes?.condition));
@@ -301,7 +316,7 @@ export class RailHost {
     this.combatNow = combat ?? null;
     return readPlayer({
       ...this.common(), actor, token, readonly: !actor.isOwner, mode: combat ? "encounter" : "exploration",
-      turn: combat ? { mine, current, round: combat.round } : null, econ: turn.economy(base), map: mine ? turn.map : 0,
+      turn: combat ? { mine, next, current, round: combat.round } : null, econ: turn.economy(base), map: mine ? turn.map : 0,
       formulas: data.formulas, blasts: data.blasts, spells: data.spells, rank: v.rank, tab: v.tab,
       target, know, truth, party: this.partyOf(actor, combat), pins: this.pinsOf(actor),
       frame: actor.getFlag(SUITE_ID, FLAGS.frame) ?? null, folded: setting(SETTINGS.folded, false),
@@ -324,12 +339,11 @@ export class RailHost {
       this.model = model;
       this.render({ arrive: true });
     } else {
-      const was = downOf(this.model);
+      const was = this.model;
       this.update(model);
-      const pass = relight(was, downOf(model));
-      if (pass) this.light.play(this.root, pass);
+      playMoments(this.root, momentsOf(was, model, { fresh: this.fresh }), { light: this.light, heroAt: this.heroAt() });
     }
-    if (this.fresh) { this.fresh = false; D.ignite(this.root); this.light.play(this.root, "in"); }
+    this.fresh = false;
   }
 
   clear() {
@@ -532,13 +546,25 @@ export class RailHost {
   }
 
   onMessage(message) {
-    const p = this.pending;
-    if (!p || !answers(message, p, { userId: game.user.id, now: Date.now() })) return;
-    this.pending = null;
-    const e = echoOf(message, { userId: game.user.id, stream: this.stream, degreeShown: seesTruth() || metagame("results"), words: WORDS() });
+    const now = Date.now(), userId = game.user.id;
+    let p = this.pending;
+    if (p && answers(message, p, { userId, now })) this.pending = null;
+    /* a reroll answers the press its first roll echoed on, for as long as
+       a Hero Point may be spent on it */
+    else if (isReroll(message) && answers(message, this.lastEcho, { userId, now, within: TIMING.rerollWindow })) p = this.lastEcho;
+    else return;
+    const e = echoOf(message, { userId, stream: this.stream, degreeShown: seesTruth() || metagame("results"), words: WORDS() });
     if (!e) return;
     const b = p.sel ? this.root?.querySelector(p.sel) : null;
-    if (b) D.echo(b, e);
+    if (b) { D.echo(b, e); this.lastEcho = { actorId: p.actorId, sel: p.sel, at: now }; }
+  }
+
+  /** The press a Hero Point spent now streaks to: the last roll echoed for
+   *  this subject, while a reroll could still answer it. */
+  heroAt() {
+    const e = this.lastEcho, actor = this.subj?.actor;
+    if (!e?.sel || !actor || e.actorId !== actor.id || Date.now() - e.at > TIMING.rerollWindow) return null;
+    return this.root?.querySelector(e.sel) ?? null;
   }
 
 /** Who is spending and in which turn, taken when the press lands: PF2e's

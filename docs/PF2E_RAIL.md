@@ -129,6 +129,13 @@ the held cards stay in front of it without a mask.
 - **"out"** plays when you go down (`relight(was, now)`; dying to dead plays
   nothing): the same pass in red, heavier with smoke, and the strikes and the
   deck dim (`is-going-down`) the moment it reaches them.
+- **"home"** plays when your turn ends (going down outranks it): dimmer
+  (`HOME_GAIN`) and quicker (`HOME_PACE`), it runs right to left, speeding
+  up, and gathers behind the figure on the plinth.
+- **On the GM's screen** a creature's turn plays "in" in its disposition's
+  colour (`LIGHT_TONE`: red hostile, green friendly, steel neutral), and its
+  card in the hand rises (`is-called`) and stays standing while the turn is
+  its. The GM's turn key is read every refresh; the first read plays nothing.
 - Each plate's edge flashes as the spark arrives: the host writes
   `--gph-lit-d` per plate from the inverse of the shader's own easing, so
   the CSS and the shader agree.
@@ -138,12 +145,57 @@ the held cards stay in front of it without a mask.
 - Shed first (`SHED_ORDER = ["light"]`), registered with `Surfaces`,
   compiled in idle time after the first attach, motion claimed only while it
   plays, length `--gl-d-cinematic × 1.6` through the motion tier. Never on a
-  folded rail or a hidden tab, and never the GM's.
+  folded rail or a hidden tab.
 
 `pf2e-rail-check` pins the uniforms (every declared one written and looked
 up), the stacking, the shed, the transition table and the purity. It cannot
 compile GLSL: serve the preview and look (`&light=in|out&lt=0..1` holds a
 frame).
+
+## The moments (`moments.mjs`)
+
+Everything the rail plays once is decided in one place: `momentsOf(was, now,
+{ fresh })` compares the rail that was drawn with the one about to be (same
+subject only; a change of rail plays nothing), and `playMoments` plays the
+answer. `fresh` is the host's "a turn just started" (`Turn#sync` for a
+player, a changed turn key for the GM). The preview calls the same two.
+
+| Change | Moment |
+|---|---|
+| Your turn starts | the ignition and the light "in" |
+| Your turn ends | the light goes home |
+| You go down / get up | the light "out" / "in" |
+| You become next (`upNext`, `turnbar.next`) | the bar knocks twice and its label pops |
+| A Hero Point is spent | the gem cracks; with a roll echoed in the last `TIMING.rerollWindow`, its light streaks to that press and lands amber |
+| A dying bead is lit / put out | it burns and the rail's edges flicker red / it exhales |
+| A creature's turn (GM) | the light in its disposition, its card rises |
+
+**On deck** is a state, not a moment: while the turn after the current one
+is yours (`upNext` over `combat.turns`, skipping the defeated where core's
+`skipDefeated` does), the turn bar's label reads "You're next" in an
+outlined paper slab, the diamonds you are about to have are drawn in paper and
+its top edge breathes. Whose turn it is now rides the title and the screen
+reader. The canvas light never plays for it.
+
+**A Hero Point's reroll** is PF2e's `rerollFromMessage`: it lowers the
+points first, deletes the old message and posts a new one whose check context
+carries `isReroll`. The host keeps the press the last roll echoed on
+(`lastEcho`), so the spend streaks there and the reroll echoes there, both
+within `TIMING.rerollWindow`.
+
+**The dying beads** follow the dying value, whatever moved it: a recovery
+check, a hit while dying (which burns, as it should), healing. Death plays no
+bead; stabilising is the light coming back.
+
+## The live attack
+
+The strike row's three MAP steps are sized by the step you are on
+(`--gph-m-live` / `-next` / `-spent`): the live one is the widest and
+prints its bonus at title size, the spent ones shrink and go faint, and the
+grid tracks and `--gph-map` transition on one beat, so the columns slide as
+attacks land and the marker under the live step slides with them. Every step
+right of the live one is a next step, which is what makes the marker's offset
+linear in `--gph-map`; the check holds the three grids to that.
 
 ## The echo (`echo.mjs`)
 

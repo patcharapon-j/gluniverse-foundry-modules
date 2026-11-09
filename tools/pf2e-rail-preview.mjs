@@ -27,7 +27,11 @@
  *   &tab=spells|actions|skills|items   the deck's tab
  *   &finder=1&q=tri&group=maneuvers   the skill finder, open
  *   &map=0|1|2   the MAP step   &turn=ignite   play the turn ignition
- *   &light=in|out&lt=0.3   play the rail light (light.mjs), frozen at lt for a still
+ *   &light=in|out|home&lt=0.3   play the rail light (light.mjs), frozen at lt for a still
+ *   &tone=hostile|friendly|neutral   …in a disposition's colour (the GM's)
+ *   &next=1   you are up next (the on-deck bar)
+ *   &moment=home|call|hero|burn|exhale|gmturn   play that moment once,
+ *          through the shipped moments.mjs (hero streaks to an echoed press)
  *   &echo=<selector>,<total>,<degree 0-3>   a roll echo on that press
  *   &drawer=inventory|effects|rest|macros|ranks
  *   &folded=1  &readonly=1  &bright=1 (a parchment map)
@@ -36,7 +40,8 @@
  *
  * Keys on the page: / the finder (↑↓ Enter 1–3 Esc inside it), N a new turn,
  * E encounter/exploration, H lose 7 HP, J heal 7, T temp HP, P a Hero Point,
- * D dying.
+ * O spend a Hero Point, D dying, K / F a recovery check passed / failed,
+ * X end the turn, U up next, G (GM) the next creature's turn.
  * `window.__rail` exposes { model, render, drive } for headless use.
  */
 import { copyFile, mkdir, writeFile, access } from "node:fs/promises";
@@ -125,7 +130,8 @@ const html = `<!doctype html>
 import * as V from '/scripts/features/pf2e-rail/view.mjs';
 import * as D from '/scripts/features/pf2e-rail/drive.mjs';
 import * as S from '/scripts/features/pf2e-rail/shape.mjs';
-import { RailLight, downOf, relight } from '/scripts/features/pf2e-rail/light.mjs';
+import { RailLight } from '/scripts/features/pf2e-rail/light.mjs';
+import { momentsOf, playMoments } from '/scripts/features/pf2e-rail/moments.mjs';
 import { TIMING } from '/scripts/features/pf2e-rail/const.mjs';
 import * as K from '/scripts/features/pf2e-rail/skill-actions.mjs';
 import * as G from '/scripts/core/pf2e-degree.mjs';
@@ -155,6 +161,7 @@ try {
   if (q.get('readonly') === '1') model.readonly = true;
   if (q.get('tab') && model.deck) model.deck = { ...model.deck, tab: q.get('tab') };
   if (q.get('map') && model.turnbar) model.turnbar = { ...model.turnbar, map: +q.get('map') };
+  if (q.get('next') === '1' && model.turnbar?.mode === 'encounter') model.turnbar = { ...model.turnbar, mine: false, current: model.turnbar.current ?? 'Kyra', map: 0, next: true };
   let open = { drawer: q.get('drawer'), peek: q.get('peek') };
   /* the finder's own state: open, what is typed, the group, the selection */
   let fs = { open: q.get('finder') === '1', query: q.get('q') ?? '', group: 'all', sel: +(q.get('sel') ?? 0), settled: false, expanded: [] };
@@ -193,16 +200,17 @@ try {
     prev = model;
     return root;
   }
-  /* The host's one decision: values are driven, anything else redraws. */
-  function update(next) {
-    const root = host.firstElementChild, was = downOf(model);
+  /* The host's one decision: values are driven, anything else redraws;
+     then whatever moved plays its moment, decided by the shipped module. */
+  let echoed = null;
+  function update(next, { fresh = false } = {}) {
+    const root = host.firstElementChild, was = model;
     if (prev && S.shapeOf(prev) === S.shapeOf(next)) {
       D.drive(root, S.liveOf(next), { raised: t('GLRAIL.shield.raised'), raise: t('GLRAIL.shield.raise') });
       if (S.tookHit(prev.vitals ?? prev.creature, next.vitals ?? next.creature)) D.flinch(root);
       model = next; prev = next;
     } else { model = next; render(); }
-    const pass = relight(was, downOf(next));
-    if (pass) light.play(host.firstElementChild, pass);
+    playMoments(host.firstElementChild, momentsOf(was, next, { fresh }), { light, heroAt: echoed?.isConnected ? echoed : null });
   }
 
   /* ── the finder ── typing redraws the panel only, and keeps the caret */
@@ -247,7 +255,7 @@ try {
     toast(call);
     const nat = 1 + Math.floor(Math.random() * 20), total = nat + mod;
     const degree = dc == null ? null : G.degreeOf(total, dc, nat);
-    setTimeout(() => D.echo(button, { total, degree, word: degree == null ? '' : WORDS[degree] }), 260);
+    setTimeout(() => { D.echo(button, { total, degree, word: degree == null ? '' : WORDS[degree] }); echoed = button; }, 260);
   }
   const parseMod = (s) => parseInt(String(s).replace('−', '-'), 10) || 0;
   /* a costed press drains its diamonds; an attack advances the MAP step */
@@ -262,10 +270,44 @@ try {
   function newTurn() {
     if (!model.turnbar || model.mode !== 'encounter') return;
     const m = clone(model);
-    m.turnbar = { ...m.turnbar, mine: true, map: 0, economy: { ...m.turnbar.economy, spent: 0, reaction: true } };
-    model = m; render();
-    D.ignite(host.firstElementChild);
-    light.play(host.firstElementChild, 'in');
+    m.turnbar = { ...m.turnbar, mine: true, next: false, map: 0, economy: { ...m.turnbar.economy, spent: 0, reaction: true } };
+    update(m, { fresh: true });
+  }
+  function endTurn() {
+    if (model.turnbar?.mode !== 'encounter' || !model.turnbar.mine) return;
+    const m = clone(model);
+    m.turnbar = { ...m.turnbar, mine: false, current: 'Kyra', map: 0 };
+    update(m);
+  }
+  function upNext() {
+    if (model.turnbar?.mode !== 'encounter' || model.turnbar.mine) return;
+    const m = clone(model);
+    m.turnbar = { ...m.turnbar, next: !m.turnbar.next };
+    update(m);
+  }
+  function spendHero() {
+    if (!model.plinth.hero?.[0]) return;
+    const m = clone(model);
+    m.plinth.hero[0] -= 1;
+    update(m);
+  }
+  function recovery(passed) {
+    const d = model.plinth.dying;
+    if (!d) return;
+    const m = clone(model), v = d.value + (passed ? -1 : 1);
+    if (v <= 0) { m.plinth.dying = null; m.plinth.conds = (m.plinth.conds ?? []).filter((c) => c.slug !== 'unconscious'); }
+    else if (v >= d.max) { m.plinth.dying = null; m.plinth.dead = true; }
+    else m.plinth.dying = { ...d, value: v };
+    update(m);
+  }
+  /* the GM's screen: the turn passes to the next creature in the hand */
+  function gmTurn() {
+    const foes = model.foes?.foes;
+    if (!foes?.length) return;
+    const m = clone(model), at = m.foes.foes.findIndex((f) => f.turn);
+    m.foes.foes.forEach((f) => delete f.turn);
+    m.foes.foes[(at + 1) % m.foes.foes.length].turn = true;
+    update(m, { fresh: true });
   }
   function rollSkillAction(id, variant) {
     const a = finder('', 'all').actions.find((x) => x.id === id);
@@ -375,6 +417,12 @@ try {
     if (e.key === '/') { e.preventDefault(); openFinder(''); return; }
     if (e.key === 'Escape') { closePeek(); if (open.drawer) { open.drawer = null; render(); } return; }
     if (e.key === 'n') { newTurn(); return; }
+    if (e.key === 'x') { endTurn(); return; }
+    if (e.key === 'u') { upNext(); return; }
+    if (e.key === 'o') { spendHero(); return; }
+    if (e.key === 'k') { recovery(true); return; }
+    if (e.key === 'f') { recovery(false); return; }
+    if (e.key === 'g') { gmTurn(); return; }
     if (e.key === 'e' && model.turnbar) { const m = clone(model), enc = m.mode !== 'encounter'; m.mode = enc ? 'encounter' : 'exploration'; m.turnbar = enc ? { mode: 'encounter', mine: false, current: 'Kyra', economy: { max: 3, spent: 0, reaction: true }, map: 0 } : { mode: 'exploration', activities: [{ id: 'search', name: 'Search', on: true }, { id: 'avoid-notice', name: 'Avoid Notice' }, { id: 'scout', name: 'Scout' }] }; model = m; render(); return; }
     const m = clone(model), hp = m.vitals?.hp ?? m.creature?.hp; if (!hp) return;
     if (e.key === 'h') { const dmg = 7, soak = Math.min(hp.temp ?? 0, dmg); hp.temp = (hp.temp ?? 0) - soak; hp.value = Math.max(0, hp.value - (dmg - soak)); if (m.plinth.hp) m.plinth.hp[0] = hp.value; update(m); }
@@ -386,9 +434,20 @@ try {
 
   render({ arrive: q.get('still') !== '1' });
   if (q.get('turn') === 'ignite') newTurn();
-  if (q.get('light')) { light.ensure(); light.play(host.firstElementChild, q.get('light')); if (q.get('lt')) light.seek(+q.get('lt')); }
-  if (q.get('echo')) { const [sel, total, degree] = q.get('echo').split(','); const el = host.querySelector(sel); if (el) D.echo(el, { total, degree: +degree, word: WORDS[+degree] }); }
-  window.__rail = { get model() { return model; }, render, update, V, D, S, K, t, openFinder, newTurn, light };
+  if (q.get('echo')) { const [sel, total, degree] = q.get('echo').split(','); const el = host.querySelector(sel); if (el) { D.echo(el, { total, degree: +degree, word: WORDS[+degree] }); echoed = el; } }
+  const mo = q.get('moment');
+  if (mo) {
+    light.ensure();
+    if (mo === 'home') { const m = clone(model); m.turnbar = { ...m.turnbar, mode: 'encounter', mine: true, next: false }; model = m; render(); endTurn(); }
+    if (mo === 'call') { const m = clone(model); m.turnbar = { ...m.turnbar, mode: 'encounter', mine: false, current: m.turnbar.current ?? 'Kyra', next: false, map: 0 }; model = m; render(); upNext(); }
+    if (mo === 'hero') { if (!echoed) { const el = host.querySelector('[data-variant="0"]'); if (el) { D.echo(el, { total: 21, degree: 1, word: WORDS[1] }); echoed = el; } } spendHero(); }
+    if (mo === 'burn') recovery(false);
+    if (mo === 'exhale') recovery(true);
+    if (mo === 'gmturn') gmTurn();
+  }
+  if (q.get('light')) { light.ensure(); light.play(host.firstElementChild, q.get('light'), { tone: q.get('tone') }); }
+  if (q.get('lt')) light.seek(+q.get('lt'));
+  window.__rail = { get model() { return model; }, render, update, V, D, S, K, t, openFinder, newTurn, endTurn, upNext, spendHero, recovery, gmTurn, light };
 
   if (q.get('bench') === '1') {
     const N = 60, o = compose();

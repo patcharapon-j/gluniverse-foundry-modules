@@ -23,6 +23,9 @@ export const TIMING = Object.freeze({
   /** A refresh waits for the next frame, or this long where frames are
    *  starved (a background tab). */
   refreshFallback: 120,
+  /** A Hero Point spent this long after a roll echoed still answers that
+   *  roll: its light streaks to the press, and the reroll echoes there. */
+  rerollWindow: 60000,
 });
 
 /** What the shared frame budget may take away, first to last. The light

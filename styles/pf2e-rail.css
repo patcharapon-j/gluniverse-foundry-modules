@@ -6,7 +6,7 @@
    bottom-right cut, one face at five sizes, nothing under 11px. So the only
    hue on the rail is a signal, and each has one job here:
 
-     amber   Hero Points — the light behind the figure, and the gems
+     amber   Hero Points — the gems, and a spent one's streak
      red     danger: Hit Points under a quarter, dying, a broken shield,
              a hostile creature's card edge
      green   a friendly creature's card edge
@@ -33,6 +33,7 @@
 @property --gph-was { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --gph-tab { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --gph-map { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --gph-crack { syntax: "<length>"; inherits: false; initial-value: 0px; }
 
 .gph {
   /* Ink and Signal, aliased (ADR 0012). Sizes, cuts and states are read
@@ -222,6 +223,23 @@
 .gph-gem.drop::before { animation: gph-drop var(--gl-d-brisk) var(--gl-ease); }
 @keyframes gph-land { 0% { scale: 1.9; filter: brightness(1.8); } 100% { scale: 1; filter: none; } }
 @keyframes gph-drop { 0% { background: color-mix(in srgb, var(--gph-amber) 60%, transparent); } 100% { } }
+/* Spent (moments.mjs): the gem that went out cracks. Its amber shell flares,
+   splits along the diagonal and falls away over the gem now empty under it.
+   Where a roll was just echoed, the gem's light streaks to that press (the
+   one a reroll answers) and lands there in amber: the Hero Point, spent on
+   that roll. */
+.gph-gem.crack::after { content: ""; position: absolute; left: 50%; top: 50%; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; rotate: 45deg; pointer-events: none;
+  background: linear-gradient(90deg, var(--gph-amber) calc(50% - var(--gph-crack)), transparent calc(50% - var(--gph-crack)) calc(50% + var(--gph-crack)), var(--gph-amber) calc(50% + var(--gph-crack)));
+  animation: gph-crack var(--gl-d-reveal) var(--gl-exit) both; }
+@keyframes gph-crack {
+  0% { --gph-crack: 0px; scale: 1; filter: brightness(1.7); opacity: 1; }
+  22% { --gph-crack: 0.75px; scale: 1.35; filter: brightness(1.4); opacity: 1; }
+  100% { --gph-crack: 4px; scale: 1.7; filter: none; opacity: 0; } }
+.gph-streak { position: absolute; z-index: 40; height: 2px; margin-top: -1px; transform-origin: 0 50%; pointer-events: none; clip-path: inset(0 100% 0 0);
+  background: linear-gradient(90deg, transparent, var(--gph-amber) 72%, color-mix(in srgb, var(--gph-amber) 55%, var(--gph-text)));
+  filter: drop-shadow(0 0 3px var(--gph-amber)); }
+.gph .is-heroic { animation: gph-heroic var(--gl-d-reveal) var(--gl-ease); }
+@keyframes gph-heroic { 0%, 30% { background: var(--gph-amber); color: var(--gph-on-slab); box-shadow: inset 0 0 0 1.5px var(--gph-amber); } }
 /* Read-only (somebody else's character): the drawers open and close, the
    fold folds and a spell still peeks on hover, but nothing else acts, so
    nothing else answers the pointer as a press would; the nameplate says so.
@@ -245,12 +263,25 @@
    down, the strikes and the deck dim on the same beat, not all at once. */
 .gph[data-light] { --gph-lit-c: var(--gph-paper); }
 .gph[data-light="out"] { --gph-lit-c: var(--gph-red); }
+/* The turn is over: the light runs home dimmer, and each edge it passes
+   cools rather than lights. */
+.gph[data-light="home"] { --gph-lit-c: color-mix(in srgb, var(--gph-paper) 45%, transparent); }
 .gph[data-light] :is(.gph-plinth .gph-plate, .gph-turnbar, .gph-body > .gph-pl:not(.gph-deck, .gph-hand)),
 .gph[data-light] :is(.gph-deck, .gph-hand)::before { animation: gph-rimlit var(--gl-d-reveal) var(--gl-ease) var(--gph-lit-d, 0ms); }
 @keyframes gph-rimlit { 0% { box-shadow: inset 0 2px 0 var(--gph-lit-c), inset 0 0 0 1px var(--gph-line-2); } }
 .gph.is-going-down[data-down] .gph-strikes { animation: gph-down var(--gl-d-move) var(--gl-ease) var(--gph-lit-d, 0ms) both, gph-rimlit var(--gl-d-reveal) var(--gl-ease) var(--gph-lit-d, 0ms); }
 .gph.is-going-down[data-down] .gph-pane { animation: gph-down var(--gl-d-move) var(--gl-ease) var(--gph-lit-d, 0ms) both; }
 @keyframes gph-down { from { opacity: 1; } }
+/* A dying bead burns (moments.mjs): the rail's top edges catch red and
+   gutter twice, the way a light does before it fails. */
+.gph.is-flicker :is(.gph-plinth .gph-plate, .gph-turnbar, .gph-body > .gph-pl:not(.gph-deck, .gph-hand)),
+.gph.is-flicker :is(.gph-deck, .gph-hand)::before { animation: gph-flicker var(--gl-d-reveal) var(--gl-linear); }
+@keyframes gph-flicker {
+  0%, 9% { box-shadow: inset 0 2px 0 var(--gph-red), inset 0 0 0 1px var(--gph-line-2); }
+  10%, 21% { box-shadow: inset 0 0 0 1px var(--gph-line); }
+  22%, 34% { box-shadow: inset 0 2px 0 var(--gph-red), inset 0 0 0 1px var(--gph-line-2); }
+  35%, 46% { box-shadow: inset 0 0 0 1px var(--gph-line); }
+  47% { box-shadow: inset 0 2px 0 color-mix(in srgb, var(--gph-red) 60%, transparent), inset 0 0 0 1px var(--gph-line-2); } }
 
 /* Conditions ride just above the name, where the figure meets the rail: a
    state of the character, on the character, clear of its face. They are in
@@ -418,10 +449,28 @@
 .gph[data-map="1"] .gph-stk:not(.is-short) .gph-map[data-variant="1"],
 .gph[data-map="2"] .gph-stk:not(.is-short) .gph-map[data-variant="2"],
 .gph-nstk .gph-map[data-variant="0"] { background: var(--gph-ink-5); color: var(--gph-text); font-weight: 750; box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); }
-/* The next-MAP marker: one hairline per row under that step, which slides
-   as the turn's attacks land. */
-.gph-mapmark { position: absolute; bottom: -2px; width: 32px; height: 2px; background: var(--gph-paper); pointer-events: none;
-  right: calc(2 * 34px + 3 * 2px + (2 - var(--gph-map)) * 34px);
+/* The live step is the widest press on the row and prints its bonus at
+   title size; the steps already spent shrink and go faint; the columns
+   slide as the turn's attacks land (the tracks are transitioned, and so is
+   --gph-map, on the same beat). The name gives and takes the difference. */
+.gph-stk { grid-template-columns: minmax(0, 1fr) var(--gph-m-live) var(--gph-m-next) var(--gph-m-next) var(--gph-m-dmg) var(--gph-m-dmg);
+  --gph-m-live: 44px; --gph-m-next: 28px; --gph-m-spent: 24px; --gph-m-dmg: 34px;
+  transition: grid-template-columns var(--gl-d-move) var(--gl-ease); }
+.gph[data-map="1"] .gph-stk { grid-template-columns: minmax(0, 1fr) var(--gph-m-spent) var(--gph-m-live) var(--gph-m-next) var(--gph-m-dmg) var(--gph-m-dmg); }
+.gph[data-map="2"] .gph-stk { grid-template-columns: minmax(0, 1fr) var(--gph-m-spent) var(--gph-m-spent) var(--gph-m-live) var(--gph-m-dmg) var(--gph-m-dmg); }
+.gph-stk .gph-map { transition: background var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease), font-size var(--gl-d-move) var(--gl-ease), color var(--gl-d-move) var(--gl-ease); }
+.gph:is(:not([data-map]), [data-map="0"]) .gph-stk .gph-map[data-variant="0"],
+.gph[data-map="1"] .gph-stk .gph-map[data-variant="1"],
+.gph[data-map="2"] .gph-stk .gph-map[data-variant="2"] { font-size: var(--gl-is-t-title); letter-spacing: -0.01em; }
+.gph[data-map="1"] .gph-stk .gph-map[data-variant="0"],
+.gph[data-map="2"] .gph-stk .gph-map:is([data-variant="0"], [data-variant="1"]) { font-size: var(--gl-is-t-meta); color: var(--gph-faint); background: var(--gph-ink-2); }
+.gph[data-map="1"] .gph-stk .gph-map[data-variant="0"]:hover,
+.gph[data-map="2"] .gph-stk .gph-map:is([data-variant="0"], [data-variant="1"]):hover { background: var(--gph-ink-6); color: var(--gph-text); }
+/* The next-MAP marker: one hairline per row under the live step, which
+   slides with it. Every step right of the live one is a next step, so the
+   offset is linear in --gph-map. */
+.gph-mapmark { position: absolute; bottom: -2px; width: var(--gph-m-live); height: 2px; background: var(--gph-paper); pointer-events: none;
+  right: calc(2 * var(--gph-m-dmg) + 3 * 2px + (2 - var(--gph-map)) * (var(--gph-m-next) + 2px));
   transition: --gph-map var(--gl-d-move) var(--gl-ease); }
 .gph[data-mode="exploration"] .gph-mapmark { display: none; }
 .gph-stk.is-short .gph-mapmark { background: var(--gph-faint); }
@@ -502,6 +551,28 @@
 .gph-turnbar.is-igniting .gph-pip.on:not(.is-react)::before { animation: gph-ignite var(--gl-d-swift) var(--gl-ease) both; animation-delay: calc(var(--gl-stagger) * (var(--i) + 2)); }
 .gph-turnbar.is-igniting .gph-pip.is-react.on { animation: gph-ignite var(--gl-d-swift) var(--gl-ease) both; animation-delay: calc(var(--gl-stagger) * (var(--i) + 2)); }
 @keyframes gph-ignite { 0% { background: transparent; scale: 0.4; opacity: 0; } 60% { scale: 1.3; opacity: 1; } 100% { } }
+/* On deck: the turn after this one is yours. The bar holds a paper edge
+   that breathes, the diamonds you are about to have are drawn in paper, and
+   the label says so in an outlined paper slab (the filled slab is your
+   turn, so the one step leads to the other), for as long as it is true; whose
+   turn it is now rides the title. The moment it becomes true (moments.mjs)
+   the bar knocks twice and the slab pops: the call to look up from whatever
+   else is open and get ready. Paper, because it is your turn, coming; never
+   the canvas light, which is a moment and not a state. */
+.gph-turnbar.is-next { box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line-2); }
+.gph-turnbar.is-next::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--gph-paper); pointer-events: none;
+  animation: gph-ondeck calc(2 * var(--gl-d-slow)) var(--gl-ease-inout) infinite; }
+@keyframes gph-ondeck { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+.gph-turnbar.is-next .gph-tb-k { color: var(--gph-paper); box-shadow: inset 0 0 0 1.5px var(--gph-paper);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+.gph-turnbar.is-next .gph-pip.on:not(.is-react)::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--gph-paper); }
+.gph-turnbar.is-next .gph-pip.is-react.on { color: var(--gph-paper); }
+.gph-turnbar.is-calling { animation: gph-knock var(--gl-d-slow) var(--gl-ease); }
+@keyframes gph-knock { 0%, 40%, 100% { translate: 0 0; } 10%, 50% { translate: 0 -5px; } 22%, 62% { translate: 0 0; } }
+.gph-turnbar.is-calling .gph-tb-k { animation: gph-ignite var(--gl-d-swift) var(--gl-ease) both; }
+.gph-turnbar.is-calling::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent 0, color-mix(in srgb, var(--gph-paper) 22%, transparent) 45%, transparent 70%);
+  animation: gph-sweep var(--gl-d-reveal) var(--gl-ease) both; }
 /* Exploring: what the character is doing while the party travels. */
 .gph-turnbar.is-explore { gap: 6px; }
 .gph-tb-acts { display: flex; gap: 3px; min-width: 0; overflow: hidden; }
@@ -904,6 +975,13 @@ button.gph-mac:hover { background: var(--gph-ink-4); }
 .gph-foes .gph-held:not(.is-sel):hover .gph-card { filter: drop-shadow(0 6px 10px var(--gl-is-shade)); }
 .gph-foes .is-sel ~ .gph-held { translate: max(0px, calc(var(--gph-cw) + 6px - var(--gph-adv))) 0; }
 .gph-foes .gph-held:has(~ .is-sel) { translate: none; }
+/* Whose turn it is stands up out of the hand, edged top and foot in its
+   disposition; when the turn comes round (moments.mjs) it rises higher and
+   settles, under the light running in the same colour. */
+.gph-foes .gph-held:has(> .gph-card[data-turn]) { z-index: 28; }
+.gph-card.is-foe[data-turn] { translate: 0 -10px; box-shadow: inset 0 0 0 1px var(--gph-line-2), inset 0 -3px 0 var(--gph-tone, var(--gph-steel)), inset 0 2px 0 var(--gph-tone, var(--gph-steel)); }
+.gph-card.is-foe.is-called { animation: gph-callup var(--gl-d-slow) var(--gl-ease); }
+@keyframes gph-callup { 0% { translate: 0 0; } 38% { translate: 0 -26px; } 100% { translate: 0 -10px; } }
 
 /* ══ SLIM ══ a familiar or a player-owned creature: what it does in a
    fight and nothing it has not got. */
@@ -1076,6 +1154,15 @@ button.gph-shead:hover { background: var(--gph-ink-2); }
 /* Dying is the one state on the rail that keeps moving: the beads beat. */
 .gph-dying .gph-beads i.on { animation: gph-beat var(--gl-d-slow) var(--gl-ease-inout) infinite; }
 @keyframes gph-beat { 0%, 100% { scale: 1; } 18% { scale: 1.45; } 34% { scale: 1; } 48% { scale: 1.25; } }
+/* A recovery check lands (moments.mjs). A bead put out breathes out: a pale
+   ring leaves it and fades. A bead lit burns: it flares white-hot and
+   swells, then settles into the beat; the rail's edges flicker with it. */
+.gph-beads i { position: relative; }
+.gph-dying .gph-beads i.is-burn { animation: gph-burn var(--gl-d-reveal) var(--gl-ease) both; animation-delay: calc(var(--k, 0) * var(--gl-d-flash)); }
+@keyframes gph-burn { 0% { scale: 0.3; box-shadow: 0 0 0 0 var(--gph-on-slab); } 30% { scale: 1.9; background: var(--gph-on-slab); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gph-on-slab) 45%, transparent); } 100% { scale: 1; } }
+.gph-dying .gph-beads i.is-exhale::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  background: var(--gph-on-slab); animation: gph-exhale var(--gl-d-reveal) var(--gl-exit) both; animation-delay: calc(var(--k, 0) * var(--gl-d-flash)); }
+@keyframes gph-exhale { 0% { opacity: 0.95; scale: 1; translate: 0 0; } 100% { opacity: 0; scale: 2.6; translate: 0 -5px; } }
 
 /* ── one-line labels ── an ellipsis needs overflow hidden, and a line box
    shorter than the font's descent then clips g, p, q and y flat
@@ -1105,10 +1192,9 @@ button.gph-shead:hover { background: var(--gph-ink-2); }
   .gph > * { --gph-pw: 128px; --gph-sw: 250px; }
   .gph-pip { width: 15px; }
   .gph-pip.is-react { width: 20px; margin-left: 3px; }
-  .gph-stk { grid-template-columns: minmax(0, 1fr) repeat(3, 28px) 31px 31px; }
+  .gph-stk { --gph-m-live: 38px; --gph-m-next: 24px; --gph-m-spent: 21px; --gph-m-dmg: 31px; }
   .gph-stn { padding: 0 5px; }
   .gph-dmg { letter-spacing: 0; }
-  .gph-mapmark { width: 28px; right: calc(2 * 31px + 3 * 2px + (2 - var(--gph-map)) * 30px); }
   .gph-stn img { display: none; }
   .gph-arows { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); }
   .gph-skilltab { grid-template-columns: minmax(0, 1fr); }

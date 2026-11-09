@@ -9,6 +9,7 @@
  * the host's business.
  */
 import { LOW_HEALTH_AT, TIMING } from "./const.mjs";
+import { scaledMs } from "../../core/theme.mjs";
 
 const frac = (v, max) => (max > 0 ? Math.max(0, Math.min(1, v / max)) : 0);
 
@@ -351,4 +352,71 @@ export function placePeek(root, anchor, peek, zoom = 1) {
   if (bar && bar.right > px0 && bar.left < px1) top = Math.min(top, bar.top);
   peek.style.setProperty("--gph-peek-x", `${Math.round(x)}px`);
   peek.style.setProperty("--gph-peek-y", `${Math.round((rr.bottom - top) / zoom + 8)}px`);
+}
+
+/* ── the moments (moments.mjs decides; these play) ────────────────
+   Each restarts a class whose CSS animation is the moment and takes it off
+   once that animation has had its length, so the next one plays from the
+   start. The lengths are the CSS's own tokens, scaled by the motion tier. */
+function restart(el, cls, ms) {
+  if (!el) return;
+  el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+  el._gphMoment ??= {};
+  clearTimeout(el._gphMoment[cls]);
+  el._gphMoment[cls] = setTimeout(() => el.classList.remove(cls), ms);
+}
+const rootOf = (rail) => rail?.closest?.(".gph") ?? rail;
+
+/** You are up next: the turn bar knocks once, and its tag pops. */
+export function callUp(rail) {
+  const root = rootOf(rail);
+  restart(root?.querySelector("[data-turnbar]"), "is-calling", scaledMs(920, root));
+}
+
+/** A creature's turn, on the GM's rail: its card rises out of the hand. */
+export function callCard(rail, id) {
+  const root = rootOf(rail);
+  restart(root?.querySelector(`[data-foe="${CSS.escape(String(id))}"]`), "is-called", scaledMs(920, root));
+}
+
+/** A Hero Point is spent: the gem that went out cracks, and where a roll was
+ *  just echoed (`at`, the press a reroll answers) its light streaks there. */
+export function spendHero(rail, { from, to }, at = null) {
+  const root = rootOf(rail);
+  const gems = [...(root?.querySelectorAll(".gph-gem") ?? [])];
+  const gem = gems[Math.min(from, gems.length) - 1];
+  if (!gem || to >= from) return;
+  gem.classList.remove("drop");
+  restart(gem, "crack", scaledMs(620, root));
+  if (!at?.isConnected || !root.contains(at)) return;
+  const rr = root.getBoundingClientRect(), z = rr.width / (root.offsetWidth || rr.width) || 1;
+  const a = gem.getBoundingClientRect(), b = at.getBoundingClientRect();
+  const x0 = (a.left + a.width / 2 - rr.left) / z, y0 = (a.top + a.height / 2 - rr.top) / z;
+  const x1 = (b.left + b.width / 2 - rr.left) / z, y1 = (b.top + b.height / 2 - rr.top) / z;
+  const dur = scaledMs(540, root);
+  const land = () => restart(at, "is-heroic", scaledMs(620, root));
+  if (!dur || !globalThis.Element?.prototype.animate) { land(); return; }
+  const s = document.createElement("i");
+  s.className = "gph-streak";
+  s.setAttribute("aria-hidden", "true");
+  Object.assign(s.style, { left: `${x0}px`, top: `${y0}px`, width: `${Math.hypot(x1 - x0, y1 - y0)}px`, transform: `rotate(${Math.atan2(y1 - y0, x1 - x0)}rad)` });
+  root.append(s);
+  const easing = getComputedStyle(root).getPropertyValue("--gl-ease").trim() || "ease-out";
+  const run = s.animate([{ clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0 0 55%)", offset: 0.6 }, { clipPath: "inset(0 0 0 100%)" }], { duration: dur, easing, fill: "forwards" });
+  setTimeout(land, dur * 0.5);
+  run.onfinish = run.oncancel = () => s.remove();
+}
+
+/** A dying bead moves. One put out (a success, a heal) exhales pale; one lit
+ *  (a failure, a hit while dying) burns red, and the rail's edges flicker. */
+export function dyingBeat(rail, { from, to }) {
+  const root = rootOf(rail);
+  const beads = [...(root?.querySelectorAll(".gph-dying .gph-beads i") ?? [])];
+  const ms = scaledMs(620, root);
+  const [lo, hi] = to > from ? [from, to] : [to, from];
+  for (let i = lo; i < hi && i < beads.length; i++) {
+    beads[i].style.setProperty("--k", String(to > from ? i - lo : hi - 1 - i));
+    restart(beads[i], to > from ? "is-burn" : "is-exhale", ms + 4 * scaledMs(70, root));
+  }
+  if (to > from) restart(root, "is-flicker", ms);
 }

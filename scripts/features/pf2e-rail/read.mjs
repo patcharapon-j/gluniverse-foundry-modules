@@ -383,6 +383,7 @@ export function turnbarOf(actor, ctx) {
   if (ctx.mode !== "encounter") return { mode: "exploration", activities: activitiesOf(actor) };
   const tb = { mode: "encounter", mine: !!ctx.turn?.mine, round: num(ctx.turn?.round, 1), economy: { ...ctx.econ }, map: ctx.map ?? 0 };
   if (!tb.mine) tb.current = ctx.turn?.current ?? "";
+  if (!tb.mine && ctx.turn?.next) tb.next = true;
   return tb;
 }
 
