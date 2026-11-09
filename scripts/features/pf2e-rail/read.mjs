@@ -132,13 +132,15 @@ export function subOf(actor, { t, loc = (k) => k, config = {} }) {
   if (actor.type === "familiar") return t("GLRAIL.sub.familiar", { master: actor.master?.name ?? "" });
   if (actor.type === "hazard") {
     const kind = traitsOf(actor).has("haunt") ? t("GLRAIL.sub.haunt") : traitsOf(actor).has("trap") ? t("GLRAIL.sub.trap") : t("GLRAIL.sub.hazard");
-    return `${kind} · ${t("GLRAIL.gm.level", { n: level })}`;
+    return `${t("GLRAIL.gm.level", { n: level })} · ${kind}`;
   }
   const size = actor.system?.traits?.size?.value;
   const sizeName = size ? loc(config.actorSizes?.[size] ?? size) : "";
   const trait = list(actor.system?.traits?.value).find((x) => config.creatureTraits?.[x]);
   const what = [sizeName, trait ? loc(config.creatureTraits[trait]) : ""].filter(Boolean).join(" ");
-  return [what, t("GLRAIL.gm.level", { n: level })].filter(Boolean).join(" · ");
+  /* The level first: it is the token a GM decides on, so the ellipsis
+     takes the size and the trait instead. */
+  return [t("GLRAIL.gm.level", { n: level }), what].filter(Boolean).join(" · ");
 }
 
 /* ── vitals ─────────────────────────────────────────────────────── */

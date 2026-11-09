@@ -127,6 +127,7 @@ export const PLINTH = (p, t, { readonly = false } = {}) => {
   ${p.hero ? heroGems(p.hero, t, readonly) : ""}
   <span class="gph-nameplate">
     ${p.conds?.length ? condList(p.conds, t) : ""}
+    ${readonly && !p.dead && !p.dying ? `<span class="gph-watch">${esc(t("GLRAIL.observing"))}</span>` : ""}
     ${p.dead ? `<span class="gph-dead">${esc(t("GLRAIL.dead"))}</span>` : p.dying ? dyingPlate(p.dying, t) : ""}
     <b title="${esc(p.name)}">${esc(p.name)}</b>
     <span class="gph-sub"><span class="gph-subt">${esc(p.sub ?? "")}</span>${p.speed ? `<span class="gph-spd">${esc(p.speed)}</span>` : ""}${p.hp ? `<span class="gph-fhp" data-fold-hp${hpState(...p.hp) ? ' data-state="low"' : ""}><b>${p.hp[0]}</b><s>/${p.hp[1]}</s>${SR(` ${t("GLRAIL.vitals.hpName")}`)}</span>` : ""}</span>
@@ -733,7 +734,7 @@ export const RAIL = (o, t) => {
     ? (o.hazard ? HAZARD(o.hazard, t) : o.creature ? CREATURE(o.creature, t) : o.foes?.foes?.length ? "" : EMPTY(t)) + (o.foes?.foes?.length ? FOES(o.foes, t) : "")
     : VITALS(o.vitals, t) + STRIKES(o.strikes ?? { list: [] }, t) + DECK(o.deck, t) + (o.slim ? "" : UTIL(o.util, t));
   return `
-<div class="gph" data-role="${o.role}" data-mode="${o.mode ?? "exploration"}" data-map="${o.turnbar?.map ?? 0}" style="--gph-map:${o.turnbar?.map ?? 0}"${o.slim ? " data-slim" : ""}${o.folded ? " data-folded" : ""}${o.readonly ? " data-readonly" : ""}${o.overlay ? " data-overlay" : ""}>
+<div class="gph" data-role="${o.role}" data-mode="${o.mode ?? "exploration"}" data-map="${o.turnbar?.map ?? 0}" style="--gph-map:${o.turnbar?.map ?? 0}"${o.slim ? " data-slim" : ""}${o.folded ? " data-folded" : ""}${o.readonly ? " data-readonly" : ""}${o.role !== "gm" && (o.plinth?.dead || o.plinth?.dying) ? ` data-down="${o.plinth.dead ? "dead" : "dying"}"` : ""}${o.overlay ? " data-overlay" : ""}>
   ${o.stack?.length ? `<div class="gph-stack" role="group" aria-label="${esc(t("GLRAIL.party"))}">${o.stack.map((s) => SEAT(s, t)).join("")}</div>` : ""}
   <div class="gph-rail">
     ${PLINTH({ ...o.plinth, folded: o.folded }, t, { readonly: o.readonly })}

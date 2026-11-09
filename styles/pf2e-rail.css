@@ -200,12 +200,13 @@
 
 /* The Hero Point gems: amber diamonds a press wide. A press on one marks up
    to it; on the last lit one, gives it back — the sheet's own rule. The
-   drawn diamond is 9px; the press around it is 16. */
+   drawn diamond is 11px, so the count reads on a 1080p capture; the press
+   around it is 20 by 19. */
 /* They stand in a column on the plinth's right edge, under the fold, beside
    the figure they belong to. */
 .gph-gems { position: absolute; right: 3px; top: 30px; z-index: 5; display: flex; flex-direction: column; gap: 0; }
-.gph-gem { position: relative; width: 20px; height: 17px; min-height: 17px; max-height: 17px; display: grid; place-items: center; }
-.gph-gem::before { content: ""; width: 9px; height: 9px; rotate: 45deg; background: var(--gph-scrim);
+.gph-gem { position: relative; width: 20px; height: 19px; min-height: 19px; max-height: 19px; display: grid; place-items: center; }
+.gph-gem::before { content: ""; width: 11px; height: 11px; rotate: 45deg; background: var(--gph-scrim);
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--gph-amber) 65%, transparent), 0 0 0 1px var(--gph-scrim);
   transition: background var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease); }
 .gph-gem.on::before { background: var(--gph-amber); box-shadow: 0 0 0 1px var(--gph-scrim); }
@@ -216,7 +217,23 @@
 .gph-gem.drop::before { animation: gph-drop var(--gl-d-brisk) var(--gl-ease); }
 @keyframes gph-land { 0% { scale: 1.9; filter: brightness(1.8); } 100% { scale: 1; filter: none; } }
 @keyframes gph-drop { 0% { background: color-mix(in srgb, var(--gph-amber) 60%, transparent); } 100% { } }
+/* Read-only (somebody else's character): the drawers and the fold still
+   open and a spell still peeks on hover, but nothing else acts, so nothing
+   else answers the pointer as a press would; the nameplate says so. */
 .gph[data-readonly] .gph-gem { cursor: default; }
+.gph[data-readonly] :is(.gph-vitals, .gph-strikes, .gph-turnbar, .gph-tabs, .gph-pane) button:not([data-drawer], [data-spell]) { pointer-events: none; }
+.gph[data-readonly] [data-spell] { cursor: default; }
+.gph-watch { justify-self: start; height: 18px; padding: 0 6px; display: flex; align-items: center; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1;
+  color: var(--gph-dim); background: var(--gph-scrim); box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: var(--gph-clip-xs); }
+
+/* Down: a dying or dead character acts on nothing in its strikes or its
+   deck, so those step back and the dying plate is the loudest thing on the
+   rail. The gems, the checks and the drawers stay lit: a Hero Point and a
+   recovery check are exactly what a dying character still reaches for. A
+   plate comes back whole under the pointer, so a GM's deliberate press is
+   still seen. */
+.gph[data-down] :is(.gph-strikes, .gph-pane) { opacity: 0.38; transition: opacity var(--gl-d-quick) var(--gl-ease); }
+.gph[data-down] :is(.gph-strikes, .gph-pane):hover { opacity: 1; }
 
 /* Conditions ride just above the name, where the figure meets the rail: a
    state of the character, on the character, clear of its face. They are in
@@ -383,7 +400,7 @@
 .gph:is(:not([data-map]), [data-map="0"]) .gph-stk:not(.is-short) .gph-map[data-variant="0"],
 .gph[data-map="1"] .gph-stk:not(.is-short) .gph-map[data-variant="1"],
 .gph[data-map="2"] .gph-stk:not(.is-short) .gph-map[data-variant="2"],
-.gph-nstk .gph-map[data-variant="0"] { background: var(--gph-ink-5); color: var(--gph-text); box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); }
+.gph-nstk .gph-map[data-variant="0"] { background: var(--gph-ink-5); color: var(--gph-text); font-weight: 750; box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); }
 /* The next-MAP marker: one hairline per row under that step, which slides
    as the turn's attacks land. */
 .gph-mapmark { position: absolute; bottom: -2px; width: 32px; height: 2px; background: var(--gph-paper); pointer-events: none;
@@ -1071,10 +1088,10 @@ button.gph-shead:hover { background: var(--gph-ink-2); }
   .gph > * { --gph-pw: 128px; --gph-sw: 250px; }
   .gph-pip { width: 15px; }
   .gph-pip.is-react { width: 20px; margin-left: 3px; }
-  .gph-stk { grid-template-columns: minmax(0, 1fr) repeat(3, 28px) 27px 27px; }
+  .gph-stk { grid-template-columns: minmax(0, 1fr) repeat(3, 28px) 31px 31px; }
   .gph-stn { padding: 0 5px; }
-  .gph-dmg { letter-spacing: 0.02em; }
-  .gph-mapmark { width: 28px; right: calc(2 * 27px + 3 * 2px + (2 - var(--gph-map)) * 30px); }
+  .gph-dmg { letter-spacing: 0; }
+  .gph-mapmark { width: 28px; right: calc(2 * 31px + 3 * 2px + (2 - var(--gph-map)) * 30px); }
   .gph-stn img { display: none; }
   .gph-arows { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); }
   .gph-skilltab { grid-template-columns: minmax(0, 1fr); }

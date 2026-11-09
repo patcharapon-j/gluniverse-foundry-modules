@@ -277,7 +277,7 @@ section("familiar, dying, GM and hazard", () => {
   const g = R.readGM(gmCtx(ogre(), tokens[1]));
   holds(g, allowG, "gm");
   requires(g, [".role", ".plinth.kind", ".plinth.name", ".plinth.sub", ".plinth.fold", ".creature.ac", ".creature.hp.value", ".creature.saves.will", ".creature.strikes[].variants", ".creature.abilities[].cost", ".foes.foes[].disp", ".foes.selected", ".stack"], "gm");
-  ok(g.plinth.sub === "ActorSizeLarge TraitGiant · Level 3" && g.creature.recallDC === 18 && g.creature.adjust === "Elite", `gm: the creature's line (got ${g.plinth.sub})`);
+  ok(g.plinth.sub === "Level 3 · ActorSizeLarge TraitGiant" && g.creature.recallDC === 18 && g.creature.adjust === "Elite", `gm: the creature's line (got ${g.plinth.sub})`);
   ok(g.foes.foes.map((x) => x.id).join(",") === "t2,t4,t1" && g.foes.foes[0].turn && g.foes.selected === "t2", `gm: the hand is hostile first, scene order, no PCs (got ${g.foes.foes.map((x) => x.id)})`);
   ok(g.sk?.target?.recallDC === undefined || g.sk.target.recallDC === null || typeof g.sk.target.recallDC === "number", "gm: the GM finder target");
   ok(g.stack.every((s) => s.hp), "gm: the GM sees every seat's numbers");

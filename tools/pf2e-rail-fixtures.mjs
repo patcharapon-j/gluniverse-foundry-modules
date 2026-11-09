@@ -273,7 +273,7 @@ const FOES = (art) => [
 function gm(art, o = {}) {
   return {
     role: "gm",
-    plinth: { kind: "npc", name: "Ogre Warrior", sub: "Large Giant · Level 3", img: art("iconics/UlkaFull.webp"), cutout: art("iconics/UlkaFull.webp"), hp: [50, 50], fold: true },
+    plinth: { kind: "npc", name: "Ogre Warrior", sub: "Level 3 · Large Giant", img: art("iconics/UlkaFull.webp"), cutout: art("iconics/UlkaFull.webp"), hp: [50, 50], fold: true },
     creature: {
       name: "Ogre Warrior", level: 3, ac: 17, hp: { value: 50, max: 50 }, perception: 7, saves: { fortitude: 13, reflex: 6, will: 4 }, recallDC: 18,
       strikes: [
@@ -299,7 +299,7 @@ function gm(art, o = {}) {
 }
 function hazard(art) {
   return gm(art, {
-    plinth: { kind: "hazard", name: "Spear Launcher", sub: "Mechanical Trap · Level 2", img: art("hazards/serpent-ward-curse-of-potent-poison.webp"), fold: true },
+    plinth: { kind: "hazard", name: "Spear Launcher", sub: "Level 2 · Mechanical Trap", img: art("hazards/serpent-ward-curse-of-potent-poison.webp"), fold: true },
     creature: null,
     hazard: { name: "Spear Launcher", level: 2, stealthDC: 20, ac: 18, hardness: 8, hp: { value: 32, max: 32 },
       disable: "Thievery DC 18 (trained) on the floor plate, or Thievery DC 20 on the wall slot.",
@@ -396,7 +396,7 @@ function gmHorde(art) {
     foes.push({ id: `f${i}`, name, level, img: art(`iconics/${art_}.webp`), hp: [Math.max(0, max - i * 5), max], disp: i === 13 ? "friendly" : "hostile", ...(i === 5 ? { state: "dead" } : {}) });
   }
   return gm(art, {
-    plinth: { kind: "npc", name: "Hobgoblin Archer Sergeant", sub: "Medium Humanoid · Level 3", img: art("iconics/UlkaFull.webp"), cutout: art("iconics/UlkaFull.webp"), hp: [38, 52], fold: true },
+    plinth: { kind: "npc", name: "Hobgoblin Archer Sergeant", sub: "Level 3 · Medium Humanoid", img: art("iconics/UlkaFull.webp"), cutout: art("iconics/UlkaFull.webp"), hp: [38, 52], fold: true },
     creature: {
       name: "Hobgoblin Archer Sergeant", level: 3, ac: 19, hp: { value: 38, max: 52 }, perception: 10, saves: { fortitude: 11, reflex: 12, will: 7 }, recallDC: 20,
       strikes: [
