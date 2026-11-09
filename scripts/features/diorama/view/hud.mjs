@@ -1,103 +1,50 @@
 /**
- * Diorama view — the HUD: toolbar, "Not set up" chip, floating labels and the
- * drag-select box (a token's own controls are Foundry's Token HUD,
- * view/token-hud.mjs). Etched Glass (`.gl-glass`, `.gl-btn`), sized by this feature
+ * Diorama view — the HUD: the floating labels and the drag-select box. The
+ * view's tools are Foundry's own scene-control tools (VIEW_TOOLS below), and a
+ * token's own controls are Foundry's Token HUD (view/token-hud.mjs). Etched Glass (`.gl-glass`, `.gl-btn`), sized by this feature
  * (`.gl-btn` declares no font-size), every string through i18n and every name
  * set as text, never markup.
  */
 
-import { el, keyHint, t } from "./util.mjs";
+import { el } from "./util.mjs";
 
 /**
- * Toolbar buttons, in order. `gm` = GM only; `toggle` = shows a pressed state;
- * `bind` = a keybinding whose current keys are added to the tooltip. The way
- * out is not in this list: it is the labelled "Exit 3D" button under the bar.
+ * The view's tools, in order. The view does not draw them: while it is open
+ * they join Foundry's Token Controls in the left panel, under the "3D view"
+ * toggle that opened it (main.mjs), so nothing of the view's is pinned on the
+ * board. `gm` = GM only; `toggle` = a pressed state the view reports
+ * (`viewToolState` in overlay.mjs); `bind` = a keybinding whose current keys
+ * join the title. Zoom (the wheel) and tilt-shift (the Graphics panel) live
+ * elsewhere.
  */
-export const TOOLBAR = Object.freeze([
+export const VIEW_TOOLS = Object.freeze([
   { act: "yawLeft", icon: "fa-solid fa-rotate-left", key: "GLDIO.view.yawLeft" },
   { act: "yawRight", icon: "fa-solid fa-rotate-right", key: "GLDIO.view.yawRight" },
   { act: "pitch", icon: "fa-solid fa-mountain-sun", key: "GLDIO.view.pitch" },
-  { act: "zoomIn", icon: "fa-solid fa-magnifying-glass-plus", key: "GLDIO.view.zoomIn" },
-  { act: "zoomOut", icon: "fa-solid fa-magnifying-glass-minus", key: "GLDIO.view.zoomOut" },
-  { sep: true },
-  { act: "grid", icon: "fa-solid fa-border-all", key: "GLDIO.view.grid", toggle: true },
-  { act: "tiltShift", icon: "fa-solid fa-camera-retro", key: "GLDIO.view.tiltShift", toggle: true },
   { act: "cutaway", icon: "fa-solid fa-scissors", key: "GLDIO.view.cutaway", toggle: true },
+  { act: "grid", icon: "fa-solid fa-border-all", key: "GLDIO.view.grid", toggle: true },
   { act: "follow", icon: "fa-solid fa-crosshairs", key: "GLDIO.view.follow", toggle: true },
-  { act: "graphics", icon: "fa-solid fa-sliders", key: "GLDIO.view.graphics" },
-  { sep: true, gm: true },
-  { act: "environment", icon: "fa-solid fa-cloud-sun-rain", key: "GLDIO.view.environment", gm: true },
-  { act: "summon", icon: "fa-solid fa-users-viewfinder", key: "GLDIO.view.summon", gm: true },
-  { act: "asPlayers", icon: "fa-solid fa-eye", key: "GLDIO.view.asPlayers", gm: true, toggle: true },
-  { act: "roofs", icon: "fa-solid fa-house", key: "GLDIO.view.roofs", gm: true, toggle: true },
-  { sep: true },
   { act: "peek", icon: "fa-solid fa-map", key: "GLDIO.view.peek", toggle: true, bind: "dio.peek" },
+  { act: "graphics", icon: "fa-solid fa-sliders", key: "GLDIO.view.graphics" },
+  { act: "asPlayers", icon: "fa-solid fa-eye", key: "GLDIO.view.asPlayers", gm: true, toggle: true },
+  { act: "roofs", icon: "fa-solid fa-house", key: "GLDIO.view.roofs", gm: true, toggle: true, bind: "dio.roofs" },
+  { act: "summon", icon: "fa-solid fa-users-viewfinder", key: "GLDIO.view.summon", gm: true },
+  { act: "environment", icon: "fa-solid fa-cloud-sun-rain", key: "GLDIO.view.environment", gm: true },
+  { act: "editTerrain", icon: "fa-solid fa-mountain", key: "GLDIO.controls.edit", gm: true },
 ]);
 
 /** Tones a label badge may take: each is a suite token (`--gl-<tone>`). */
 export const CHIP_TONES = Object.freeze(["info", "good", "warn", "hazard", "peril"]);
 
 export class Hud {
-  /**
-   * @param {HTMLElement} root
-   * @param {{isGM:boolean, actions:Record<string, () => void>}} o
-   */
-  constructor(root, { isGM, actions }) {
+  /** @param {HTMLElement} root */
+  constructor(root) {
     this.root = root;
-    this.actions = actions;
-    this.buttons = new Map();
-
-    const bar = el("div", { class: "gldio-toolbar gl-glass", role: "toolbar", "aria-label": t("GLDIO.view.toolbar") });
-    for (const b of TOOLBAR) {
-      if (b.gm && !isGM) continue;
-      if (b.sep) { bar.append(el("span", { class: "gldio-sep", "aria-hidden": "true" })); continue; }
-      const label = t(b.key);
-      const keys = b.bind ? keyHint(b.bind) : "";
-      const btn = el("button", {
-        type: "button", class: "gldio-btn gl-btn", title: keys ? `${label} (${keys})` : label, "aria-label": label,
-        "aria-pressed": b.toggle ? "false" : null, dataset: { act: b.act },
-      }, [el("i", { class: b.icon, "aria-hidden": "true" })]);
-      btn.addEventListener("click", (ev) => { ev.stopPropagation(); this.actions[b.act]?.(); });
-      this.buttons.set(b.act, btn);
-      bar.append(btn);
-    }
-    this.bar = bar;
-
-    // The way back to 2D: labelled and in the accent, so nobody has to guess
-    // which glyph leaves the view. Its keys are in the tooltip.
-    const exitKeys = ["Esc", keyHint("dio.toggle")].filter(Boolean).join(" / ");
-    const exit = el("button", {
-      type: "button", class: "gldio-exit gldio-door gl-btn gl-btn-accent",
-      title: t("GLDIO.view.exitTitle", { keys: exitKeys }), dataset: { act: "close" },
-    }, [el("i", { class: "fa-solid fa-arrow-right-from-bracket", "aria-hidden": "true" }), el("span", { text: t("GLDIO.view.exit") })]);
-    exit.addEventListener("click", (ev) => { ev.stopPropagation(); this.actions.close?.(); });
-    this.buttons.set("close", exit);
-
-    this.chip = el("div", { class: "gldio-chip gl-glass", hidden: true }, [
-      el("span", { class: "gldio-chip-text", text: t("GLDIO.view.notSetUp") }),
-    ]);
-    if (isGM) {
-      const auto = el("button", { type: "button", class: "gldio-btn gldio-btn--text gl-btn gl-btn-accent", text: t("GLDIO.view.autoSetup") });
-      auto.addEventListener("click", (ev) => { ev.stopPropagation(); this.actions.autoSetup?.(); });
-      this.chip.append(auto);
-    }
-
-    // One column beside the scene controls: the "Not set up" chip, the bar, the way out.
-    this.rail = el("div", { class: "gldio-rail" }, [this.chip, bar, exit]);
-
     this.labels = el("div", { class: "gldio-labels", "aria-hidden": "true" });
     this.labelEls = new Map();
     this.marqueeEl = null;
 
-    root.append(this.labels, this.rail);
-  }
-
-  setPressed(act, on) {
-    this.buttons.get(act)?.setAttribute("aria-pressed", on ? "true" : "false");
-  }
-
-  setSetup(show) {
-    this.chip.hidden = !show;
+    root.append(this.labels);
   }
 
   /**
@@ -161,8 +108,6 @@ export class Hud {
   dispose() {
     this.marquee(null);
     this.labels.remove();
-    this.rail.remove();
-    this.chip.remove();
     this.labelEls.clear();
   }
 }

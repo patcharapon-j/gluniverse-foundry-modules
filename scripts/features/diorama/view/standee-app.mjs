@@ -109,9 +109,11 @@ function makeClass() {
     #drag = null;
     #loadId = 0;
 
-    constructor(actor, mods, options = {}) {
+    constructor(actor, mods, options = {}, synthetic = null) {
       super({ id: `gldio-standee-${String(actor.uuid).replace(/[^\w-]/g, "-")}`, ...options });
       this.actor = actor;
+      /** The token's own actor this window was opened from, when it writes to the world actor instead. */
+      this.synthetic = synthetic;
       this.#mods = mods;
       const units = sceneUnits();
       const legacy = legacyHeightOf(actor);
@@ -132,7 +134,7 @@ function makeClass() {
     #artFor(standee) {
       const a = this.actor;
       return this.#mods.snapshot.tokenArtFor({
-        standee, canObserve: true, actorImg: a?.img ?? null, tokenImg: a?.prototypeToken?.texture?.src ?? null,
+        standee, actorImg: a?.img ?? null, tokenImg: a?.prototypeToken?.texture?.src ?? null,
       });
     }
 
@@ -169,6 +171,7 @@ function makeClass() {
           btn("browse", "fa-solid fa-folder-open", t("GLDIO.standee.art.browse")),
           r.resetArt = btn("resetArt", "fa-solid fa-rotate-left", t("GLDIO.standee.art.reset")),
         ]),
+        el("p", { class: "gldio-standee-hint", text: t("GLDIO.standee.art.scope") }),
         r.tainted,
       ]);
 
@@ -434,6 +437,7 @@ function makeClass() {
       del(dio, leaf(FLAG_CREATURE_HEIGHT));
       try {
         await this.actor.update({ flags: { [SUITE_ID]: { dio } } });
+        await clearTokenOverride(this.synthetic);
         this.close();
       } catch (e) {
         warn("diorama: saving the standee failed", e);
@@ -458,14 +462,48 @@ export async function openStandeeConfig(actor) {
     ui.notifications?.warn(t("GLDIO.standee.denied"));
     return null;
   }
-  const open = _open.get(actor.uuid);
+  // A token's own actor (an unlinked token's sheet, the Token HUD) edits the
+  // world actor behind it when this user may, so every token of it, placed or
+  // dragged out later, stands the same art.
+  const { target, synthetic } = standeeTarget(actor);
+  const open = _open.get(target.uuid);
   if (open) { open.render({ force: true }); open.bringToFront?.(); return open; }
   const mods = await loadMods();
   _Class ??= makeClass();
-  const app = new _Class(actor, mods);
-  _open.set(actor.uuid, app);
+  const app = new _Class(target, mods, {}, synthetic);
+  _open.set(target.uuid, app);
   app.render({ force: true });
   return app;
+}
+
+/**
+ * Where a standee is stored: on the world actor, which every token of it reads
+ * (an unlinked token's flags fall through to its world actor). A token's own
+ * actor is used only when this user may not edit the world one (a player who
+ * owns this token and not the actor). Pure but for the documents it is handed.
+ * @param {Actor} actor
+ * @returns {{target: Actor, synthetic: Actor|null}}
+ */
+export function standeeTarget(actor) {
+  if (!actor?.isToken) return { target: actor, synthetic: null };
+  const base = actor.token?.baseActor ?? globalThis.game?.actors?.get?.(actor.id) ?? null;
+  const may = base && (globalThis.game?.user?.isGM || base.isOwner);
+  return may ? { target: base, synthetic: actor } : { target: actor, synthetic: null };
+}
+
+/**
+ * A token whose own actor carried an older standee (saved from its Token HUD)
+ * would shadow the world actor's: that override is dropped once the world
+ * actor is saved, so the token stands what the actor says.
+ */
+async function clearTokenOverride(synthetic) {
+  const delta = synthetic?.token?.delta;
+  if (!delta?.flags?.[SUITE_ID]?.dio) return;
+  try {
+    await delta.update({ [`flags.${SUITE_ID}.-=dio`]: null });
+  } catch (e) {
+    warn("diorama: could not clear the token's own standee", e);
+  }
 }
 
 /** Owners and GMs see the header entry. */

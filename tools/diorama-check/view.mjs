@@ -197,7 +197,12 @@ export default async function check(ctx) {
   const binds = [...main.matchAll(/keybindings\.register\(\s*SUITE_ID\s*,\s*"([^"]+)"/g)].map((m) => m[1]);
   ctx.ok("keybindings are dio.-prefixed", binds.length >= 4 && binds.every((k) => k.startsWith(C.PREFIX)), binds.join(", "));
   ctx.ok("Shift+V toggles the view", /"dio\.toggle"[\s\S]{0,200}key:\s*"KeyV",\s*modifiers:\s*\["Shift"\]/.test(main));
-  ctx.ok("scene controls go through the suite group", /ensureSuiteGroup\(controls\)/.test(main) && !/controls\.tokens/.test(main));
+  // The way in and out is ONE toggle in the Token Controls; the view's tools join it there while
+  // it is open, and nothing of the view's is pinned on the board. Edit terrain stays in the suite group.
+  ctx.ok("the 3D view is a toggle in the Token Controls", /controls\.tokens/.test(main) && /tools\[TOOL_VIEW\] = \{[\s\S]{0,400}toggle: true/.test(main));
+  ctx.ok("the view's tools join the Token Controls only while it is open", /if \(isOpen\(\)\) \{[\s\S]{0,200}VIEW_TOOLS\.forEach/.test(main));
+  ctx.ok("Edit terrain goes through the suite group", /ensureSuiteGroup\(controls\)[\s\S]{0,200}TOOL_EDIT/.test(main));
+  ctx.ok("nothing of the view's is pinned on the board", !/\bel\("button"/.test(read(`${DIO}/view/hud.mjs`)) && !existsSync(join(ctx.root, `${DIO}/view/entry.mjs`)));
   ctx.ok("main.mjs imports the view lazily", !/^import[^;]*view\/overlay\.mjs/m.test(main) && /import\("\.\/view\/overlay\.mjs"\)/.test(main));
   for (const f of files) {
     if (/^import[^;]*render\/renderer\.mjs/m.test(read(f))) ctx.ok(`${f} imports the renderer lazily`, false);
@@ -273,22 +278,20 @@ export default async function check(ctx) {
   ctx.ok("a malformed wall is dropped", Snap.wallState(W({ c: [0, 0, "x", 1] }), { isGM: true, terrain: null, size: 100, distance: 5 }) === null);
 
   const art = Snap.tokenArtFor;
-  ctx.ok("the GM's standee override wins", art({ standee: "s.webp", canObserve: false, actorImg: "a.webp", tokenImg: "t.webp" }) === "s.webp");
-  ctx.ok("every viewer sees the portrait (a bestiary creature stands as its art)",
-    art({ canObserve: false, actorImg: "a.webp", tokenImg: "t.webp", protoImg: "t.webp" }) === "a.webp"
-    && art({ canObserve: false, actorImg: "a.webp", tokenImg: "t.webp" }) === "a.webp"
-    && art({ canObserve: false, actorImg: "a.webp", tokenImg: null }) === "a.webp");
-  ctx.ok("a disguised token stays disguised to a viewer who cannot Observe",
-    art({ canObserve: false, actorImg: "mimic.webp", tokenImg: "chest.webp", protoImg: "mimic-token.webp" }) === "chest.webp");
-  ctx.ok("an observer sees through the disguise",
-    art({ canObserve: true, actorImg: "mimic.webp", tokenImg: "chest.webp", protoImg: "mimic-token.webp" }) === "mimic.webp");
-  ctx.ok("a random or wildcard prototype image is no disguise",
-    art({ canObserve: false, actorImg: "a.webp", tokenImg: "wolf-2.webp", protoImg: "wolf-*.webp" }) === "a.webp"
-    && art({ canObserve: false, actorImg: "a.webp", tokenImg: "wolf-2.webp", protoImg: "wolf-1.webp", protoRandom: true }) === "a.webp");
-  ctx.ok("an observer sees the portrait", art({ canObserve: true, actorImg: "a.webp", tokenImg: "t.webp" }) === "a.webp");
-  ctx.ok("the mystery-man portrait falls back to the token", art({ canObserve: true, actorImg: Snap.DEFAULT_ART, tokenImg: "t.webp" }) === "t.webp"
-    && art({ canObserve: false, actorImg: Snap.DEFAULT_ART, tokenImg: "t.webp", protoImg: "t.webp" }) === "t.webp");
-  ctx.ok("the standee override beats a disguise", art({ standee: "s.webp", canObserve: false, actorImg: "a.webp", tokenImg: "chest.webp", protoImg: "p.webp" }) === "s.webp");
+  ctx.ok("the actor's standee art wins", art({ standee: "s.webp", actorImg: "a.webp", tokenImg: "t.webp" }) === "s.webp");
+  ctx.ok("otherwise the portrait (a bestiary creature stands as its art)", art({ actorImg: "a.webp", tokenImg: "t.webp" }) === "a.webp"
+    && art({ actorImg: "a.webp", tokenImg: null }) === "a.webp");
+  ctx.ok("the mystery-man portrait falls back to the token", art({ actorImg: Snap.DEFAULT_ART, tokenImg: "t.webp" }) === "t.webp");
+  // One answer for every viewer: a token image that drifted from its prototype
+  // (placed before a prototype edit) once showed players the round token while
+  // the GM saw the portrait. Nothing about the viewer may enter the rule.
+  ctx.ok("standee art is the same for every viewer", art({ canObserve: false, actorImg: "a.webp", tokenImg: "old-token.webp", protoImg: "new-token.webp" }) === "a.webp"
+    && art({ canObserve: true, actorImg: "a.webp", tokenImg: "old-token.webp", protoImg: "new-token.webp" }) === "a.webp");
+  const snapSrc = read(`${DIO}/view/snapshot.mjs`);
+  const readBody = snapSrc.slice(snapSrc.indexOf("export function readTokens"), snapSrc.indexOf("export function backgroundSrc"));
+  ctx.ok("readTokens asks nothing about the viewer for the art", !/testUserPermission|canObserve|isGM[^\n]*art/.test(readBody.slice(readBody.indexOf("const art"), readBody.indexOf("const marks"))));
+  const saSrc = read(`${DIO}/view/standee-app.mjs`);
+  ctx.ok("the Standee window saves to the world actor behind a token", /export function standeeTarget/.test(saSrc) && /baseActor/.test(saSrc) && /standeeTarget\(actor\)/.test(saSrc));
 
   const p1 = Snap.pathCellsTo([{ i: 0, j: 0 }], { i: 2, j: 3 });
   const contiguous = p1.every((c, k) => !k || (Math.abs(c.i - p1[k - 1].i) <= 1 && Math.abs(c.j - p1[k - 1].j) <= 1));
@@ -377,7 +380,7 @@ export default async function check(ctx) {
   const syncSrc = readFileSync(join(ctx.root, `${DIO}/view/sync.mjs`), "utf8");
   ctx.ok("an invite never asks the stream audience (no toast in stream mode)", /mode === "auto" \|\| streamOwnsView\(\)/.test(syncSrc));
   const viewCss = readFileSync(join(ctx.root, "styles/diorama.css"), "utf8");
-  ctx.ok("the stream capture hides the view's chrome", /body\.gluniverse-stream-active:not\(\.gluniverse-stream-restore\)[^{]*\.gldio-toolbar/.test(viewCss));
+  ctx.ok("the stream capture hides the view's chrome", /body\.gluniverse-stream-active:not\(\.gluniverse-stream-restore\)[^{]*\.gldio-toast[^{]*\.gldio-peek/.test(viewCss));
   ctx.ok("the view sits at the board's layer so Stage portraits draw over it", /\.gldio-view \{[^}]*z-index: var\(--gl-z-base\);/.test(viewCss));
   ctx.ok("a malformed camera is refused", sanitizeCamera({ yawStep: 0, pitchIndex: 0, zoom: 1, target: { x: "a" } }) === null && sanitizeCamera(null) === null);
 }

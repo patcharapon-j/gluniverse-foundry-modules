@@ -270,7 +270,9 @@ export const STREAM_COMMANDS = {
   start: "start",
   stop: "stop",
   toggleRestore: "toggleRestore",
-  reframe: "reframe"
+  reframe: "reframe",
+  // A sibling feature's command (extensions.mjs registerStreamCommand): { id, args }.
+  feature: "feature"
 };
 
 export const CORE_UI_SELECTORS = [

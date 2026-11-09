@@ -71,8 +71,11 @@ const fresh = () => ({
 
 const S = fresh();
 let _opening = null;
-/** main.mjs's listener for the view opening and closing (it gates the 2D entry chip). */
+/** main.mjs's listeners: the view opening and closing, and a tool's pressed state moving (the Token Controls draw both). */
 let _onOpenChange = null;
+let _onToolsChange = null;
+/** Scenes this GM has been told are not set up yet, this session. */
+const _toldNotSetUp = new Set();
 
 /* ═══════════════════════════ public ═══════════════════════════ */
 
@@ -87,6 +90,41 @@ export function onOpenChange(fn) {
 
 function announce() {
   try { _onOpenChange?.(S.open); } catch (e) { err("diorama: open listener", e); }
+}
+
+/** Tell `fn()` whenever a tool's pressed state may have moved. One listener: main.mjs. */
+export function onToolsChange(fn) {
+  _onToolsChange = typeof fn === "function" ? fn : null;
+}
+
+/**
+ * The pressed state of every toggle in VIEW_TOOLS (view/hud.mjs), read from
+ * where each one lives, or null while the view is closed.
+ */
+export function viewToolState() {
+  if (!S.open) return null;
+  return {
+    cutaway: !!S.cutaway,
+    grid: !!setting(SETTINGS.grid, true),
+    follow: !!setting(SETTINGS.follow, false),
+    peek: !!S.peek?.open,
+    asPlayers: !!S.asPlayers,
+    roofs: !!S.roofCut,
+  };
+}
+
+/**
+ * Run one of the view's tools from the Token Controls. A toggle is handed the
+ * state Foundry's button now shows (`on`) and is set to it, never flipped, so
+ * the button and the view cannot drift apart.
+ * @param {string} act  @param {boolean} [on]
+ */
+export function runViewTool(act, on) {
+  if (!S.open) return false;
+  const fn = hudActions()[act];
+  if (!fn) return false;
+  Promise.resolve().then(() => fn(on)).catch((e) => err(`diorama: ${act}`, e));
+  return true;
 }
 
 /** Whether this client may open the view on a scene; notifies why not. */
@@ -255,7 +293,7 @@ async function mount(scene) {
     holds: () => S.open,
   });
 
-  S.hud = new Hud(root, { isGM: isGM(), actions: hudActions() });
+  S.hud = new Hud(root);
   S.peek = new Peek(root, {
     onCentre: () => centrePeek(true),
     onSwitch: () => closeView({ at: peekCentreScene() }),
@@ -293,7 +331,18 @@ async function mount(scene) {
   // The stream capture never shows the 2D map window: the hole would put the 2D canvas on the broadcast.
   S.hooks.push([STREAM_HOOKS.streamModeChanged, Hooks.on(STREAM_HOOKS.streamModeChanged, () => { if (streamOwnsView()) setPeek(false); })]);
   if (isGM()) sendInvite(scene.id);
+  noteNotSetUp();
   announce();
+}
+
+/**
+ * A GM opening a scene whose terrain was never saved hears it once a session:
+ * the ground is flat, and the Edit terrain tool (beside the view's own) raises it.
+ */
+function noteNotSetUp() {
+  if (!isGM() || S.saved || !S.scene || _toldNotSetUp.has(S.scene.id) || streamOwnsView()) return;
+  _toldNotSetUp.add(S.scene.id);
+  ui.notifications?.info(t("GLDIO.view.notSetUpHint"));
 }
 
 function createRenderer() {
@@ -473,6 +522,8 @@ function wireHooks() {
   // A client-scope setting never becomes a Setting document, so it never fires
   // updateSetting: Foundry announces it on clientSettingChanged instead.
   on("clientSettingChanged", (key) => {
+    // the grid and follow toggles live in client settings any window can change
+    if (key === `${SUITE_ID}.${SETTINGS.grid}` || key === `${SUITE_ID}.${SETTINGS.follow}`) syncHud();
     if (REACH_KEYS.has(key)) { queueReach(); return; }
     if (GRAPHICS_KEYS.has(key)) { mark("options"); if (key.endsWith(".dayNight")) mark("environment"); }
   });
@@ -488,8 +539,6 @@ function wireHooks() {
     const step = snapYawStep(cam.yawStep ?? 0, yawSnap());
     if (step !== cam.yawStep) setCamera({ yawStep: step });
   });
-  // The controls change width with the active tool set; place again after a render.
-  on("renderSceneControls", () => placeBesideControls());
   S.unTerrain = onTerrainChange((scene) => { if (!scene || scene.id === S.scene?.id) { mark("terrain"); queueReach(); } });
   // The targeting lines: exactly the ones stream-targets draws on this client.
   S.unLines = onLinesChanged(() => mark("links"));
@@ -556,7 +605,6 @@ function flush() {
       r.setTerrain(S.ground);
       S.baker?.setGrid(S.grid);
       S.baker?.request();
-      S.hud?.setSetup(gm && !S.saved);
       d.add("walls"); d.add("tokens"); d.add("cells"); d.add("background"); d.add("props"); d.add("levels");
       queueReach();
     }
@@ -721,17 +769,7 @@ function readGraphics() {
   return resolveGraphics(raw);
 }
 
-/** Keep the toolbar beside Foundry's scene controls, whatever their width. */
-function placeBesideControls() {
-  if (!S.root) return;
-  const sc = document.getElementById("scene-controls") ?? document.getElementById("ui-left-column-1");
-  const right = sc?.getBoundingClientRect?.().right;
-  const left = Number.isFinite(right) && right > 0 ? right : 88;
-  S.root.style.setProperty("--gldio-left", `${Math.round(left)}px`);
-}
-
 function resize() {
-  placeBesideControls();
   S.peek?.layout();
   if (!S.root || !S.r) return;
   const w = S.root.clientWidth || globalThis.innerWidth, h = S.root.clientHeight || globalThis.innerHeight;
@@ -905,7 +943,7 @@ function setPeek(on) {
   } else if (!on && p.open) {
     p.hide();
   }
-  S.hud?.setPressed("peek", p.open);
+  syncHud();
 }
 
 /** Pan the 2D canvas so what the 3D camera looks at sits in the middle of the window. */
@@ -958,19 +996,14 @@ function foundryEdges() {
 
 /* ═══════════════════════════ HUD ═══════════════════════════ */
 
+/** The view's tool states have moved: the Token Controls redraw their pressed buttons. */
 function syncHud() {
-  const h = S.hud;
-  if (!h) return;
-  h.setPressed("peek", !!S.peek?.open);
-  h.setPressed("grid", !!setting(SETTINGS.grid, true));
-  h.setPressed("tiltShift", !!setting(SETTINGS.tiltShift, false));
-  h.setPressed("cutaway", S.cutaway);
-  h.setPressed("follow", !!setting(SETTINGS.follow, false));
-  h.setPressed("asPlayers", S.asPlayers);
-  h.setPressed("roofs", S.roofCut);
-  h.setSetup(isGM() && !S.saved);
   S.root?.toggleAttribute("data-as-players", S.asPlayers);
+  try { _onToolsChange?.(); } catch (e) { err("diorama: tools listener", e); }
 }
+
+/** A toggle set to `on` when the Token Controls hand a state, else flipped (a key). */
+const next = (on, now) => (typeof on === "boolean" ? on : !now);
 
 function hudActions() {
   return {
@@ -979,23 +1012,24 @@ function hudActions() {
     pitch: () => cyclePitch(),
     zoomIn: () => zoomBy(1.25),
     zoomOut: () => zoomBy(1 / 1.25),
-    grid: async () => { await setSetting(SETTINGS.grid, !setting(SETTINGS.grid, true)); syncHud(); mark("options"); },
-    tiltShift: async () => { await setSetting(SETTINGS.tiltShift, !setting(SETTINGS.tiltShift, false)); syncHud(); mark("options"); },
-    cutaway: () => { S.cutaway = !S.cutaway; syncHud(); mark("options"); },
-    roofs: () => toggleRoofs(),
-    follow: async () => {
-      const on = !setting(SETTINGS.follow, false);
-      await setSetting(SETTINGS.follow, on);
+    grid: async (on) => { await setSetting(SETTINGS.grid, next(on, !!setting(SETTINGS.grid, true))); syncHud(); mark("options"); },
+    cutaway: (on) => { S.cutaway = next(on, S.cutaway); syncHud(); mark("options"); },
+    roofs: (on) => { if (next(on, S.roofCut) !== S.roofCut) toggleRoofs(); else syncHud(); },
+    follow: async (on) => {
+      const v = next(on, !!setting(SETTINGS.follow, false));
+      await setSetting(SETTINGS.follow, v);
       syncHud();
-      if (on) follow();
+      if (v) follow();
     },
     summon: () => {
       if (!S.r || !S.scene) return;
       sendSummon(S.scene.id, S.r.getCamera());
       ui.notifications?.info(t("GLDIO.view.summoned"));
     },
-    asPlayers: () => {
-      S.asPlayers = !S.asPlayers;
+    asPlayers: (on) => {
+      const v = next(on, S.asPlayers);
+      if (v === S.asPlayers) { syncHud(); return; }
+      S.asPlayers = v;
       S.input?.cancel();
       syncHud();
       markAll();
@@ -1004,8 +1038,8 @@ function hudActions() {
     },
     graphics: () => import("./graphics-app.mjs").then((m) => m.openGraphics()).catch((e) => err("diorama: graphics", e)),
     environment: () => import("./environment-app.mjs").then((m) => m.openEnvironment(S.scene)).catch((e) => err("diorama: environment", e)),
-    autoSetup: () => editTerrain(S.scene),
-    peek: () => setPeek(!S.peek?.open),
+    editTerrain: () => editTerrain(S.scene),
+    peek: (on) => setPeek(next(on, !!S.peek?.open)),
     close: () => closeView(),
   };
 }

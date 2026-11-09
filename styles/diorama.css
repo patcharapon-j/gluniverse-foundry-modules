@@ -54,85 +54,12 @@
   outline: none;
 }
 
-/* ── Toolbar ── */
-/* A vertical column beside Foundry's scene controls. The top centre belongs to
-   the suite's time HUD and the initiative rail, and the right edge to the chat
-   notifications, so a toolbar in either sits under them. `--gldio-left` is the
-   controls' right edge, written by the overlay on open, resize and re-render.
-   The rail stacks the "Not set up" chip, the bar and the labelled way out. */
-.gldio-rail {
-  position: absolute;
-  top: 50%;
-  left: calc(var(--gldio-left, 88px) + var(--gl-sp-6));
-  translate: 0 -50%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--gl-sp-4);
-}
-
-.gldio-toolbar {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--gl-sp-2);
-  padding: var(--gl-sp-3) var(--gl-sp-2);
-}
-
-/* ── The doors: "Exit 3D" under the bar, "3D view" on the 2D board ──
-   Labelled, in the accent, one look for the way in and the way out. */
-.gldio-door.gl-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--gl-sp-4);
-  height: var(--gl-sp-11);
-  min-height: 0;
-  margin: 0;
-  padding: 0 var(--gl-sp-7) 0 var(--gl-sp-6);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 26%, transparent), color-mix(in srgb, var(--gl-accent) 8%, transparent)),
-    var(--gl-ink-2);
-  box-shadow: inset 0 0 var(--gl-sp-8) color-mix(in srgb, var(--gl-accent) 22%, transparent), 0 var(--gl-sp-2) var(--gl-sp-6) var(--gl-shadow);
-  font-size: var(--gl-fs-sm);
-  font-weight: var(--gl-weight-medium);
-  letter-spacing: var(--gl-track-wide);
-  line-height: 1;
-  white-space: nowrap;
-}
-.gldio-door > i {
-  font-size: var(--gl-fs-md);
-  color: var(--gl-text-bright);
-}
-.gldio-door.gl-btn:hover:not(:disabled) {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--gl-accent) 40%, transparent), color-mix(in srgb, var(--gl-accent) 14%, transparent)),
-    var(--gl-ink-2);
-}
-
-/* The way out sits under the bar, a little apart, so it never reads as one more tool. */
-.gldio-exit.gl-btn { margin-top: var(--gl-sp-2); }
-
-/* The 2D board's way in: beside the scene controls, at the height the 3D
-   toolbar uses, on the board's layer so Foundry's interface stays in front. */
-.gldio-entry.gl-btn {
-  position: fixed;
-  top: 50%;
-  left: calc(var(--gldio-left, 88px) + var(--gl-sp-6));
-  translate: 0 -50%;
-  z-index: var(--gl-z-base);
-  animation: gl-fade-in var(--gl-d-swift) var(--gl-ease) both;
-}
-.gldio-entry[hidden] { display: none; }
-.gldio-entry:focus-visible {
-  outline: var(--gl-focus-outline);
-  outline-offset: 2px;
-}
-
-.gldio-sep {
-  height: 1px;
-  margin-block: var(--gl-sp-1);
-  background: var(--gl-hair);
-}
+/* ── The view's tools ──
+   None are drawn here: the way in and out ("3D view") and every camera and
+   view tool are Foundry's own scene-control tools in the Token Controls
+   (main.mjs, view/hud.mjs VIEW_TOOLS), so nothing of the view's is pinned on
+   the board. What this sheet still dresses: the floating labels, the
+   drag-select box, the invite toast and the 2D map window. */
 
 /* .gl-btn declares no font-size; every button here is sized by this feature. */
 .gldio-btn.gl-btn {
@@ -154,12 +81,6 @@
   font-size: var(--gl-fs-xs);
   letter-spacing: var(--gl-track-wide);
 }
-.gldio-btn[aria-pressed="true"] {
-  border-color: var(--gl-accent);
-  color: var(--gl-text-bright);
-  box-shadow: var(--gl-ring), inset 0 0 var(--gl-sp-6) color-mix(in srgb, var(--gl-accent) 28%, transparent);
-}
-
 .gldio-view button:focus-visible,
 .gldio-toast button:focus-visible {
   outline: var(--gl-focus-outline);
@@ -168,25 +89,9 @@
 
 /* The stream capture in stream mode: the broadcast shows the diorama and none
    of its chrome (stream's own "restore" brings the controls back). */
-body.gluniverse-stream-active:not(.gluniverse-stream-restore) :is(.gldio-toolbar, .gldio-rail, .gldio-chip, .gldio-marquee, .gldio-toast, .gldio-peek, .gldio-entry) {
+body.gluniverse-stream-active:not(.gluniverse-stream-restore) :is(.gldio-marquee, .gldio-toast, .gldio-peek) {
   display: none;
 }
-
-/* ── "Not set up" chip (GM), at the top of the rail ── */
-.gldio-chip {
-  --gl-accent: var(--gl-warn);
-  display: flex;
-  align-items: center;
-  gap: var(--gl-sp-4);
-  padding: var(--gl-sp-2) var(--gl-sp-2) var(--gl-sp-2) var(--gl-sp-6);
-  font-size: var(--gl-fs-xs);
-  letter-spacing: var(--gl-track-wide);
-  text-transform: uppercase;
-  color: var(--gl-warn);
-  animation: gl-drop-in var(--gl-d-reveal) var(--gl-ease) both;
-}
-.gldio-chip[hidden] { display: none; }
-.gldio-chip-text { white-space: nowrap; }
 
 /* ── The 2D map window ──
    A frame around a hole cut in the view (the root's clip-path, view/peek.mjs):

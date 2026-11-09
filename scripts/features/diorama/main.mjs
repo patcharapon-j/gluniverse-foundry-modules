@@ -7,9 +7,14 @@
  * opens it; the socket half (view/sync.mjs) is light and wired at ready.
  *
  *   init   the height rules (sight/light backend, movement), keybindings,
- *          the suite scene-control buttons, terrain cache invalidation.
- *   ready  the rules' ready half, the invite / summon socket, the "3D view"
- *          entry chip on the 2D board (view/entry.mjs).
+ *          the scene controls, terrain cache invalidation.
+ *   ready  the rules' ready half, the invite / summon socket, the stream
+ *          Control Room's 2D / 3D switch (stream-bridge.mjs).
+ *
+ * The way in and out is ONE toggle in Foundry's Token Controls ("3D view",
+ * pressed while the view is open). While it is open the view's own tools sit
+ * under it in the same column (VIEW_TOOLS, view/hud.mjs); nothing of the view's
+ * is pinned on the board. The suite group keeps the GM's Edit terrain.
  */
 
 import { SUITE_ID, warn, err } from "../../core/const.mjs";
@@ -21,20 +26,21 @@ import { installRules, readyRules } from "./foundry/install.mjs";
 import { wireSocket } from "./view/sync.mjs";
 import { watchTargetLines } from "./integrations/target-lines.mjs";
 import { wireStandee } from "./view/standee-app.mjs";
-import { EntryChip } from "./view/entry.mjs";
+import { VIEW_TOOLS } from "./view/hud.mjs";
+import { keyHint } from "./view/util.mjs";
+import { wireStreamBridge, reportViewToStream } from "./stream-bridge.mjs";
 
 export const TOOL_VIEW = "gldio-view";
 export const TOOL_EDIT = "gldio-edit";
 
 let _viewP = null;
 let _view = null;
-/** The "3D view" chip on the 2D board, built at ready. */
-let _entry = null;
 
 /** The overlay module, imported on first use. */
 function loadView() {
   _viewP ??= import("./view/overlay.mjs").then((m) => {
-    m.onOpenChange?.(() => refreshEntry());
+    m.onOpenChange?.(() => onViewOpenChange());
+    m.onToolsChange?.(() => syncTools());
     return (_view = m);
   });
   return _viewP;
@@ -106,32 +112,83 @@ function offeredHere() {
   return game.user.isGM || !TerrainStore.isOff(scene);
 }
 
+/** The Token Controls' tool names: prefixed, so they never meet Foundry's or another module's. */
+const toolName = (act) => `gldio-${act}`;
+
+/** The view opened or closed: the Token Controls gain or lose the view's tools, the stream hears it. */
+function onViewOpenChange() {
+  try {
+    ui.controls?.render?.({ reset: true });
+    // the view's tools are in the Token Controls, and the view keeps that layer active
+    if (isOpen() && globalThis.canvas?.ready && ui.controls?.control?.name !== "tokens") globalThis.canvas.tokens?.activate?.();
+  } catch (e) { warn("diorama | scene controls", e); }
+  reportViewToStream(isOpen());
+}
+
 /**
- * The 2D entry chip: shown where the view is offered, the scene is not
- * switched off (the GM keeps the scene-control button there), and the view is
- * not already open.
+ * Put every toggle's pressed state back on Foundry's buttons without
+ * re-rendering the controls (a key, Escape or a setting moved one). Foundry
+ * draws a toggle from `tool.active`, so the record is written too.
  */
-function refreshEntry() {
-  if (!_entry) return;
-  const scene = globalThis.canvas?.scene;
-  const show = !!globalThis.canvas?.ready && offeredHere() && !TerrainStore.isOff(scene) && !isOpen();
-  _entry.set(show);
+function syncTools() {
+  const tools = ui.controls?.controls?.tokens?.tools;
+  const state = _view?.viewToolState?.();
+  if (!tools) return;
+  const set = (name, on) => {
+    const tool = tools[name];
+    if (!tool) return;
+    tool.active = !!on;
+    ui.controls.element?.querySelector?.(`button.tool[data-tool="${name}"]`)?.setAttribute("aria-pressed", on ? "true" : "false");
+  };
+  set(TOOL_VIEW, isOpen());
+  if (!state) return;
+  for (const b of VIEW_TOOLS) if (b.toggle) set(toolName(b.act), state[b.act]);
+}
+
+/** A tool title with its current keys, when it has any. */
+function titled(key, bind) {
+  const label = game.i18n.localize(key);
+  const keys = bind ? keyHint(bind) : "";
+  return keys ? `${label} (${keys})` : label;
 }
 
 function onGetSceneControlButtons(controls) {
   if (!offeredHere()) return;
-  const group = ensureSuiteGroup(controls);
-  if (!group) return;
-  group.tools[TOOL_VIEW] = {
-    name: TOOL_VIEW,
-    title: "GLDIO.controls.view",
-    icon: "fa-solid fa-cubes",
-    order: Object.keys(group.tools).length,
-    button: true,
-    visible: true,
-    onChange: pressed(toggleOnce),
-  };
+  // The way in and out: one toggle among the Token Controls, pressed while the view is open.
+  const tokens = controls.tokens;
+  if (tokens?.tools && (game.user.isGM || !TerrainStore.isOff(globalThis.canvas?.scene))) {
+    const base = 100;
+    tokens.tools[TOOL_VIEW] = {
+      name: TOOL_VIEW,
+      title: titled(isOpen() ? "GLDIO.controls.viewOn" : "GLDIO.controls.view", "dio.toggle"),
+      icon: "fa-solid fa-cubes",
+      order: base,
+      toggle: true,
+      active: isOpen(),
+      visible: true,
+      onChange: (_event, on) => setView(on),
+    };
+    if (isOpen()) {
+      const state = _view?.viewToolState?.() ?? {};
+      VIEW_TOOLS.forEach((b, k) => {
+        if (b.gm && !game.user.isGM) return;
+        const name = toolName(b.act);
+        tokens.tools[name] = {
+          name,
+          title: titled(b.key, b.bind),
+          icon: b.icon,
+          order: base + 1 + k,
+          visible: true,
+          ...(b.toggle
+            ? { toggle: true, active: !!state[b.act], onChange: (_event, on) => _view?.runViewTool(b.act, on) }
+            : { button: true, onChange: () => _view?.runViewTool(b.act) }),
+        };
+      });
+    }
+  }
   if (game.user.isGM) {
+    const group = ensureSuiteGroup(controls);
+    if (!group) return;
     group.tools[TOOL_EDIT] = {
       name: TOOL_EDIT,
       title: "GLDIO.controls.edit",
@@ -144,10 +201,22 @@ function onGetSceneControlButtons(controls) {
   }
 }
 
+/**
+ * The toggle was pressed: open or close to match it. A view that cannot open
+ * (no scene, a hex grid) puts the button back up.
+ * @param {boolean} on
+ */
+function setView(on) {
+  if (!!on === isOpen()) return;
+  if (on) {
+    api.open().then((ok) => { if (!ok) syncTools(); }).catch((e) => { warn("diorama | open", e); syncTools(); });
+  } else {
+    api.close();
+  }
+}
+
 function onRenderSceneControls(_app, html) {
-  bindSuiteToolClicks(html, { [TOOL_VIEW]: toggleOnce, [TOOL_EDIT]: editOnce });
-  // the controls change width with the active tool set
-  _entry?.place();
+  bindSuiteToolClicks(html, { [TOOL_EDIT]: editOnce });
 }
 
 function registerKeybindings() {
@@ -201,8 +270,6 @@ function registerKeybindings() {
 }
 
 function onUpdateScene(scene, changes) {
-  // the grid type or the "3D off" switch may have moved: re-gate the 2D chip
-  if (scene === globalThis.canvas?.scene) refreshEntry();
   // Props are part of the rules terrain (stamped while dio.propsBlock is on),
   // so a props save drops the same cache a terrain save does.
   if (!TerrainStore.touched(changes) && !PropStore.touched(changes)) return;
@@ -224,12 +291,8 @@ function onUpdateSetting(setting) {
 function onCanvasReady() {
   invalidate();
   _view?.onCanvasReady();
-  refreshEntry();
-}
-
-/** The scene is going away: no chip until the next one is drawn and gated. */
-function onCanvasTearDown() {
-  _entry?.set(false);
+  // the stream client: a new scene may not offer the view at all
+  reportViewToStream();
 }
 
 /** A Level's elevation sets where its terrain stands: a Level change drops the scene's cache. */
@@ -254,7 +317,6 @@ export function onInit() {
   Hooks.on("updateSetting", onUpdateSetting);
   Hooks.on("canvasReady", onCanvasReady);
   for (const h of ["createLevel", "updateLevel", "deleteLevel"]) Hooks.on(h, onLevelChange);
-  Hooks.on("canvasTearDown", onCanvasTearDown);
 }
 
 export function onReady() {
@@ -265,7 +327,6 @@ export function onReady() {
     err("diorama: readyRules failed", e);
   }
   wireSocket(loadView, isOpen);
-  // The way in, labelled, on the 2D board (the scene-control button and Shift+V stay).
-  _entry = new EntryChip({ onOpen: toggleOnce });
-  refreshEntry();
+  // A director's 2D / 3D switch for the stream capture (stream's Control Room).
+  wireStreamBridge({ open: () => api.open(), close: () => api.close(), isOpen, offered: () => offeredHere() && !TerrainStore.isOff(globalThis.canvas?.scene) });
 }
