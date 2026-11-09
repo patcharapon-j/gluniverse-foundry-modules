@@ -13,6 +13,8 @@
  *   auraStart?(s, M, T)                persistent decals when a condition starts
  *   aura(s, M, {at,body,T,dt})         a condition's loop on a creature
  *   tick?(s, M, T)                     extra beat on a condition's tick
+ *   bloom?(s, M, B)                    the `bloom` delivery on a creature (deliveries.mjs
+ *                                      `bloomCtx` says what B carries); none: the generic bloom
  *   dark?, gentle?, projectileBolt?    flags (see compile.mjs)
  *
  * `M.material` tells a family which of its materials it is drawing, so poison

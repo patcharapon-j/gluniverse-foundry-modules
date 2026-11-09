@@ -13,6 +13,8 @@
  *   ?view=sheet   a contact sheet: every material × every delivery, as stills
  *   stage params: kind func mat outcome rank style shape cond cval seed seek zoom floor,
  *                 the look axes delivery motif flavor props (comma list), arch (archetypes/rules.mjs), and slug (the item slug an archetype may read, e.g. charm)
+ *                 rider (a Strike's rider archetype: grab|trip|shove|rend) and riderslug (its slug, e.g. constrict),
+ *                 csize / tsize (the caster's / first target's footprint in squares: 2 Large, 3 Huge, 4 Gargantuan)
  *
  * Stage params: kind (attack|save|area|strike|auto|self|condition|tick), func,
  *   mat, outcome (crit|hit|miss|neutral), rank, style (weapon style), shape
@@ -87,9 +89,9 @@ const CAM = { x: num("camx", 10.2), y: num("camy", 6.0) };
 function specFrom(o) {
   const kind = o.kind ?? "attack", out = o.outcome ?? "hit";
   const strike = kind === "strike";
-  const caster = strike ? { ...CASTER, x: 11.3, y: 6.05 } : CASTER;
+  const caster = strikeCaster(o);
   const shape = o.shape ?? "burst";
-  let targets = FOES.map((T, i) => ({ ...T, outcome: i === 0 ? out : out === "crit" ? "hit" : out }));
+  let targets = foes(o).map((T, i) => ({ ...T, outcome: i === 0 ? out : out === "crit" ? "hit" : out }));
   if (kind === "attack" || kind === "strike" || kind === "tick" || kind === "condition" || kind === "auto") targets = targets.slice(0, 1);
   if (kind === "self") targets = [];
   let area = null;
@@ -106,7 +108,16 @@ function specFrom(o) {
     condition: kind === "condition" ? { slug: o.cond ?? "persistent-damage", value: o.cval ?? 1 } : null,
     look: o.hue != null || o.flourish ? { hue: o.hue ?? null, flourish: o.flourish ?? null } : null,
     delivery: o.delivery ?? null, motif: o.motif ?? null, flavor: o.flavor ?? null, props: o.props ?? [], arch: o.arch ?? null, slug: o.slug ?? null,
+    rider: o.rider ? { arch: o.rider, slug: o.riderslug ?? o.rider } : null,
   };
+}
+
+/* csize / tsize: the first foe takes the target's footprint, and a Strike's caster stands just off its edge */
+const foes = (o) => FOES.map((T, i) => (i === 0 && o.tsize ? { ...T, size: o.tsize, h: T.h * o.tsize } : T));
+function strikeCaster(o) {
+  if (o.kind !== "strike") return o.csize ? { ...CASTER, size: o.csize, h: CASTER.h * o.csize } : CASTER;
+  const cs = o.csize ?? 1, T = foes(o)[0];
+  return { ...CASTER, size: cs, h: CASTER.h * cs, x: T.x - (cs + (T.size ?? 1)) / 2 - 0.1, y: 6.05 };
 }
 
 /* ── views: a top-down canvas and a Diorama-like side canvas ── */
@@ -162,7 +173,7 @@ function drawTokens(ctx, V, sim, tokens, sil) {
     const L = sil || sim.shed.has("tokenLight") ? null : sim.lightAt(t.x, t.y), ring = t.ally ? "#5fb0ff" : "#e05a50";
     ctx.save();
     if (V.kind === "top") {
-      const [sx, sy] = V.proj(t.x + kx, t.y + ky, 0), r = 0.43 * G;
+      const [sx, sy] = V.proj(t.x + kx, t.y + ky, 0), r = 0.43 * G * (t.size ?? 1);
       ctx.translate(sx, sy); ctx.scale(1 + (1 - sqz) * 0.6, sqz);
       if (sil) { ctx.fillStyle = sil; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill(); ctx.restore(); continue; }
       ctx.save(); ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.clip();
@@ -176,8 +187,8 @@ function drawTokens(ctx, V, sim, tokens, sil) {
       if (L) { const a = Math.atan2(L.dy, L.dx); ctx.strokeStyle = css(L.c, Math.min(1, L.k * 1.4)); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, r - 2, a - 1.1, a + 1.1); ctx.stroke(); }
     } else {
       const [bx, by] = V.proj(t.x, t.y, 0);
-      if (!sil) { ctx.strokeStyle = ring; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(bx, by, 0.4 * G, 0.4 * G * V.sq, 0, 0, Math.PI * 2); ctx.stroke(); }
-      const [fx, fy] = V.proj(t.x + kx, t.y + ky, 0), hh = t.h * G, w = 0.5 * G;
+      if (!sil) { ctx.strokeStyle = ring; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(bx, by, 0.4 * G * (t.size ?? 1), 0.4 * G * V.sq * (t.size ?? 1), 0, 0, Math.PI * 2); ctx.stroke(); }
+      const [fx, fy] = V.proj(t.x + kx, t.y + ky, 0), hh = t.h * G, w = 0.5 * G * (t.size ?? 1);
       ctx.translate(fx, fy - 2); ctx.scale(1 + (1 - sqz) * 0.7, sqz);
       figure(ctx, hh, w);
       if (sil) { ctx.fillStyle = sil; ctx.fill(); ctx.restore(); continue; }
@@ -228,6 +239,7 @@ function stage() {
     cval: num("cval", 1),
     // the look axes, so any delivery, motif, flavor or prop can be judged on its own
     delivery: P.get("delivery") ?? null, motif: P.get("motif") ?? null, flavor: P.get("flavor") ?? null, arch: P.get("arch") ?? null, slug: P.get("slug") ?? null,
+    rider: P.get("rider") ?? null, riderslug: P.get("riderslug") ?? null, csize: P.has("csize") ? num("csize") : null, tsize: P.has("tsize") ? num("tsize") : null,
     props: P.get("props")?.split(",").filter(Boolean) ?? [],
   };
   const zoom = num("zoom", 1), speed = num("speed", 1), seek = P.has("seek") ? num("seek") : null;
@@ -242,7 +254,7 @@ function stage() {
   });
   $("root").className = "stage";
   let sim, seed = o.seed;
-  const tokens = () => (o.kind === "strike" ? [{ ...CASTER, x: 11.3, y: 6.05 }, ...FOES] : [CASTER, ...FOES]);
+  const tokens = () => [strikeCaster(o), ...foes(o)];
   const restart = () => { sim = compile(specFrom({ ...o, seed: seed++ })); window.__fx.sims = [sim]; $("cue").textContent = sim.M.material + " (" + sim.M.family + ") · " + o.kind + " · " + o.func + " · " + o.outcome + " · rank " + o.rank + " · " + sim.phases.join(" → "); };
   window.__fx = { compile, sims: [], restart };
   restart();

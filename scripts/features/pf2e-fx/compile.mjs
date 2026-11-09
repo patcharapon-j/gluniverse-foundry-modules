@@ -12,6 +12,10 @@
  *   tradition            "arcane" | "divine" | "occult" | "primal" | null
  *   weapon               { style, ranged, heavy, power } | null   (constants.mjs WEAPON_STYLES;
  *                        heavy: two-handed, power: Vicious Swing toggled; strikes.mjs weightOf)
+ *   rider                { arch, slug } | null   a Strike's rider (semantics.mjs riderOf): grab, trip,
+ *                        shove or rend. Never drawn on the Strike: PF2e's follow-up plays it (handoff.mjs)
+ *   limb                 { delivery, motif, slug, rider, style } | null   on a follow-up maneuver, the
+ *                        body part of the Strike it follows (read.mjs, handoff.mjs); the drawer reads it
  *   caster               { id, x, y, size, h } | null   squares; size = footprint, h = height
  *   targets              [{ id, x, y, size, h, outcome }]
  *   area                 { shape, x, y, r, dir, len, width } | null   squares, radians
@@ -283,7 +287,8 @@ function buildHarm(s, M) {
 function buildStrike(s, M) {
   const sp = s.spec;
   const style = strikeTimeline(sp.delivery) ?? STRIKES[sp.weapon?.style] ?? STRIKES.slash;
-  style(s, M, strikeCtx(s, (T) => T.outcome ?? sp.outcome ?? "neutral"));
+  const ctx = strikeCtx(s, (T) => T.outcome ?? sp.outcome ?? "neutral");
+  style(s, M, ctx);
 }
 
 function buildForm(s, M, drawer = null) {
@@ -296,7 +301,8 @@ function buildForm(s, M, drawer = null) {
   if (craft) { craft(s, M, { caster, targets: targets.length ? targets : caster ? [caster] : [], area: null, hand, t0: 0, release, linger, fire, self }); return; }
   // a maneuver (archetypes/body.mjs) is a body moving, not a spell: no glyph circle, no orb at
   // the hand, only a beat for the drawer's own anticipation. A spell that grabs still charges.
-  const maneuver = !!drawer?.noCharge && !sp.cast;
+  // a passive (passives.mjs: Frightful Presence, an aura) is not cast either
+  const maneuver = (!!drawer?.noCharge && !sp.cast) || !!sp.passive;
   const chargeEnd = maneuver ? (caster ? 0.1 : 0) : caster && !self ? 0.4 : caster ? 0.3 : 0;
   if (caster && !maneuver) { windUp(s, M, caster, hand, 0, chargeEnd, () => charge(s, M, hand, caster, 0, chargeEnd)); s.phases.push("charge"); }
   /* A helpful or controlling area still reads as its whole footprint: the
@@ -304,6 +310,8 @@ function buildForm(s, M, drawer = null) {
   if (sp.area) areaFX(s, M, sp.area, { tele0: 0, hitAt: Math.max(chargeEnd, 0.3), pow: 1, gentle: sp.func !== "hinder" && sp.func !== "control", erupt: false, linger: 1.4 });
   const form = drawer ?? FORMS[sp.func] ?? FORMS.neutral;
   if (drawer) s.phases.push(`arch: ${sp.arch}`);
+  // a follow-up to a Strike's rider draws with the body part that landed it (handoff.mjs)
+  if (drawer && sp.limb) s.phases.push(`limb: ${sp.limb.delivery ?? sp.limb.slug ?? "?"}`);
   const on = self && caster ? [caster] : targets;
   form(s, M, { caster, targets: on, area: sp.area, hand, t0: chargeEnd, release, linger, fire, self });
   // the named object appears where the form lands: a Spiritual Armament's weapon, a Shield's shield

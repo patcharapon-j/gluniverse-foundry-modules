@@ -28,6 +28,7 @@ import { ARCH_DRAW, missingArch } from "../scripts/features/pf2e-fx/archetypes/i
 import { CONDITIONS } from "../scripts/features/pf2e-fx/conditions.mjs";
 import { applyLook, mergeLooks, normalizeLook } from "../scripts/features/pf2e-fx/looks.mjs";
 import { Director } from "../scripts/features/pf2e-fx/director.mjs";
+import { Riders } from "../scripts/features/pf2e-fx/handoff.mjs";
 import { Layers } from "../scripts/features/pf2e-fx/core/pix.mjs";
 import { paintFrame, sideView, topView } from "../scripts/features/pf2e-fx/core/frame.mjs";
 
@@ -221,6 +222,76 @@ for (const style of WEAPON_STYLES) for (const o of OUTCOMES) {
   ok(stand && flat, "a fire burst painted nothing in the stand or flat layer");
 }
 
+/* Strike riders (catalogue §1.1) are a hand-off, never a beat on the Strike.
+   Grab, Knockdown and Push are PF2e follow-ups (the creature's action or an
+   Athletics check) that Spellsprite already plays with their real outcome, so a
+   Strike that drew the maneuver too would grab twice when it is followed up and
+   announce a grab that never happened when it is not. The follow-up takes the
+   Strike's body part instead: a tongue grab closes as coils. */
+{
+  const riderSpec = (arch, o) => base("kinetic", o, { kind: "strike", delivery: "jaws", weapon: { style: "bite" }, rider: { arch, slug: arch }, targets: [target(o)] });
+  const hitsOf = (spec) => {
+    const sim = compile(spec), times = [];
+    const hit = sim.hit.bind(sim);
+    sim.hit = (id, ...rest) => { times.push(sim.t); return hit(id, ...rest); };
+    for (let t = 0; t < 4; t += TIMING.step) sim.step(TIMING.step);
+    return { sim, n: times.length };
+  };
+  for (const arch of ["grab", "trip", "shove", "rend"]) for (const o of OUTCOMES) {
+    const s = run(`rider:${arch}/${o}`, riderSpec(arch, o), 4, o === "hit");
+    if (!s) continue;
+    ok(!s.phases.some((p) => /^rider|^arch:/.test(p)), `rider ${arch}/${o}: the Strike drew a maneuver beat (${s.phases.filter((p) => /^rider|^arch:/.test(p)).join(", ")}); PF2e's follow-up plays it`);
+    const withRider = hitsOf(riderSpec(arch, o)).n, plain = hitsOf({ ...riderSpec(arch, o), rider: null }).n;
+    ok(withRider === plain, `rider ${arch}/${o}: a rider changed the Strike's blows (${withRider} vs ${plain}); it must play only its hit`);
+  }
+  // the follow-up takes the body part: a grab after a tongue Strike closes as coils, after jaws as a hand
+  const follow = (limb) => run(`handoff:grab/${limb?.delivery ?? "none"}`, base("kinetic", "hit", { kind: "attack", func: "control", arch: "grab", slug: "grapple", limb, targets: [target("hit")] }), 4, true);
+  const tongue = follow({ delivery: "lash", motif: null, slug: "tongue", rider: "tongue-grab", style: "unarmed" });
+  const jaws = follow({ delivery: "jaws", motif: null, slug: "jaws", rider: "grab", style: "bite" });
+  const bare = follow(null);
+  ok(tongue?.phases.includes("limb: lash") && tongue.phases.some((p) => /coils close/.test(p)), `a Grapple after a tongue Strike must draw coils and record its limb (${tongue?.phases.join(", ")})`);
+  ok(jaws?.phases.includes("limb: jaws") && jaws.phases.some((p) => /a hand closes/.test(p)), `a Grapple after a jaws Strike must keep the hand and record its limb (${jaws?.phases.join(", ")})`);
+  ok(bare && !bare.phases.some((p) => p.startsWith("limb:")) && bare.phases.some((p) => /a hand closes/.test(p)), "a Grapple with no Strike before it must draw exactly as it always did");
+  // the memory (handoff.mjs): keyed by token, one Strike one follow-up, inside the window, bounded, cleared
+  const R = new Riders({ window: TIMING.handoff, limit: 4 });
+  const L = { delivery: "jaws", slug: "jaws" };
+  R.note("t1", { rider: { arch: "grab" }, limb: L, outcome: "hit", target: "v", at: 100 });
+  ok(R.take("t1", "trip", { at: 101 }) === null, "handoff: a Trip took a Grab Strike's body part (a different archetype)");
+  ok(R.take("t2", "grab", { at: 101 }) === null, "handoff: another token took the body part (the memory is keyed by token id)");
+  ok(R.take("t1", "grab", { at: 101, targets: ["w"] }) === null, "handoff: a Grapple on somebody else took the body part");
+  ok(R.take("t1", "grab", { at: 100 + TIMING.handoff - 0.5, targets: ["v"] }) === L, "handoff: a Grapple inside the window did not take the body part");
+  ok(R.take("t1", "grab", { at: 102 }) === null, "handoff: one Strike's body part was taken twice");
+  R.note("t1", { rider: { arch: "grab" }, limb: L, outcome: "hit", at: 100 });
+  ok(R.take("t1", "grab", { at: 100 + TIMING.handoff + 0.5 }) === null && R.size === 0, "handoff: a Grapple past the window took the body part (or the stale entry stayed)");
+  for (const o of ["miss", "neutral"]) { R.note("t1", { rider: { arch: "grab" }, limb: L, outcome: o, at: 100 }); ok(R.take("t1", "grab", { at: 101 }) === null, `handoff: a Strike the viewer saw as ${o} handed its body part on`); }
+  R.note("t1", { rider: { arch: "grab" }, limb: L, outcome: "hit", at: 100 });
+  R.note("t1", { rider: null, limb: L, outcome: "hit", at: 101 });
+  ok(R.take("t1", "grab", { at: 102 }) === null, "handoff: a later Strike with no rider must replace the earlier one (only the last Strike is followed up)");
+  for (let i = 0; i < 10; i++) R.note(`k${i}`, { rider: { arch: "trip" }, limb: L, outcome: "hit", at: 100 });
+  ok(R.size === 4 && R.take("k9", "trip", { at: 101 }) === L && R.take("k0", "trip", { at: 101 }) === null, `handoff: the memory holds ${R.size} entries over its limit of 4, or dropped the newest`);
+  R.clear();
+  ok(R.size === 0, "handoff: clear() left entries behind");
+  const riderMs = cost.filter(([w]) => w.startsWith("rider:") || w.startsWith("handoff:")).reduce((m, [, ms]) => Math.max(m, ms), 0);
+  ok(riderMs < 6, `a rider Strike or its follow-up paints ${riderMs.toFixed(2)} ms a frame on average, over the 6 ms budget`);
+  if (verbose) console.log(`rider: ${riderMs.toFixed(2)} ms a frame (worst rider Strike or follow-up average)`);
+  // the wiring: semantics marks the rider, the reader remembers it per token and hands it to the follow-up
+  const reader = stripComments(await text(`${FX}read.mjs`)), compiler = stripComments(await text(`${FX}compile.mjs`)), body = stripComments(await text(`${FX}archetypes/body.mjs`));
+  ok(/rider: desc\.rider \?\? null/.test(reader), "read.mjs finish() must copy the Strike's rider onto the spec (desc.rider)");
+  ok(!/strikeRider|ARCH_DRAW\[[^\]]*rider/.test(compiler), "compile.mjs must not draw a Strike's rider: PF2e's follow-up plays it (handoff.mjs)");
+  ok(/riders\.note\(casterToken\.id/.test(reader) && /riders\.take\(follow\.token/.test(reader), "read.mjs must note each Strike per attacker token (riders.note) and hand it to the follow-up (riders.take)");
+  ok(/new Riders\(\{ window: TIMING\.handoff/.test(reader) && /riders\.clear\(\)/.test(reader), "read.mjs must bound the memory by TIMING.handoff and clear it on unwire");
+  ok(!/actor\??\.id/.test(reader.slice(reader.indexOf("riders.note"), reader.indexOf("riders.note") + 200)), "read.mjs must key the rider memory by token id, never actor id");
+  ok(/sp\.limb|spec\.limb/.test(body), "archetypes/body.mjs must read spec.limb (the follow-up draws in the Strike's style)");
+  // size: a Huge creature's bite is a huge bite (catalogue §4 row 9)
+  const fangs = (size) => {
+    const s = compile(base("kinetic", "hit", { kind: "strike", delivery: "jaws", weapon: { style: "bite" }, caster: { ...caster, x: 6 - (size + 1) / 2 - 0.1, size, h: 1.3 * size }, targets: [target("hit")] }));
+    for (let t = 0; t < 1; t += TIMING.step) { s.step(TIMING.step); const p = s.parts.find((q) => q.k === "mlFangs"); if (p) return p.sc; }
+    return 0;
+  };
+  const med = fangs(1), huge = fangs(3);
+  ok(med > 0 && huge > med * 1.6, `a Huge creature's bite is drawn ${(huge / (med || 1)).toFixed(2)}× a Medium one's (want about √3: Strikes scale with the attacker's size)`);
+}
+
 /* ── 4. determinism ────────────────────────────────────────────────────── */
 
 const r5 = (n) => (Number.isFinite(n) ? +n.toFixed(5) : null);
@@ -354,6 +425,74 @@ for (const slug of Object.keys(CONDITIONS)) {
     // a creature's look styles what it does, never the conditions on it
     ok(!/slug: c\.slug, actor:/.test(reader) && !/slug: "persistent-damage", actor:/.test(reader), "read.mjs must not pass the afflicted actor's look to its condition loops or persistent damage ticks");
   }
+}
+
+/* ── 11. passives: the PF2e events that show them, and who may see them ── */
+/* Frightful Presence, Regeneration and auras post no card (catalogue §4 row
+   21). Each plays on a real PF2e event (passives.mjs cites the system source);
+   every one of these fails silently: a passive read as the wrong kind plays
+   nothing or the wrong thing, a key that is not per round replays on every
+   re-sort, a turn pulse that skips the audience test draws a GM-hidden
+   creature's aura on the stream. */
+{
+  const P = await import("../scripts/features/pf2e-fx/passives.mjs");
+  const item = (name, slug, system) => ({ name, type: "action", system: { slug, actionType: { value: "passive" }, description: { value: "" }, rules: [], ...system, traits: { value: system.traits ?? [] } } });
+  const fp = item("Frightful Presence", "frightful-presence", { traits: ["aura", "emotion", "fear", "mental"], rules: [{ key: "Aura", radius: 90, slug: "frightful-presence", traits: ["emotion", "fear", "mental"] }], description: { value: "<p>90 feet. @Check[will|dc:30|options:area-effect,inflicts:frightened]</p>" } });
+  const regen = item("Regeneration 20", "regeneration", { rules: [{ key: "FastHealing", type: "regeneration", value: 20, deactivatedBy: ["fire"] }] });
+  const fast = item("Fast Healing 5", "fast-healing", { rules: [{ key: "FastHealing", value: 5 }] });
+  const stench = item("Stench", "stench", { traits: ["aura", "olfactory"], rules: [{ key: "Aura", radius: 30, slug: "stench", traits: ["olfactory"] }], description: { value: "<p>30 feet. @Check[fortitude|dc:20|options:area-effect,inflicts:sickened]</p>" } });
+  const heat = item("Dragon Heat", "dragon-heat", { traits: ["aura", "fire"], rules: [{ key: "Aura", radius: 10, slug: "dragon-heat" }], description: { value: "<p>10 feet, @Damage[4d6[fire]] damage</p>" } });
+  const telepathy = item("Telepathy 100 feet", "telepathy", { traits: ["aura", "magical"], rules: [{ key: "Aura", radius: 100, slug: "telepathy" }] });
+  const sacred = item("Sacrilegious Aura", "sacrilegious-aura", { traits: ["aura", "magical"], rules: [{ key: "Aura", radius: 30, slug: "sacrilegious-aura" }] });
+  const like = (what, got, want) => { for (const [k, v] of Object.entries(want)) ok(got?.[k] === v, `passiveOf(${what}).${k} is ${JSON.stringify(got?.[k])}, want ${JSON.stringify(v)}`); };
+  like("Frightful Presence", P.passiveOf(fp), { kind: "fear", feet: 90 });
+  like("Regeneration", P.passiveOf(regen), { kind: "regen", regen: "regeneration", rank: 1 });
+  like("Fast Healing", P.passiveOf(fast), { kind: "regen", regen: "fast-healing" });
+  like("Stench", P.passiveOf(stench), { kind: "aura", material: "poison", visible: false, feet: 30 });
+  like("Dragon Heat", P.passiveOf(heat), { kind: "aura", material: "fire", damage: true, visible: true });
+  like("Sacrilegious Aura", P.passiveOf(sacred), { kind: "aura", visible: false });
+  ok(P.passiveOf(telepathy) === null, "passiveOf: Telepathy is a sense, never an aura to draw");
+  ok(P.passiveOf({ ...heat, type: "spell" }) === null, "passiveOf: a spell with the aura trait posts its own card and plays from it");
+  ok(P.passiveOf({ ...heat, system: { ...heat.system, actionType: { value: "action" } } }) === null, "passiveOf: an activated aura posts its own card and plays from it");
+  ok(P.turnPulse([P.passiveOf(stench), P.passiveOf(sacred), P.passiveOf(heat)])?.slug === "dragon-heat", "turnPulse: a creature's damaging aura is the one it breathes out at turn start");
+  ok(P.turnPulse([P.passiveOf(stench), P.passiveOf(fp)]) === null, "turnPulse: a smell, a fear or a feeling never pulses at turn start (it plays from its save card)");
+  ok(P.auraArea({ x: 0, y: 0, size: 2 }, 5280).r === P.MAX_AURA_SQUARES + 1, "auraArea: a mile-wide aura must be clamped, or it fills the screen every turn");
+  // keys: one play per creature per round, forward only
+  ok(P.turnAdvanced({ round: 1, turn: 2 }, { round: 1, turn: 3, combatantId: "c" }) && P.turnAdvanced({ round: 1, turn: 5 }, { round: 2, turn: 0, combatantId: "c" }), "turnAdvanced: a turn or a round moving forward is a turn start");
+  ok(!P.turnAdvanced({ round: 2, turn: 1 }, { round: 2, turn: 0, combatantId: "c" }) && !P.turnAdvanced({ round: 2, turn: 1 }, { round: 2, turn: 1, combatantId: "c" }) && !P.turnAdvanced({ round: 2, turn: 0 }, { round: 1, turn: 4, combatantId: "c" }), "turnAdvanced: rewinding or a re-sort onto the same turn must not replay a pulse");
+  ok(!P.turnAdvanced(null, { round: 0, turn: 0, combatantId: "c" }), "turnAdvanced: an encounter that has not started has no turns");
+  const seen = new P.Seen(4);
+  const k = P.passiveKey("regen", "tok", "combat:3");
+  ok(seen.claim(k) && !seen.claim(k), "Seen: a second claim of one key must fail (regen and turn pulses are idempotent)");
+  for (let i = 0; i < 10; i++) seen.claim(`x${i}`);
+  ok(seen.keys.size === 4, "Seen: the played-key memory must stay bounded");
+  // the status cards' audience rule for a trigger with no message
+  ok(!P.observable({ truth: false, playerOwned: false, hidden: true, onScene: true }), "observable: a GM-hidden creature no player owns must never play for a viewer without the truth");
+  ok(P.observable({ truth: false, playerOwned: false, hidden: false, onScene: true }) && P.observable({ truth: false, playerOwned: true, hidden: true, onScene: true }), "observable: a visible creature, or a player-owned one, is the table's business");
+  ok(!P.observable({ truth: true, playerOwned: true, hidden: false, onScene: false }), "observable: a creature with no token on the viewed scene plays nothing");
+  ok(!P.auraShown({ truth: false, party: false }) && P.auraShown({ truth: false, party: true }) && P.auraShown({ truth: true }), "auraShown: an enemy's aura is drawn only for a viewer PF2e draws it for (a GM, or the party's own)");
+  // the specs compile to the archetypes and the delivery they promise
+  const subject = { ...caster, x: 2, y: 4 };
+  const fearSim = run("passive:fear", { ...P.fearDesc(P.passiveOf(fp)), id: "pf", seed: 7, caster: subject, targets: [target("hit"), target("neutral", 1)], outcome: "hit" });
+  ok(fearSim?.phases.includes("arch: fear"), "Frightful Presence must play the fear archetype");
+  const auraSim = run("passive:aura", { ...P.auraDesc(P.passiveOf(heat)), id: "pa", seed: 7, caster: subject, targets: [], area: P.auraArea(subject, 10) });
+  ok(auraSim?.phases.includes("aura"), "a passive aura must play HARM.aura's pulse");
+  const riseSim = run("passive:regen", { ...P.regenDesc(P.passiveOf(regen)), id: "pr", seed: 7, caster: null, targets: [{ ...subject, outcome: "neutral" }] });
+  ok(riseSim?.phases.includes("arch: rise") && !riseSim.phases.includes("charge"), "Regeneration must play a small rise with no spell charge (nobody cast it)");
+
+  const reader = stripComments(await text(`${FX}read.mjs`));
+  ok(/from "\.\/passives\.mjs"/.test(reader), "read.mjs must take its passive decisions from passives.mjs");
+  ok(/!castFor\(origin\) && PASSIVE_ORIGINS\.has\(origin\.type\)\) onPassiveRoll/.test(reader), "read.mjs must route a castless save from a passive to onPassiveRoll (Frightful Presence, Stench)");
+  ok(/PASSIVE_ORIGINS\.has\(origin\.type\)\) onPassiveRoll\(message, ctx, origin\)/.test(reader.slice(reader.indexOf('type === "damage-roll"'))), "read.mjs must play a passive aura's damage card (Dragon Heat)");
+  ok(/!ctx && !origin && message\.rolls\?\.length\) \{ void onRegenCard/.test(reader) && /type === "damage-taken"\) \{ onHealTaken/.test(reader), "read.mjs must read FastHealing's turn-start card and the healing applied from it");
+  ok(/on\("combatTurnChange"/.test(reader) && !/pf2e\.startTurn/.test(reader), "read.mjs must hook combatTurnChange (every client), never pf2e.startTurn (the active GM's client only)");
+  const turn = reader.slice(reader.indexOf("function onTurnChange"), reader.indexOf("function resetPassives"));
+  ok(/observable\(/.test(turn) && /auraShown\(/.test(turn) && /bodyOf\(token\)/.test(turn) && /seesTruth\(\)/.test(turn), "onTurnChange must pass the status cards' audience rule, PF2e's aura visibility and this viewer's sight before it draws");
+  ok(/turnAdvanced\(/.test(turn) && /passiveSeen\.claim\(/.test(turn), "onTurnChange must play forward turns only, once per creature per round");
+  const fire = reader.slice(reader.indexOf("async function firePassive"), reader.indexOf("function regenRound"));
+  ok(/canRead\(message\)/.test(fire) && /degreeShown\(\)/.test(fire) && /bodyOf\(/.test(fire), "firePassive must show a save's degree only to a viewer who may read it and see the result, on bodies this viewer can see");
+  ok(/passiveSeen\.claim\(key\)/.test(reader.slice(reader.indexOf("function playRegen"))), "a regeneration must play once per creature per round, however many cards show it");
+  ok(/resetPassives\(\)/.test(reader.slice(reader.indexOf("return () => {"))), "unwiring the reader must drop its passive joins and played keys");
 }
 
 /* ── report ────────────────────────────────────────────────────────────── */

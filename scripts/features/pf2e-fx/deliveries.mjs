@@ -872,8 +872,34 @@ function aura(s, M, ctx) {
 
 /* ── bloom: it opens on the target itself, from inside it out ─────────── */
 
+/** How big a bloom opens, by outcome: a crit ×1.4 (spellsprite-craft §1), a save that succeeded small. */
+const BLOOM_K = Object.freeze({ crit: 1.4, hit: 1, neutral: 0.9, miss: 0.6 });
+
+/**
+ * What a family's `bloom(s, M, B)` hook is handed, one per creature. The hook
+ * schedules its own beats with `s.at` from `B.at` (the drawn-in moment) and
+ * `B.b` (the bloom itself, 0.17 s later) and draws only the look: the hit, the
+ * motif, the props' marks, the crit's hitstop and second beat and the linger
+ * are this delivery's. `B.r` is the bloom's radius in art px, already scaled
+ * by rank, outcome and the creature's size (22 px on an ordinary hit on a
+ * Medium creature, × size^0.75 past that); `B.k` the outcome's scale; `B.z`
+ * the body's middle and `B.head` its head, in squares; `B.ux, B.uy` the unit
+ * vector from the caster.
+ */
+function bloomCtx(s, D, T, o, at, b, from) {
+  const sz = Math.sqrt(T.size ?? 1), k = BLOOM_K[o] ?? 1, m = Math.min(1.4, s.m);
+  const [ux, uy] = norm(T.x - from[0], T.y - from[1]);
+  return {
+    T, o, at, b, from, ux, uy, sz, k, m,
+    x: T.x, y: T.y, z: 0.55 * T.h, head: 0.92 * T.h, h: T.h,
+    crit: o === "crit", saved: o === "miss", pow: D.pw(o),
+    // a big creature blooms past its own rim: the radius grows faster than the body it opens from
+    r: 22 * k * m * (T.size ?? 1) ** 0.75,
+  };
+}
+
 function bloom(s, M, ctx) {
-  const D = prep(s, M, ctx), list = aims(D), t0 = wind(D, 0, 0.35);
+  const D = prep(s, M, ctx), list = aims(D), t0 = wind(D, 0, 0.35), own = M.mod.bloom;
   if (D.area && D.targets.length) ctx.areaFX(s, M, D.area, { tele0: Math.min(0.1, t0), hitAt: t0 + 0.17, pow: D.pw(primary(D)), erupt: false, linger: 1.6 });
   let last = t0;
   list.forEach((T, i) => {
@@ -881,6 +907,22 @@ function bloom(s, M, ctx) {
     const crit = o === "crit", saved = o === "miss";
     // marked: the floor under it is chosen before anything happens to it
     s.at(Math.max(0, at - 0.3), (s2) => s2.add({ k: "mark", x: T.x, y: T.y, r: 0.65 * (T.size ?? 1), life: 0.55, R: M.R, update: still }));
+    const b = at + 0.17;
+    if (own) {
+      // the family draws its own bloom; the hit, the marks and the crit's beats stay here
+      own(s, M, bloomCtx(s, D, T, o, at, b, from));
+      s.at(b + 1 / 12, (s2) => {
+        s2.hit(T.id, D.pw(o), { x: from[0], y: from[1] }, M.R);
+        D.motif?.impact?.(s2, M, { x: ctr[0], y: ctr[1], z: ctr[2], pow: D.pw(o), rad: saved ? 0.28 : 0.4, at: s2.t });
+        D.motif?.residue?.(s2, M, { x: T.x, y: T.y, at: s2.t + 0.35 });
+        marks(s2, D, T, o);
+        if (crit) hitstop(s2, 1 / 12);
+      });
+      if (crit) s.at(b + 0.2, (s2) => s2.hit(T.id, 1.6, { x: from[0], y: from[1] }, M.R));
+      ctx.linger(s, M, T.x, T.y, saved ? 0.2 : 0.32, b + 0.35, b + 1.8);
+      last = b;
+      return;
+    }
     // drawn in: matter gathers inside the body
     s.at(at, (s2) => {
       for (let k = 0; k < 12; k++) {
@@ -889,7 +931,6 @@ function bloom(s, M, ctx) {
       }
       s2.light(ctr[0], ctr[1], ctr[2], 1.3, S(M.R, 0.9), 0.85, 0.2, { swell: true });
     });
-    const b = at + 0.17;
     // the spokes open first; the matter bursts out along them a frame later
     s.at(b, (s2) => s2.add({ k: "dvBloom", x: ctr[0], y: ctr[1], z: ctr[2], r: (crit ? 24 : saved ? 13 : 20) * Math.min(1.4, s2.m) * sz, n: saved ? 6 : 10, life: 0.6, R: M.R, dark: M.dark, seed: sd(s2), update: still }));
     s.at(b + 1 / 12, (s2) => {

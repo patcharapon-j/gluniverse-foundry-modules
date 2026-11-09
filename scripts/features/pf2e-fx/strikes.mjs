@@ -12,7 +12,11 @@
  *   motif                 the motif's hooks or null (impact is called on contact)
  *
  * The delivery shapes it (a chop is a falling wedge, jaws are fangs closing),
- * `M` colours it (its ramp, its release), the props size and time it.
+ * `M` colours it (its ramp, its release: a fire elemental's slam burns, an
+ * acid bite fumes), the attacker's size scales it (`bulkOf`: a Huge
+ * creature's bite is a huge bite), the props size and time it. A rider
+ * (Grab, Knockdown, Push, Rend) is never drawn here: PF2e's follow-up plays it,
+ * drawn with this Strike's body part (handoff.mjs).
  *
  * The three outcomes have to read apart at a glance, on a token 26 px wide:
  *   hit    one stroke on the body, one release, a flinch
@@ -57,6 +61,24 @@ const STK = (i) => (i % 3 === 0 ? "streak" : "stStreak");
 const fan = (s, q, spread) => { const a = q + s.rand(-spread, spread); return [Math.cos(a), Math.sin(a)]; };
 
 /**
+ * How big a blow is drawn (catalogue §4 row 9): the ATTACKER's size, so a
+ * Huge creature's bite is a huge bite (√3 the reach and thickness of a
+ * Medium one), with a quarter-power nod to a bigger target so a dagger still
+ * reads on a dragon. Footprints in squares; a Medium-on-Medium blow is 1.
+ */
+export const bulkOf = (caster, T) => {
+  const cs = Math.max(0.5, caster?.size ?? 1), ts = Math.max(0.5, T?.size ?? 1);
+  return Math.sqrt(cs) * Math.max(1, ts / cs) ** 0.25;
+};
+
+/**
+ * When a Strike's last blow on any creature it hit has landed (a crit's
+ * second impact included), or null when it hit nothing: anything that must
+ * follow the blow rather than land on top of it starts after this.
+ */
+export const contactOf = (s) => s.strikeContact ?? null;
+
+/**
  * Where a blow is aimed: on the body, or for a miss over the shoulder and on
  * past it. A sideways miss is depth on a billboard view and lands right on the
  * figure; height reads as "over" in both views, and the overshoot carries it
@@ -70,7 +92,7 @@ function aimOf(ctx, T) {
   if (py < 0 || (py === 0 && px < 0)) { px = -px; py = -py; }
   const miss = ctx.outcome(T) === "miss", sz = Math.sqrt(T.size ?? 1), side = 0.22 * sz, past = 0.5 * sz;
   return {
-    from, ux, uy, px, py, miss,
+    from, ux, uy, px, py, miss, B: bulkOf(ctx.caster, T),
     x: miss ? T.x + px * side + ux * past : T.x, y: miss ? T.y + py * side + uy * past : T.y,
     z: (k) => (miss ? 1.15 : k) * T.h,
   };
@@ -97,7 +119,8 @@ function whoosh(s, M, A, T, at) {
  * lamp. `k` grows it (deadly, fatal).
  */
 function critImpact(s, M, A, T, k = 1) {
-  const sz = Math.sqrt(T.size ?? 1), K = k * clamp(s.m, 0.9, 1.25) * sz, z = 0.6 * T.h, x = T.x - 0.05, y = T.y, base = Math.atan2(A.uy, A.ux);
+  // a big attacker crits big (bulkOf): the star, the sparks and the rings grow with the blow, not only with the body
+  const sz = A.B ?? Math.sqrt(T.size ?? 1), rs = Math.max(T.size ?? 1, A.B ?? 0), K = k * clamp(s.m, 0.9, 1.25) * sz, z = 0.6 * T.h, x = T.x - 0.05, y = T.y, base = Math.atan2(A.uy, A.ux);
   // ~1.4× the hit's flare (34 px), the burst's spikes 11-15 px as the reference's
   s.add({ k: "stBurst", x, y, z, ux: A.ux, uy: A.uy, L: 11 * K, n: 14, life: 5 / 12, R: M.R, seed: s.R(), update: still });
   s.add({ k: "stFlare", x, y, z, ux: A.ux, uy: A.uy, L: 44 * K, life: 4 / 12, R: M.R, seed: s.R(), update: still });
@@ -125,9 +148,9 @@ function critImpact(s, M, A, T, k = 1) {
     const q = s.rand(0, TAU), d = s.rand(0.55, 1.3) * K;
     s.add({ k: "glint", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.8, z: z + s.rand(-0.2, 0.4), life: 5 / 12, R: M.R, big: i < 2, wait: s.rand(0.08, 0.32), minor: true, update: still });
   }
-  s.add({ k: "ring", x: T.x, y: T.y, r: 1.55 * k * (T.size ?? 1), life: 0.45, R: M.R, broken: true, seed: 5, update: still });
-  s.add({ k: "ring", x: T.x, y: T.y, r: 0.9 * k * (T.size ?? 1), life: 0.3, R: M.R, seed: 7, update: still });
-  if (k > 1.3) s.add({ k: "ring", x: T.x, y: T.y, r: 2.1 * k * (T.size ?? 1), life: 0.55, R: M.R, broken: true, seed: 9, wait: 1 / 12, update: still });
+  s.add({ k: "ring", x: T.x, y: T.y, r: 1.55 * k * rs, life: 0.45, R: M.R, broken: true, seed: 5, update: still });
+  s.add({ k: "ring", x: T.x, y: T.y, r: 0.9 * k * rs, life: 0.3, R: M.R, seed: 7, update: still });
+  if (k > 1.3) s.add({ k: "ring", x: T.x, y: T.y, r: 2.1 * k * rs, life: 0.55, R: M.R, broken: true, seed: 9, wait: 1 / 12, update: still });
 }
 
 const hasProp = (spec, k) => { const p = spec?.props; return Array.isArray(p) ? p.includes(k) : !!p?.has?.(k); };
@@ -165,7 +188,7 @@ function heavyContact(s, M, A, T, W, soft = false) {
   // grit and chips are thrown hard along the blow, dust rolls out, embers rise
   s.freeze = Math.max(s.freeze, W > 1.5 ? 2.5 / 12 : 1.5 / 12);
   s.shake = Math.max(s.shake, 0.8 + W);
-  const base = Math.atan2(A.uy, A.ux), sz = Math.sqrt(T.size ?? 1);
+  const base = Math.atan2(A.uy, A.ux), sz = A.B ?? Math.sqrt(T.size ?? 1);
   s.light(T.x, T.y, 0.4 * T.h, 2.5 * W * sz, S(M.R, 0.85), 0.5, 0.8);
   // the cut runs across the blow, leaning with it: a diagonal through the body
   const q = base + Math.PI / 2 - 0.55;
@@ -207,16 +230,20 @@ function windUp(s, M, caster, A, T, at, W) {
  * grey cloud. An element releases its family's burst under the same flare.
  */
 function contactRelease(s, ctx, M, A, x, y, z, pow, rad) {
-  const mm = clamp(s.m * pow, 0.9, 1.6), base = Math.atan2(A.uy, A.ux);
-  s.add({ k: "stFlare", x, y, z, ux: A.ux, uy: A.uy, L: 34 * mm, life: 4 / 12, R: M.R, seed: s.R(), update: still });
-  s.light(x + A.ux * 0.4, y + A.uy * 0.4, z, 1, S(M.R, 1), 0.5 * mm, 0.14);
+  // a big attacker's contact is drawn at its size (bulkOf): a longer flare, a wider pop, faster sparks
+  const B = A.B ?? 1, mm = clamp(s.m * pow, 0.9, 1.6), base = Math.atan2(A.uy, A.ux), sv = Math.sqrt(B);
+  // the release grows by the root: an element's crit already erupts, and at full bulk a Large fire slam buried the body
+  rad *= sv;
+  s.add({ k: "stFlare", x, y, z, ux: A.ux, uy: A.uy, L: 34 * mm * B, life: 4 / 12, R: M.R, seed: s.R(), update: still });
+  s.light(x + A.ux * 0.4, y + A.uy * 0.4, z, B, S(M.R, 1), 0.5 * mm, 0.14);
   const sparks = (n, lo, hi, R) => {
     for (let i = 0; i < n; i++) {
-      const back = i % 6 === 5, [cx, cy] = fan(s, back ? base + Math.PI : base - 0.1, back ? 0.5 : 0.6), sp = s.rand(lo, hi) * (back ? 0.5 : 1);
+      const back = i % 6 === 5, [cx, cy] = fan(s, back ? base + Math.PI : base - 0.1, back ? 0.5 : 0.6), sp = s.rand(lo, hi) * (back ? 0.5 : 1) * sv;
       s.add({ k: SPK(i), x, y, z, vx: cx * sp, vy: cy * sp, vz: s.rand(0.5, 3), g: 30, drag: 2.2, bounce: 0.4, life: s.rand(0.25, 0.45), R, minor: i % 2 === 1, wait: i > 7 ? s.rand(0.01, 0.03) : 0 });
     }
   };
-  if (M.family !== "physical") { ctx.release(s, M, x, y, z, pow, rad); sparks(Math.round(5 * mm), 6, 12, M.R); return; }
+  if (B > 1.3) s.shake = Math.max(s.shake, 0.6 + B);
+  if (M.family !== "physical") { ctx.release(s, M, x, y, z, pow, rad); sparks(Math.round(5 * mm * sv), 6, 12, M.R); return; }
   releaseFlash(s, M, x, y, z, pow, rad, { light: 0.55, flash: 0.6 });
   sparks(Math.round(11 * mm), 6.5, 14, M.R);
   for (let i = 0; i < Math.round(6 * mm); i++) {
@@ -299,13 +326,17 @@ function land(s, M, ctx, T, at, stroke, o = {}) {
   });
   for (const d of o.again ?? []) s.at(c + d, (s2) => { contactRelease(s2, ctx, M, A, T.x - 0.1, T.y, zk * T.h, 0.5, 0.25); s2.hit(T.id, 0.7, A.from, M.R); });
   if (W > 1) s.phases.push("held contact", F.soft ? "soft" : "cut", "debris");
+  const tail = (o.again?.length ? Math.max(...o.again) : 0);
   if (out === "crit") {
-    const tail = (o.again?.length ? Math.max(...o.again) : 0);
     s.at(c + tail + 0.14, (s2) => stroke(s2, -1, true));
     s.at(c + tail + 0.22, (s2) => { contactRelease(s2, ctx, M, A, T.x - 0.1, T.y, zk * T.h, 1.6, 0.4); critImpact(s2, M, A, T, F.critK); s2.hit(T.id, 1.6 * F.critK, A.from, M.R); o.onHit?.(s2, A, T, "crit2"); });
     s.phases.push("hitstop", "second stroke", "impact frames");
   }
-  if (M.id !== "kinetic") ctx.linger(s, M, T.x, T.y, 0.35, c + 0.1, c + 1.25);
+  // the last blow on this body (contactOf); a held frame stretches it
+  const last = c + tail + (out === "crit" ? 0.22 : 0) + (W > 1 ? 0.2 : 0);
+  s.strikeContact = Math.max(s.strikeContact ?? 0, last);
+  // an element's wound lingers: a fire elemental's slam keeps burning, an acid bite keeps fuming
+  if (M.id !== "kinetic") ctx.linger(s, M, T.x, T.y, 0.35 * A.B, c + 0.1, c + 1.25);
 }
 
 function glint(s, M, caster, at = 0.02) {
@@ -348,7 +379,8 @@ function melee(s, M, ctx, def) {
   if (caster && ctx.windUp) ctx.windUp(M, caster, ctx.handOf(caster, ctx.targets[0] ?? null), 0, lead);
   const cf = def.cf ?? 1, contact = cf / 12 + 0.005;
   ctx.targets.forEach((T, i) => {
-    const at = lead + i * 0.2, A = aimOf(ctx, T), sz = Math.sqrt(T.size ?? 1);
+    // every shape is sized by the blow (bulkOf: the attacker's size, a nod to the target's)
+    const at = lead + i * 0.2, A = aimOf(ctx, T), sz = A.B;
     const stroke = (s2, flip, big) => def.stroke(s2, A, T, { flip, big, sc: sc0 * BIG * sz * (big ? 1.4 * F.critK : 1), skip: big ? Math.max(0, cf - 1) : 0, F, W });
     windUp(s, M, caster, A, T, at, W);
     s.at(at, (s2) => {
@@ -381,7 +413,9 @@ const tearOf = (M, F) => bleedOf(M, F) ?? M.R;
 function slashArc(A, T, { k = 1, W = 1, reach = 1, sweep = 1, dir = 1, big = false, zk = 0.55, R0 = 1.6, W0 = 12, at = 0.8, tilt = 0.45, span = 2.4 } = {}) {
   // a miss is a tighter arc centred on the empty air past the body, so its tails never sweep a neighbour
   if (A.miss) { R0 *= 0.8; span *= 0.6; at = 0.5; }
-  const R = R0 * k * (1 + 0.25 * (W - 1)) * (reach > 1 ? 1.12 : 1);
+  // a big wielder's swing is thicker by its whole bulk, wider only by its root: the arc stays
+  // centred on the wielder instead of wrapping round its own token
+  const R = R0 * (k / Math.sqrt(A.B ?? 1)) * (1 + 0.25 * (W - 1)) * (reach > 1 ? 1.12 : 1);
   const Wpx = W0 * Math.min(1.6, k) * (1 + 0.4 * (W - 1)), Rw = Wpx / AP;
   let ux = A.ux, uy = A.uy;
   // a crit's second stroke comes in across the first
@@ -489,8 +523,8 @@ const DELIVER = {
     land: {
       zk: 0.65,
       onHit(s2, A, T, o) {
-        const sz = T.size ?? 1, R = M.id === "kinetic" ? RAMP.earth : M.R;
-        s2.add({ k: "mlPow", x: T.x, y: T.y, z: 0.65 * T.h, r: 10, L: 13, n: 12, life: 3 / 12, R: M.R, seed: 0.2, update: still });
+        const sz = Math.max(T.size ?? 1, A.B), R = M.id === "kinetic" ? RAMP.earth : M.R;
+        s2.add({ k: "mlPow", x: T.x, y: T.y, z: 0.65 * T.h, r: 10 * A.B, L: 13 * A.B, n: 12, life: 3 / 12, R: M.R, seed: 0.2, update: still });
         s2.add({ k: "ring", x: T.x, y: T.y, r: 1.0 * sz, life: 0.45, R: RAMP.kinetic, broken: true, seed: 11, update: still });
         if (o !== "crit2") s2.add({ k: "mlCracks", x: T.x, y: T.y, r: 0.65 * sz, life: 1.6, R, seed: s2.seedInt(), update: still });
         s2.light(T.x, T.y, 0.3, 2.4 * Math.sqrt(sz), S(M.R, 0.85), 0.45, 0.6);
@@ -513,7 +547,7 @@ const DELIVER = {
   thrust: (s, M, ctx) => melee(s, M, ctx, {
     name: "thrust", at: 0.28, cf: 1, period: 2.3, lit: false,
     stroke(s2, A, T, { big, sc, W, F }) {
-      const on = A.miss ? 0.45 : big ? 0.3 : 0, len = (1.15 + 0.2 * (T.size ?? 1)) * F.reach * (big ? 1.3 : 1) * Math.min(1.25, W);
+      const on = A.miss ? 0.45 : big ? 0.3 : 0, len = (1.15 * A.B + 0.2 * (T.size ?? 1)) * F.reach * (big ? 1.3 : 1) * Math.min(1.25, W);
       const x = A.x + A.ux * on, y = A.y + A.uy * on, z = A.z(0.6);
       s2.add({ k: "stBundle", x, y, z, ux: A.ux, uy: A.uy, len: len * 1.25, sc, life: 4 / 12, R: M.R, update: still });
       s2.add({ k: "mlSpear", ...at3(A, T, 0.6), x, y, ux: A.ux, uy: A.uy, len, sc, life: 5 / 12, R: M.R });
@@ -596,8 +630,8 @@ const DELIVER = {
     },
     land: {
       zk: 0.7, pow: 0.65,
-      onHit(s2, A, T, o) { if (o !== "crit2") crack(s2, M, T.x - A.ux * 0.1, T.y - A.uy * 0.1, 0.7 * T.h, A, 1); },
-      whiff(s2, A, T) { crack(s2, M, A.x, A.y, A.z(0.7), A, 0.8); },
+      onHit(s2, A, T, o) { if (o !== "crit2") crack(s2, M, T.x - A.ux * 0.1, T.y - A.uy * 0.1, 0.7 * T.h, A, Math.sqrt(A.B)); },
+      whiff(s2, A, T) { crack(s2, M, A.x, A.y, A.z(0.7), A, 0.8 * Math.sqrt(A.B)); },
     },
   }),
 
@@ -655,7 +689,7 @@ const DELIVER = {
       onHit(s2, A, T, o) {
         const B = bleedOf(M, feelOf(s2)) ?? M.R;
         for (let k = 0; k < (o === "crit2" ? 14 : 10); k++) {
-          const q = s2.rand(0, TAU), sp = s2.rand(4, 8);
+          const q = s2.rand(0, TAU), sp = s2.rand(4, 8) * Math.sqrt(A.B);
           s2.add({ k: "spark", x: T.x + Math.cos(q) * 0.08, y: T.y, z: 0.62 * T.h, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.5, vz: s2.rand(0.5, 3), g: 30, drag: 1.6, life: s2.rand(0.3, 0.5), R: B, minor: k > 4 });
         }
       },
@@ -674,7 +708,7 @@ const DELIVER = {
         // the toss: grit and lines thrown up off the hook
         for (let k = 0; k < 7; k++) s2.add({ k: "streak", x: T.x + (k - 3) * 0.1, y: T.y, z: 0.5 * T.h, vx: A.ux * 2.5, vy: A.uy * 2.5, vz: s2.rand(9, 13), life: 0.18, R: M.R, minor: k % 2 === 1 });
         for (let k = 0; k < 7; k++) s2.add({ k: "chunk", x: T.x, y: T.y, z: 0.05, vx: s2.rand(-2.5, 2.5) + A.ux, vy: s2.rand(-1.2, 1.2) + A.uy, vz: s2.rand(4, 7), g: 30, drag: 0.8, bounce: 0.3, life: s2.rand(1.2, 1.8), R: RAMP.kinetic, s: 1, debris: true, minor: k > 3 });
-        dustRing(s2, T.x, T.y, 4, 0.35);
+        dustRing(s2, T.x, T.y, 4, 0.35 * A.B);
       },
     },
   }),
@@ -708,9 +742,10 @@ const DELIVER = {
       zk: 0.25, pow: 0.6, knock: 1.2,
       onHit(s2, A, T, o) {
         const R = M.id === "kinetic" ? RAMP.earth : M.R;
-        s2.add({ k: "mlCracks", x: T.x, y: T.y, r: (o === "crit2" ? 1.1 : 0.8) * (T.size ?? 1), life: 1.6, R, seed: s2.seedInt(), update: still });
-        s2.add({ k: "ring", x: T.x, y: T.y, r: 1.15 * (T.size ?? 1), life: 0.45, R: RAMP.kinetic, broken: true, seed: 13, update: still });
-        dustRing(s2, T.x, T.y, 9, 0.55);
+        const sz = Math.max(T.size ?? 1, A.B);
+        s2.add({ k: "mlCracks", x: T.x, y: T.y, r: (o === "crit2" ? 1.1 : 0.8) * sz, life: 1.6, R, seed: s2.seedInt(), update: still });
+        s2.add({ k: "ring", x: T.x, y: T.y, r: 1.15 * sz, life: 0.45, R: RAMP.kinetic, broken: true, seed: 13, update: still });
+        dustRing(s2, T.x, T.y, 9, 0.55 * A.B);
         for (let i = 0; i < 8; i++) { const q = s2.rand(0, TAU), sp = s2.rand(1.5, 3.5); s2.add({ k: "chunk", x: T.x, y: T.y, z: 0.05, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(3, 5.5), g: 30, drag: 0.8, bounce: 0.35, life: s2.rand(1, 1.8), R, s: i % 3 ? 1 : 2, debris: true, minor: i > 3 }); }
         s2.shake = Math.max(s2.shake, 1.4);
       },
@@ -742,14 +777,14 @@ const DELIVER = {
   slam: (s, M, ctx) => melee(s, M, ctx, {
     name: "slam", at: 0.28, cf: 2, period: 2.5, glint: false,
     stroke(s2, A, T, { sc, skip, W }) {
-      s2.add({ k: "mlSlab", ...at3(A, T, 0.55), sc: (sc / BIG) * 1.35 * Math.min(1.3, W) * Math.sqrt(T.size ?? 1), life: 6 / 12, R: M.R, skip });
+      s2.add({ k: "mlSlab", ...at3(A, T, 0.55), sc: (sc / BIG) * 1.35 * Math.min(1.3, W), life: 6 / 12, R: M.R, skip });
     },
     land: {
       zk: 0.55, pow: 0.8, knock: 1.4,
       onHit(s2, A, T) {
-        s2.add({ k: "mlPow", x: T.x, y: T.y, z: 0.55 * T.h, r: 12, L: 14, n: 12, life: 3 / 12, R: M.R, seed: 0.1, update: still });
-        s2.add({ k: "ring", x: T.x, y: T.y, r: 1.05 * (T.size ?? 1), life: 0.45, R: RAMP.kinetic, broken: true, seed: 3, update: still });
-        dustRing(s2, T.x, T.y, 6, 0.45);
+        s2.add({ k: "mlPow", x: T.x, y: T.y, z: 0.55 * T.h, r: 12 * A.B, L: 14 * A.B, n: 12, life: 3 / 12, R: M.R, seed: 0.1, update: still });
+        s2.add({ k: "ring", x: T.x, y: T.y, r: 1.05 * Math.max(T.size ?? 1, A.B), life: 0.45, R: RAMP.kinetic, broken: true, seed: 3, update: still });
+        dustRing(s2, T.x, T.y, 6, 0.45 * A.B);
         s2.shake = Math.max(s2.shake, 1.6);
       },
     },
@@ -768,7 +803,7 @@ const DELIVER = {
   grasp: (s, M, ctx) => melee(s, M, ctx, {
     name: "grasp", at: 0.22, cf: 2, period: 2.3, glint: false,
     stroke(s2, A, T, { sc, skip }) {
-      s2.add({ k: "mlHand", ...at3(A, T, 0.6), sc: sc * Math.sqrt(T.size ?? 1), life: 8 / 12, R: M.R, skip });
+      s2.add({ k: "mlHand", ...at3(A, T, 0.6), sc: sc * Math.max(1, Math.sqrt(T.size ?? 1) / A.B), life: 8 / 12, R: M.R, skip });
     },
     land: { pow: 0.5, rad: 0.25, knock: 0.7 },
   }),

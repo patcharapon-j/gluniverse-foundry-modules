@@ -15,7 +15,7 @@
  * No core and no star.
  */
 
-import { TAU, clamp, easeOut, q12, fadeOut } from "../core/rand.mjs";
+import { TAU, clamp, easeOut, q12, fadeOut, rng } from "../core/rand.mjs";
 import { RAMP, S } from "../core/palette.mjs";
 import { physics } from "../core/sim.mjs";
 import { registerShapes } from "../core/shapes.mjs";
@@ -258,11 +258,95 @@ export default {
   trail: pick("trail"),
   linger: pick("linger"),
   spray: pick("spray"),
+  /**
+   * The crackle (spellsprite-craft §5 arcane/mana-burst, lightning/thunderclap):
+   * the air round the creature goes taut for the drawn-in beat, then a faceted
+   * shell snaps round it and cracks, crackling, shear lines and shards thrown
+   * out, a band racing over the floor. Sonic rings out in shells, air throws
+   * gusts and a swirl.
+   */
+  bloom(s, M, B) {
+    const R = M.R, mat = M.material, aps = s.spec.aps, { x, y, z, r } = B, rs = r / aps;
+    s.at(B.at, (s2) => {
+      s2.add({ k: "soundshell", x, y, z, r: r * 1.5, life: 0.17, R, thin: true, update(p) { p.r = r * 1.5 * (1 - p.age / p.life) + 4; } });
+      s2.light(x, y, 0.1, rs * 1.6 + 0.5, S(R, 0.85), 0.4, 0.2, { swell: true });
+    });
+    s.at(B.b, (s2) => {
+      s2.add({ k: "shkCrackle", x, y, z, r: r * 1.12, n: B.saved ? 5 : B.crit ? 8 : 6, life: 0.7, R, seed: sd(s2), update: still });
+      if (B.crit) { s2.add({ k: "star", x, y, z, L: r * 0.55, life: 3 / 12, R, update: still }); s2.crit(); }
+      s2.light(x, y, 0.1, rs * 2.2 + 0.7, S(R, 0.9), 0.55 * B.k, 0.6);
+      // shear lines: straight streaks racing out flat, a square and more
+      for (let i = 0, N = Math.round(14 * B.k); i < N; i++) {
+        const q = (i / N) * TAU + s2.rand(-0.12, 0.12), sp = s2.rand(9, 14) * Math.min(1.3, B.k);
+        s2.add({ k: "streak", x: x + Math.cos(q) * rs * 0.5, y: y + Math.sin(q) * rs * 0.4, z: z + s2.rand(-0.15, 0.2), vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.85, drag: 4, life: s2.rand(0.16, 0.26), R, minor: i % 2 === 1 });
+      }
+      for (let i = 0, N = Math.round(10 * B.k); i < N; i++) s2.add(shard(s2, R, x, y, z, s2.rand(4, 9) * B.k, { L: 2 + (i % 3), minor: i > 3 }));
+      for (let i = 0, N = Math.round(10 * B.k); i < N; i++) s2.add({ k: "spark", x, y, z, ...flat(s2, s2.rand(5, 11), 0.6), g: 12, drag: 2.4, bounce: 0.4, life: s2.rand(0.2, 0.45), R, minor: i > 3 });
+      s2.add({ k: "flBand", x, y, r: rs * 1.9 + 0.5, life: 0.45, R, dust: RAMP.kinetic, th: 3, update: still });
+      shove(s2, x, y, rs * 0.5, B.saved ? 3 : 5, 2.6 * B.k, 6 * B.sz, { minor: true });
+      if (mat === "sonic") for (let i = 0; i < (B.saved ? 2 : 3); i++) s2.add({ k: "soundshell", x, y, z: z + i * 0.1, r: r * (1.4 + i * 0.35), life: 0.45 + i * 0.08, R, wait: 0.05 + i * 0.08, update: still });
+      else if (mat === "air") {
+        s2.add({ k: "windswirl", x, y, z: z * 0.6, r: r * 1.2, spin: 1, life: 0.8, R, seed: sd(s2), update: still });
+        for (let i = 0, N = Math.round(8 * B.k); i < N; i++) { const q = (i / N) * TAU, sp = s2.rand(4, 7); s2.add({ k: "gust", x, y, z: z + s2.rand(-0.2, 0.3), vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.8, drag: 2.6, life: s2.rand(0.4, 0.6), len: 0.6, turn: 1, seed: sd(s2), R, minor: i > 3 }); }
+      } else for (let i = 0, N = Math.round(6 * B.k); i < N; i++) { const a = s2.rand(0, TAU), d = s2.rand(0.4, 1.1) * rs; s2.add({ k: "glint", x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.8, z: z + s2.rand(-0.2, 0.4), life: 5 / 12, R, wait: s2.rand(0.1, 0.35), big: i === 0, update: still }); }
+    });
+  },
   auraStart(s, M, T) { look(M).auraStart(s, M, T); },
   aura: pick("aura"),
   tick(s, M, T) { look(M).tick?.(s, M, T); },
   gentle: true,
 };
+
+
+/* ── the bloom's crackle (deliveries.mjs bloom) ───────────────────────── */
+
+registerShapes({
+  /**
+   * The crackle: a faceted shell snaps round the body, cracks run across it
+   * from the middle out, and the force in it crackles along the cracks and
+   * off the rim in short zigzags re-rolled at 20 fps; then the facets fall
+   * away outward and the crackle thins to sparks at the rim. Never filled, so
+   * the creature stays seen through it.
+   */
+  shkCrackle(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 7) return;
+    const [x, y] = v.ap(p.x, p.y, p.z), sq = v.kind === "top" ? 0.86 : 0.45, a = fr < 5 ? 1 : (8 - fr) / 3;
+    const grow = [0.55, 0.9, 1, 1.03, 1.06, 1.1, 1.15, 1.2][fr], r = p.r * grow, n = p.n, rot = (p.seed % 10) * 0.07;
+    const corner = (i, k = 1) => { const q = rot + (i / n) * TAU; return [x + Math.cos(q) * r * k, y + Math.sin(q) * r * k * sq]; };
+    // the shell's facets: a bright rim, a dim inner line; past the snap each facet slides out on its own
+    for (let i = 0; i < n; i++) {
+      const out = fr >= 4 ? (fr - 3) * 0.06 * (1 + (i % 3) * 0.4) : 0, [ax, ay] = corner(i, 1 + out), [bx, by] = corner(i + 1, 1 + out);
+      if (fr >= 5 && (i + fr) % 3 === 0) continue;
+      P.line(ax, ay, bx, by, null, 2, a, () => S(p.R, fr < 2 ? 1 : 0.9));
+      const [cx2, cy2] = corner(i, 0.82 + out), [dx2, dy2] = corner(i + 1, 0.82 + out);
+      P.line(cx2, cy2, dx2, dy2, S(p.R, 0.6), 1, a * 0.85);
+    }
+    // the cracks: from near the middle out to the corners, jagged, re-rolled at 20 fps with the crackle
+    const fz = Math.floor(p.age * 20), rr = rng(p.seed * 17 + fz);
+    for (let i = 0; i < n; i++) {
+      if (fr < 1 || (fr >= 5 && i % 2)) continue;
+      let [px, py] = corner(i, 0.25);
+      const [ex, ey] = corner(i, 1), steps = 4;
+      for (let k = 1; k <= steps; k++) {
+        const f = k / steps, jx = k < steps ? (rr() - 0.5) * 5 : 0, jy = k < steps ? (rr() - 0.5) * 5 * sq : 0;
+        const nx = x + (ex - x) * (0.25 + 0.75 * f) + jx, ny = y + (ey - y) * (0.25 + 0.75 * f) + jy;
+        P.line(px, py, nx, ny, null, 2, a, () => S(p.R, k === 1 && fr < 3 ? 1 : 0.85));
+        px = nx; py = ny;
+      }
+    }
+    // the crackle off the rim: short zigzags kicked outward
+    for (let i = 0; i < p.n + 2; i++) {
+      const q = rr() * TAU, d0 = r * (0.9 + rr() * 0.2);
+      let px = x + Math.cos(q) * d0, py = y + Math.sin(q) * d0 * sq;
+      const L = 3 + rr() * (r * 0.35);
+      for (let k = 0; k < 3; k++) {
+        const qq = q + (rr() - 0.5) * 1.6, nx = px + Math.cos(qq) * L / 3, ny = py + Math.sin(qq) * L / 3 * sq;
+        P.line(px, py, nx, ny, S(p.R, k ? 0.82 : 1), 2, a);
+        px = nx; py = ny;
+      }
+    }
+  },
+});
 
 /* ── shapes ───────────────────────────────────────────────────────────── */
 

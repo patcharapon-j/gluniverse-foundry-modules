@@ -134,10 +134,89 @@ function fungalBurst(s, M, { x, y, z, pow, rad, sub }) {
   flourish(s, M, x, y, z, rad, Math.round(5 * m));
 }
 
+
+registerShapes({
+  /**
+   * The thorn burst, on a body (deliveries.mjs bloom): barbed thorns spear
+   * out of a hollow middle, curving as they go, a barb on alternate sides,
+   * lit along one edge; they hold, then wither back from the tip. `bud`: over
+   * the head a bud swells for three frames and opens into five petals in the
+   * blossom ramp `PR`, its heart lit. `wood` thorns are thicker and darker.
+   */
+  grBurst(v, P, p) {
+    const fr = Math.floor(p.age * 12), u = p.age / p.life, [x, y] = v.ap(p.x, p.y, p.z), top = v.kind === "top", sq = top ? 0.85 : 0.5, R = p.R;
+    const a = u < 0.75 ? 1 : (1 - u) / 0.25, grow = Math.min(1, (fr + 1) / 2.5), wilt = u > 0.55 ? (u - 0.55) / 0.45 : 0, r0 = Math.max(6, p.r * 0.28);
+    for (let k = 0; k < p.n; k++) {
+      const q = (k / p.n) * TAU + hash(k, p.seed) * 0.5, bend = (hash(k, p.seed, 1) - 0.5) * 0.9, L = (p.r - r0) * (0.7 + 0.45 * hash(k, p.seed, 2)) * grow * (1 - wilt * 0.6);
+      const W = (p.wood ? 3.6 : 2.8) * Math.min(1.4, p.r / 24), steps = Math.ceil(L);
+      for (let j = 0; j <= steps; j++) {
+        const f = j / Math.max(1, steps), qq = q + bend * f * f, d = r0 + j, cx = x + Math.cos(qq) * d, cy = y + Math.sin(qq) * d * sq - (top ? 0 : f * f * 4);
+        const w = W * (1 - f) + 0.3, nx = -Math.sin(qq), ny = Math.cos(qq) * sq;
+        for (let i = Math.floor(-w); i <= Math.ceil(w); i++) {
+          if (Math.abs(i) > w + 0.2) continue;
+          const col = Math.abs(i) >= w - 0.6 && w > 1.2 ? S(R, 0.33) : i < 0 ? S(R, p.wood ? 0.83 : 1) : f > 0.85 ? S(R, 1) : S(R, p.wood ? 0.5 : 0.67);
+          P.dot(cx + nx * i, cy + ny * i, col, a, 1);
+        }
+        // barbs on alternate sides, every few pixels
+        if (j > 2 && j % 4 === 0 && f < 0.85) { const sg = (j / 4) % 2 ? 1 : -1, bx = cx + nx * sg * (w + 2.5) + Math.cos(qq) * 1.5, by = cy + ny * sg * (w + 2.5) + Math.sin(qq) * 1.5 * sq; P.line(cx + nx * sg * w, cy + ny * sg * w, bx, by, S(R, 0.83), 1, a); }
+      }
+    }
+    if (!p.bud) return;
+    // the bud over the head: swells, then opens into five petals
+    const [hx, hy0] = v.ap(p.x, p.y, p.hz), hy = hy0 - (top ? 6 : 0), open = clamp((p.age - 0.12) / 0.3), PR = p.PR, pr = (4 + p.r * 0.18) * (0.5 + 0.5 * Math.min(1, p.age / 0.12));
+    for (let k = 0; k < 5; k++) {
+      const q = -Math.PI / 2 + (k / 5) * TAU + open * 0.3, d = pr * 0.9 * open, cx = hx + Math.cos(q) * d, cy = hy - 6 + Math.sin(q) * d * (top ? 0.85 : 0.6), pw = pr * (0.55 + 0.25 * open);
+      P.shade(cx - pw - 1, cy - pw - 1, cx + pw + 1, cy + pw + 1, (px, py) => {
+        const dx = px - cx, dy = py - cy, along = dx * Math.cos(q) + dy * Math.sin(q), across = -dx * Math.sin(q) + dy * Math.cos(q), e = (along / pw) ** 2 + (across / (pw * 0.62)) ** 2;
+        if (e > 1) return null;
+        const col = e > 0.7 ? S(PR, 0.5) : along < 0 ? S(PR, 0.83) : S(PR, 1);
+        return a < 1 ? { c: col, a } : col;
+      }, 2);
+    }
+    P.dot(hx, hy - 6, S(R, 1), a, 2); P.dot(hx + 1, hy - 6, S(R, 0.83), a, 2); P.dot(hx, hy - 5, S(R, 0.67), a, 2);
+  },
+});
+
 /* ── the family ───────────────────────────────────────────────────────── */
 
 export default {
   id: "growth",
+  /**
+   * The thorn and bud burst (spellsprite-craft §5 nature/thorns,
+   * nature/spore-burst): soil hops and shoots wriggle for the drawn-in beat,
+   * then the growth bursts out of the body: barbed thorns spearing out of a
+   * hollow middle, and over the head a bud that swells and opens into a
+   * flower; leaves and petals flutter, vines whip up round the feet. Wood is
+   * all thorn and splinter; fungal throws up a ring of caps that puff spores.
+   */
+  bloom(s, M, B) {
+    const R = M.R, k = kindOf(M), aps = s.spec.aps, { x, y, z, head, r, sz } = B, rs = r / aps, dirt = soil(s, M);
+    s.at(B.at, (s2) => {
+      grit(s2, dirt, x, y, 0.04, 8, { sp: [0.3, 1.2], up: [1.5, 3], life: [0.25, 0.4], keep: 2, spread: rs * 0.7 });
+      for (let i = 0; i < 6; i++) s2.add({ k: "spore", x: x + s2.rand(-0.3, 0.3) * sz, y: y + s2.rand(-0.2, 0.2), z: z + s2.rand(-0.3, 0.4), vx: s2.rand(-0.3, 0.3), vz: s2.rand(-0.6, 0.2), drag: 2, life: 0.2, R, seed: s2.R(), minor: i > 2 });
+      s2.light(x, y, 0.1, rs * 1.3 + 0.5, S(R, 0.83), 0.35, 0.2, { swell: true });
+    });
+    s.at(B.b, (s2) => {
+      s2.add({ k: "grBurst", x, y, z, hz: head, r: r * 1.15, n: B.saved ? 5 : B.crit ? 9 : 7, bud: k === "plant" && !B.saved, PR: petalRamp(R), wood: k === "wood", hero: B.crit, life: 1.1, R, seed: sd(s2), update: still });
+      s2.light(x, y, 0.1, rs * 2 + 0.7, S(R, 0.83), 0.45 * B.k, 0.8);
+      if (B.crit) s2.crit();
+      // vines whipping up round the feet
+      vines(s2, M, R, x, y, rs * 0.45, Math.min(1.3, B.k) * 0.8 * sz, k === "wood", B.saved ? 2 : Math.round(3 * B.k));
+      grit(s2, dirt, x, y, 0.05, Math.round(12 * B.k), { sp: [1.2, 4.5], up: [2, 4.5], keep: 2 });
+      if (k === "wood") for (let i = 0, N = Math.round(14 * B.k); i < N; i++) s2.add({ k: "sliver", x, y, z, ...out(s2, s2.rand(3, 8) * B.k), g: 13, drag: 1, bounce: 0.3, onGround: settle, life: s2.rand(1.4, 2.2), R, len: i % 3 ? 3 : 5, seed: s2.R(), debris: true, minor: i > 4 });
+      else if (k === "fungal") {
+        const list = [];
+        for (let i = 0, N = B.saved ? 3 : Math.round(5 * B.k); i < N; i++) { const q = (i / N) * TAU + s2.rand(-0.3, 0.3), d = rs * s2.rand(0.55, 0.8) + 0.1; list.push({ k: "mushroom", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.85, h: s2.rand(8, 12) * Math.min(1.3, B.k) * sz, w: s2.rand(5, 7) * sz, life: s2.rand(1.6, 2.2), R, seed: sd(s2), small: i > 2, wait: 0.03 + i * 0.03, debris: true, update: bloom }); }
+        list.sort((a, b) => b.y - a.y).forEach((p) => s2.add(p));
+        for (let i = 0, N = Math.round(20 * B.k); i < N; i++) { const q = s2.rand(0, TAU), v = s2.rand(0.5, 2.6); s2.add({ k: "spore", x, y, z: head * s2.rand(0.5, 1), vx: Math.cos(q) * v, vy: Math.sin(q) * v * 0.8, vz: s2.rand(0.2, 1), g: -0.1, drag: 1.8, life: s2.rand(1, 1.8), R, seed: s2.R(), minor: i > 6 }); }
+        s2.add({ k: "phDust", x, y, z: head, vz: 0.3, g: -0.05, drag: 1.8, r: 8 * sz, life: 1.2, lobes: dustLobes(s2), R, tone: 0.67, a0: 0.45, wait: 0.1 });
+      }
+      if (k !== "wood") for (let i = 0, N = Math.round(12 * B.k); i < N; i++) { const o = out(s2, s2.rand(1.6, 4) * B.k); o.vz = Math.abs(o.vz) + 1.4; s2.add({ k: i % 3 === 0 && k === "plant" ? "petal" : "leaf", x, y, z: head, ...o, g: 1.5, drag: 2.2, life: s2.rand(1.6, 2.4), R: i % 3 === 0 && k === "plant" ? petalRamp(R) : R, seed: s2.R(), minor: i > 4 }); }
+      if (!B.saved) s2.add({ k: k === "fungal" ? "mycelium" : "tangle", x, y, r: rs * 1.1 + 0.25, n: 7, life: 3.4, R, seed: sd(s2), thorn: k === "wood", debris: true, update: still });
+      s2.add({ k: "ring", x, y, r: rs * 1.6 + 0.4, life: 0.45, R, broken: true, seed: sd(s2), update: still });
+    });
+  },
+
   burst(s, M, ctx) {
     const k = kindOf(M);
     if (k === "fungal") fungalBurst(s, M, ctx); else woodOrPlant(s, M, ctx, k === "wood");

@@ -102,6 +102,41 @@ export default {
     emit("spark", 50, () => ({ drag: 1.4, g: 3, life: s.rand(0.35, 0.6), update: jink, minor: true }));
     emit("streak", 14, () => ({ drag: 2, life: 0.3 }));
   },
+  /**
+   * The bolt-pop (spellsprite-craft §5 lightning/zap-hit): the charge
+   * crackles in the body for the drawn-in beat, then it pops: branching bolts
+   * stab out of it in every direction, re-striking at 20 fps, a crackling
+   * knot at the middle, sparks that jink and bounce, a few bolts finding the
+   * floor and burning ferns into it, and a smaller second pop as it bleeds off.
+   */
+  bloom(s, M, B) {
+    const R = M.R, aps = s.spec.aps, { x, y, z, r, sz } = B, rs = r / aps;
+    s.at(B.at, (s2) => {
+      s2.add({ k: "acKnot", x, y, z, r: Math.max(5, r * 0.32), life: 0.18, R, seed: sd(s2), update: still });
+      for (let i = 0; i < 6; i++) s2.add({ k: "spark", x: x + s2.rand(-0.3, 0.3) * sz, y: y + s2.rand(-0.2, 0.2), z: z + s2.rand(-0.3, 0.3), vx: s2.rand(-2, 2), vy: s2.rand(-2, 2), vz: s2.rand(-1, 2), g: 4, drag: 2, life: 0.15, R, update: jink, minor: i > 2 });
+      s2.light(x, y, 0.1, rs * 1.4 + 0.5, S(R, 0.83), 0.5, 0.2, { swell: true, flicker: true });
+    });
+    const pop = (s2, k, n, life) => {
+      s2.add({ k: "acPop", x, y, z, r: r * k, n, life, hero: B.crit && k > 0.8, R, seed: sd(s2), update: still });
+      s2.light(x, y, 0.1, rs * 2.3 * k + 0.6, S(R, 0.9), 0.7 * B.k * k, life + 0.1, { flicker: true });
+    };
+    s.at(B.b, (s2) => {
+      pop(s2, 1.15, B.saved ? 4 : B.crit ? 8 : 6, 0.42);
+      if (B.crit) s2.crit();
+      s2.add({ k: "acKnot", x, y, z, r: Math.max(6, r * 0.38), life: 0.45, R, seed: sd(s2), update: still });
+      for (let i = 0, N = Math.round(20 * B.k); i < N; i++) s2.add({ k: "spark", x, y, z, ...flat(s2, s2.rand(5, 12) * Math.min(1.3, B.k), 0.8), g: 16, drag: 2.2, bounce: 0.5, life: s2.rand(0.2, 0.55), R, update: jink, minor: i % 3 !== 0 });
+      // bolts finding the floor round it, ferns burnt where they land
+      for (let i = 0, N = B.saved ? 2 : 3; i < N; i++) {
+        const q = (i / N) * TAU + s2.rand(-0.5, 0.5), d = rs * s2.rand(0.9, 1.4) + 0.2, bx = x + Math.cos(q) * d, by = y + Math.sin(q) * d;
+        s2.add(bolt(s2, R, [x, y, z], [bx, by, 0], 0.22, { wait: 0.04 * i }));
+        s2.add({ k: "acFern", x: bx, y: by, r: s2.rand(0.35, 0.55), life: 2.4, R, seed: sd(s2), wait: 0.04 * i, debris: true, minor: i > 0, update: still });
+      }
+      for (let i = 0; i < (B.saved ? 1 : 3); i++) s2.add(ozone(s2, R, x + s2.rand(-0.3, 0.3), y + s2.rand(-0.2, 0.2), z, { wait: s2.rand(0.1, 0.4) }));
+      for (let i = 0, N = Math.round(8 * B.k); i < N; i++) s2.add(grit(s2, x, y, 0.05, s2.rand(2, 5), RAMP.kinetic));
+    });
+    // it bleeds off: a smaller pop and a crackle a beat later
+    if (!B.saved) s.at(B.b + 0.3, (s2) => pop(s2, 0.75, 4, 0.25));
+  },
   aura(s, M, { at, body, dt }) {
     const R = M.R;
     if (s.R() < 7 * dt) { const a = body(true), b = body(true); s.add(bolt(s, R, [a.x, a.y, a.z], [b.x, b.y, b.z], 0.1, { glow: false })); }
@@ -115,6 +150,35 @@ export default {
 const DIRS8 = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
 
 registerShapes({
+  /**
+   * The bolt-pop (deliveries.mjs bloom): `n` bolts stab out of a hollow
+   * middle, each walking an eight-way jag and forking once or twice, re-rolled
+   * at 20 fps. Hot colour while young, cooling as it holds, a halo under every
+   * stroke; white only on a crit's first frame.
+   */
+  acPop(v, P, p) {
+    const fz = Math.floor(p.age * 20), fr = Math.floor(p.age * 12), u = p.age / p.life, rr = rng(p.seed * 13 + fz);
+    const [x, y] = v.ap(p.x, p.y, p.z), sq = v.kind === "top" ? 0.85 : 0.55, R = p.R, r0 = Math.max(4, p.r * 0.22);
+    const core = p.hero && fr === 0 ? WHITE : S(R, u < 0.5 ? 1 : 0.83), mid = S(R, u < 0.5 ? 0.83 : 0.67), halo = S(R, 0.5);
+    const walk = (sx, sy, q, L, w, depth) => {
+      let px = sx, py = sy;
+      const steps = Math.ceil(L / 2);
+      for (let k = 0; k < steps; k++) {
+        const qq = q + (rr() - 0.5) * 1.3, nx = px + Math.cos(qq) * 2, ny = py + Math.sin(qq) * 2 * sq;
+        const f = k / steps, col = f < 0.6 ? core : mid;
+        P.line(px, py, nx, ny, col, 2, 1);
+        if (w > 1) P.line(px + 1, py, nx + 1, ny, mid, 1, 1);
+        P.under(Math.round(nx), Math.round(ny) - 1, halo); P.under(Math.round(nx), Math.round(ny) + 1, halo);
+        if (depth < 2 && k > 1 && rr() < 0.18) walk(nx, ny, q + (rr() < 0.5 ? -1 : 1) * (0.6 + rr() * 0.5), (L - k * 2) * 0.55, 1, depth + 1);
+        px = nx; py = ny;
+      }
+    };
+    const grow = Math.min(1, (fr + 1) / 2);
+    for (let i = 0; i < p.n; i++) {
+      const q = (i / p.n) * TAU + (rr() - 0.5) * 0.6, L = p.r * grow * (0.75 + rr() * 0.55);
+      walk(x + Math.cos(q) * r0, y + Math.sin(q) * r0 * sq, q, L, i % 2 === 0 ? 2 : 1, 0);
+    }
+  },
   /** A knot of tiny zigzags crackling inside radius r: re-drawn every frame at 20 fps, white while young. */
   acKnot(v, P, p) {
     const u = clamp(p.age / p.life), fr = Math.floor(p.age * 20), r = rng(p.seed + fr * 131), [cx, cy] = v.ap(p.x, p.y, p.z), rr = p.r * (0.6 + 0.4 * u);

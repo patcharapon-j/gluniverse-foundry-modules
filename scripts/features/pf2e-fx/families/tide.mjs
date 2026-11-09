@@ -8,7 +8,7 @@
  */
 
 import { TAU, clamp, easeOut, hash, pnoise, fadeOut } from "../core/rand.mjs";
-import { S } from "../core/palette.mjs";
+import { S, WHITE } from "../core/palette.mjs";
 import { registerShapes, snapH } from "../core/shapes.mjs";
 import { sd, still, releaseFlash, counter, flourish } from "../core/motifs.mjs";
 import { dustRing, dustLobes } from "./physical.mjs";
@@ -69,6 +69,38 @@ function foam(s, R, x, y, z, N, sp = [1.5, 4.5]) {
 
 export default {
   id: "tide",
+  /**
+   * The splash (spellsprite-craft §5 water/splash, water/wave-crash): water
+   * wells up round the feet for the drawn-in beat, then bursts over the body:
+   * sheets of it thrown out of a hollow middle in arcs that fall and break into
+   * drops, a crown thrown up round the feet, droplets landing as rings and
+   * plinks past the creature, foam, mist, and a wet sheen left on the floor.
+   */
+  bloom(s, M, B) {
+    const R = M.R, aps = s.spec.aps, { x, y, z, r, sz } = B, rs = r / aps;
+    s.at(B.at, (s2) => {
+      s2.add({ k: "ripple", x, y, r: rs * 0.9 + 0.2, n: 2, life: 0.3, R, update: still });
+      for (let i = 0; i < 8; i++) s2.add({ k: "waterbubble", x: x + s2.rand(-0.3, 0.3) * sz, y: y + s2.rand(-0.2, 0.2) * sz, z: s2.rand(0.05, z), vz: s2.rand(0.6, 1.4), drag: 2, life: s2.rand(0.16, 0.24), R, seed: sd(s2), minor: i > 3 });
+      s2.light(x, y, 0.1, rs * 1.3 + 0.5, S(R, 0.83), 0.35, 0.2, { swell: true });
+    });
+    s.at(B.b, (s2) => {
+      s2.add({ k: "tdSplash", x, y, z, r: r * 1.2, n: B.saved ? 6 : B.crit ? 12 : 9, hero: B.crit, life: 0.75, R, seed: sd(s2), update: still });
+      for (let i = 0, N = B.saved ? 2 : 4; i < N; i++) { const q = (i / N) * TAU + 0.4, d = rs * 0.62 + 0.1; s2.add({ k: "crown", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.85, z: 0, r: 0.16 * sz, h: 14 * Math.min(1.4, B.k) * sz, n: 8, life: 7 / 12, R, seed: sd(s2), wait: i * 0.03, update: still }); }
+      s2.light(x, y, 0.1, rs * 2 + 0.7, S(R, 0.9), 0.5 * B.k, 0.6);
+      if (B.crit) s2.crit();
+      for (let i = 0, N = Math.round(22 * B.k); i < N; i++) {
+        const q = s2.rand(0, TAU), v = s2.rand(1.8, 5) * B.k;
+        s2.add({ k: "droplet", x, y, z, vx: Math.cos(q) * v, vy: Math.sin(q) * v, vz: s2.rand(2, 4.5), g: 13, drag: 0.5, life: 3, R, big: i % 3 === 0, onGround: wet, minor: i > 7 });
+      }
+      foam(s2, R, x, y, z, Math.round(10 * B.k));
+      mist(s2, R, x, y, B.saved ? 2 : 4, { r0: rs * 0.4 });
+      s2.add({ k: "ring", x, y, r: rs * 1.7 + 0.4, life: 0.45, R, seed: sd(s2), update: still });
+      for (let i = 0; i < (B.saved ? 1 : 3); i++) s2.add({ k: "ripple", x, y, r: (rs * 1.6 + 0.3) * (1 - i * 0.18), n: 2, life: 1.1, R, wait: 0.1 + i * 0.22, update: still });
+      if (!B.saved) s2.add({ k: "sheen", x, y, r: rs * 0.85 + 0.2, life: 3.4, R, seed: sd(s2), debris: true, update: still });
+      for (let i = 0; i < 3; i++) s2.add({ k: "glint", x: x + s2.rand(-1, 1) * rs, y: y + s2.rand(-0.7, 0.7) * rs, z: s2.rand(0.05, 0.6), life: 5 / 12, R, wait: s2.rand(0.1, 0.5), minor: i > 0, update: still });
+    });
+  },
+
   burst(s, M, { x, y, z, pow, rad, sub }) {
     const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n0 = counter(s, pow, rad), n = sub ? (k) => Math.ceil(n0(k) / 2.5) : n0;
     releaseFlash(s, M, x, y, z, pow, rad, sub ? { flash: 0.6, light: 0.22 } : undefined);
@@ -154,6 +186,29 @@ const RINGS = {
 };
 
 registerShapes({
+  /**
+   * The splash on a body (deliveries.mjs bloom): sheets of water thrown out
+   * of a hollow middle, each a thick arc with a lit crest and a dark
+   * underside that rises, tips over and falls, its end breaking into drops
+   * as it goes. White only at a crit's crests on the first frame.
+   */
+  tdSplash(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 8) return;
+    const [x, y] = v.ap(p.x, p.y, p.z), top = v.kind === "top", sq = top ? 0.85 : 0.5, R = p.R, u = p.age / p.life, a = u < 0.65 ? 1 : (1 - u) / 0.35;
+    const reach = Math.min(1, (fr + 1) / 3), r0 = Math.max(6, p.r * 0.28), H = p.r * (top ? 0.3 : 0.6);
+    for (let k = 0; k < p.n; k++) {
+      const q = (k / p.n) * TAU + hash(k, p.seed) * 0.4, c = Math.cos(q), sn = Math.sin(q), L = (p.r - r0) * (0.7 + 0.5 * hash(k, p.seed, 1));
+      const W = (k % 2 ? 2 : 3) * Math.min(1.4, p.r / 26), steps = Math.ceil(L), gone = u > 0.4 ? (u - 0.4) / 0.6 : 0;
+      for (let j = 0; j <= steps; j++) {
+        const f = j / steps; if (f > reach || f < gone * 0.9) continue;
+        const d = r0 + j, lift = Math.sin(Math.PI * Math.min(1, f * 0.9 + 0.1)) * H * (1 - u * 0.6) - u * u * 8, cx = x + c * d, cy = y + sn * d * sq - lift;
+        // the far half breaks into drops
+        if (f > 0.65 && (j + fr) % 3) { if ((j + k) % 2 === 0) P.dot(cx, cy, S(R, 0.95), a, 1); continue; }
+        const w = W * (1 - f * 0.5);
+        for (let i = 0; i <= w; i++) P.dot(cx, cy + i, i === 0 ? (p.hero && fr === 0 ? WHITE : S(R, 1)) : i >= w - 0.5 ? S(R, 0.42) : S(R, 0.67), a, 1);
+      }
+    }
+  },
   /** A splash crown: a rim and a ring of columns that rise, throw their tips, and fall. */
   crown(v, P, p) {
     const fr = Math.floor(p.age * 12);

@@ -10,7 +10,7 @@
  * Shapes are prefixed `fr`.
  */
 
-import { TAU, clamp } from "../core/rand.mjs";
+import { TAU, clamp, hash } from "../core/rand.mjs";
 import { S, WHITE } from "../core/palette.mjs";
 import { physics } from "../core/sim.mjs";
 import { registerShapes } from "../core/shapes.mjs";
@@ -111,6 +111,46 @@ export default {
     emit("spark", 22, () => ({ drag: 1.8, g: 3, life: s.rand(0.3, 0.5), minor: true }));
     if (s.R() < 6 * dt) { const f = s.rand(0.2, 0.9), q = dir + s.rand(-half, half) * 0.6; s.light(hand[0] + Math.cos(q) * len * f, hand[1] + Math.sin(q) * len * f, 0.3, 0.9 + len * f * 0.3, S(R, 0.83), 0.35, 0.4); }
   },
+  /**
+   * The crystal snap (spellsprite-craft §5 ice/ice-shatter, ice/freeze): cold
+   * pulls in as frost creeps out over the floor, then ice blades snap out of
+   * the body in a six-pointed star and a cage of crystals spears up round its
+   * feet; a beat later it all cracks and shatters, shards tumbling and
+   * skidding away, flakes and mist hanging where it stood.
+   */
+  bloom(s, M, B) {
+    const R = M.R, aps = s.spec.aps, { x, y, z, r, sz } = B, rs = r / aps, snap = B.saved ? 0.22 : 0.34;
+    s.at(B.at, (s2) => {
+      s2.add({ k: "frost", x, y, r: rs * 0.7 + 0.15, life: 3.2, R, seed: sd(s2), debris: true, update: still });
+      for (let i = 0; i < 10; i++) { const q = (i / 10) * TAU + s2.rand(-0.2, 0.2), d = rs * 1.5 + 0.3, life = 0.17; s2.add({ k: "flake", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.7, z: z + s2.rand(-0.3, 0.4), vx: -Math.cos(q) * d / life, vy: -Math.sin(q) * d * 0.7 / life, life, R, big: i % 3 === 0, minor: i % 2 === 1, update(p, _s, dt) { p.x += p.vx * dt; p.y += p.vy * dt; } }); }
+      s2.light(x, y, 0.1, rs * 1.5 + 0.5, S(R, 0.83), 0.45, 0.2, { swell: true });
+    });
+    const cage = [];
+    s.at(B.b, (s2) => {
+      s2.add({ k: "frSnap", x, y, z, r: r * 1.25, n: 6, snap, hero: B.crit, life: snap + 0.4, R, seed: sd(s2), update: still });
+      s2.light(x, y, 0.1, rs * 2.2 + 0.7, S(R, 0.9), 0.45 * B.k, 0.5);
+      s2.light(x, y, 0.1, rs * 1.6 + 0.5, S(R, 0.83), 0.25, 2.2);
+      if (B.crit) s2.crit();
+      // the cage: crystals spearing up round the feet, tall near the body
+      for (let i = 0, N = B.saved ? 4 : Math.round(7 * B.k); i < N; i++) {
+        const q = (i / N) * TAU + s2.rand(-0.25, 0.25), d = rs * s2.rand(0.42, 0.62), h = s2.rand(14, 22) * Math.min(1.4, B.k) * sz;
+        const cx = x + Math.cos(q) * d, cy = y + Math.sin(q) * d * 0.85;
+        cage.push([cx, cy, h]);
+        s2.add({ k: "crystal", x: cx, y: cy, z: 0, h, w: s2.rand(2.6, 3.8), lean: Math.cos(q) * h * s2.rand(0.15, 0.3), life: snap + 0.05, R, wait: i * 0.012, minor: i > 4, update: still });
+      }
+      for (let i = 0, N = Math.round(10 * B.k); i < N; i++) s2.add({ k: "spark", x, y, z, ...flat(s2, s2.rand(4, 9), 0.8), g: 12, drag: 2.4, bounce: 0.4, life: s2.rand(0.2, 0.45), R, minor: i > 3 });
+    });
+    // the snap: the cage and the star break, everything thrown out
+    s.at(B.b + snap, (s2) => {
+      for (const [cx, cy, h] of cage) for (let j = 0; j < 3; j++) s2.add(shard(s2, R, cx, cy, (h / aps) * 0.4 * (j + 1) / 3, s2.rand(2, 5) * B.k, { L: 2 + j, minor: j > 0 }));
+      for (let i = 0, N = Math.round(12 * B.k); i < N; i++) s2.add(shard(s2, R, x, y, z, s2.rand(4, 9) * B.k, { L: 2 + Math.floor(s2.R() * 4), minor: i > 5 }));
+      for (let i = 0, N = Math.round(9 * B.k); i < N; i++) s2.add({ k: "flake", x: x + s2.rand(-1, 1) * rs, y: y + s2.rand(-0.8, 0.8) * rs, z: z + s2.rand(0, 0.8), vx: s2.rand(-0.4, 0.4), g: 0.4, drag: 2.5, life: s2.rand(1, 1.8), R, big: i % 3 === 0, minor: i > 3 });
+      for (let i = 0; i < (B.saved ? 1 : 3); i++) s2.add(mist(s2, R, { x: x + s2.rand(-0.3, 0.3) * sz, y: y + s2.rand(-0.2, 0.2) * sz, z: 0.1, ...flat(s2, s2.rand(0.6, 1.4), 0.3), drag: 2.5, r: s2.rand(5, 7) * sz, life: s2.rand(0.9, 1.3), minor: i > 0 }));
+      for (let i = 0; i < 3; i++) s2.add({ k: "glint", x: x + s2.rand(-0.6, 0.6) * rs, y: y + s2.rand(-0.5, 0.5) * rs, z: z + s2.rand(-0.2, 0.5), life: 5 / 12, R, big: i === 0, wait: i * 0.06, update: still });
+      s2.add({ k: "ring", x, y, r: rs * 1.6 + 0.4, life: 0.4, R, broken: true, seed: sd(s2), update: still });
+      s2.light(x, y, z, rs + 0.5, S(R, 1), 0.4, 0.15);
+    });
+  },
   auraStart(s, M, T) {
     s.add({ k: "frost", x: T.x, y: T.y, r: 0.6 * T.size, life: 1e9, R: M.R, seed: 3, update: still });
   },
@@ -127,6 +167,38 @@ export default {
 };
 
 registerShapes({
+  /**
+   * The crystal snap, on the body (deliveries.mjs bloom): blades of ice
+   * snapping out of a hollow middle, each a long diamond with a lit face and a
+   * shaded one, a bright spine and a white tip on the hero frame. At `snap`
+   * a crack runs through them and they break: each blade splits in two and
+   * the halves slide outward as they fade.
+   */
+  frSnap(v, P, p) {
+    const t = p.age, fr = Math.floor(t * 12), [x, y] = v.ap(p.x, p.y, p.z), sq = v.kind === "top" ? 0.85 : 0.55, R = p.R;
+    const broke = t >= p.snap, bu = broke ? clamp((t - p.snap) / (p.life - p.snap)) : 0, a = broke ? 1 - bu : 1;
+    const grow = Math.min(1, (fr + 1) / 2), r0 = Math.max(5, p.r * 0.26);
+    for (let k = 0; k < p.n; k++) {
+      const q = (k / p.n) * TAU + 0.26 + (p.seed % 7) * 0.05, long = k % 2 === 0, L = p.r * grow * (long ? 1 : 0.72) * (0.9 + 0.2 * hash(k, p.seed));
+      const c = Math.cos(q), sn = Math.sin(q), W = (long ? 3.4 : 2.6) * Math.min(1.3, p.r / 22), n = Math.ceil(L - r0);
+      for (let j = 0; j <= n; j++) {
+        const f = j / Math.max(1, n), half = f < 0.5 ? 0 : 1;
+        if (broke && f > 0.46 && f < 0.56) continue;
+        const slide = broke ? bu * p.r * 0.5 * (half ? 1.3 : 0.6) : 0, d = r0 + j + slide, drop = broke ? bu * bu * 6 * (half + 0.5) : 0;
+        const w = W * (f < 0.3 ? f / 0.3 : 1 - (f - 0.3) / 0.7) + 0.4, cx = x + c * d, cy = y + sn * d * sq + drop;
+        for (let i = Math.floor(-w); i <= Math.ceil(w); i++) {
+          const e = Math.abs(i) / Math.max(0.6, w); if (e > 1) continue;
+          const col = e < 0.3 ? (p.hero && fr < 2 && f > 0.8 ? WHITE : S(R, 1)) : i < 0 ? S(R, 0.83) : S(R, 0.5);
+          P.dot(cx - sn * i, cy + c * i * sq, col, a, 1);
+        }
+      }
+    }
+    // the crack: a bright jagged line across the star the frame it breaks
+    if (broke && bu < 0.25) {
+      let px = x - p.r * 0.9, py = y;
+      for (let k = 1; k <= 6; k++) { const nx = x - p.r * 0.9 + (p.r * 1.8 * k) / 6, ny = y + (hash(k, p.seed) - 0.5) * 6; P.line(px, py, nx, ny, S(R, 1), 2, 1); px = nx; py = ny; }
+    }
+  },
   /** A tumbling sliver of ice: a bright edge, a cold body, a dark tail; turns on the 12 fps clock. */
   frShard(v, P, p) {
     const [x, y] = v.ap(p.x, p.y, p.z), a = Math.round((p.a ?? 0) / (TAU / 8)) * (TAU / 8), L = p.L ?? 3, fade = clamp((p.life - p.age) / 0.4);

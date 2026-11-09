@@ -14,7 +14,7 @@
  */
 
 import { TAU, clamp, easeOut, hash } from "../core/rand.mjs";
-import { RAMP, S } from "../core/palette.mjs";
+import { RAMP, S, WHITE } from "../core/palette.mjs";
 import { registerShapes, snapH } from "../core/shapes.mjs";
 import { out, sd, still, splat, releaseFlash, counter, flourish } from "../core/motifs.mjs";
 
@@ -61,6 +61,43 @@ registerShapes({
       }
       return null;
     }, 0, "mix");
+  },
+});
+
+
+registerShapes({
+  /**
+   * The force knock on a body (deliveries.mjs bloom): an impact star about a
+   * hollow middle, long along the blow and short across it, then shock
+   * crescents driven out through the far side of the body along (ux, uy),
+   * thick as they leave and thinning. The star's roots are white only on a
+   * crit's first frame (the kinetic ramp is pale enough already).
+   */
+  phKnock(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 6) return;
+    const [x, y] = v.ap(p.x, p.y, p.z), [ex, ey] = v.ap(p.x + p.ux, p.y + p.uy, p.z), R = p.R, sq = v.kind === "top" ? 0.85 : 0.5;
+    let dx = ex - x, dy = ey - y; const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
+    const q0 = Math.atan2(dy, dx), r0 = Math.max(5, p.r * 0.25), a = fr < 4 ? 1 : (7 - fr) / 3;
+    // the star: four rays along and across the blow, four short diagonals; gone after three frames
+    if (fr < 3) for (let k = 0; k < 8; k++) {
+      const q = q0 + (k * TAU) / 8, along = Math.abs(Math.cos(q - q0)) > 0.9, diag = k % 2 === 1;
+      const L = p.r * [0.7, 1.05, 0.85][fr] * (diag ? 0.45 : along ? 1 : 0.65), c = Math.cos(q), sn = Math.sin(q);
+      P.line(x + c * r0, y + sn * r0 * sq, x + c * (r0 + L), y + sn * (r0 + L) * sq, null, 2, 1, (f) => (p.hero && fr === 0 && f < 0.4 ? WHITE : S(R, f < 0.6 ? 1 : 0.83)));
+      if (!diag) P.line(x + c * r0 - sn, y + sn * r0 * sq + c, x + c * (r0 + L * 0.7) - sn, y + sn * (r0 + L * 0.7) * sq + c, S(R, 0.67), 1, 1);
+    }
+    // the shock crescents through the far side
+    for (let k = 0; k < 2; k++) {
+      const f = clamp((p.age - k * 0.06) / (p.life * 0.8)); if (f <= 0) continue;
+      const rr = p.r * (0.45 + 0.85 * (1 - (1 - f) ** 2)), th = Math.max(1, Math.round((k ? 2 : 3.5) * (1 - f))), cx = x - dx * p.r * 0.25, cy = y - dy * p.r * 0.25 * sq;
+      for (let j = 0; j < th; j++) {
+        const R2 = rr - j, n = Math.ceil(R2 * 2.4);
+        for (let i = 0; i <= n; i++) {
+          const t = -1.15 + (2.3 * i) / n, q = q0 + t, w = 1 - Math.abs(t) / 1.15;
+          if (w < 0.15 && j > 0) continue;
+          P.dot(cx + Math.cos(q) * R2, cy + Math.sin(q) * R2 * sq, S(R, j === 0 ? (k ? 0.83 : 1) : 0.6), a * (0.5 + 0.5 * w), 1);
+        }
+      }
+    }
   },
 });
 
@@ -164,6 +201,39 @@ export default {
     emit("phDust", 44, () => ({ R: arc ? M.R : RAMP.kinetic, drag: 2, g: -0.04, life: s.rand(0.6, 0.95), r: s.rand(4, 7), tone: 0.5, a0: 0.45, lobes: dustLobes(s) }));
     emit(arc ? "shard" : "phGrit", 70, () => ({ g: arc ? 3 : 10, drag: 1.4, bounce: 0.25, life: s.rand(0.6, 1), R: arc ? M.R : RAMP.kinetic, t: s.rand(0.33, 0.83), s: s.R() < 0.4 ? 2 : 1, seed: arc ? s.R() : s.seedInt(), minor: true }));
     emit("spark", 30, () => ({ R: arc ? M.R : RAMP.fire, drag: 2, g: 6, life: s.rand(0.25, 0.45), minor: true }));
+  },
+  /**
+   * The force knock (spellsprite-craft §5 impacts/impact-frame,
+   * impacts/blunt-hit): the air buckles round the body for the drawn-in beat,
+   * then the blow lands from the caster's side: an impact star about a hollow
+   * middle, shock crescents driven out through the far side, speed lines and
+   * dust and grit thrown the way it was knocked, sparks, a ring on the floor.
+   * Arcane knocks with an octagon of force and shards of light.
+   */
+  bloom(s, M, B) {
+    const R = M.R, arc = isArcane(M), stone = arc ? R : RAMP.kinetic, aps = s.spec.aps, { x, y, z, r, ux, uy, sz } = B, rs = r / aps;
+    s.at(B.at, (s2) => {
+      for (let i = 0; i < 6; i++) { const sd2 = (i - 2.5) * 0.12 * sz; s2.add({ k: "streak", x: x - ux * 0.9 - uy * sd2, y: y - uy * 0.9 + ux * sd2, z: z + (i % 3 - 1) * 0.1, vx: ux * 7, vy: uy * 7, life: 0.12, R, minor: i % 2 === 1 }); }
+      s2.light(x, y, 0.1, rs * 1.3 + 0.5, S(R, 0.85), 0.3, 0.2, { swell: true });
+    });
+    s.at(B.b, (s2) => {
+      s2.add({ k: "phKnock", x, y, z, r: r * 1.2, ux, uy, hero: B.crit, life: 0.55, R, seed: sd(s2), update: still });
+      if (arc) s2.add({ k: "octa", x, y, z, r: r * 0.9, squash: true, life: 0.45, R, update: still });
+      s2.light(x, y, 0.1, rs * 2 + 0.6, S(R, 0.85), 0.35 * B.k, 0.45);
+      s2.shake = Math.max(s2.shake, (B.crit ? 2.4 : 1.3) * B.k);
+      if (B.crit) s2.crit();
+      // thrown the way it was knocked: speed lines, dust and grit downstream
+      for (let i = 0, N = Math.round(10 * B.k); i < N; i++) { const q = Math.atan2(uy, ux) + s2.rand(-0.7, 0.7), sp = s2.rand(9, 14); s2.add({ k: "streak", x: x + Math.cos(q) * rs * 0.4, y: y + Math.sin(q) * rs * 0.35, z: z + s2.rand(-0.2, 0.3), vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.8, drag: 6, life: s2.rand(0.14, 0.22), R, minor: i > 4 }); }
+      for (let i = 0, N = Math.round(20 * B.k); i < N; i++) { const o = out(s2, s2.rand(4, 11) * Math.min(1.3, B.k)); if (o.vx * ux + o.vy * uy < 0 && i % 3) { o.vx = -o.vx; o.vy = -o.vy; } s2.add({ k: "spark", x, y, z, ...o, g: 14, drag: 2.2, bounce: 0.4, life: s2.rand(0.2, 0.5), R: !arc && i % 3 === 0 ? RAMP.fire : R, minor: i > 5 }); }
+      if (arc) for (let i = 0, N = Math.round(10 * B.k); i < N; i++) s2.add({ k: "shard", x, y, z, ...out(s2, s2.rand(2.5, 6)), g: 7, drag: 1.4, bounce: 0.35, life: s2.rand(0.5, 0.9), R, seed: s2.R(), minor: i > 3 });
+      else {
+        for (let i = 0, N = Math.round(6 * B.k); i < N; i++) { const q = Math.atan2(uy, ux) + s2.rand(-0.9, 0.9), sp = s2.rand(2, 5); s2.add({ k: "chunk", x, y, z: z * 0.5, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(1.5, 3.5), g: 14, drag: 0.8, bounce: 0.35, life: s2.rand(1.2, 2), R: stone, s: i < 2 ? 2 : 1, wide: i % 2 === 0, debris: true, minor: i > 2 }); }
+        for (let i = 0, N = Math.round(18 * B.k); i < N; i++) { const q = Math.atan2(uy, ux) + s2.rand(-1.2, 1.2), v = s2.rand(2, 7); s2.add({ k: "phGrit", x, y, z: 0.1, vx: Math.cos(q) * v, vy: Math.sin(q) * v, vz: s2.rand(1, 3.5), g: 22, drag: 1.1, bounce: 0.25, life: s2.rand(0.7, 1.3), R: stone, t: s2.rand(0.33, 0.83), s: i % 4 === 0 ? 2 : 1, seed: s2.seedInt(), minor: i > 4 }); }
+      }
+      for (let i = 0, N = B.saved ? 2 : 4; i < N; i++) { const q = Math.atan2(uy, ux) + s2.rand(-0.8, 0.8), v = s2.rand(1.2, 2.6) * B.k; s2.add({ k: "phDust", x: x + ux * 0.15, y: y + uy * 0.15, z: 0.04, vx: Math.cos(q) * v, vy: Math.sin(q) * v, vz: 0.05, drag: 2.4, g: -0.02, r: s2.rand(5, 8) * sz, life: s2.rand(0.9, 1.3), R: arc ? R : RAMP.kinetic, tone: 0.5, a0: 0.4, lobes: dustLobes(s2), minor: i > 1 }); }
+      s2.add({ k: "ring", x, y, r: rs * 1.6 + 0.4, life: 0.4, R, seed: sd(s2), update: still });
+      s2.add({ k: "ring", x: x + ux * rs * 0.3, y: y + uy * rs * 0.3, r: rs * 1.1 + 0.3, life: 0.55, R, broken: true, seed: sd(s2), wait: 0.05, update: still });
+    });
   },
   auraStart(s, M, T) {
     s.add({ k: "puddle", x: T.x + 0.12, y: T.y + 0.15, r: 0.26 * T.size, life: 1e9, R: M.R, update: still });

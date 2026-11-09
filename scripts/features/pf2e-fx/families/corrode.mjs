@@ -147,6 +147,49 @@ const poison = {
   },
 };
 
+
+registerShapes({
+  /**
+   * The hiss and spit, on the body (deliveries.mjs bloom): a froth of bubbles
+   * boiling round it, popping on the sprite clock; jets of the stuff spat out
+   * of the froth in arcs that land past the creature; and the hiss itself,
+   * wavering lines of fume curling up off the head.
+   */
+  coHiss(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 10) return;
+    const [x, y] = v.ap(p.x, p.y, p.z), r = p.r, a = fr < 6 ? 1 : (11 - fr) / 5, top = v.kind === "top", sq = top ? 0.8 : 0.45, R = p.R;
+    // the froth
+    const nb = p.n * 2;
+    for (let i = 0; i < nb; i++) {
+      if (hash(i, fr >> 1, p.seed) < 0.22) continue;
+      const q = (i / nb) * TAU + hash(i, p.seed) * 0.4, d = r * (0.42 + 0.12 * hash(i, fr >> 1, p.seed + 1)), bx = x + Math.cos(q) * d, by = y + Math.sin(q) * d * sq;
+      if ((i + (fr >> 1)) % 3 === 0) { P.dot(bx, by - 1, S(R, 1), a, 2); for (const [ox, oy] of [[-1, 0], [1, 0], [0, -2], [0, 1]]) P.dot(bx + ox, by + oy - (oy < 0 ? 0 : 0), S(R, oy < 0 ? 0.83 : 0.5), a, 2); }
+      else P.dot(bx, by, S(R, 0.83), a, 2);
+    }
+    // the spit: arcs thrown out of the froth, drawn as far as they have flown
+    const t = Math.min(1, (fr + 1) / 4), gone = fr > 4 ? (fr - 4) / 6 : 0, H = r * (top ? 0.35 : 0.75);
+    for (let k = 0; k < p.n; k++) {
+      const q = (k / p.n) * TAU + hash(k, p.seed, 2) * 0.7, L = r * (0.85 + 0.5 * hash(k, p.seed, 3)), c = Math.cos(q), sn = Math.sin(q) * sq;
+      const steps = Math.ceil(L * 0.8);
+      for (let j = 0; j <= steps; j++) {
+        const f = j / steps; if (f > t || f < gone) continue;
+        const d = r * 0.42 + (L - r * 0.42) * f, px = x + c * d, py = y + sn * d - Math.sin(Math.PI * f) * H * (0.6 + 0.4 * hash(k, p.seed));
+        const head = f > t - 0.12;
+        P.dot(px, py, S(R, head ? 1 : f < 0.5 ? 0.83 : 0.67), a, 2);
+        if (head && j % 2 === 0) P.dot(px + 1, py, S(R, 0.5), a, 1);
+      }
+    }
+    // the hiss: three wavering fume lines curling up off the head
+    if (fr >= 1) for (let k = -1; k <= 1; k++) {
+      const h = r * (0.7 + 0.2 * (k & 1)), bx = x + k * r * 0.22;
+      for (let j = 2; j < h; j++) {
+        const f = j / h; if ((j + fr) % 3 === 0 || f < gone) continue;
+        P.dot(bx + Math.sin(f * 5 + fr * 0.8 + k) * (1 + f * 2.5), y - r * 0.35 - j, S(R, f < 0.4 ? 0.83 : 0.67), a * (1 - f * 0.5), 1);
+      }
+    }
+  },
+});
+
 /* ── the family ───────────────────────────────────────────────────────── */
 
 const pick = (name) => (s, M, ctx) => (isPoison(M) ? poison : acid)[name](s, M, ctx);
@@ -157,6 +200,37 @@ export default {
   trail: pick("trail"),
   linger: pick("linger"),
   spray: pick("spray"),
+  /**
+   * Hiss and spit (spellsprite-craft §5 nature/acid-splash, nature/toxic-puddle):
+   * the body fizzes for the drawn-in beat, then boils over: froth round it,
+   * jets spat out in arcs that splash and pool past it, fume curling off with a
+   * hiss, beads hopping and a pit (acid) or a creeping swirl (poison) under it.
+   * Poison wells a cloud up round it too.
+   */
+  bloom(s, M, B) {
+    const R = M.R, pz = isPoison(M), aps = s.spec.aps, { x, y, z, r, sz } = B, rs = r / aps;
+    s.at(B.at, (s2) => {
+      for (let i = 0; i < 8; i++) { const q = s2.rand(0, TAU), d = s2.rand(0.1, 0.35) * sz; s2.add({ k: "toxbubble", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.7, z: z + s2.rand(-0.3, 0.3), vz: s2.rand(0.3, 0.8), drag: 2, r: i % 3 ? 1 : 2, life: s2.rand(0.18, 0.3), R, seed: sd(s2), minor: i > 3 }); }
+      s2.light(x, y, 0.1, rs * 1.4 + 0.5, S(R, 0.83), 0.4, 0.2, { swell: true });
+    });
+    s.at(B.b, (s2) => {
+      s2.add({ k: "coHiss", x, y, z, r: r * 1.05, n: B.saved ? 5 : B.crit ? 9 : 7, life: 0.9, R, seed: sd(s2), update: still });
+      s2.light(x, y, 0.1, rs * 2 + 0.7, S(R, 0.83), 0.5 * B.k, 1.6, { flicker: true });
+      if (B.crit) s2.crit();
+      // the spit: drops flung up and out that splash and pool where they land
+      for (let i = 0, N = Math.round(16 * B.k); i < N; i++) s2.add(drop(s2, R, x, y, z, s2.rand(2.2, 4.5) * B.k, { vz: s2.rand(2.5, 4.5), minor: i % 2 === 1 }));
+      for (let i = 0, N = Math.round(10 * B.k); i < N; i++) s2.add({ k: "spark", x, y, z, ...flat(s2, s2.rand(3, 8), 0.8), g: 16, drag: 2, bounce: 0.3, life: s2.rand(0.25, 0.5), R, minor: i > 3 });
+      // the hiss: fume curling up off the body
+      for (let i = 0, N = pz ? 5 : 3; i < N; i++) s2.add(fume(s2, R, x + s2.rand(-0.2, 0.2) * sz, y + s2.rand(-0.1, 0.1), z + s2.rand(0, 0.4), { r: s2.rand(3.5, 5.5) * sz, wait: i * 0.08, minor: i > 1 }));
+      if (pz) {
+        s2.add(gas(s2, { x, y, z: z * 0.7, vz: 0.1, g: -0.03, drag: 1.3, r: (8 + 3 * B.k) * sz, life: 1.6, R }));
+        if (!B.saved) s2.add({ k: "miasma", x, y, r: rs * 0.9 + 0.3, life: 3, R, seed: sd(s2), debris: true, update: still });
+      } else if (!B.saved) s2.add({ k: "coPit", x: x + 0.05, y: y + 0.08, r: rs * 0.55 + 0.15, life: 3, R, seed: sd(s2), debris: true, update: still });
+      s2.add({ k: "ring", x, y, r: rs * 1.6 + 0.4, life: 0.45, R, broken: true, seed: sd(s2), update: still });
+    });
+    // a second spit as the froth boils over
+    if (!B.saved) s.at(B.b + 0.28, (s2) => { for (let i = 0, N = Math.round(7 * B.k); i < N; i++) s2.add(drop(s2, R, x, y, z, s2.rand(1.5, 3) * B.k, { vz: s2.rand(2, 3.5), minor: i > 2 })); });
+  },
   auraStart(s, M, T) { (isPoison(M) ? poison : acid).auraStart(s, M, T); },
   aura: pick("aura"),
 };

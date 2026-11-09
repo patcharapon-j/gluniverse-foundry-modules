@@ -19,6 +19,7 @@ import {
   describeItem, describeBlast, describeCondition, describeSkillAction, describeTick, outcomeFrom,
   weaponStyleOf, inlineTemplate, inlineDamage, runeMaterials,
 } from "../scripts/features/pf2e-fx/semantics.mjs";
+import { HANDOFF_ARCHES, Riders, limbOf } from "../scripts/features/pf2e-fx/handoff.mjs";
 import { FUNCTIONS, MATERIALS, WEAPON_STYLES, DELIVERIES, TRADITIONS, DELIVERY_VOCAB, MOTIF_VOCAB, PROP_VOCAB, FLAVOR_VOCAB } from "../scripts/features/pf2e-fx/constants.mjs";
 
 const fails = [];
@@ -198,6 +199,54 @@ expect("NPC Power Attack silent", describeItem({ type: "action", name: "Power At
 expect("NPC Vicious Swing silent", describeItem({ type: "action", name: "Vicious Swing", system: { slug: "vicious-swing", actionType: { value: "action" }, actions: { value: 2 }, traits: { value: ["flourish"] } } }), { silent: "strike-plays" });
 expect("Unarmed fist", weaponStyleOf({ name: "Fist", type: "weapon", system: { damage: { damageType: "bludgeoning" }, traits: { value: ["agile", "finesse", "nonlethal", "unarmed"] } } }), { style: "unarmed" });
 
+/* ── archetype routing: the P1 archetypes (catalogue §4 rows 12–20) and their collisions ── */
+
+const ab = (name, slug, traits, { act = "action", category = null, damage = null, area = null, defense = null } = {}) => ({ name, type: "action", system: { slug, actionType: { value: act }, actions: { value: act === "action" ? 1 : null }, category, traits: { value: traits }, defense, area, description: { value: damage ? `<p>@Damage[${damage}]</p>` : "" } } });
+const featCost = (name, slug, traits = []) => ({ name, type: "feat", system: { slug, actionType: { value: "reaction" }, traits: { value: traits }, description: { value: "" } } });
+const ARCHS = [
+  // polymorph · teleport · haste · fly
+  ["Humanoid Form is a polymorph", spell("Humanoid Form", "humanoid-form", { level: { value: 2 }, traits: { value: ["concentrate", "manipulate", "polymorph"] } }), { func: "transform", arch: "polymorph" }],
+  ["Change Shape (creature) is a polymorph", ab("Change Shape", "change-shape", ["concentrate", "polymorph"]), { arch: "polymorph" }],
+  ["Translocate folds", spell("Translocate", "translocate", { level: { value: 4 }, range: { value: "120 feet" }, traits: { value: ["concentrate", "manipulate", "teleportation"] } }), { func: "teleport", arch: "teleport" }],
+  ["Haste hastes", F.haste, { func: "movement", arch: "haste" }],
+  ["Fly flies", spell("Fly", "fly", { level: { value: 4 }, range: { value: "touch" }, target: { value: "1 creature" }, traits: { value: ["concentrate", "manipulate"] } }), { func: "movement", arch: "fly" }],
+  ["Spider Climb is no haste", spell("Spider Climb", "spider-climb", { level: { value: 2 }, range: { value: "touch" }, target: { value: "1 creature" }, traits: { value: ["concentrate", "manipulate"] } }), { func: "movement", arch: null }],
+  ["Flyby Attack does not fly", ab("Flyby Attack", "flyby-attack", [], { category: "offensive" }), { arch: "hex" }],
+  // ward: Shield, Shield Block, dodge, counterspell; a shield Strike and a riposte by heading alone are not wards
+  ["Shield wards", F.shield, { func: "protect", arch: "ward" }],
+  ["Shield Block wards", ab("Shield Block", "shield-block", [], { act: "reaction", category: "defensive" }), { func: "protect", arch: "ward" }],
+  ["Nimble Dodge wards", ab("Nimble Dodge", "nimble-dodge", [], { act: "reaction", category: "defensive" }), { arch: "ward" }],
+  ["Counterspell wards (never a dispel)", ab("Counterspell", null, [], { act: "reaction", category: "defensive" }), { arch: "ward" }],
+  ["a defensive retort is no ward", ab("Cutting Rebuke", null, [], { act: "reaction", category: "defensive" }), { func: "protect", arch: null }],
+  ["a shield Strike plays its Strike", npc("Shield Bash", ["bludgeoning"]), { kind: "strike", arch: null }],
+  ["Shield Bash, the action, is harm and keeps its blow", ab("Shield Bash", "shield-bash", ["attack"], { category: "offensive", damage: "2d6[bludgeoning]" }), { func: "harm", arch: null }],
+  ["Dodge Away (silent) is rescued as a ward", featCost("Dodge Away", "dodge-away"), { silent: null, arch: "ward", func: "protect", material: "force" }],
+  // dispel
+  ["Dispel Magic unweaves", spell("Dispel Magic", "dispel-magic", { level: { value: 2 }, range: { value: "120 feet" }, target: { value: "1 spell effect or unattended magic item" }, traits: { value: ["concentrate", "manipulate"] } }), { func: "control", arch: "dispel" }],
+  ["Dispelling Globe stays a terrain", spell("Dispelling Globe", "dispelling-globe", { area: { type: "emanation", value: 10 }, level: { value: 5 }, traits: { value: ["abjuration", "concentrate", "manipulate"] } }), { arch: null }],
+  // detect: the sweep, never Seek (secret) or a mark
+  ["Detect Magic sweeps", spell("Detect Magic", "detect-magic", { area: { type: "emanation", value: 30 }, traits: { value: ["cantrip", "concentrate", "detection", "manipulate"] } }), { func: "detect", arch: "detect" }],
+  // conceal: a veil, a darkness, a blur; Invisibility stays vanish, a phantom sound and a fear stay generic
+  ["Darkness veils", spell("Darkness", "darkness", { area: { type: "burst", value: 20 }, level: { value: 2 }, range: { value: "120 feet" }, traits: { value: ["concentrate", "darkness", "manipulate"] } }), { arch: "conceal" }],
+  ["Figment veils", spell("Figment", "figment", { range: { value: "30 feet" }, traits: { value: ["cantrip", "concentrate", "illusion", "manipulate", "subtle"] } }), { func: "conceal", arch: "conceal" }],
+  ["Blur veils", spell("Blur", "blur", { level: { value: 2 }, range: { value: "touch" }, target: { value: "1 creature" }, traits: { value: ["concentrate", "illusion", "manipulate", "visual"] } }), { arch: "conceal" }],
+  ["Invisibility stays vanish", spell("Invisibility", "invisibility", { level: { value: 2 }, range: { value: "touch" }, target: { value: "1 creature" }, traits: { value: ["concentrate", "illusion", "manipulate", "subtle"] } }), { arch: "vanish" }],
+  ["Disappearance vanishes", spell("Disappearance", "disappearance", { level: { value: 8 }, range: { value: "touch" }, target: { value: "1 creature" }, traits: { value: ["illusion", "manipulate", "subtle"] } }), { arch: "vanish" }],
+  ["Ghost Sound is only a sound", spell("Ghost Sound", "ghost-sound", { range: { value: "30 feet" }, traits: { value: ["auditory", "cantrip", "concentrate", "illusion", "manipulate"] } }), { func: "conceal", arch: null }],
+  ["Darkvision Elixir is drunk", { name: "Darkvision Elixir (Lesser)", type: "consumable", system: { slug: "darkvision-elixir-lesser", category: "elixir", traits: { value: ["alchemical", "consumable", "elixir"] } } }, { arch: "drink" }],
+  // drain: feed, affliction seep, poison apply; a bite keeps its jaws, a cloud its area
+  ["Drink Blood drains", ab("Drink Blood", "drink-blood", ["divine"], { category: "offensive", damage: "3d6[healing]" }), { func: "restore", arch: "drain" }],
+  ["Ghoul Fever seeps", ab("Ghoul Fever", "ghoul-fever", ["disease"], { act: "passive", category: "offensive", damage: "1d6[void]" }), { func: "harm", arch: "drain" }],
+  ["Blood Drain (a Strike) keeps its jaws", npc("Jaws", ["piercing"], { traits: ["unarmed"] }), { delivery: "jaws", arch: null }],
+  ["a poison cloud keeps its area (no drain)", spell("Stinking Cloud", "stinking-cloud", { area: { type: "burst", value: 20 }, defense: { save: { statistic: "fortitude" } }, level: { value: 3 }, range: { value: "60 feet" }, traits: { value: ["concentrate", "manipulate", "poison"] } }), { arch: "hex" }],
+  ["Drain Bonded Item is a spellshape, not a feed", ab("Drain Bonded Item", "drain-bonded-item", ["arcane", "wizard"]), { arch: null }],
+  // summon
+  ["Summon Animal summons", spell("Summon Animal", "summon-animal", { range: { value: "30 feet" }, traits: { value: ["concentrate", "manipulate", "summon"] } }), { func: "summon", arch: "summon" }],
+];
+for (const [label, doc, want] of ARCHS) expect(label, describeItem(doc), want);
+expect("Seek (secret) is no detect sweep", describeSkillAction("seek", ["concentrate", "secret"]), { func: "detect", arch: null });
+expect("Hunt Prey marks, it does not sweep", describeSkillAction("hunt-prey", ["concentrate", "ranger"]), { func: "detect", arch: null });
+
 /* ── outcomes ────────────────────────────────────────────────────────── */
 
 const OUT = [
@@ -256,6 +305,95 @@ try {
 } catch (e) {
   spotNote = `real-data spot checks unavailable (${e.message})`;
 }
+
+/* ── Strike riders (catalogue §1.1) ─────────────────────────────────────
+   A melee item's system.attackEffects.value names what the hit hands over to.
+   A rider read from nothing plays only the bite; one read from an affliction
+   grabs someone a disease was meant to sicken. */
+{
+  const rid = (name, effects, damage = ["piercing"]) => ({ ...npc(name, damage), system: { ...npc(name, damage).system, attackEffects: { value: effects } } });
+  const RIDERS = [
+    ["Grab", rid("Jaws", ["grab"]), { kind: "strike", "rider.arch": "grab", "rider.slug": "grab" }],
+    ["Improved Grab", rid("Jaws", ["improved-grab"]), { "rider.arch": "grab" }],
+    ["Constrict keeps its slug (the coil variant)", rid("Body", ["constrict"], ["bludgeoning"]), { "rider.arch": "grab", "rider.slug": "constrict" }],
+    ["Tongue Grab", rid("Tongue", ["tongue-grab"]), { "rider.arch": "grab" }],
+    ["Knockdown", rid("Jaws", ["knockdown"]), { "rider.arch": "trip" }],
+    ["Improved Knockdown", rid("Fist", ["improved-knockdown"], ["bludgeoning"]), { "rider.arch": "trip" }],
+    ["Trip", rid("Tail", ["trip"], ["bludgeoning"]), { "rider.arch": "trip" }],
+    ["Push", rid("Tail", ["push"], ["bludgeoning"]), { "rider.arch": "shove" }],
+    ["Push 20 feet", rid("Tail", ["push-20-feet"], ["bludgeoning"]), { "rider.arch": "shove" }],
+    ["Rend", rid("Claw", ["rend"], ["slashing"]), { "rider.arch": "rend" }],
+    ["the first rider listed wins", rid("Jaws", ["ghoul-fever", "knockdown", "grab"]), { "rider.arch": "trip" }],
+    ["a disease rides nothing", rid("Jaws", ["ghoul-fever"]), { rider: null }],
+    ["Rend Faith is not a rend", rid("Hand", ["rend-faith"], ["void"]), { rider: null }],
+    ["Clutching Cold is not a grab", rid("Touch", ["clutching-cold"], ["cold"]), { rider: null }],
+    ["no attackEffects, no rider", npc("Jaws", ["piercing"]), { rider: null }],
+    ["a malformed attackEffects never throws", { ...npc("Jaws", ["piercing"]), system: { ...npc("Jaws", ["piercing"]).system, attackEffects: "grab" } }, { kind: "strike", rider: null }],
+  ];
+  for (const [label, doc, want] of RIDERS) expect(`rider: ${label}`, describeItem(doc), want);
+  // never off a Strike: a Grab action card plays its own archetype, not a rider
+  expect("rider: only a Strike carries one", describeItem({ name: "Grab", type: "action", system: { slug: "grab", actionType: { value: "action" }, actions: { value: 1 }, traits: { value: [] }, description: { value: "" }, attackEffects: { value: ["grab"] } } }), { rider: undefined });
+
+  /* The hand-off (handoff.mjs): the rider is never drawn on the Strike. PF2e's
+     follow-up routes to the rider's own archetype and takes the Strike's body
+     part: the creature's Grab / Knockdown / Push action, or the Athletics check. */
+  const act = (name, slug) => ({ name, type: "action", system: { slug, actionType: { value: "action" }, actions: { value: 1 }, traits: { value: [] }, description: { value: "" } } });
+  const FOLLOW = [
+    ["Grab action", describeItem(act("Grab", "grab"), { use: "action" }), "grab"],
+    ["Improved Grab action", describeItem(act("Improved Grab", "improved-grab"), { use: "action" }), "grab"],
+    ["Knockdown action", describeItem(act("Knockdown", "knockdown"), { use: "action" }), "trip"],
+    ["Push action", describeItem(act("Push", "push"), { use: "action" }), "shove"],
+    ["Grapple check", describeSkillAction("grapple", ["attack"]), "grab"],
+    ["Trip check", describeSkillAction("trip", ["attack"]), "trip"],
+    ["Shove check", describeSkillAction("shove", ["attack"]), "shove"],
+  ];
+  for (const [label, desc, arch] of FOLLOW) {
+    expect(`handoff: ${label} routes to the rider's archetype`, desc, { arch });
+    if (!HANDOFF_ARCHES.has(desc.arch)) fails.push(`handoff: ${label} routes to ${desc.arch}, which takes no body part`); else passed++;
+  }
+  const tongue = describeItem(rid("Tongue", ["tongue-grab"]), { use: "strike" });
+  const limb = limbOf(tongue, "tongue");
+  expect("handoff: a tongue Strike's body part", limb, { delivery: tongue.delivery, slug: "tongue", rider: "tongue-grab" });
+  const R = new Riders({ window: 12 });
+  R.note("tok", { rider: tongue.rider, limb, outcome: "hit", target: "vic", at: 0 });
+  if (R.take("tok", FOLLOW[4][1].arch, { at: 8, targets: ["vic"] }) !== limb) fails.push("handoff: a Grapple 8 s after a tongue grab hit did not take the tongue"); else passed++;
+  R.note("tok", { rider: tongue.rider, limb, outcome: "hit", at: 0 });
+  if (R.take("tok", FOLLOW[5][1].arch, { at: 1 }) !== null) fails.push("handoff: a Trip took a tongue grab's body part"); else passed++;
+  if (R.take("tok", "grab", { at: 13 }) !== null) fails.push("handoff: a Grapple 13 s later took the body part (past the 12 s window)"); else passed++;
+  if (R.take("other", "grab", { at: 1 }) !== null) fails.push("handoff: a token that never struck took a body part"); else passed++;
+}
+
+/* The same against the real packs: a wolf's jaws knock down, a crocodile's grab,
+   a dire wolf's do both (Grab is listed first), a giant frog's tongue grabs, and
+   a living wildfire's tendril burns with no rider at all. */
+let riderNote = "";
+try {
+  const cov = await import("./fx-coverage.mjs");
+  if (existsSync(cov.DEFAULT_PACKS)) {
+    const SPOTS = [
+      { label: "Wolf jaws", pack: "pathfinder-monster-core", actor: "Wolf", name: "Jaws", type: "melee", expect: { kind: "strike", delivery: "jaws", "rider.arch": "trip", "rider.slug": "knockdown" } },
+      { label: "Crocodile jaws", pack: "pathfinder-monster-core", actor: "Crocodile", name: "Jaws", type: "melee", expect: { kind: "strike", delivery: "jaws", "rider.arch": "grab" } },
+      { label: "Dire Wolf jaws", pack: "pathfinder-monster-core", actor: "Dire Wolf", name: "Jaws", type: "melee", expect: { "rider.arch": "grab" } },
+      { label: "Giant Anaconda tail", pack: "pathfinder-monster-core", actor: "Giant Anaconda", name: "Tail", type: "melee", expect: { "rider.arch": "shove" } },
+      { label: "Giant Frog tongue", pack: "pathfinder-monster-core-2", actor: "Giant Frog", name: "Tongue", type: "melee", expect: { "rider.arch": "grab", "rider.slug": "tongue-grab" } },
+      { label: "Living Wildfire tendril", pack: "pathfinder-monster-core", actor: "Living Wildfire", name: "Tendril", type: "melee", expect: { material: "fire", rider: null } },
+      { label: "Crocodile tail", pack: "pathfinder-monster-core", actor: "Crocodile", name: "Tail", type: "melee", expect: { rider: null } },
+    ];
+    const packs = new Map();
+    for (const p of new Set(SPOTS.map((s) => s.pack))) packs.set(p, await cov.loadPack(`${cov.DEFAULT_PACKS}/${p}`));
+    let n = 0;
+    for (const spot of SPOTS) {
+      const r = cov.runSpot(spot, packs);
+      if (r.missing) { fails.push(`rider spot ${spot.label}: not found`); continue; }
+      n++;
+      if (r.fails.length) fails.push(`rider spot ${spot.label}: ${r.fails.join("; ")}`); else passed++;
+    }
+    riderNote = `, ${n} real-data rider checks`;
+  }
+} catch (e) {
+  riderNote = `, real-data rider checks unavailable (${e.message})`;
+}
+spotNote += riderNote;
 
 if (fails.length) {
   console.error(`fx-semantics-check: ${fails.length} failure(s), ${passed} passed; ${spotNote}`);

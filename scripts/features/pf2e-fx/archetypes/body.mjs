@@ -312,6 +312,12 @@ registerShapes({
 
 const COILY = /coil|wrap|constrict|tentacle|tongue|vine|tendril|lasso|swallow|engulf/;
 const COIL_MOTIFS = new Set(["serpent", "vine", "root", "chain", "whip", "web", "thorn"]);
+/** Coils, from the spec or from the Strike it follows (spec.limb, handoff.mjs): a tongue, a tail, a tentacle. */
+function coily(sp) {
+  const l = sp.limb;
+  if (COILY.test(sp.slug ?? "") || COIL_MOTIFS.has(sp.motif)) return true;
+  return !!l && (l.delivery === "lash" || COILY.test(l.slug ?? "") || COILY.test(l.rider ?? "") || COIL_MOTIFS.has(l.motif));
+}
 
 /**
  * pixelfx grasping-hands, read top-down: the hand opens wide as it arrives,
@@ -320,7 +326,7 @@ const COIL_MOTIFS = new Set(["serpent", "vine", "root", "chain", "whip", "web", 
  * flanks, sized to whichever is bigger, the grabber's reach or the body.
  */
 function grab(s, M, ctx) {
-  const { C, list } = cast(s, ctx), t0 = ctx.t0, coil = COILY.test(s.spec.slug ?? "") || COIL_MOTIFS.has(s.spec.motif);
+  const { C, list } = cast(s, ctx), t0 = ctx.t0, coil = coily(s.spec);
   let end = t0;
   list.forEach((T, i) => {
     const o = outOf(s, T), K = POWK[o] ?? 1, miss = o === "miss" || T.virtual, crit = o === "crit" && !T.virtual;

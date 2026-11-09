@@ -164,6 +164,47 @@ export default {
     at(3, () => ({ k: "boulder", z: s.rand(0.5, 1), g: 9, bounce: 0.3, onGround: settle, life: 1.6, s: s.R() < 0.3 ? 2 : 1, seed: sd(s), debris: true, minor: true }));
     at(0.7, () => ({ k: "rockspike", h: s.rand(9, 15), w: s.rand(2.6, 4), lean: s.rand(-2, 2), life: s.rand(1.1, 1.5), seed: sd(s), debris: true, update: crumble }));
   },
+  /**
+   * The stone burst (spellsprite-craft §5 nature/earth-spike,
+   * explosions/dirt-explosion): the ground shivers and grit hops for the
+   * drawn-in beat, then the stone bursts round the body: slabs flung out of a
+   * hollow middle, tumbling and falling, a ring of spikes punching up round
+   * the feet, rocks bouncing and settling, grit and dust rolling out over a
+   * cracked floor. Metal bursts as steel: blades and slivers, a clang, sparks.
+   */
+  bloom(s, M, B) {
+    const R = M.R, metal = isMetal(M), aps = s.spec.aps, { x, y, z, r, sz } = B, rs = r / aps;
+    s.at(B.at, (s2) => {
+      grit(s2, R, x, y, 0.04, 10, { sp: [0.3, 1.2], up: [1.5, 3], life: [0.25, 0.4], keep: 2, spread: rs * 0.8 });
+      s2.light(x, y, 0.1, rs * 1.4 + 0.5, S(metal ? R : RAMP.fire, 0.7), 0.35, 0.2, { swell: true });
+      s2.shake = Math.max(s2.shake, 0.6);
+    });
+    s.at(B.b, (s2) => {
+      s2.add({ k: "ewBurst", x, y, z: z * 0.8, r: r * 1.2, n: B.saved ? 5 : B.crit ? 9 : 7, metal, hero: B.crit, life: 0.85, R, seed: sd(s2), update: still });
+      if (metal) s2.add({ k: "clang", x, y, z: B.head, r: Math.round(3 + 1.5 * B.k), life: 4 / 12, R, wait: 1 / 12, update: still });
+      s2.light(x, y, 0.1, rs * 2.2 + 0.7, S(metal ? R : RAMP.fire, 0.7), 0.5 * B.k, 0.5);
+      s2.shake = Math.max(s2.shake, (B.crit ? 2.4 : 1.2) * B.k);
+      if (B.crit) s2.crit();
+      // the ring of spikes round the feet, nearest drawn last
+      const list = [];
+      for (let i = 0, N = B.saved ? 3 : Math.round(6 * B.k); i < N; i++) {
+        const q = (i / N) * TAU + s2.rand(-0.25, 0.25), d = rs * s2.rand(0.5, 0.72) + 0.1;
+        list.push({ k: "rockspike", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.85, h: s2.rand(15, 24) * Math.min(1.4, B.k) * sz, w: metal ? s2.rand(1.6, 2.4) : s2.rand(3.4, 5), lean: Math.cos(q) * s2.rand(2, 5), life: s2.rand(1.3, 1.8), R, seed: sd(s2), sharp: metal, wait: i * 0.015, debris: true, minor: i > 4, update: crumble });
+      }
+      list.sort((a, b) => b.y - a.y).forEach((p) => s2.add(p));
+      // rocks (or shrapnel) flung, bouncing and settling
+      for (let i = 0, N = Math.round(9 * B.k); i < N; i++) {
+        const q = s2.rand(0, TAU), sp = s2.rand(1.8, 5) * B.k, big = i < 3;
+        if (metal) s2.add({ k: "sliver", x, y, z, ...out(s2, s2.rand(3.5, 8) * B.k), g: 14, drag: 1.2, bounce: 0.35, onGround: settle, life: s2.rand(1.4, 2.2), R, len: i % 3 ? 3 : 5, seed: s2.R(), glint: true, debris: true, minor: i > 4 });
+        else s2.add({ k: "boulder", x, y, z: z * 0.5, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(2.5, 5), g: 14, drag: 0.5, bounce: 0.32, onGround: settle, thud: big ? thud : null, life: s2.rand(1.8, 2.8), R, s: big ? s2.rand(3, 4.5) * sz : s2.rand(1, 2.5), seed: sd(s2), a0: s2.rand(0, TAU), spin: i % 2 ? -1 : 1, debris: true, minor: i > 4 });
+      }
+      for (let i = 0, N = Math.round((metal ? 16 : 6) * B.k); i < N; i++) s2.add({ k: "spark", x, y, z, ...out(s2, s2.rand(5, 11)), g: 14, drag: 2, bounce: 0.4, life: s2.rand(0.2, 0.5), R: metal && i % 3 ? R : RAMP.fire, minor: i > 3 });
+      grit(s2, R, x, y, z * 0.4, Math.round(24 * B.k), { sp: [1.5, 7], up: [2, 5.5], life: [0.8, 1.6], keep: 5 });
+      dustRing(s2, metal ? RAMP.kinetic : R, x, y, B.saved ? 3 : 6, { r0: rs * 0.4, sp: [1.2, 2.6], r: [6, 10], life: [0.9, 1.4], tone: 0.5, a0: 0.42, keep: 2 });
+      if (!B.saved) s2.add({ k: metal ? "filings" : "fissure", x, y, r: rs * 1.05 + 0.25, life: 3.6, R, seed: sd(s2), debris: true, update: still });
+      s2.add({ k: "ring", x, y, r: rs * 1.7 + 0.4, life: 0.45, R, broken: true, seed: sd(s2), update: still });
+    });
+  },
   spray(s, M, ctx) {
     const { emit } = ctx;
     if (isMetal(M)) {
@@ -228,6 +269,32 @@ function fissures(seed) {
 }
 
 registerShapes({
+  /**
+   * The stone burst, round a body (deliveries.mjs bloom): slabs of rock (or
+   * blades of steel) blown out of a hollow middle, each a jagged quad with a
+   * lit top face and a dark flank, turning a step a frame as it flies and
+   * dropping as it slows. Metal shows a bright cutting edge on every blade.
+   */
+  ewBurst(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 9) return;
+    const [x, y] = v.ap(p.x, p.y, p.z), sq = v.kind === "top" ? 0.85 : 0.55, R = p.R, u = p.age / p.life, a = u < 0.7 ? 1 : (1 - u) / 0.3;
+    const out = 1 - (1 - Math.min(1, u * 1.7)) ** 2.2, r0 = Math.max(6, p.r * 0.3);
+    for (let k = 0; k < p.n; k++) {
+      const q = (k / p.n) * TAU + hash(k, p.seed) * 0.5, c = Math.cos(q), sn = Math.sin(q), sz = (p.metal ? 3 : 4.2) * (0.75 + 0.5 * hash(k, p.seed, 1)) * Math.min(1.4, p.r / 26);
+      const d = r0 + (p.r - r0) * out * (0.8 + 0.4 * hash(k, p.seed, 2)), drop = u > 0.35 ? (u - 0.35) ** 2 * 50 : 0;
+      const cx = x + c * d, cy = y + sn * d * sq - (1 - u) * 4 + drop, rot = q + fr * 0.7 * (k % 2 ? 1 : -1);
+      // a jagged quad: four corners at uneven radii
+      const pts = [0, 1, 2, 3].map((i) => { const t = rot + (i * TAU) / 4 + (hash(k, i, p.seed) - 0.5) * 0.6, rr = sz * (p.metal && i % 2 ? 0.45 : 0.8 + 0.4 * hash(k, i, p.seed + 1)); return [cx + Math.cos(t) * rr, cy + Math.sin(t) * rr]; });
+      const x0 = Math.min(...pts.map((q2) => q2[0])), x1 = Math.max(...pts.map((q2) => q2[0])), y0 = Math.min(...pts.map((q2) => q2[1])), y1 = Math.max(...pts.map((q2) => q2[1]));
+      P.shade(x0 - 1, y0 - 1, x1 + 1, y1 + 1, (px, py) => {
+        if (!inPoly(pts, px + 0.5, py + 0.5)) return null;
+        const up = (py - y0) / Math.max(1, y1 - y0), lit = (px - x0) / Math.max(1, x1 - x0) - up;
+        const col = p.hero && fr === 0 ? WHITE : up < 0.3 ? S(R, p.metal ? 1 : 0.83) : lit > 0 ? S(R, 0.6) : S(R, 0.33);
+        return a < 1 ? { c: col, a } : col;
+      }, 1);
+      if (p.metal) P.line(pts[0][0], pts[0][1], pts[2][0], pts[2][1], S(R, 1), 1, a);
+    }
+  },
   /** A tumbling rock: a lumpy hexagon, lit from the top left, that stops turning when it rests. */
   boulder(v, P, p) {
     const [x, y] = v.ap(p.x, p.y, p.z), a = fadeOut(p.age / p.life, 0.8), R = p.R, r = p.s;

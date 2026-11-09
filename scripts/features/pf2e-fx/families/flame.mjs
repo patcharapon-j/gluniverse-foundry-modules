@@ -166,6 +166,38 @@ const flame = {
     // heat pools along the stream
     if (s.R() < 6 * dt) { const f = s.rand(0.2, 0.9), q = dir + s.rand(-half, half) * 0.6; s.light(hand[0] + Math.cos(q) * len * f, hand[1] + Math.sin(q) * len * f, 0.3, 0.9 + len * f * 0.3, S(R, 0.83), 0.35, 0.35, { flicker: true }); }
   },
+  /**
+   * The flare (spellsprite-craft §5 explosions/small-explosion, fire/fire-ring):
+   * heat gathers in the body, then it flares: a corona of flame tongues
+   * flung out round it (white at the root on the hero frame only, cooling to
+   * deep red at the tips, an outline so they read on parchment), flames
+   * standing up round its feet, puffs boiling up into smoke, sparks, embers,
+   * a scorch and a warm pool while it burns.
+   */
+  bloom(s, M, B) {
+    const R = M.R, aps = s.spec.aps, { x, y, z, r, sz } = B, rs = r / aps;
+    s.at(B.at, (s2) => {
+      for (let i = 0; i < 10; i++) { const q = (i / 10) * TAU + s2.rand(-0.2, 0.2), d = rs * 1.5 + 0.2, life = 0.17; s2.add({ k: "ember", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.7, z: z + s2.rand(-0.3, 0.3), vx: -Math.cos(q) * d / life, vy: -Math.sin(q) * d * 0.7 / life, life, R, seed: sd(s2), minor: i % 2 === 1 }); }
+      s2.light(x, y, 0.1, rs * 1.4 + 0.6, S(R, 0.67), 0.3, 0.2, { swell: true, flicker: true });
+    });
+    s.at(B.b, (s2) => {
+      s2.add({ k: "flFlare", x, y, z, r: r * 1.15, n: B.saved ? 7 : B.crit ? 12 : 10, hero: B.crit, life: 0.75, R, seed: sd(s2), update: still });
+      if (B.crit) s2.crit();
+      s2.light(x, y, 0.1, rs * 2.4 + 0.8, S(R, 0.67), 0.5 * B.k, 0.5, { flicker: true });
+      s2.light(x, y, 0.1, rs * 1.6 + 0.6, S(R, 0.67), 0.4, 2, { flicker: true });
+      // flames standing up round the feet
+      for (let i = 0, N = B.saved ? 3 : Math.round(6 * B.k); i < N; i++) {
+        const q = (i / N) * TAU + s2.rand(-0.3, 0.3), d = rs * s2.rand(0.45, 0.8);
+        s2.add({ k: "tongue", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.8, z: 0, h: s2.rand(11, 18) * B.k * sz, w: s2.rand(2.4, 3.6), life: s2.rand(0.55, 0.9), R, seed: sd(s2), glow: i === 0, r: 3, wait: i * 0.02, minor: i > 3, update: still });
+      }
+      // puffs boiling up off the body, half leaving smoke
+      for (let i = 0, N = Math.round(6 * B.k); i < N; i++) { const q = (i / N) * TAU + s2.rand(-0.3, 0.3), d = rs * 0.75, sp = s2.rand(1.5, 3.5) * B.k; s2.add(puff(s2, R, x + Math.cos(q) * d, y + Math.sin(q) * d * 0.8, z, 0, s2.rand(3.5, 6) * sz * Math.min(1.3, B.k), s2.rand(0.45, 0.75), { vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.8, vz: s2.rand(1.5, 3), wait: 0.05, smokes: i % 2 === 0, minor: i > 3 })); }
+      for (let i = 0, N = Math.round(18 * B.k); i < N; i++) s2.add({ k: "spark", x, y, z, ...flat(s2, s2.rand(5, 12) * Math.min(1.3, B.k), 0.8), g: 16, drag: 2.2, bounce: 0.45, life: s2.rand(0.2, 0.55), R, minor: i % 3 !== 0 });
+      for (let i = 0, N = Math.round(10 * B.k); i < N; i++) s2.add({ k: "ember", x: x + s2.rand(-0.3, 0.3) * sz, y: y + s2.rand(-0.3, 0.3) * sz, z, ...flat(s2, s2.rand(1, 3.5), 0.9), g: -0.9, drag: 1.6, life: s2.rand(1, 2), R, seed: sd(s2), update: emberUpd, minor: i % 2 === 1 });
+      if (!B.saved) s2.add({ k: "flScorch", x, y, r: rs * 0.7 + 0.2, life: 3.6, cool: 1.6, R, seed: sd(s2), debris: true, update: still });
+      s2.add({ k: "flBand", x, y, r: rs * 1.8 + 0.4, life: 0.42, R, dust: RAMP.kinetic, th: 3, update: still });
+    });
+  },
   aura(s, M, { at, T, dt }) {
     at(14, () => ({ k: "tongue", h: s.rand(6, 12), w: s.rand(1.6, 2.6), life: s.rand(0.4, 0.75), seed: Math.floor(s.R() * 1000), update: still }));
     at(6, () => ({ k: "flPuff", vz: s.rand(0.6, 1.2), g: -1, drag: 3, r: s.rand(2, 3.4), life: s.rand(0.3, 0.55), hs: s.R(), seed: sd(s), smokes: s.R() < 0.25, update: puffUpd, minor: true }));
@@ -264,6 +296,38 @@ registerShapes({
     const [x, y] = v.ap(p.x, p.y, p.z), c = S(p.R, p.t ?? 0.5);
     P.px(x, y, c);
     if (p.big) { P.px(x + 1, y, c); P.px(x, y + 1, S(p.R, (p.t ?? 0.5) - 0.17)); P.px(x + 1, y + 1, S(p.R, (p.t ?? 0.5) - 0.33)); }
+  },
+}, {});
+
+
+registerShapes({
+  /**
+   * The flare, round a body (deliveries.mjs bloom): tongues of flame flung
+   * out from a hollow middle, so the creature stays seen. Each tapers from a
+   * hot root to a deep tip with an outline on its sides; they shoot out over
+   * two frames, flicker their lengths, then shrink back and curl up as they
+   * cool. White only at the roots of a crit's first frame.
+   */
+  flFlare(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 8) return;
+    const [x, y] = v.ap(p.x, p.y, p.z), sq = v.kind === "top" ? 0.85 : 0.5, R = p.R, a = fr < 5 ? 1 : (9 - fr) / 4;
+    const grow = [0.5, 0.95, 1.1, 1.05, 0.95, 0.85, 0.72, 0.6, 0.5][fr], cool = fr / 9, r0 = Math.max(6, p.r * 0.3), lift = fr > 3 ? (fr - 3) * 1.5 : 0;
+    for (let k = 0; k < p.n; k++) {
+      const q = (k / p.n) * TAU + hash(k, p.seed) * 0.35, long = k % 2 === 0;
+      const L = p.r * grow * (long ? 1 : 0.68) * (0.85 + 0.3 * hash(k, fr >> 1, p.seed)), c = Math.cos(q), sn = Math.sin(q);
+      const W = (long ? 3.2 : 2.4) * Math.min(1.4, p.r / 22), steps = Math.ceil(L - r0);
+      if (steps < 1) continue;
+      for (let j = 0; j <= steps; j++) {
+        const f = j / steps, w = W * Math.sin(Math.PI * Math.min(1, f * 1.6 + 0.15)) * (1 - f * 0.55), d = r0 + j;
+        const cx = x + c * d, cy = y + sn * d * sq - lift * f * f;
+        const heat = f + cool * 0.6, core = p.hero && fr === 0 && f < 0.35 ? WHITE : S(R, 1 - heat * 0.5);
+        for (let i = Math.floor(-w); i <= Math.ceil(w); i++) {
+          const e = Math.abs(i) / Math.max(0.6, w); if (e > 1) continue;
+          const col = e > 0.75 ? S(R, 0.42 - cool * 0.2) : e < 0.35 ? core : S(R, 0.83 - heat * 0.45);
+          P.dot(cx - sn * i, cy + c * i * sq, col, a, 1);
+        }
+      }
+    }
   },
 }, {});
 

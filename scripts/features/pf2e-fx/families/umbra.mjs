@@ -71,6 +71,35 @@ registerShapes({
   },
 });
 
+
+registerShapes({
+  /**
+   * The void pulse: a band of dark rolling out from the body, black in the
+   * middle of the band with a pale crawling rim outside and a violet one
+   * inside, thick as it leaves and thinning to a line at the rim. Standing (it
+   * is drawn at the body's height), squashed onto the floor like a ripple.
+   */
+  umPulse(v, P, p) {
+    const u = clamp(p.age / p.life), fr = Math.floor(p.age * 12), e = 1 - (1 - u) ** 2.4, [cx, cy] = v.ap(p.x, p.y, p.z);
+    const rr = p.r0 + (p.r - p.r0) * e, th = Math.max(1, Math.round(p.th * (1 - u * 0.8))), fl = v.kind === "top" ? 0.86 : 0.4, a = u < 0.75 ? 1 : (1 - u) / 0.25;
+    if (rr < 2) return;
+    for (let j = 0; j <= th + 1; j++) {
+      const R2 = rr - j, c = j === 0 ? S(p.R, 0.85) : j === th + 1 ? S(p.R, 0.62) : j === 1 ? S(p.R, 0.33) : S(p.R, 0);
+      if (R2 < 1) break;
+      P.ellipse(cx, cy, R2, R2 * fl, (q) => (j === 0 && hash(Math.floor(q * 7 + fr), fr >> 1, p.seed) < 0.3 ? null : { c, a }), j === 0 || j === th + 1 ? 2 : 1);
+    }
+  },
+  /** The pupil: a black point at the body that the light falls into, ringed pale, for the first frames. */
+  umPupil(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 3) return;
+    const [x, y] = v.ap(p.x, p.y, p.z), r = p.r * [0.6, 1, 0.8, 0.45][fr];
+    P.shade(x - r - 2, y - r - 2, x + r + 2, y + r + 2, (px, py) => {
+      const d = Math.hypot(px - x, py - y);
+      return d > r + 1.2 ? null : d > r ? S(p.R, fr < 2 ? 1 : 0.85) : S(p.R, 0);
+    }, 2);
+  },
+});
+
 const kindOf = (M) => (M.material === "unholy" ? "unholy" : M.material === "shadow" ? "shadow" : "void");
 
 /** Dark smoke: translucent, low in the ramp, lit only at the cap. */
@@ -224,6 +253,48 @@ export default {
     at(11, () => ({ k: "wisp", vz: s.rand(0.3, 0.6), g: -0.3, drag: 1.5, life: s.rand(0.8, 1.2), s: s.R() < 0.5 ? 2 : 3 }));
     at(0.8, () => murk(s, R, { vz: 0.2, drag: 1.5, r: s.rand(2.5, 3.5), life: 1.2, minor: true }));
     if (k === "unholy") at(2, () => ({ k: "ember", vz: s.rand(0.5, 1), g: -0.4, drag: 1.2, life: s.rand(0.8, 1.2), seed: sd(s), update: emberUpd, minor: true }));
+  },
+  /**
+   * The void pulse (spellsprite-craft §5 shadow/void-orb, shadow/life-steal):
+   * light and motes are dragged into the body for the drawn-in beat, a black
+   * pupil opens there with a black star across it, then the dark rolls out in
+   * bands to well past the creature while the floor darkens under it and
+   * shards and wisps are thrown out. Unholy punches crimson thorns up round it,
+   * shadow lashes tendrils up out of the pool. Harm on the living plays this.
+   */
+  bloom(s, M, B) {
+    const R = M.R, k = kindOf(M), aps = s.spec.aps, { x, y, z, r, sz } = B, rs = r / aps;
+    s.at(B.at, (s2) => {
+      const L = rs * 1.8 + 0.4;
+      for (let i = 0; i < 14; i++) {
+        const q = (i / 14) * TAU + s2.rand(-0.2, 0.2), px = x + Math.cos(q) * L, py = y + Math.sin(q) * L * 0.75, pz = z + s2.rand(-0.3, 0.5), life = s2.rand(0.15, 0.19), tq = q + Math.PI / 2;
+        s2.add({ k: "streak", x: px, y: py, z: pz, vx: (x - px) / life + Math.cos(tq) * 2, vy: (y - py) / life + Math.sin(tq) * 2, vz: (z - pz) / life, life, R, minor: i % 2 === 1, update(p, _s, dt) { p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; } });
+      }
+      for (let i = 0; i < 8; i++) s2.add({ k: "mote", x, y, z, cx: x, cy: y, cz: z, z0: z + s2.rand(-0.2, 0.6), d0: s2.rand(0.8, 1.2) * L, a0: s2.rand(0, TAU), w: s2.rand(2.5, 4), life: s2.rand(0.17, 0.24), R, plus: i % 3 === 0, minor: i > 3, update: spiralIn });
+      s2.light(x, y, 0.1, L + 0.5, S(R, 0.75), 0.3, 0.2, { swell: true });
+    });
+    s.at(B.b, (s2) => {
+      s2.add({ k: "umPupil", x, y, z, r: Math.max(3, r * 0.2), life: 0.34, R, update: still });
+      s2.add({ k: "umStar", x, y, z, L: r * 0.85, q: s2.rand(0, 1), life: 4 / 12, R, wait: 1 / 12, update: still });
+      const n = B.saved ? 2 : B.crit ? 4 : 3;
+      for (let i = 0; i < n; i++) s2.add({ k: "umPulse", x, y, z: z * (1 - i * 0.25), r0: r * 0.25, r: r * (1.45 + i * 0.28), th: (B.saved ? 3 : 5) * Math.min(1.3, B.k) - i, life: 0.55 + i * 0.1, R, seed: sd(s2), wait: 1 / 12 + i * 0.09, update: still });
+      s2.add({ k: "darkpool", x, y, r: rs * 1.25 + 0.3, life: 2.2, R, debris: true, update: still });
+      s2.add({ k: "flBand", x, y, r: rs * 1.8 + 0.4, life: 0.5, R, dust: R, th: 3, wait: 0.06, update: still });
+      s2.light(x, y, 0.1, rs * 2.4 + 0.8, S(R, 0.67), 0.35 * B.k, 1.4, { flicker: true });
+      if (B.crit) s2.crit();
+    });
+    s.at(B.b + 0.12, (s2) => {
+      for (let i = 0, N = Math.round(8 * B.k); i < N; i++) s2.add(shard(s2, R, x, y, z, s2.rand(3, 7) * B.k, { minor: i > 3 }));
+      for (let i = 0, N = Math.round(12 * B.k); i < N; i++) s2.add({ k: "wisp", x, y, z, ...out(s2, s2.rand(1.2, 3) * B.k), drag: 2.2, g: -0.4, life: s2.rand(0.8, 1.4), s: i % 2 ? 2 : 3, R, minor: i > 4 });
+      for (let i = 0, N = B.saved ? 2 : 4; i < N; i++) { const a = (i / N) * TAU + s2.rand(-0.4, 0.4), sp = s2.rand(1.2, 2.4); s2.add(murk(s2, R, { x, y, z: z * 0.6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.8, vz: s2.rand(0.1, 0.4), g: -0.1, drag: 2, r: s2.rand(5, 7) * sz, life: s2.rand(1.1, 1.6), minor: i > 1 })); }
+      if (k === "unholy") for (let i = 0, N = B.saved ? 3 : Math.round(6 * B.k); i < N; i++) {
+        const a = (i / N) * TAU + s2.rand(-0.3, 0.3), d = rs * s2.rand(0.75, 1.15) + 0.15;
+        s2.add({ k: "crystal", x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, z: 0, h: s2.rand(12, 20) * B.k * sz, w: s2.rand(1.6, 2.6), lean: Math.cos(a) * s2.rand(2, 5), life: s2.rand(1, 1.4), R, wait: i * 0.025, debris: true, minor: i > 3, update: still });
+      } else if (k === "shadow") for (let i = 0, N = B.saved ? 2 : Math.round(5 * B.k); i < N; i++) {
+        const a = (i / N) * TAU + s2.rand(-0.3, 0.3), d = rs * s2.rand(0.6, 1.1) + 0.15;
+        s2.add({ k: "umTendril", x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, z: 0, h: s2.rand(16, 26) * B.k * sz, w: s2.rand(1.4, 2.2), amp: s2.rand(2, 4), life: s2.rand(0.8, 1.2), R, seed: sd(s2) % 100, wait: i * 0.05, minor: i > 2, update: still });
+      }
+    });
   },
   auraStart(s, M, T) {
     if (kindOf(M) === "unholy") s.add({ k: "umbSigil", x: T.x, y: T.y, r: 0.6 * T.size, life: 1e9, R: M.R, seed: 3, update: still });

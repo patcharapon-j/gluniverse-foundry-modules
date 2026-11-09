@@ -90,6 +90,40 @@ registerShapes({
 /* Shapes the remaster added: the lotus, the heart, the lens ghosts. */
 const HEART = ["0110110", "1111111", "1111111", "0111110", "0011100", "0001000"];
 registerShapes({
+  /**
+   * The sunburst round a body (deliveries.mjs bloom, after pixelfx
+   * holy/sunburst): long and short tapered rays by turns about a hollow
+   * corona, turning slowly and breathing, a lit spine down each and a glint
+   * running out along the long ones that winks at the tip. The spine roots
+   * are white on the first frame (two on a crit); `warm` never goes white
+   * and keeps its rays softer and shorter.
+   */
+  raSun(v, P, p) {
+    const fr = Math.floor(p.age * 12), u = clamp(p.age / p.life), [x, y] = v.ap(p.x, p.y, p.z), sq = v.kind === "top" ? 0.85 : 0.5, R = p.R;
+    const open = 1 - (1 - Math.min(1, u * 4)) ** 2, a = u < 0.7 ? 1 : (1 - u) / 0.3, rot = fr * 0.035 + (p.seed % 9) * 0.07, r0 = Math.max(5, p.r * 0.26);
+    const hot = !p.warm && fr < (p.hero ? 2 : 1), N = p.n * 2;
+    for (let i = 0; i < N; i++) {
+      const long = i % 2 === 0, q = rot + (i / N) * TAU, br = 0.86 + 0.14 * Math.sin(q * 3 - p.age * 9);
+      const L = (p.r - r0) * open * br * (long ? 1 : 0.55) * (p.warm ? 0.85 : 1), W = (long ? 3.4 : 2.2) * Math.min(1.3, p.r / 26) * (p.warm ? 0.8 : 1);
+      const c = Math.cos(q), sn = Math.sin(q), steps = Math.ceil(L);
+      for (let j = 0; j <= steps; j++) {
+        const f = j / Math.max(1, steps), w = (W / 2) * (1 - f * 0.85) + 0.25, d = r0 + j, cx = x + c * d, cy = y + sn * d * sq;
+        for (let k = Math.floor(-w); k <= Math.ceil(w); k++) {
+          const e = Math.abs(k) / Math.max(0.6, w); if (e > 1) continue;
+          const col = e < 0.4 ? (hot && f < 0.4 ? WHITE : S(R, f < 0.75 ? 1 : 0.83)) : e > 0.75 && w > 0.9 ? S(R, 0.5) : S(R, f < 0.5 ? 0.83 : 0.67);
+          P.dot(cx - sn * k, cy + c * k * sq, col, f > 0.72 ? a * (1 - (f - 0.72) / 0.28) * 1.2 : a, 1);
+        }
+      }
+      if (long && open > 0.9) {
+        const g = (p.age * 2.2 + i * 0.13) % 1, d = r0 + g * L, gx = x + c * d, gy = y + sn * d * sq;
+        if (g < 0.88) P.dot(gx, gy, S(R, 1), a, 2);
+        else for (const [ox, oy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) P.dot(gx + ox, gy + oy, S(R, ox || oy ? 0.83 : 1), a, 2);
+      }
+    }
+    // the corona: a ring round the hollow, not a disc, so the creature shows through
+    P.ellipse(x, y, r0, r0 * sq, (q) => ({ c: S(R, Math.floor((q / TAU) * 10 + fr) % 2 ? 1 : 0.83), a }), 1);
+    P.ellipse(x, y, r0 + 1, (r0 + 1) * sq, () => ({ c: S(R, 0.67), a: a * 0.8 }), 1);
+  },
   /** A tiny heart a healing mote pops into: it swells in one frame, floats up and fades. */
   raHeart(v, P, p) {
     let [x, y] = v.ap(p.x, p.y, p.z); [x, y] = snapH(p, v, x, y);
@@ -271,6 +305,40 @@ export default {
     if (k === "holy") emit("spark", 40, () => ({ drag: 1.6, g: 2, life: s.rand(0.3, 0.45), minor: true }));
     if (k === "light") emit("spark", 70, () => ({ drag: 1.2, life: s.rand(0.3, 0.45), minor: true }));
     emit("glint", 8, () => ({ drag: 3, life: 5 / 12, minor: true }));
+  },
+  /**
+   * The sunburst (spellsprite-craft §5 holy/sunburst, holy/smite): light
+   * gathers into the body, then a sun opens round it: long and short tapered
+   * rays turning slowly about a hollow corona, a glint running out along each
+   * long ray and winking at its tip, twinkles round it. Holy drops a thin
+   * shaft of gold on it, light throws a glare across. Vitality stays healing
+   * warm: no white anywhere, softer rays, a lotus under the feet and motes
+   * spiralling up into hearts (Heal on the undead).
+   */
+  bloom(s, M, B) {
+    const R = M.R, k = kindOf(M), warm = k === "vitality", aps = s.spec.aps, { x, y, z, r, sz } = B, rs = r / aps;
+    s.at(B.at, (s2) => {
+      for (let i = 0; i < 12; i++) { const q = (i / 12) * TAU + s2.rand(-0.15, 0.15), d = rs * 1.6 + 0.3, life = 0.17; s2.add({ k: "mote", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.7, z: z + s2.rand(-0.3, 0.4), vx: -Math.cos(q) * d / life, vy: -Math.sin(q) * d * 0.7 / life, life, R, plus: i % 3 === 0, minor: i % 2 === 1, update(p, _s, dt) { p.x += p.vx * dt; p.y += p.vy * dt; } }); }
+      s2.light(x, y, 0.1, rs * 1.4 + 0.5, S(R, 0.9), warm ? 0.4 : 0.22, 0.2, { swell: true });
+    });
+    s.at(B.b, (s2) => {
+      s2.add({ k: "raSun", x, y, z, r: r * (warm ? 1.05 : 1.25), n: B.saved ? 6 : B.crit ? 10 : 8, warm, hero: B.crit, life: B.saved ? 0.6 : 0.9, R, seed: sd0(s2), update: still });
+      s2.light(x, y, 0.1, rs * 2.6 + 0.8, S(R, 0.9), (warm ? 0.5 : 0.3) * B.k, 0.9, { swell: warm });
+      if (B.crit) s2.crit();
+      for (let i = 0, N = Math.round(8 * B.k); i < N; i++) { const a = s2.rand(0, TAU), d = rs * s2.rand(0.6, 1.3); s2.add({ k: "glint", x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.7, z: z + s2.rand(-0.3, 0.6), life: 5 / 12, R, big: i === 0, wait: s2.rand(0.05, 0.5), minor: i > 2, update: still }); }
+      for (let i = 0, N = Math.round((warm ? 6 : 12) * B.k); i < N; i++) s2.add({ k: "spark", x, y, z, ...out(s2, s2.rand(6, 11)), g: 6, drag: 2.2, life: s2.rand(0.2, 0.45), R, minor: i > 3 });
+      if (warm) {
+        const L = leafRamp(s2);
+        if (!B.saved) s2.add({ k: "raLotus", x, y, r: rs * 0.8 + 0.2, n: 8, life: 1.5, R, update: still });
+        for (let i = 0, N = Math.round(12 * B.k); i < N; i++) { const ph = (i / N) * TAU * 2, r0 = s2.rand(0.4, 0.8) * (rs + 0.2), life = s2.rand(0.8, 1.2), z0 = s2.rand(0, 0.25); s2.add({ k: "mote", x, y, z: z0, z0, life, R: i % 3 ? R : L, plus: i % 2 === 0, wait: s2.rand(0, 0.2), minor: i > 4, update: spiralMote(x, y, r0, ph, (i % 2 ? 1 : -1) * s2.rand(3, 4.5), s2.rand(0.9, 1.5), life, i % 4 === 0) }); }
+        for (let i = 0, N = Math.round(6 * B.k); i < N; i++) { const q = s2.rand(0, TAU), sp = s2.rand(0.8, 2); s2.add({ k: "radLeaf", x, y, z: z * 0.5, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.6, vz: s2.rand(1, 2.2), g: 0.9, drag: 2, life: s2.rand(1.1, 1.7), R: L, seed: s2.R(), minor: i > 2 }); }
+      } else if (k === "holy") {
+        s2.add({ k: "beam", x, y, h: 3.4 * Math.min(1.3, B.k), w: 2.6 * Math.min(1.3, B.k) * sz, life: 0.7, R, update: still });
+        for (let i = 0; i < (B.saved ? 1 : 2); i++) s2.add({ k: "halo", x, y, z: 0.05, vz: s2.rand(0.9, 1.3), drag: 0.8, life: 0.9, r: rs * 0.5 + 0.2, R, wait: 0.12 + i * 0.14 });
+      } else s2.add({ k: "radGlare", x, y, z, L: r * 0.75, life: 7 / 12, R, update: still });
+      if (warm && !B.saved) s2.add({ k: "radPool", x, y, r: rs * 0.9 + 0.2, life: 2.8, R: leafRamp(s2), seed: sd0(s2), debris: true, update: still });
+      s2.add({ k: "ring", x, y, r: rs * 1.7 + 0.4, life: warm ? 0.8 : 0.45, R, seed: sd0(s2), update: still });
+    });
   },
   aura(s, M, { at }) {
     const k = kindOf(M);

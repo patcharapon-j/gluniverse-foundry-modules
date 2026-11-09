@@ -555,6 +555,33 @@ export function weaponStyleOf(item, opts = {}) {
   return strikeOf(item, opts).weapon;
 }
 
+/**
+ * Strike riders (docs/SPELLSPRITE_ARCHETYPES.md §1.1): the body archetype a
+ * Strike's `system.attackEffects.value` hands over to after its hit, first
+ * match wins. PF2e's own riders are grab, improved-grab, constrict,
+ * greater-constrict, knockdown, improved-knockdown, push, improved-push and
+ * trip (CONFIG.PF2E.attackEffects); a creature may also list one of its own
+ * actions by slug (tongue-grab, grabbing-trunk, push-20-feet). Pull, web and
+ * every affliction are not body beats and ride nothing. Rend is matched
+ * exactly, so Rend Faith stays a curse.
+ */
+const RIDER_RULES = [
+  ["grab", /(^|-)(grab|grabbing|grapple|attach|seize|snatch|clutch|constrict|wrap|engulf|swallow-whole)(-|$)/],
+  ["trip", /(^|-)(knockdown|trip|topple)(-|$)/],
+  ["shove", /(^|-)(push|shove|knockback|reposition)(-|$)/],
+  ["rend", /^(improved-)?(rend|tear|eviscerate|rip-and-tear)$/],
+];
+
+/** A Strike's rider: `{ arch, slug }` (the slug picks a variant: constrict → coils), or null. */
+export function riderOf(item) {
+  const ae = sysOf(item).attackEffects;
+  for (const raw of Array.isArray(ae?.value) ? ae.value : Array.isArray(ae) ? ae : []) {
+    const slug = slugify(raw);
+    for (const [arch, rx] of RIDER_RULES) if (rx.test(slug)) return { arch, slug };
+  }
+  return null;
+}
+
 /* ── the entry points ──────────────────────────────────────────────────── */
 
 /** A consumable with one of these does something worth drawing. */
@@ -591,6 +618,8 @@ function depictSpec(item, spec, ctx) {
   out.arch = a.arch; out.why.arch = a.src;
   // an archetype that rescues lifts a costed action out of silence (Mighty Rage, Flurry of Blows, Pounce)
   if (out.silent === "no-function") { out.silent = null; out.func = ARCH[a.arch].func ?? out.func; out.kind = out.kind === "auto" ? "self" : out.kind; out.why.func = "arch"; }
+  // a rescued action with no material of its own takes its archetype's (a bare Drink Blood drains void)
+  if (out.why.func === "arch" && out.material === "neutral" && ARCH[a.arch].material) { out.material = ARCH[a.arch].material; out.why.material = "arch"; }
   return out;
 }
 
@@ -665,6 +694,8 @@ function describeItemUnsafe(item, opts) {
     return done(blank({
       ...base, kind: "strike", func: "harm", material: material === "neutral" ? "kinetic" : material, accent, weapon, mode: "attack",
       area: weapon.splash && weapon.ranged ? { shape: "burst", r: 1, len: null, width: null } : null,
+      // Grab, Knockdown, Push, Rend: the archetype beat played after the hit (compile.mjs buildStrike)
+      rider: riderOf(item),
       why: { kind: "strike", func: "strike", material: material === "neutral" ? "default" : src },
     }));
   }
