@@ -229,9 +229,10 @@ export const TURNBAR = (tb, t) => {
 /* ── strikes ──────────────────────────────────────────────────────
    A strike is a row of PF2e's own chat-card buttons: the three attack
    variants with the multiple attack penalty already in them, then Damage and
-   Critical, so the rail and the card read the same. The next MAP step is
-   underlined — one marker per row that slides as the turn's attacks land,
-   so the eye never has to count. A weapon not in hand dims and says why
+   Critical, so the rail and the card read the same. The three steps are
+   equal and keep still; the turn bar says which one is next. A weapon that
+   must be reloaded (PF2e Ranged Combat) carries a Reload press beside its
+   name, lit while it is empty. A weapon not in hand dims and says why
    before it is pressed. Exploring, the row closes to its first attack. */
 /* `s.short` is what the weapon IS (PF2e's base item, "Greatsword"; a
    blast's element, and its range when it has one, "Water 30 ft") — the word that tells two
@@ -240,13 +241,13 @@ export const TURNBAR = (tb, t) => {
 const STRIKE = (s, t) => {
   const short = s.ready === false;
   return `
-  <div class="gph-stk${short ? " is-short" : ""}${s.kind === "blast" ? " is-blast" : ""}" data-strike-row="${esc(s.id)}">
+  <div class="gph-stk${short ? " is-short" : ""}${s.kind === "blast" ? " is-blast" : ""}${s.reload ? " has-reload" : ""}" data-strike-row="${esc(s.id)}">
     <button type="button" class="gph-stn" data-strike="${esc(s.id)}" data-act="peek-strike" title="${esc(s.name)}${short ? ` · ${esc(t("GLRAIL.strike.notReady"))}` : ""}">
       ${s.img ? `<img src="${esc(s.img)}" alt="">` : ""}<b>${esc(s.short ?? s.name)}</b>${short ? SR(`, ${t("GLRAIL.strike.notReady")}`) : ""}</button>
+    ${s.reload ? `<button type="button" class="gph-rld${s.reload.loaded ? " is-loaded" : ""}" data-reload="${esc(s.id)}"${s.reload.cost ? ` data-cost="${s.reload.cost}"` : ""} title="${esc(t(s.reload.loaded ? "GLRAIL.strike.loaded" : "GLRAIL.strike.empty"))}" aria-label="${esc(t("GLRAIL.strike.reload", { name: s.name }) + ", " + t(s.reload.loaded ? "GLRAIL.strike.loaded" : "GLRAIL.strike.empty"))}">${ICON.reload}</button>` : ""}
     ${[0, 1, 2].map((i) => s.variants[i] != null
       ? `<button type="button" class="gph-map" data-strike="${esc(s.id)}" data-variant="${i}" data-cost="1" data-attack${short ? ' aria-disabled="true"' : ""} aria-label="${esc(t("GLRAIL.strike.attack", { name: s.name, mod: s.variants[i] }))}">${esc(s.variants[i])}</button>`
       : '<span class="gph-map is-none" aria-hidden="true"></span>').join("")}
-    <i class="gph-mapmark" aria-hidden="true"></i>
     <button type="button" class="gph-dmg" data-dmg="${esc(s.id)}" title="${esc(s.damage ?? "")}" aria-label="${esc(t("GLRAIL.strike.dmgSaid", { name: s.name, f: s.damage ?? "" }))}">${esc(t("GLRAIL.strike.dmg"))}</button>
     <button type="button" class="gph-dmg is-crit" data-crit="${esc(s.id)}" title="${esc(s.critical ?? "")}" aria-label="${esc(t("GLRAIL.strike.critSaid", { name: s.name, f: s.critical ?? "" }))}">${esc(t("GLRAIL.strike.crit"))}</button>
   </div>`;
@@ -737,7 +738,7 @@ export const RAIL = (o, t) => {
     ? (o.hazard ? HAZARD(o.hazard, t) : o.creature ? CREATURE(o.creature, t) : o.foes?.foes?.length ? "" : EMPTY(t)) + (o.foes?.foes?.length ? FOES(o.foes, t) : "")
     : VITALS(o.vitals, t) + STRIKES(o.strikes ?? { list: [] }, t) + DECK(o.deck, t) + (o.slim ? "" : UTIL(o.util, t));
   return `
-<div class="gph" data-role="${o.role}" data-mode="${o.mode ?? "exploration"}" data-map="${o.turnbar?.map ?? 0}" style="--gph-map:${o.turnbar?.map ?? 0}"${o.slim ? " data-slim" : ""}${o.folded ? " data-folded" : ""}${o.readonly ? " data-readonly" : ""}${o.role !== "gm" && (o.plinth?.dead || o.plinth?.dying) ? ` data-down="${o.plinth.dead ? "dead" : "dying"}"` : ""}${o.overlay ? " data-overlay" : ""}>
+<div class="gph" data-role="${o.role}" data-mode="${o.mode ?? "exploration"}" data-map="${o.turnbar?.map ?? 0}"${o.slim ? " data-slim" : ""}${o.folded ? " data-folded" : ""}${o.readonly ? " data-readonly" : ""}${o.role !== "gm" && (o.plinth?.dead || o.plinth?.dying) ? ` data-down="${o.plinth.dead ? "dead" : "dying"}"` : ""}${o.overlay ? " data-overlay" : ""}>
   ${o.stack?.length ? `<div class="gph-stack" role="group" aria-label="${esc(t("GLRAIL.party"))}">${o.stack.map((s) => SEAT(s, t)).join("")}</div>` : ""}
   <div class="gph-rail">
     ${PLINTH({ ...o.plinth, folded: o.folded }, t, { readonly: o.readonly })}

@@ -139,13 +139,11 @@ export function flinch(rail) {
 }
 
 /** Drive the turn bar: the actions left, the reaction, the MAP step. A
- *  diamond going out plays its drain; the strikes' marker slides on its own
- *  (`--gph-map` is registered and transitioned). */
+ *  diamond going out plays its drain. */
 export function setEcon(rail, econ, map) {
   const root = rail.closest(".gph") ?? rail;
   if (map != null) {
     root.dataset.map = String(map);
-    root.style.setProperty("--gph-map", String(map));
     const n = root.querySelector("[data-map-n]");
     if (n) n.textContent = ["0", "−5", "−10"][map] ?? n.textContent;
   }

@@ -338,7 +338,7 @@ function stress(art) {
     },
     strikes: { list: [
       { id: "greatsword", name: "+2 Greater Striking Holy Greatsword", short: "Greatsword", img: art("equipment/weapons/greatsword.webp"), variants: ["+28", "+23", "+18"], damage: "3d12+11 slashing, 1d6 spirit", critical: "6d12+22 slashing, 2d6 spirit" },
-      { id: "longspear", name: "Longspear of the Unbroken Line", short: "Longspear", img: art("equipment/weapons/longspear.webp"), variants: ["+26", "+21", "+16"], damage: "3d8+9 piercing", critical: "6d8+18 piercing" },
+      { id: "crossbow", name: "+2 Greater Striking Heavy Crossbow", short: "Heavy Crossbow", img: art("equipment/weapons/heavy-crossbow.webp"), variants: ["+26", "+21", "+16"], damage: "3d10+4 piercing", critical: "6d10+8 piercing", reload: { cost: 2, loaded: false } },
       { id: "javelin", name: "Returning Javelin", short: "Javelin", img: art("equipment/weapons/javelin.webp"), variants: ["+24", "+19", "+14"], damage: "3d6+9 piercing", critical: "6d6+18 piercing", ready: false },
       { id: "fist", name: "Fist", img: art("unarmed-attacks/fist.webp"), variants: ["+24", "+20", "+16"], damage: "1d4+9 bludgeoning", critical: "2d4+18 bludgeoning" },
       { id: "shield-bash", name: "Shield Bash", img: art("equipment/shields/steel-shield.webp"), variants: ["+24", "+19", "+14"], damage: "1d6+9 bludgeoning", critical: "2d6+18 bludgeoning" },

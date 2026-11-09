@@ -1917,8 +1917,8 @@ text is inline syntax (`inlineText`). And a background tab starves
 `expandObject`, and a key that is also the head of another (`GLRAIL.deck` beside
 `GLRAIL.deck.label`) throws and drops *every* key in it; the check refuses
 one. The skin is scoped (docs/adr/0013-pf2e-rail-skin.md), the rail never
-mounts on the stream login or beside pf2e-hud, and it hides `#hotbar` only
-while it is mounted. The turn's light (`light.mjs`) is one WebGL2 canvas
+mounts on the stream login or beside pf2e-hud, and it hides `#hotbar` and the
+player list only while a rail is drawn, from the bottom-left corner. The turn's light (`light.mjs`) is one WebGL2 canvas
 stacked *under* `.gph-rail`, which is what keeps its smoke behind the figure
 and the cards; it is a pass, never a state, and the check pins its uniforms
 and the stacking but cannot compile it, so after touching the shader look at

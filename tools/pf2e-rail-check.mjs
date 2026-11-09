@@ -140,6 +140,16 @@ const ENTRIES = [
   { id: "foc", name: "Focus", isPrepared: false, isFocusPool: true, isRitual: false, dc: 25, atk: 15, groups: [{ id: 3, uses: { value: 1, max: 1 }, active: [{ spell: SPELL("fbolt", "Force Bolt", 1, "1") }] }] },
   { id: "rit", name: "Rituals", isRitual: true, groups: [] },
 ];
+const MORE_ENTRIES = [
+  /* PF2e marks every spell of a spontaneous rank expended once its slots are gone */
+  { id: "spo", name: "Divine Spontaneous", isSpontaneous: true, dc: 22, atk: 12, groups: [
+    { id: "cantrips", active: [{ spell: SPELL("dl", "Divine Lance", 0), expended: true }] },
+    { id: 2, uses: { value: 0, max: 3 }, active: [{ spell: SPELL("heal", "Heal", 2, "1 to 3"), castRank: 2, expended: true }, { spell: SPELL("bless", "Bless", 2, "2"), castRank: 2, expended: true }] },
+  ] },
+  { id: "inn", name: "Innate", isInnate: true, dc: 20, atk: 10, groups: [
+    { id: 1, active: [{ spell: SPELL("fly", "Fly", 1, "2"), castRank: 1, expended: true }, { spell: SPELL("light", "Light", 1, "2", { atWill: true }), castRank: 1, expended: true }] },
+  ] },
+];
 const BLASTS = [{ element: "water", label: "Elemental Blast", elementLabel: "Water", img: "/b/water.webp", range: { max: 30 }, damageTypes: [{ value: "bludgeoning", label: "Bludgeoning", selected: true }],
   maps: { melee: { map0: "+15", map1: "+10 (MAP -5)", map2: "+5 (MAP -10)" }, ranged: { map0: "+15", map1: "+10 (MAP -5)", map2: "+5 (MAP -10)" } } }];
 
@@ -246,6 +256,16 @@ section("the caster's hand", () => {
   ok(sp.rank === 4, `caster: the dial opens on the highest rank with a slot left (got ${sp.rank})`);
   ok(m.deck.tabs[0].key === "spells" && m.deck.tabs[0].count === sp.cards.filter((c) => !c.socket && !c.spent).length, "caster: the Spells tab counts castable cards");
   ok(R.spellsOf([ENTRIES[2]]) === null, "caster: rituals alone are no hand");
+  {
+    const spo = R.spellsOf([MORE_ENTRIES[0]]);
+    ok(spo.cards.length === 3 && spo.cards.every((c) => !c.spent && !c.socket && c.slot == null), "caster: a spontaneous caster's spells stay in the hand with the rank's slots gone, and so do its cantrips");
+    ok(JSON.stringify(spo.ranks.find((r) => r.key === 2).slots) === "[0,3]", "caster: a spontaneous rank out of slots says so on its count");
+    const inn = R.spellsOf([MORE_ENTRIES[1]]);
+    ok(inn.cards.find((c) => c.name === "Fly")?.spent === true && !inn.cards.find((c) => c.name === "Light")?.spent, "caster: an innate spell out of uses is put down; an at-will one never is");
+    const pc = R.spellsOf([{ ...ENTRIES[0], groups: [{ id: "cantrips", active: [{ spell: SPELL("ea", "Electric Arc", 0), expended: true }] }] }]);
+    ok(!pc.cards[0].spent, "caster: a prepared cantrip is never put down");
+    ok(!sp.cards.some((c) => c.rank === "f" && c.spent), "caster: a focus spell is never put down");
+  }
   ok(R.readPlayer(ctxBase(caster(), { spells: ENTRIES, rank: "f" })).deck.spells.rank === "f", "caster: a chosen rank is kept");
 });
 
@@ -527,7 +547,10 @@ section("the host keeps to its own corner", () => {
   const h = strip(src["host.mjs"]);
   ok(!/game\.socket|emitSocket/.test(h), "the host syncs nothing");
   ok(!/\.roll\(\{[^}]*dialog/i.test(h) && !/new\s+\w*Dialog/.test(h), "no HUD roll dialog: every press is PF2e's own");
-  ok(/style\.display = hide \? "none" : ""/.test(h), "the hotbar is hidden, and given back");
+  ok(/style\.display = off \? "none" : ""/.test(h), "the hotbar and the player list are hidden, and given back");
+  ok(/hide\("hotbar", SETTINGS\.hideHotbar\)/.test(h) && /hide\("players", SETTINGS\.hidePlayers\)/.test(h), "each docked Foundry panel is hidden behind its own setting");
+  ok(/renderPlayers[^\n]*this\.dock\(\)/.test(h), "a re-rendered player list is hidden again");
+  ok(/style\.left = `\$\{kept\?\.width \? Math\.round\(kept\.right\) : 0\}px`/.test(h), "the rail stands in the bottom-left corner, or beside a kept player list");
   ok(/--gph-rail-top/.test(h), "the rail publishes its top edge");
   ok(/Budget\.claimMotion/.test(h) === false, "the rail animates only on input, so it claims no motion");
   ok(/hidden[^\n]*GLRAIL\.turnbar\.someone|GLRAIL\.turnbar\.someone[^\n]*hidden/.test(h) || /veiled[\s\S]{0,200}GLRAIL\.turnbar\.someone/.test(h), "a hidden combatant's name never reaches a player's turn bar");
@@ -535,7 +558,7 @@ section("the host keeps to its own corner", () => {
   ok(/spendCtx\(\)[\s\S]{0,40}await/.test(h) && !/await [^;]+;\s*(return )?this\.spend\([^)]*\)\s*;?\s*(\}|$)/m.test(h.replace(/this\.spend\([^)]*ctx\)/g, "")), "every press that awaits PF2e spends against the context it started in");
   ok(/turnKey\(ctx\.combat\) !== ctx\.key/.test(h), "a pending press checks its own combat's live turn before spending");
   ok(/updateSetting[\s\S]{0,240}clearKnowledgeCache/.test(h), "a knowledge change refreshes the rail");
-  ok(/hotbar\(hide = !!this\.el && !!this\.model/.test(h), "the hotbar is hidden only while a rail is drawn");
+  ok(/dock\(drawn = !!this\.el && !!this\.model\)/.test(h) && /const off = drawn && setting/.test(h), "Foundry's panels are hidden only while a rail is drawn");
 });
 
 /* The light fails silently in every way it can: a uniform the shader declares
@@ -644,16 +667,33 @@ section("the moments", () => {
     ok(lit(V.TURNBAR(spentAll, tt)) === 3 && S.liveOf({ turnbar: spentAll }).econ.left === 3 && S.actionsLeft({ ...spentAll, next: false }) === 0,
       "on deck the diamonds are the turn coming, not what was left of the last one (drawn and driven alike)");
   }
-  /* the live attack: the grid's live track is where the marker's arithmetic puts it */
-  for (const k of [0, 1, 2]) {
-    const rule = k === 0 ? css.match(/\n\.gph-stk \{ grid-template-columns: ([^;]+);/)?.[1] : css.match(new RegExp(`\\.gph\\[data-map="${k}"\\] \\.gph-stk \\{ grid-template-columns: ([^;]+);`))?.[1];
-    const tracks = rule?.match(/minmax\([^)]*\)|var\([^)]*\)|\S+/g) ?? [];
-    const steps = tracks.slice(1, 4).map((x) => x.match(/--gph-m-(\w+)/)?.[1]);
-    const want = [0, 1, 2].map((i) => (i < k ? "spent" : i === k ? "live" : "next"));
-    ok(steps.join() === want.join(), `MAP ${k}: the steps are ${want.join(", ")} (got ${steps.join(", ") || "nothing"})`);
-  }
-  ok(/\.gph-mapmark \{[^}]*width: var\(--gph-m-live\)[^}]*\(2 - var\(--gph-map\)\) \* \(var\(--gph-m-next\) \+ 2px\)/.test(css), "the marker is the live step's width and steps over next steps only");
-  ok(/\.gph-stk \{[^}]*transition: grid-template-columns var\(--gl-d-move\)/.test(css) && /--gph-map var\(--gl-d-move\)/.test(css), "the columns and the marker slide on one beat");
+  /* the MAP steps keep still: no step is lit, sized or marked by the MAP */
+  ok(!/gph-mapmark|--gph-m-live|--gph-map\b/.test(css + src["view.mjs"] + src["drive.mjs"]), "no live-step marker, sizing or slide");
+  ok(!/data-map="[0-2]"\][^{]*\.gph-(n?stk|map)/.test(css), "no MAP step is styled by the step you are on");
+});
+
+section("reload (PF2e Ranged Combat)", () => {
+  const tt = (k) => k;
+  const LOADED = "Compendium.pf2e-ranged-combat.effects.Item.nEqdxZMAHlYVXI0Z";
+  const xbow = { id: "xb", type: "weapon", system: { reload: { value: "2" } } };
+  const bow = { id: "bow", type: "weapon", system: { reload: { value: "0" } } };
+  const who = (effects = [], item = xbow) => ({ itemTypes: { effect: effects }, _item: item });
+  const on = { ranged: true };
+  ok(R.reloadOf(who(), xbow, { ranged: false }) === null, "no Reload press unless the module runs");
+  ok(R.reloadOf(who(), bow, on) === null && R.reloadOf(who(), { ...bow, system: { reload: { value: "-" } } }, on) === null, "reload 0 and – weapons carry no Reload press");
+  ok(JSON.stringify(R.reloadOf(who(), xbow, on)) === '{"cost":2,"loaded":false}', "an empty reload-2 weapon: Reload costs 2, not loaded");
+  ok(R.reloadOf(who([{ sourceId: LOADED, flags: { "pf2e-ranged-combat": { targetId: "xb" } } }]), xbow, on).loaded === true, "the module's Loaded effect aimed at the weapon is loaded");
+  ok(R.reloadOf(who([{ sourceId: LOADED, flags: { "pf2e-ranged-combat": { targetId: "other" } } }]), xbow, on).loaded === false, "a Loaded effect aimed at another weapon is not");
+  ok(R.reloadOf(who(), { ...xbow, subitems: [{ quantity: 1, isAmmoFor: () => true }] }, on).loaded === true, "under PF2e's own ammunition a round in the weapon is loaded");
+  ok(R.reloadOf(who(), { ...xbow, system: { reload: { value: "10" } } }, on).cost === null, "a one-minute reload spends no diamonds");
+  const row = V.STRIKES({ list: [{ id: "1", name: "Crossbow", variants: ["+9", "+4", "-1"], damage: "1d10", critical: "2d10", reload: { cost: 2, loaded: false } }] }, tt);
+  ok(/class="gph-stk has-reload"/.test(row) && /class="gph-rld" data-reload="1" data-cost="2"/.test(row), "an empty weapon's row draws a lit Reload press that costs its actions");
+  ok(/gph-rld is-loaded/.test(V.STRIKES({ list: [{ id: "1", name: "Crossbow", variants: ["+9"], reload: { cost: 1, loaded: true } }] }, tt)), "a loaded weapon's press goes faint");
+  const h = strip(src["host.mjs"]);
+  ok(/game\.pf2eRangedCombat\.reload\(\)/.test(h) && /pf2eRangedCombatReload/.test(h), "Reload is the module's own action, and the actions are spent on its hook");
+  ok(/onReloaded\(actor, weapon\)[\s\S]{0,200}actor\?\.id !== p\.actorId/.test(h) && /this\.spend\(n, false, p\.ctx\)/.test(h), "a reload spends only for the actor pressed, against the turn it was pressed in");
+  ok(/pf2eRangedCombatReload", \(actor, weapon\) => this\.onReloaded\(actor, weapon\)/.test(h) && /weapon\?\.reloadActions/.test(h) && !/p\.cost/.test(h), "the cost is the reloaded weapon's, not the pressed row's");
+  ok(/\.gph-stk\.has-reload \{ grid-template-columns: minmax\(0, 1fr\) 24px repeat\(3, 32px\) 34px 34px; \}/.test(css), "the Reload press takes its own track, the MAP steps keep theirs");
 });
 
 console.log(problems.length ? `\n${problems.length} problem(s):\n  ${problems.join("\n  ")}` : `\nall ${passed} checks passed`);
