@@ -40,11 +40,10 @@ it has to read over any map, dark or parchment, and never move the scene.
   rank; the hue makes it findable at a glance and matches what every PF2e
   player already reads on their sheet. They are identity, not signals, and
   nothing else may borrow them.
-- **The halo is a readout, not a glow.** The No Glow Rule refuses light as
-  decoration. The plinth's amber light behind the figure is the Hero Point
-  pool drawn as light: its strength is linear in the points held, zero points
-  is no light at all, and it goes out while the character is dying. It is the
-  only light on the rail, and nothing else may borrow it.
+- **No light on the rail.** The No Glow Rule holds without exception. An
+  amber halo behind the figure once drew the Hero Point pool as light; it was
+  removed at the author's request, because it tinted every portrait gold and
+  the gems already say the count. Hero Points are the gems alone.
 - **The rail is 112px and never taller**: four rows of 24px presses in every
   plate (strikes, actions with their toggles), which is what a PF2e character
   reaches for in a turn. It was 96px (three rows) and was raised once, on
@@ -108,9 +107,10 @@ separate actions plate, so the order is restated for the rail as built:
 
 1. Under 1260px of rail, the deck's tabs drop their labels to icons.
 2. Under 1080px, the plinth narrows to 128px and the strikes plate to 250px
-   (the strike's icon goes; its name and every number stay), the deck's rows,
-   keys and tiles fit whole columns only, and the spell hand closes into a
-   pile behind its dial.
+   (the strike's icon goes; its name and every number stay), the deck's rows
+   and keys fit whole columns only, and the spell and item hands close into a
+   pile (the spells behind their dial), each card lifting whole under the
+   pointer.
 
 The vitals never narrow, because their four checks are the numbers a GM calls
 for without warning. A plate never shows a column cut by its edge: the deck's
@@ -123,7 +123,5 @@ press.
   is an ink plate with its own hairlines.
 - A new signal use (say, a colour for persistent damage) is a change to this
   record, not a local choice.
-- The halo exception is narrow on purpose: if a second light appears on the
-  rail, the exception no longer holds and the No Glow Rule applies to both.
 - Phase 2 (the Foundry wiring) adds `tools/pf2e-rail-check.mjs`, which pins the
   scoping, the signal uses and the narrow order recorded here.

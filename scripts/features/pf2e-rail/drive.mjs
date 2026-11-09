@@ -64,10 +64,9 @@ export function setMeter(el, m) {
   el.querySelector(".gph-bar")?.setAttribute("aria-valuenow", m.value);
 }
 
-/** Drive the Hero Point gems and the halo. Lighting one is an event, so the
- *  gem that changes plays its landing; the halo eases on its own. */
+/** Drive the Hero Point gems. Lighting one is an event, so the gem that
+ *  changes plays its landing. */
 export function setHero(rail, cur) {
-  const plinth = rail.querySelector("[data-plinth]");
   const gems = [...rail.querySelectorAll(".gph-gem")];
   if (!gems.length) return;
   const moving = [];
@@ -83,7 +82,6 @@ export function setHero(rail, cur) {
     g.classList.add(on ? "land" : "drop");
     g.setAttribute("aria-pressed", String(on));
   }
-  if (plinth && !plinth.dataset.state) plinth.style.setProperty("--gph-hero", frac(cur, gems.length).toFixed(3));
   const sr = rail.querySelector("[data-hero-n]");
   if (sr) sr.textContent = sr.textContent.replace(/\d+/, String(cur));
 }

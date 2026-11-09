@@ -72,12 +72,9 @@ const glyph = (c, t) => (c != null ? costGlyph(c, t(costKey(c), { cost: c })) : 
    (`cutout`: the token ring's subject texture, or a transparent figure) has
    its own edge and stands with a contact shadow instead.
 
-   THE SIGNATURE: Hero Points as light. `--gph-hero` is the pool's fullness,
-   0–1, a halo behind the figure's head and shoulders, in amber because a
-   Hero Point is the one thing on the sheet that is pure player agency.
-   Spending one dims it a step; gaining one lights it a step. The gems stand
-   in a column on the plinth's edge, beside the light they feed. While the
-   character is dying the halo goes out and the dying beads take its place.
+   Hero Points are amber gems in a column on the plinth's edge, amber because
+   a Hero Point is the one thing on the sheet that is pure player agency. No
+   light stands behind the figure: the picture is the character's own.
 
    The sub line is class and level (`sub`) and Speed (`speed`), never the
    ancestry: the line is one plinth wide and both are numbers someone acts on.
@@ -120,12 +117,10 @@ const condList = (conds, t) => {
 };
 
 export const PLINTH = (p, t, { readonly = false } = {}) => {
-  const lit = p.dying || p.dead ? 0 : p.hero ? frac(p.hero[0], p.hero[1] || 3) : 0;
   const state = p.dead ? "dead" : p.dying ? "dying" : "";
   return `
-<section class="gph-plinth${p.cutout ? " is-cut" : ""}" data-plinth data-kind="${esc(p.kind ?? "character")}"${state ? ` data-state="${state}"` : ""}${p.turn ? " data-turn" : ""} style="--gph-hero:${lit.toFixed(3)};${frameVars(p.frame)}">
+<section class="gph-plinth${p.cutout ? " is-cut" : ""}" data-plinth data-kind="${esc(p.kind ?? "character")}"${state ? ` data-state="${state}"` : ""}${p.turn ? " data-turn" : ""}${p.frame ? ` style="${frameVars(p.frame)}"` : ""}>
   <span class="gph-plate"></span>
-  <span class="gph-glow" aria-hidden="true"></span>
   <span class="gph-fig" aria-hidden="true"><span class="gph-img"${p.cutout || p.img ? ` style="background-image:url('${esc(p.cutout || p.img)}')"` : ""}></span></span>
   ${p.frameable ? `<button type="button" class="gph-frm" data-act="frame" title="${esc(t("GLRAIL.frame.title"))}" aria-label="${esc(t("GLRAIL.frame.label"))}">${ICON.frame}</button>
   <span class="gph-frhint" aria-hidden="true">${esc(t("GLRAIL.frame.hint"))}</span>` : ""}
@@ -379,18 +374,32 @@ export const SKILLTAB = (s, t) => `
     <div class="gph-keys">${(s.suggested ?? []).map((a) => KEY(a, t)).join("")}</div>
   </div>`;
 
-/* Items: what is reached for in a fight, as tiles — consumables first, each
-   with what is left of it; a press uses it through PF2e. */
-export const ITEMS = ({ list = [] }, t) => `
-  <div class="gph-items">${list.length ? list.map((i) => `<button type="button" class="gph-item" data-item="${esc(i.id)}"${/^[123]$/.test(String(i.cost)) ? ` data-cost="${i.cost}"` : ""} title="${esc(i.name)}">
-    ${i.img ? `<img src="${esc(i.img)}" alt="">` : '<span class="gph-iimg"></span>'}<b>${esc(i.name)}</b><span class="gph-imeta">${i.cost != null ? glyph(i.cost, t) : ""}${i.qty != null ? `<em>×${i.qty}</em>` : ""}</span></button>`).join("") : `<span class="gph-none">${esc(t("GLRAIL.items.none"))}</span>`}</div>`;
+/* Items: what is reached for in a fight, held as a hand of the same compact
+   card the spells are — the item's own painting, what is left of it on the
+   pennant where a spell carries its rank, the action cost top right. A
+   press uses it through PF2e. */
+const ITEM_CARD = (i, t) => {
+  const costSaid = i.cost != null ? t(costKey(i.cost), { cost: i.cost }) : "";
+  return `<button type="button" class="gph-card is-item${i.qty === 0 ? " is-spent" : ""}" data-item="${esc(i.id)}"${/^[123]$/.test(String(i.cost)) ? ` data-cost="${i.cost}"` : ""}
+    aria-label="${esc([i.name, costSaid, i.qty != null ? t("GLRAIL.items.left", { n: i.qty }) : ""].filter(Boolean).join(", "))}">
+    <span class="gph-art"${i.img ? ` style="background-image:url('${esc(i.img)}')"` : ""}></span>
+    ${i.qty != null ? `<span class="gph-pen" aria-hidden="true">×${i.qty}</span>` : ""}
+    ${i.cost != null ? `<span class="gph-ccost" aria-hidden="true">${costGlyph(i.cost)}</span>` : ""}
+    <b class="gph-cname" aria-hidden="true">${esc(i.name)}</b>
+  </button>`;
+};
+
+export const ITEMS = ({ list = [] }, t) => list.length
+  ? FAN(list.map((i) => ({ html: ITEM_CARD(i, t) })), " is-items", t("GLRAIL.items.handSaid", { n: list.length }))
+  : `<span class="gph-none gph-pane-none">${esc(t("GLRAIL.items.none"))}</span>`;
 
 export const DECK = (d, t) => {
   const pane = d.tab === "spells" && d.spells ? SPELLS(d.spells, t)
     : d.tab === "skills" ? SKILLTAB(d.skills ?? {}, t)
     : d.tab === "items" ? ITEMS(d.items ?? {}, t)
     : ACTIONS(d.actions ?? {}, t);
-  const n = d.tab === "spells" && d.spells ? d.spells.cards.filter((c) => c.rank === (d.spells.rank ?? d.spells.ranks[0].key)).length : 1;
+  const n = d.tab === "spells" && d.spells ? d.spells.cards.filter((c) => c.rank === (d.spells.rank ?? d.spells.ranks[0].key)).length
+    : d.tab === "items" ? (d.items?.list?.length ?? 0) : 1;
   return `
 <section class="gph-pl gph-deck" data-tab="${esc(d.tab)}" style="--n:${Math.max(1, n)}" aria-label="${esc(t("GLRAIL.deck.label"))}">
   ${TABS(d, t)}

@@ -44,7 +44,9 @@ contract; the check holds every reader to it path for path).
   `<entry>.<spell>.<rank>.<slot>`; an empty prepared slot is a socket.
 - **Items** are physical items with the `consumable` trait and a quantity —
   PF2e files Chalk and Rations as consumables too; the trait is what separates
-  a potion from them.
+  a potion from them. They are held as a hand of the same compact card as the
+  spells (80 × 112, the Daggerheart card's 1 : 1.4), what is left on the
+  pennant where a spell carries its rank, laid nearly flat.
 - **Foes**: disposition is read off `token.document`, never the placeable.
 - **Hazard Disable** text runs through `inlineText`, so
   `@Check[thievery|dc:18]` reads "Thievery DC 18" instead of printing raw.

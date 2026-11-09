@@ -119,6 +119,8 @@
   "GLRAIL.tab.skills": "Skills",
   "GLRAIL.tab.items": "Items",
   "GLRAIL.items.none": "Nothing to reach for",
+  "GLRAIL.items.left": "{n} left",
+  "GLRAIL.items.handSaid": "{n} items to hand",
   "GLRAIL.turnbar.yours": "Your turn",
   "GLRAIL.turnbar.theirs": "{name}’s turn",
   "GLRAIL.turnbar.exploring": "Exploring",

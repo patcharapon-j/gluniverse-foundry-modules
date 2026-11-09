@@ -25,10 +25,9 @@
    written on :root and no foundation token is redeclared (ADR 0001, 0012).
    ══════════════════════════════════════════════════════════════════ */
 
-/* `--gph-hero` and a seat's `--gph-f` are animated, so they are registered: an
+/* A seat's `--gph-f` and its kin are animated, so they are registered: an
    unregistered custom property interpolates as a token stream, which is to
    say it snaps. */
-@property --gph-hero { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --gph-v { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --gph-f { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --gph-was { syntax: "<number>"; inherits: true; initial-value: 0; }
@@ -84,9 +83,10 @@
   --gph-h: 112px;
   /* how far the picture is let out of the top of the plinth */
   --gph-rise: 76px;
-  /* a spell or foe card, true size */
-  --gph-cw: 92px;
-  --gph-ch: 128px;
+  /* a spell, item or foe card, true size: the Daggerheart compact card's
+     1 : 1.4, at the smallest size a two-line name still reads at 12px */
+  --gph-cw: 80px;
+  --gph-ch: 112px;
   /* the fixed plates, which the turn bar is placed against */
   --gph-pw: 148px;
   --gph-vw: 268px;
@@ -184,21 +184,6 @@
   transform-origin: 50% 100%;
   transform: translate(calc(var(--fdx, 0) * 1%), calc(var(--fdy, 0) * 1%)) scale(var(--fz, 1)); }
 
-/* THE SIGNATURE: Hero Points as light. A halo behind the head and shoulders
-   that the figure stands in front of, so the light reads as coming from
-   behind the character, never painted over a face. Its strength is linear
-   in Hero Points, so each of the three is a step you can see; at zero it is
-   gone, not dim. The one light on the rail, and a readout: ADR 0013 records
-   why it is not the glow the No Glow Rule refuses. */
-.gph-glow {
-  position: absolute; left: -6px; right: -6px; bottom: calc(var(--gph-h) - 30px); height: 150px; pointer-events: none; z-index: 0;
-  background:
-    radial-gradient(38% 32% at 50% 50%, color-mix(in srgb, var(--gph-amber) calc(var(--gph-hero) * 58%), transparent), transparent 100%),
-    radial-gradient(52% 46% at 50% 56%, color-mix(in srgb, var(--gph-amber) calc(var(--gph-hero) * 22%), transparent), transparent 100%);
-  mix-blend-mode: plus-lighter;
-  transition: --gph-hero var(--gl-d-glide) var(--gl-ease);
-}
-
 .gph-nameplate {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
   display: grid; gap: 4px; padding: 22px 10px 9px;
@@ -217,7 +202,7 @@
    to it; on the last lit one, gives it back — the sheet's own rule. The
    drawn diamond is 9px; the press around it is 16. */
 /* They stand in a column on the plinth's right edge, under the fold, beside
-   the light they feed. */
+   the figure they belong to. */
 .gph-gems { position: absolute; right: 3px; top: 30px; z-index: 5; display: flex; flex-direction: column; gap: 0; }
 .gph-gem { position: relative; width: 20px; height: 17px; min-height: 17px; max-height: 17px; display: grid; place-items: center; }
 .gph-gem::before { content: ""; width: 9px; height: 9px; rotate: 45deg; background: var(--gph-scrim);
@@ -278,8 +263,8 @@
 .gph-plinth[data-framing] :is(.gph-nameplate, .gph-conds, .gph-gems) { opacity: 0.25; pointer-events: none; }
 .gph-plinth[data-framing] .gph-fig { transition: none; }
 
-/* Dying: the light goes out and the figure drains, and the dying value takes
-   the halo's place as the loudest thing on the plinth — beads up to the
+/* Dying: the figure drains, and the dying value becomes the loudest thing
+   on the plinth — beads up to the
    dying maximum, which already has doomed taken off (core/pf2e-dying.mjs). */
 .gph-plinth[data-state] .gph-fig { filter: grayscale(0.85) brightness(0.62); }
 .gph-dying, .gph-dead { justify-self: start; display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 7px;
@@ -594,18 +579,10 @@
 .gph-key:active { scale: var(--gl-is-press); }
 .gph-key.is-locked :is(b, .gph-kmod) { color: var(--gph-faint); }
 
-/* Items: tiles, what is left of each under it. */
-.gph-items { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, 80px); grid-auto-rows: 102px; gap: 4px; align-content: start; overflow: hidden; height: 102px; align-self: start; }
-.gph-item { display: grid; grid-template-rows: 30px auto 14px; justify-items: center; align-content: center; gap: 5px; height: 100px; min-height: 100px; max-height: 100px; padding: 6px 4px; min-width: 0;
-  background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs);
-  transition: background var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease); }
-.gph-item img, .gph-iimg { width: 30px; height: 30px; display: block; }
-.gph-item b { max-width: 100%; font-size: var(--gl-is-t-meta); font-weight: 600; line-height: 1.15; text-align: center; text-wrap: balance;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.gph-imeta { display: flex; align-items: center; gap: 5px; color: var(--gph-faint); }
-.gph-imeta em { font-family: var(--gph-num); font-style: normal; font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-dim); font-variant-numeric: tabular-nums; }
-.gph-item:hover { background: var(--gph-ink-4); }
-.gph-item:active { scale: var(--gl-is-press); }
+/* Items: a hand of the spells' compact card (below). The pane keeps its
+   right gutter for the expand press, which opens the whole inventory. */
+.gph-pane[data-pane="items"] { padding: 0 28px 0 0; }
+.gph-deck[data-tab="items"] { min-width: calc(118px + 28px + 36px + var(--gph-cw) + (var(--n) - 1) * 5px); }
 
 /* ══ THE UTILITY COLUMN ══ rest, macros, the sheet. */
 .gph-util { flex: none; width: var(--gph-uw); padding: 6px; display: grid; grid-auto-rows: 30px; gap: 3px; align-content: center; }
@@ -662,23 +639,36 @@
 .gph-card { position: relative; display: block; width: var(--gph-cw); height: var(--gph-ch); min-height: var(--gph-ch); max-height: var(--gph-ch);
   background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: var(--gph-clip);
   filter: drop-shadow(0 6px 10px var(--gl-is-shade)); }
-.gph-art { position: absolute; inset: 1px 1px 34px 1px; background: var(--gph-ink-3) center / cover no-repeat; }
+.gph-art { position: absolute; inset: 1px 1px 32px 1px; background: var(--gph-ink-3) center / cover no-repeat; }
 .gph-art::after { content: ""; position: absolute; inset: 40% 0 0 0; background: linear-gradient(to bottom, transparent, var(--gph-ink-2)); }
 .gph-pen { position: absolute; left: 0; top: 0; min-width: 20px; height: 22px; padding: 0 5px; display: grid; place-items: center;
   font-family: var(--gph-num); font-size: var(--gl-is-t-lead); font-weight: 600; font-variant-numeric: tabular-nums;
   color: var(--gph-on-slab); background: var(--gph-paper); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%); }
 .gph-ccost { position: absolute; right: 4px; top: 4px; padding: 3px 4px; color: var(--gph-text); background: var(--gph-scrim); clip-path: var(--gph-clip-xs); }
-.gph-cname { position: absolute; left: 7px; right: 6px; bottom: 7px; font-size: var(--gl-is-t-body); font-weight: 650; line-height: 1.15; text-wrap: balance;
+/* At 80px a name has 69px: the floor size, so "Smokestick" and "Alchemist's"
+   fit a line whole, and a word longer than the card breaks rather than
+   being cut by its edge. */
+.gph-cname { position: absolute; left: 6px; right: 5px; bottom: 7px; font-size: var(--gl-is-t-meta); font-weight: 700; line-height: 1.2; text-wrap: balance; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .gph-card:hover { box-shadow: inset 0 0 0 1px var(--gph-paper); }
 /* Expended: still a card, visibly put down. */
 .gph-card.is-spent .gph-art { filter: grayscale(1) brightness(0.45); }
 .gph-card.is-spent .gph-cname { color: var(--gph-faint); }
 .gph-card.is-spent .gph-pen { background: var(--gph-ink-5); color: var(--gph-dim); }
-.gph-card.is-spent::after { content: ""; position: absolute; left: 8px; right: 8px; top: 52px; height: 1.5px; background: var(--gph-faint); rotate: -18deg; }
+.gph-card.is-spent::after { content: ""; position: absolute; left: 8px; right: 8px; top: 44px; height: 1.5px; background: var(--gph-faint); rotate: -18deg; }
 .gph-card.is-socket { background: var(--gph-ink-0); box-shadow: inset 0 0 0 1px var(--gph-line-2); filter: none; cursor: default; }
 .gph-card.is-socket .gph-pen { background: transparent; color: var(--gph-faint); box-shadow: inset 0 0 0 1px var(--gph-line-2); }
 .gph-card.is-socket .gph-cname { color: var(--gph-faint); font-weight: 500; }
+/* An item's painting is an object on its own ground, so it is held whole
+   rather than cropped to the card. */
+.gph-card.is-item .gph-art { background-size: contain; background-color: var(--gph-ink-3); }
+.gph-card.is-item .gph-pen { font-size: var(--gl-is-t-body); }
+/* A belt, not a hand of cards: a whole row of items lies nearly flat, so its
+   outer cards stay on the plate. */
+.gph-fan.is-items .gph-held { transform: translateY(calc(var(--t) * var(--t) * 0.6px)) rotate(calc(var(--t) * 1deg)); }
+.gph-fan.is-items .gph-held:is(:hover, :focus-within) { transform: translateY(-14px) rotate(0); }
+.gph[data-overlay] .gph-fan.is-items .gph-held { transform: translateY(42px) rotate(0); }
+.gph-card:active { scale: var(--gl-is-press); }
 
 .gph-drawer { position: absolute; right: var(--gph-drawer-r, 0); bottom: calc(var(--gph-h) + 52px); z-index: 40; width: max-content; min-width: 280px; max-width: 460px;
   background: var(--gph-ink-1); box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip);
@@ -871,6 +861,7 @@ button.gph-mac:hover { background: var(--gph-ink-4); }
    what tells them apart. */
 .gph-foes .gph-held .gph-cname { right: max(6px, calc(var(--gph-cw) - var(--gph-adv) + 4px)); }
 .gph-foes .gph-held:is(.is-sel, :hover, :focus-within, :last-child) .gph-cname { right: 6px; }
+.gph-foes .gph-cname { overflow-wrap: normal; }
 .gph-foes[data-dense] .gph-cname { left: 5px; font-size: var(--gl-is-t-meta); line-height: 1.2; letter-spacing: -0.01em; -webkit-line-clamp: 3; }
 .gph-foes[data-dense] .gph-held:not(.is-sel, :hover, :focus-within, :last-child) .gph-cname { right: max(4px, calc(var(--gph-cw) - var(--gph-adv) + 1px)); }
 .gph-foes .gph-held.is-sel { transform: translateY(-6px) rotate(0); }
@@ -1074,6 +1065,7 @@ button.gph-shead:hover { background: var(--gph-ink-2); }
   .gph-tab :is(span, b) { display: none; }
   .gph-tabmark { left: 4px; }
   .gph-deck[data-tab="spells"] { min-width: calc(30px + 78px + 36px + var(--gph-cw) + (var(--n) - 1) * 5px); }
+  .gph-deck[data-tab="items"] { min-width: calc(30px + 28px + 36px + var(--gph-cw) + (var(--n) - 1) * 5px); }
 }
 @container gph (max-width: 1080px) {
   .gph > * { --gph-pw: 128px; --gph-sw: 250px; }
