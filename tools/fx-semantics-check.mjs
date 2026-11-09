@@ -16,7 +16,7 @@
 
 import { existsSync } from "node:fs";
 import {
-  describeItem, describeCondition, describeSkillAction, describeTick, outcomeFrom,
+  describeItem, describeBlast, describeCondition, describeSkillAction, describeTick, outcomeFrom,
   weaponStyleOf, inlineTemplate, inlineDamage, runeMaterials,
 } from "../scripts/features/pf2e-fx/semantics.mjs";
 import { FUNCTIONS, MATERIALS, WEAPON_STYLES, DELIVERIES, TRADITIONS, DELIVERY_VOCAB, MOTIF_VOCAB, PROP_VOCAB, FLAVOR_VOCAB } from "../scripts/features/pf2e-fx/constants.mjs";
@@ -180,6 +180,19 @@ expect("Shortbow not heavy", weaponStyleOf(F.shortbow), { ranged: true, heavy: f
 expect("Battle Medicine craft", describeSkillAction("battle-medicine", ["healing", "manipulate"]), { func: "restore", craft: "medicine" });
 expect("Treat Wounds craft", describeItem({ type: "action", name: "Treat Wounds", system: { slug: "treat-wounds", actionType: { value: "action" }, traits: { value: ["exploration", "healing", "manipulate"] } } }), { craft: "medicine" });
 expect("Lay on Hands is not a craft", describeItem({ type: "spell", name: "Lay on Hands", system: { slug: "lay-on-hands", level: { value: 1 }, traits: { value: ["focus", "healing", "vitality"] } } }), { func: "restore", craft: null });
+// an Elemental Blast is described from the choice in context.identifier, not the impulse
+const BLAST = { type: "action", name: "Elemental Blast", system: { slug: "elemental-blast", actionType: { value: "action" }, traits: { value: ["attack", "impulse", "kineticist", "primal"] } } };
+expect("Blast air+electricity is lightning", describeBlast(BLAST, { element: "air", damageType: "electricity", melee: false }), { kind: "attack", func: "harm", material: "electricity", delivery: "orb" });
+expect("Blast air+slashing keeps the element", describeBlast(BLAST, { element: "air", damageType: "slashing", melee: true }), { func: "harm", material: "air", delivery: "touch" });
+expect("Blast metal+piercing", describeBlast(BLAST, { element: "metal", damageType: "piercing" }), { material: "metal" });
+expect("Blast fire", describeBlast(BLAST, { element: "fire", damageType: "fire" }), { material: "fire", silent: null });
+expect("Blast element from traits", describeBlast({ ...BLAST, system: { ...BLAST.system, traits: { value: ["impulse", "water"] } } }, { damageType: "bludgeoning" }), { material: "water" });
+// archetypes: a silent costed action an archetype rescues plays it; a damaging spell keeps its delivery
+expect("Mighty Rage rescued as rage", describeItem({ type: "feat", name: "Mighty Rage", system: { slug: "mighty-rage", actionType: { value: "action" }, actions: { value: 1 }, traits: { value: ["barbarian", "rage"] } } }), { silent: null, arch: "rage", func: "support" });
+expect("Pounce rescued as charge", describeItem({ type: "action", name: "Pounce", system: { slug: "pounce", actionType: { value: "action" }, actions: { value: 1 }, traits: { value: ["flourish"] } } }), { silent: null, arch: "charge" });
+expect("Fire harm spell keeps its delivery", describeItem({ type: "spell", name: "Ignition", system: { slug: "ignition", level: { value: 1 }, damage: { 0: { formula: "2d4", type: "fire" } }, traits: { value: ["attack", "cantrip", "fire"] } } }), { func: "harm", arch: null });
+expect("Healing Potion drinks", describeItem({ type: "consumable", name: "Healing Potion (Minor)", system: { slug: "healing-potion-minor", category: "potion", damage: { formula: "1d8", type: "vitality", kind: "healing" }, traits: { value: ["consumable", "healing", "magical", "potion", "vitality"] } } }), { arch: "drink" });
+expect("Demoralize is fear", describeSkillAction("demoralize", ["auditory", "concentrate", "emotion", "fear", "mental"]), { arch: "fear" });
 // a creature's Power Attack card is the Strike's announcement: the Strike plays
 expect("NPC Power Attack silent", describeItem({ type: "action", name: "Power Attack", system: { slug: "power-attack", actionType: { value: "action" }, actions: { value: 2 }, traits: { value: ["flourish"] } } }), { silent: "strike-plays" });
 expect("NPC Vicious Swing silent", describeItem({ type: "action", name: "Vicious Swing", system: { slug: "vicious-swing", actionType: { value: "action" }, actions: { value: 2 }, traits: { value: ["flourish"] } } }), { silent: "strike-plays" });

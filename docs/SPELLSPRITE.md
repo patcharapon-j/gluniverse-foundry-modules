@@ -28,6 +28,7 @@ ChatMessage ─read─▶ event ─semantics─▶ spec ─looks─▶ spec ─c
 | `compile.mjs` | yes | A spec into a seeded `Sim` with its cues. |
 | `area.mjs` | yes | The area language (below). |
 | `families/`, `forms.mjs`, `strikes.mjs`, `conditions.mjs` | yes | What each material, function, weapon style and condition draws. |
+| `archetypes/` | yes | One animation per meaning, reused across documents (below). |
 | `core/` | yes | Sim, shapes, palettes, the pixel buffer, frame painting. |
 | `director.mjs` | yes | Which sims run, on which scene, under which budget. |
 | `host-2d.mjs` | no | Puts the buffers on the Foundry canvas and moves the tokens. |
@@ -53,6 +54,12 @@ PF2e 8.5 facts the reader depends on: a spell attack and a Strike are both
 `context.type: "attack-roll"`; the cast rank is `origin.castRank`; a save from
 a spell card carries the spell as `flags.pf2e.origin`; a persistent damage tick's
 only origin is the `persistent-damage` condition item.
+
+An Elemental Blast is not a Strike and not a spell: its roll carries
+`context.action: "elemental-blast"` and `context.identifier`
+(`element.damageType.melee|ranged.cost`), and its origin is an `action` item.
+`describeBlast` plays it as a spell attack, its material the damage type when that
+is energy and the element otherwise, as an orb at range and a touch in melee.
 
 Condition loops are keyed `cond:<tokenId>:<slug>` (never the actor id, which
 unlinked tokens share), start on `createItem` and stop on `deleteItem`.
@@ -155,6 +162,33 @@ height while it crosses terrain; the decal does not follow slopes.
 `fx.maxConcurrent`). Pixel size is never shed. While anything plays the
 Director holds `Budget.claimMotion`.
 
+## Archetypes
+
+An archetype is one animation reused by every document that means the same
+thing: one grab for every Grab and Improved Grab, one rage for barbarian Rage and
+every NPC berserk, one rise for every healing spell. `archetypes/rules.mjs`
+`pickArch` chooses it from the slug, then the traits, then the function, and
+`depictSpec` puts it on the spec as `arch`. The drawers are
+`archetypes/{mind,body,self}.mjs`, called exactly like a `FORMS` entry, and they
+take the creature sizes, the material ramp, the outcome and the rank as their
+parameters, so one drawing serves a goblin's Grab and a dragon's.
+`docs/SPELLSPRITE_ARCHETYPES.md` is the catalogue and the build order; the
+coverage report counts what each archetype plays.
+
+- **mind** — hex (the catch-all for any hinder), fear, charm, slow, sleep, blind,
+  vanish.
+- **body** — grab, trip, shove (Trample and Throw Rock by slug), rend, charge,
+  flurry. These are maneuvers: `noCharge` skips the spell charge unless a spell
+  plays one (`spec.cast`), and none of them may read as a second hit, because the
+  Strike beside it plays its own.
+- **self** — rise, drink (the flask, then the potion's own form; a restore
+  potion ends in rise), rage, stance, light, fortune.
+
+A name never moves a document across functions: `fits` gates each archetype,
+so See the Unseen is a detect, not a vanish. A silent action is lifted only by an
+archetype marked `rescue`, and a damaging ability takes only a body archetype and
+only in place of a generic delivery.
+
 ## Looks
 
 A look restyles an effect: material, hue, flourish, layout, or off. Players
@@ -185,7 +219,12 @@ Zero problems required. Regenerate coverage after any change to
 - `node tools/diorama-preview.mjs` with `?fx=burst|strike|cone|condition`.
 
 Headless Chrome delivers almost no animation frames under a virtual-time
-budget, so judge stills with `seek`, never by waiting.
+budget, so judge stills with `seek`, never by waiting. `fx.html` takes `arch`
+and `slug` to play an archetype, and `layers=flat,stand,light` to find which
+layer a wash comes from.
+
+The size, density and timing bar lives in the `spellsprite-craft` skill, which
+benchmarks against the pixelfx reference (`node tools/fx-reference.mjs`).
 
 ## Fails silently
 
@@ -202,6 +241,14 @@ budget, so judge stills with `seek`, never by waiting.
   Spellsprite's own functions, which Spellglass's classifier never returns,
   so `pickFunc` reads their traits and slugs before it asks the classifier.
   Check the function table in the coverage report after adding one.
+- An archetype left as a placeholder plays its function's old form for
+  thousands of documents. fx-check refuses one.
+- `spec.slug` is how an archetype picks a variant (charm's heart, Trample, Throw
+  Rock). `finish()` in `read.mjs` must keep copying it; without it every variant
+  works in the preview and never in play.
+- A release flash sized by the area whites out the whole footprint for two
+  frames, and every eruption under it. `releaseFlash` caps the white core in
+  squares; the area's own lights stay below a wash for the same reason.
 - Persistent bleed arrives as slug `persistent-damage` with
   `damageType: "bleed"`; the bleed ramp is chosen on either.
 

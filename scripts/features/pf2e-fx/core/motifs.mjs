@@ -63,7 +63,7 @@ export const TRADITION_GLYPHS = Object.freeze({
 export function charge(s, M, hand, caster, from, to, { size = null } = {}) {
   const tradition = s.spec.tradition;
   // the orb swells to what leaves the hand: a lob's own size, or a spark
-  const top = (size ?? 3.2) * Math.min(1.5, s.m) - 1;
+  const top = (size ?? 4.5) * Math.min(1.5, s.m) - 1;
   s.add({ k: "glyph", x: caster.x, y: caster.y, r: 0.62 * Math.max(1, caster.size ?? 1), life: to - from + 0.5, R: M.R, star: s.spec.look?.flourish === "runes", glyphs: TRADITION_GLYPHS[tradition] ?? undefined, spin: tradition === "occult" ? -1 : 1, update: still });
   s.at(from, (s2) => {
     s2.light(hand[0], hand[1], hand[2], 1.5, S(M.R, 0.85), 0.9, to - from + 0.06, { swell: true });
@@ -82,13 +82,20 @@ export function charge(s, M, hand, caster, from, to, { size = null } = {}) {
  * A projectile from `a` to `b` over `dur`, starting at `from`, arcing `arc`
  * squares high. `trail(s, x, y, z, dt)` sheds the family's trail.
  */
-export function projectile(s, M, a, b, from, dur, arc, trail, { r = 3, bolt = false, big = false } = {}) {
+/**
+ * A flying ball from a to b. `head` names the shape it draws (default the
+ * plain orb), `props` adds fields that shape reads, and `step(p, s, dt)`
+ * runs every step after the move: compile.mjs passes deliveries.mjs's comet
+ * head and its wake, which this core module cannot import.
+ */
+export function projectile(s, M, a, b, from, dur, arc, trail, { r = 4.5, bolt = false, big = false, head = "orb", props = null, step = null } = {}) {
   const pos = (u) => [lerp(a[0], b[0], u), lerp(a[1], b[1], u), lerp(a[2], b[2], u) + Math.sin(Math.PI * u) * arc];
   s.at(from, (s2) => s2.add({
-    k: "orb", x: a[0], y: a[1], z: a[2], life: dur, R: M.R, dark: M.dark, r: r * Math.min(1.5, s2.m), glow: true, big,
+    k: head, x: a[0], y: a[1], z: a[2], life: dur, R: M.R, dark: M.dark, r: r * Math.min(1.5, s2.m), glow: true, big, ...(props?.(s2) ?? {}),
     update(p, s3, dt) {
       const u = clamp(p.age / dur);
       [p.x, p.y, p.z] = pos(u); p.tail = pos(Math.max(0, u - 0.09));
+      step?.(p, s3, dt);
       trail?.(s3, p.x, p.y, p.z, dt);
       trailFlourish(s3, M, p.x, p.y, p.z, dt);
       const st = Math.floor(p.age * 20);
@@ -99,14 +106,21 @@ export function projectile(s, M, a, b, from, dur, arc, trail, { r = 3, bolt = fa
 
 /** The light-and-flash every release shares, scaled by power. */
 export function releaseFlash(s, M, x, y, z, pow, rad, { light = 1, flash = 1 } = {}) {
-  const mm = Math.min(1.6, s.m * pow);
-  s.light(x, y, z, rad * 2.3 + 1, S(M.R, 0.85), (M.dark ? 0.5 : 1.1) * mm * light, 0.7 + 0.25 * s.m * pow, { flicker: M.flicker });
+  const mm = Math.min(1.6, s.m * pow), aps = s.spec.aps;
+  // a big soft pool at low strength and a tight hot one at the core (spellsprite-craft §1)
+  // capped: a lobbed area (rad 1.4) would otherwise light six squares round it
+  s.light(x, y, z, Math.min(rad * 3.2 + 1.5, rad + 3), S(M.R, 0.85), (M.dark ? 0.45 : 0.85) * mm * light, 0.8 + 0.3 * s.m * pow, { flicker: M.flicker });
+  if (!M.dark) s.light(x, y, z, rad * 1.1 + 0.6, S(M.R, 1), 0.9 * light, 0.18);
+  // the white core is the detonation, not the footprint: capped in squares, or a fireball's
+  // flash (and its ring frame) whited out the whole area, and everything in it, for two frames
   if (pow > 1.2) {
-    s.add({ k: "flash", x, y, z, life: 2 / 12, r: (rad * 0.6 + 0.3) * s.spec.aps * 0.7 * flash, R: M.R, update: still });
+    s.add({ k: "flash", x, y, z, life: 2 / 12, r: Math.min(rad * 0.85 + 0.45, 1.1) * aps * 0.8 * flash, R: M.R, update: still });
     s.crit();
-  } else s.add({ k: "flash", x, y, z, life: 1 / 12, r: (rad * 0.4 + 0.2) * s.spec.aps * 0.6, R: M.R, update: still });
-  if (pow >= 0.5) s.add({ k: "ring", x, y, r: rad * 1.25 + 0.3, life: 0.5, R: M.R, broken: true, seed: sd(s), update: still });
+  } else s.add({ k: "flash", x, y, z, life: 1 / 12, r: Math.min(rad * 0.6 + 0.35, 0.8) * aps * 0.7 * flash, R: M.R, update: still });
+  if (pow >= 0.3) s.add({ k: "ring", x, y, r: rad * 1.7 + 0.6, life: 0.55, R: M.R, broken: true, seed: sd(s), update: still });
+  if (pow >= 0.8) s.add({ k: "ring", x, y, r: rad * 1.15 + 0.4, life: 0.32, R: M.R, seed: sd(s), update: still });
 }
 
 /** How many of something a release makes: scales with power, rank and radius. */
-export const counter = (s, pow, rad) => (k) => Math.max(1, Math.round(k * s.m * pow * (0.6 + rad * 0.45)));
+// twice the old density: a burst reads as a burst (spellsprite-craft §1); families mark the excess minor
+export const counter = (s, pow, rad) => (k) => Math.max(1, Math.round(2 * k * s.m * pow * (0.6 + rad * 0.45)));

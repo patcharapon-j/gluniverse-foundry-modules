@@ -22,8 +22,17 @@ import { FAMILY_OF } from "../scripts/features/pf2e-fx/constants.mjs";
 import { BASE_GROUP } from "../scripts/features/pf2e-fx/depict.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const DEFAULT_PACKS = "C:/Users/frostnoxia/AppData/Local/FoundryVTT/Data/systems/pf2e/packs";
-const CLASSIC_LEVEL = "C:/Program Files/Foundry Virtual Tabletop/resources/app/node_modules/classic-level/index.js";
+// The first install that exists: Windows, then Linux (Foundry's default data and app folders).
+const HOME = process.env.HOME ?? process.env.USERPROFILE ?? "";
+const firstOf = (...paths) => paths.find((p) => existsSync(p)) ?? paths[0];
+export const DEFAULT_PACKS = firstOf(
+  "C:/Users/frostnoxia/AppData/Local/FoundryVTT/Data/systems/pf2e/packs",
+  join(HOME, ".local/share/FoundryVTT/Data/systems/pf2e/packs"),
+);
+const CLASSIC_LEVEL = firstOf(
+  "C:/Program Files/Foundry Virtual Tabletop/resources/app/node_modules/classic-level/index.js",
+  join(HOME, "foundryvtt/resources/app/node_modules/classic-level/index.js"),
+);
 
 let ClassicLevel = null;
 async function classicLevel() {
@@ -227,6 +236,17 @@ export const SPOT_CHECKS = [
   { label: "Flurry of Blows", pack: "actions", name: "Flurry of Blows", expect: { flavor: "flurry" } },
   { label: "Elemental Blast (impulse)", pack: "actions", name: "Elemental Blast", expect: { flavor: "impulse" } },
   { label: "Rage", pack: "actions", name: "Rage", expect: { flavor: "rage" } },
+  // archetypes (archetypes/rules.mjs): one animation per meaning, never across functions
+  { label: "Fireball keeps its delivery", pack: "spells", name: "Fireball", expect: { arch: null } },
+  { label: "Heal is a vital rise", pack: "spells", name: "Heal", expect: { func: "restore", arch: "rise" } },
+  { label: "Fear is fear", pack: "spells", name: "Fear", expect: { func: "hinder", arch: "fear" } },
+  { label: "Invisibility vanishes", pack: "spells", name: "Invisibility", expect: { arch: "vanish" } },
+  { label: "See the Unseen is a detect", pack: "spells", name: "See the Unseen", expect: { func: "detect", arch: null } },
+  { label: "Heroism is a buff", pack: "spells", name: "Heroism", expect: { func: "support", arch: "fortune" } },
+  { label: "Sending is not a hinder", pack: "spells", name: "Sending", expect: { func: "support" } },
+  { label: "Slow is slow", pack: "spells", name: "Slow", expect: { arch: "slow" } },
+  { label: "Grab grabs", pack: "bestiary-ability-glossary-srd", name: "Grab", expect: { arch: "grab" } },
+  { label: "Knockdown trips", pack: "bestiary-ability-glossary-srd", name: "Knockdown", expect: { arch: "trip" } },
 ];
 
 export const pick = (o, path) => path.split(".").reduce((a, k) => (a == null ? a : a[k]), o);
@@ -287,6 +307,7 @@ function newLook() {
     delivery: m(), deliverySrc: m(), motif: m(), motifSrc: m(), props: m(), flavor: m(), flavorSrc: m(), byClass: new Map(),
     npcStrikes: 0, npcSpecific: 0, npcDefault: m(), harmSpells: 0, harmSpellDefault: m(), harmSpellNoMotif: new Map(),
     harmSpellMotif: 0, spellsPackHarm: 0, abilities: 0, abilityDefault: m(), unknownBase: m(), playing: 0, withMotif: 0, withFlavor: 0,
+    arch: m(), archSrc: m(), archEx: new Map(), rescued: 0,
   };
 }
 
@@ -304,6 +325,10 @@ function tallyLook(L, e) {
   bump(L.motif, r.motif ?? "(none)"); bump(L.motifSrc, r.why?.motif);
   bump(L.flavor, r.flavor ?? "(none)"); bump(L.flavorSrc, r.why?.flavor);
   for (const p of r.props ?? []) bump(L.props, p);
+  // the archetype (archetypes/rules.mjs): one animation shared by every document that means the same thing
+  bump(L.arch, r.arch ?? "(none)"); if (r.arch) bump(L.archSrc, r.why?.arch);
+  if (r.why?.func === "arch") L.rescued++;
+  if (r.arch) { const ex = L.archEx.get(r.arch) ?? new Map(); bump(ex, e.doc.name); L.archEx.set(r.arch, ex); }
   const name = normName(e.doc.name);
   if (isNpcStrike(e)) {
     L.npcStrikes++;
@@ -333,7 +358,11 @@ const pct = (a, b) => (b ? ((100 * a) / b).toFixed(1) : "0.0");
 const list = (m, n = 60) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => `${k} (${v})`).join("; ") || "None.";
 
 function lookReport(L) {
-  const lines = ["## Look axes", "", "The five-axis look model (docs/SPELLSPRITE_LOOK.md), over every playing document. A source of `default` means no structure, name or trait said anything and the kind's fallback was used.", ""];
+  const withArch = L.playing - (L.arch.get("(none)") ?? 0);
+  const lines = ["## Archetypes", "", `An archetype (docs/SPELLSPRITE_ARCHETYPES.md, archetypes/rules.mjs) is one animation reused by every document that means the same thing. **${withArch}** of ${L.playing} playing documents (${pct(withArch, L.playing)}%) play one; **${L.rescued}** of those were silent actions an archetype rescued. Sources: ${list(L.archSrc)}.`, "",
+    "| archetype | docs | top documents |", "|---|---:|---|",
+    ...[...L.arch.entries()].filter(([k]) => k !== "(none)").sort((a, b) => b[1] - a[1]).map(([k, v]) => `| ${k} | ${v} | ${list(L.archEx.get(k) ?? new Map(), 6)} |`), "",
+    "## Look axes", "", "The five-axis look model (docs/SPELLSPRITE_LOOK.md), over every playing document. A source of `default` means no structure, name or trait said anything and the kind's fallback was used.", ""];
   lines.push(`- NPC strike instances with a specific delivery: **${L.npcSpecific} / ${L.npcStrikes} (${pct(L.npcSpecific, L.npcStrikes)}%)**`);
   lines.push(`- Harm spells (every pack) with a delivery: **${L.harmSpells} / ${L.harmSpells}**, ${L.harmSpells - [...L.harmSpellDefault.values()].reduce((a, b) => a + b, 0)} from structure or name`);
   lines.push(`- Harm spells in the Spells pack with a motif: **${L.harmSpellMotif} / ${L.spellsPackHarm}**`);

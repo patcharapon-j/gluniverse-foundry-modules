@@ -34,7 +34,7 @@ import { metagame, reachedPlayers } from "../pf2e-odds/observe.mjs";
 import { seedOf } from "./core/rand.mjs";
 import { LOOK_FLAG, SETTINGS, TIMING } from "./constants.mjs";
 import { applyLook, mergeLooks } from "./looks.mjs";
-import { describeCondition, describeItem, describeSkillAction, describeTick, outcomeFrom, slugOf } from "./semantics.mjs";
+import { describeBlast, describeCondition, describeItem, describeSkillAction, describeTick, outcomeFrom, slugOf } from "./semantics.mjs";
 
 /* ── settings and viewer ───────────────────────────────────────────────── */
 
@@ -197,6 +197,10 @@ function finish(desc, { id, seedKey, caster = null, targets = [], area = null, o
     craft: desc.craft ?? null,
     // the look axes (docs/SPELLSPRITE_LOOK.md)
     delivery: desc.delivery ?? null, motif: desc.motif ?? null, props: desc.props ?? [], flavor: desc.flavor ?? null,
+    arch: desc.arch ?? null,
+    // archetypes read the slug for their variants (charm's heart, trample, throw rock);
+    // a cast is told apart from an action so a maneuver never plays a spell's charge
+    slug: slug ?? desc.slug ?? null, cast: item?.type === "spell",
   };
   if (!spec.caster && !spec.targets.length && !spec.area) return null;
   return applyLook(spec, lookFor(slug ?? desc.slug, actor, item));
@@ -517,6 +521,18 @@ function poweredSwing(actor) {
   } catch { return false; }
 }
 
+/**
+ * An Elemental Blast: an attack roll whose origin is the impulse (an action),
+ * which the weapon/melee/spell gate would drop. PF2e 8.7 tags it
+ * `action: "elemental-blast"` and names the choice in `identifier`
+ * (`<element>.<damageType>.<melee|ranged>.<cost>`).
+ */
+const isBlast = (ctx) => ctx?.action === "elemental-blast" || !!ctx?.options?.includes?.("action:elemental-blast");
+function blastOf(ctx, ranged) {
+  const [element = null, damageType = null, reach = null] = String(ctx?.identifier ?? "").split(".");
+  return { element, damageType, melee: reach ? reach === "melee" : !ranged };
+}
+
 async function onAttack(message, ctx, origin) {
   const isSpell = origin?.type === "spell";
   if (isSpell ? !enabled(SETTINGS.spells) : !enabled(SETTINGS.strikes)) return;
@@ -529,7 +545,8 @@ async function onAttack(message, ctx, origin) {
   const domains = ctx?.domains ?? [];
   const options = ctx?.options ?? [];
   const ranged = domains.includes?.("ranged-attack-roll") || options.includes?.("item:ranged");
-  const desc = isSpell
+  const blast = isBlast(ctx) ? blastOf(ctx, ranged) : null;
+  const desc = blast ? describeBlast(item, blast) : isSpell
     ? describeItem(item, { use: "cast", castRank: origin?.castRank, tradition: message.flags?.pf2e?.casting?.tradition ?? null, actorLevel: message.actor?.level, targetUndead: isUndead(targetToken?.actor) })
     : describeItem(item, { use: "strike", ranged, actorLevel: message.actor?.level, weapon: linkedWeapon(item) });
   if (!desc || desc.silent) return;
@@ -548,7 +565,7 @@ async function onAttack(message, ctx, origin) {
     desc.weapon = { ...desc.weapon, power: true };
     desc.props = [...new Set([...(desc.props ?? []), "power"])].sort();
   }
-  const spec = finish({ ...desc, kind: isSpell ? "attack" : "strike" }, {
+  const spec = finish({ ...desc, kind: isSpell || blast ? "attack" : "strike" }, {
     id: `msg:${message.id}`, seedKey: message.id, caster, targets, area, outcome,
     slug: slugOf(item), actor: message.actor, item,
   });
@@ -589,7 +606,7 @@ async function onTick(message, origin) {
   const body = bodyOf(speakerToken(message) ?? tokenOf(cond.actor));
   if (!body) return;
   const desc = describeTick(cond.system?.persistent?.damageType, {});
-  const spec = finish(desc, { id: `msg:${message.id}`, seedKey: message.id, targets: [{ ...body, outcome: "neutral" }], slug: "persistent-damage", actor: cond.actor });
+  const spec = finish(desc, { id: `msg:${message.id}`, seedKey: message.id, targets: [{ ...body, outcome: "neutral" }], slug: "persistent-damage" });
   play(spec, `msg:${message.id}`);
 }
 
@@ -614,7 +631,7 @@ function onMessage(message) {
     const origin = originOf(message);
     const type = ctx?.type ?? null;
     if (type === "attack-roll") {
-      if (["weapon", "melee", "spell"].includes(origin?.type)) void onAttack(message, ctx, origin);
+      if (["weapon", "melee", "spell"].includes(origin?.type) || isBlast(ctx)) void onAttack(message, ctx, origin);
       return;
     }
     if (type === "saving-throw") { if (origin?.uuid) onSave(message, ctx, origin); return; }
@@ -689,7 +706,8 @@ function reconcile() {
         const desc = describeCondition(c.slug, { value: c.value, damageType: c.damageType });
         if (!desc || desc.silent) continue;
         const key = `cond:${token.id}:${keySlug}`;
-        const spec = finish(desc, { id: key, seedKey: key, targets: [{ ...body, outcome: "neutral" }], slug: c.slug, actor: token.actor });
+        // no actor: a creature's look styles what it does, never what is done to it
+        const spec = finish(desc, { id: key, seedKey: key, targets: [{ ...body, outcome: "neutral" }], slug: c.slug });
         if (spec) want.set(key, spec);
       }
     }

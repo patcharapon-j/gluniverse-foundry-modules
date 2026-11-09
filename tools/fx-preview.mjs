@@ -11,11 +11,13 @@
  * Two views:
  *   ?view=stage   one effect, top-down and Diorama side by side, animated
  *   ?view=sheet   a contact sheet: every material × every delivery, as stills
+ *   stage params: kind func mat outcome rank style shape cond cval seed seek zoom floor,
+ *                 the look axes delivery motif flavor props (comma list), arch (archetypes/rules.mjs), and slug (the item slug an archetype may read, e.g. charm)
  *
  * Stage params: kind (attack|save|area|strike|auto|self|condition|tick), func,
  *   mat, outcome (crit|hit|miss|neutral), rank, style (weapon style), shape
  *   (burst|cone|line|emanation), cond (condition slug), hue, flourish, floor
- *   (dungeon|parchment), zoom, seek (freeze at t seconds), seed, speed.
+ *   (dungeon|parchment), zoom, seek (freeze at t seconds), seed, speed, layers (debug: flat,stand,light).
  * Sheet params: rows=materials|functions|strikes|conditions, cols (comma list
  *   of column ids), seek (override every cell), floor, only (comma materials).
  *
@@ -103,6 +105,7 @@ function specFrom(o) {
     caster: kind === "condition" || kind === "tick" ? null : caster, targets, area,
     condition: kind === "condition" ? { slug: o.cond ?? "persistent-damage", value: o.cval ?? 1 } : null,
     look: o.hue != null || o.flourish ? { hue: o.hue ?? null, flourish: o.flourish ?? null } : null,
+    delivery: o.delivery ?? null, motif: o.motif ?? null, flavor: o.flavor ?? null, props: o.props ?? [], arch: o.arch ?? null, slug: o.slug ?? null,
   };
 }
 
@@ -195,7 +198,9 @@ function drawView(ctx, V, sims, tokens, now, L, B) {
   const shake = Math.max(0, ...sims.map((s) => (s.shake > 0.3 ? s.shake : 0)));
   const shx = Math.round(Math.sin(now * 0.09) * shake) * k, shy = Math.round(Math.cos(now * 0.071) * shake * 0.6) * k;
   drawMap(ctx, V);
-  paintFrame(sims, V.v, L, { bright });
+  // layers=flat,stand,light (debug): paint only those, to find which layer a wash comes from
+  const only = P.get("layers")?.split(",");
+  paintFrame(sims, V.v, L, { bright, light: !only || only.includes("light"), filter: only ? (p) => !p.k || only.includes(p.layer === "flat" ? "flat" : "stand") : null });
   B.update(L, bright);
   ctx.translate(shx, shy);
   B.draw(ctx, "flat", k);
@@ -221,6 +226,9 @@ function stage() {
     rank: num("rank", 5), style: P.get("style") ?? "slash", shape: P.get("shape") ?? "burst", cond: P.get("cond") ?? undefined,
     hue: P.has("hue") ? num("hue") : null, flourish: P.get("flourish") ?? null, seed: num("seed", 7), tradition: P.get("tradition") ?? "arcane",
     cval: num("cval", 1),
+    // the look axes, so any delivery, motif, flavor or prop can be judged on its own
+    delivery: P.get("delivery") ?? null, motif: P.get("motif") ?? null, flavor: P.get("flavor") ?? null, arch: P.get("arch") ?? null, slug: P.get("slug") ?? null,
+    props: P.get("props")?.split(",").filter(Boolean) ?? [],
   };
   const zoom = num("zoom", 1), speed = num("speed", 1), seek = P.has("seek") ? num("seek") : null;
   const W = 640, H = 380;

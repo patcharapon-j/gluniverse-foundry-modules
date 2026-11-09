@@ -1,18 +1,24 @@
 /**
- * Radiance: vitality, holy, light. One family, three temperaments:
+ * Radiance: vitality, holy, light. One family, three temperaments that must
+ * never be mistaken for each other:
  *
- *   holy      gold: a pillar of light, rising motes and crosses, halos, and a
- *             turning sunburst of rays (the look this family was tuned for)
- *   vitality  warm green-gold life: motes that rise in a fountain and leaves of
- *             light that tumble up and away; no pillar, no halo
- *   light     plain white-gold glare: a long anamorphic flare, a hot core, a
- *             few sparks; nothing sacred about it
+ *   holy      judgment: a glint marks the spot, a pillar of gold drops like a
+ *             hammer, a sigil burns on the floor, a shockwave and stone chips,
+ *             gold sparks, a turning sunburst of rays, halos and rising crosses
+ *             (holy/smite, holy/holy-pillar, holy/sunburst)
+ *   vitality  healing, warm and gentle: a lotus of light opens under the feet,
+ *             motes ride a slow spiral up and pop into tiny hearts, leaves of
+ *             light tumble up, a sprouting patch stays; no sparks, no shake,
+ *             nothing that strikes (holy/heal, nature/healing-bloom)
+ *   light     plain glare: a long anamorphic flare, lens ghosts down the axis,
+ *             a hot core, fast white sparks and glints; nothing sacred about it
  */
 
-import { TAU, clamp, fadeOut, hash } from "../core/rand.mjs";
-import { S, rotateRamp } from "../core/palette.mjs";
+import { TAU, clamp, fadeOut, hash, easeOut } from "../core/rand.mjs";
+import { RAMP, S, WHITE, rotateRamp } from "../core/palette.mjs";
 import { registerShapes, snapH } from "../core/shapes.mjs";
-import { still, releaseFlash, counter, flourish } from "../core/motifs.mjs";
+import { out, still, releaseFlash, counter, flourish } from "../core/motifs.mjs";
+import { grit } from "./physical.mjs";
 
 const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 /** Leaves of light: vitality's second ramp, green under gold, rotated with the look's hue. */
@@ -80,7 +86,73 @@ registerShapes({
   },
 }, { flat: ["radPool"] });
 
+
+/* Shapes the remaster added: the lotus, the heart, the lens ghosts. */
+const HEART = ["0110110", "1111111", "1111111", "0111110", "0011100", "0001000"];
+registerShapes({
+  /** A tiny heart a healing mote pops into: it swells in one frame, floats up and fades. */
+  raHeart(v, P, p) {
+    let [x, y] = v.ap(p.x, p.y, p.z); [x, y] = snapH(p, v, x, y);
+    const fr = Math.floor(p.age * 12), a = fadeOut(p.age / p.life, 0.55), small = fr === 0;
+    const rows = small ? ["0101", "1111", "0110"] : HEART, w = rows[0].length;
+    for (let j = 0; j < rows.length; j++) for (let i = 0; i < w; i++) {
+      if (rows[j][i] !== "1") continue;
+      const edge = j === 0 || i === 0 || rows[j][i - 1] !== "1" || rows[j][i + 1] !== "1" || !rows[j + 1] || rows[j + 1][i] !== "1";
+      P.dot(x + i - (w >> 1), y + j - 3, j < 2 && i < 3 && !edge ? WHITE : S(p.R, edge ? 0.62 : 0.92), a, 1);
+    }
+  },
+  /** Light's lens ghosts: rings of different sizes strung along the flare's axis, fading out. */
+  raGhosts(v, P, p) {
+    const u = clamp(p.age / p.life); if (u >= 1) return;
+    const [cx, cy] = v.ap(p.x, p.y, p.z), a = (u < 0.15 ? u / 0.15 : 1 - (u - 0.15) / 0.85);
+    const G = [[-2.2, 3], [-1.2, 5], [1.4, 2], [2.4, 7], [3.4, 3]];
+    for (const [f, r] of G) {
+      const gx = cx + f * p.L, gy = cy + f * p.L * 0.18, rr = r * p.gk;
+      P.ellipse(gx, gy, rr, rr, (q) => ({ c: S(p.R, Math.sin(q) < 0 ? 0.95 : 0.75), a }));
+    }
+  },
+});
+
+registerShapes({
+  /**
+   * The healing lotus: petals of light that open one after another round the
+   * spot, lean out as they open and fold away at the end. A lit rim, a white
+   * tip, a warm translucent body.
+   */
+  raLotus(v, P, p) {
+    const [cx, cy] = v.ap(p.x, p.y, 0), N = p.n ?? 8, R0 = p.r * v.aps, sq = v.sq, t = p.age, rot = t * 0.35;
+    const close = clamp((t - p.life + 0.45) / 0.45);
+    const bl = new Float64Array(N);
+    let any = false;
+    for (let k = 0; k < N; k++) {
+      const t0 = ((k * 3) % N) * 0.035, b = clamp((t - t0) / 0.3);
+      bl[k] = (b < 1 ? easeOut(b) * (1 + 0.25 * Math.sin(Math.PI * b)) : 1) * (1 - close);
+      if (bl[k] > 0.03) any = true;
+    }
+    if (!any) return;
+    const rb = R0 * 0.22, ext = R0 * 1.15 + 2;
+    const rim = S(p.R, 0.95), body = S(p.R, 0.62), deep = S(p.R, 0.45), vein = S(p.R, 0.85);
+    P.shade(cx - ext, cy - ext * sq, cx + ext, cy + ext * sq, (x, y) => {
+      const dx = x - cx, dy = (y - cy) / sq, d = Math.hypot(dx, dy);
+      if (d < rb) return null;
+      let q = Math.atan2(dy, dx) - rot; q = ((q % TAU) + TAU) % TAU;
+      const k = Math.floor((q / TAU) * N + 0.5) % N, b = bl[k];
+      if (b <= 0.03) return null;
+      const rt = rb + (R0 - rb) * Math.min(1.15, b), u = (d - rb) / (rt - rb);
+      if (u > 1) return null;
+      let off = q - (k / N) * TAU; if (off > Math.PI) off -= TAU;
+      const hw = (TAU / N) * 0.5 * Math.min(1, b) * Math.sqrt(Math.sin(Math.PI * Math.sqrt(u))) + 0.02, e = Math.abs(off) * d / Math.max(1, hw * d);
+      if (e > 1) return null;
+      if (u > 0.88) return { c: WHITE, a: 1 };
+      if (e > 0.72) return { c: u < 0.35 ? body : rim, a: 1 };
+      if (e < 0.18 && u > 0.15) return { c: vein, a: 0.75 };
+      return { c: u < 0.45 ? deep : body, a: 0.5 };
+    }, 0, "mix");
+  },
+}, { flat: ["raLotus"] });
+
 const kindOf = (M) => (M.material === "vitality" ? "vitality" : M.material === "light" ? "light" : "holy");
+const sd0 = (s) => s.seedInt();
 
 /*
  * `sub`: one of many eruptions across an area (area.mjs). Lighter: no pillar,
@@ -88,58 +160,88 @@ const kindOf = (M) => (M.material === "vitality" ? "vitality" : M.material === "
  */
 
 function holyBurst(s, M, { x, y, z, pow, rad, sub }) {
-  const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n0 = counter(s, pow, rad), n = sub ? (k) => Math.ceil(n0(k) / 2) : n0;
-  releaseFlash(s, M, x, y, z, pow, rad);
+  const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n0 = counter(s, pow, rad), n = sub ? (k) => Math.ceil(n0(k) / 2.5) : n0;
+  releaseFlash(s, M, x, y, z, pow, rad, sub ? { flash: 0.6, light: 0.22 } : undefined);
+  const rise = (i) => ({ x: x + s.rand(-1, 1) * (rad + 0.35), y: y + s.rand(-1, 1) * (rad + 0.35) * 0.7, z: s.rand(0, 0.6), vz: s.rand(0.7, 2), g: -0.3, drag: 1.4, life: s.rand(0.9, 1.6), R, plus: s.R() < 0.55, wait: s.rand(0, 0.25), minor: i >= (sub ? 2 : 8) });
   if (sub) {
-    for (let i = 0; i < n(22); i++) s.add({ k: "mote", x: x + s.rand(-1, 1) * rad * 0.7, y: y + s.rand(-1, 1) * rad * 0.7, z: s.rand(0, 0.6), vz: s.rand(0.6, 1.8), g: -0.3, drag: 1.4, life: s.rand(0.8, 1.5), R, plus: s.R() < 0.5, minor: i % 3 === 2 });
-    s.add({ k: "halo", x, y, z: 0.05, vz: 1, drag: 0.8, life: 0.8, r: rad * 0.55 + 0.2, R });
+    for (let i = 0; i < n(30); i++) s.add({ k: "mote", ...rise(i) });
+    s.add({ k: "halo", x, y, z: 0.05, vz: 1, drag: 0.8, life: 0.8, r: rad * 0.6 + 0.25, R });
+    for (let i = 0, N = n(14); i < N; i++) s.add({ k: "spark", x, y, z, ...out(s, s.rand(3, 8)), g: 6, drag: 2, life: s.rand(0.2, 0.45), R, minor: i >= 2 });
     return;
   }
-  s.add({ k: "beam", x, y, h: 2.4 * Math.min(1.4, m), w: 4 * mm * (0.7 + rad * 0.3), life: 0.9, R, update: still });
-  if (pow >= 0.5) s.add({ k: "radRays", x, y, z: z + 0.15, L: (8 + rad * 6) * Math.min(1.3, mm), n: pow > 1.2 ? 16 : 12, flat: 0.75, life: 0.8, R, wait: 0.04, update: still });
-  for (let i = 0; i < n(22); i++) s.add({ k: "mote", x: x + s.rand(-1, 1) * rad * 0.7, y: y + s.rand(-1, 1) * rad * 0.7, z: s.rand(0, 0.6), vz: s.rand(0.6, 1.8), g: -0.3, drag: 1.4, life: s.rand(0.8, 1.5), R, plus: s.R() < 0.5, minor: i % 3 === 2 });
-  for (let i = 0; i < 3; i++) s.add({ k: "halo", x, y, z: 0.05, vz: s.rand(0.9, 1.2), drag: 0.8, life: 0.9, r: rad * 0.55 + 0.25, R, wait: i * 0.14 });
-  for (let i = 0; i < n(4); i++) s.add({ k: "glint", x: x + s.rand(-1, 1) * rad * 0.6, y: y + s.rand(-1, 1) * rad * 0.6, z: s.rand(0.2, 1), life: 5 / 12, R, wait: s.rand(0, 0.4), update: still });
+  // the hammer: a pillar of gold dropped on the spot, a thinner shaft that stays a beat longer
+  s.add({ k: "beam", x, y, h: 3.4 * Math.min(1.4, m), w: 6 * mm * (0.75 + rad * 0.35), life: 0.9, R, update: still });
+  s.add({ k: "beam", x, y, h: 3.8 * Math.min(1.4, m), w: 2.2 * mm, life: 1.5, R, wait: 0.1, update: still });
+  // judgment on the floor: a burning sigil, cracks that glow and cool, a shockwave
+  if (pow >= 0.5) {
+    s.add({ k: "glyph", x, y, r: rad * 1.5 + 0.55, life: 1.6, R, star: true, glyphs: undefined, update: still });
+    s.add({ k: "fissure", x, y, r: rad * 1.2 + 0.35, life: 3, R, seed: sd0(s), debris: true, update: still });
+  }
+  s.add({ k: "ring", x, y, r: Math.min(rad * 2.4 + 1, rad * 1.1 + 1.5) * Math.min(1.3, mm), life: 0.5, R, seed: sd0(s), update: still });
+  s.add({ k: "ring", x, y, r: Math.min(rad * 1.6 + 0.7, rad * 1.1 + 1.2) * Math.min(1.3, mm), life: 0.65, R, broken: true, seed: sd0(s), wait: 0.06, update: still });
+  if (pow >= 0.5) s.add({ k: "radRays", x, y, z: z + 0.15, L: (14 + rad * 10) * Math.min(1.3, mm), n: pow > 1.2 ? 16 : 12, flat: 0.75, life: 0.9, R, wait: 0.04, update: still });
+  // gold sparks thrown out and stone chips knocked loose by the blow
+  for (let i = 0, N = n(32); i < N; i++) s.add({ k: "spark", x, y, z: Math.max(0.1, z * 0.4), ...out(s, s.rand(4, 11)), g: 10, drag: 2, bounce: 0.35, life: s.rand(0.25, 0.6), R, minor: i >= 8 });
+  grit(s, RAMP.kinetic, x, y, 0.1, n(14), { sp: [1.5, 5.5], up: [2, 4], keep: 2 });
+  // what rises after: motes and crosses, halos climbing, glints winking
+  for (let i = 0; i < n(30); i++) s.add({ k: "mote", ...rise(i) });
+  for (let i = 0; i < 3; i++) s.add({ k: "halo", x, y, z: 0.05, vz: s.rand(0.9, 1.3), drag: 0.8, life: 1, r: rad * 0.65 + 0.3, R, wait: 0.1 + i * 0.14 });
+  for (let i = 0; i < n(6); i++) s.add({ k: "glint", x: x + s.rand(-1, 1) * (rad + 0.4), y: y + s.rand(-1, 1) * (rad + 0.4) * 0.7, z: s.rand(0.2, 1.2), life: 5 / 12, R, big: i === 0, wait: s.rand(0.05, 0.6), minor: i >= 2, update: still });
+  if (pow >= 0.8) s.shake = Math.max(s.shake, 0.8 + pow * 0.6);
   flourish(s, M, x, y, z, rad, Math.round(5 * m));
 }
 
+/** A healing mote: it rides a slow spiral up round the spot and pops into a heart (some of them). */
+function spiralMote(x, y, r0, ph, w, rise, life, heart) {
+  return function (p, s) {
+    const a = p.age, f = clamp(a / life), q = ph + w * a, r = r0 * (1 - 0.45 * f);
+    p.x = x + Math.cos(q) * r; p.y = y + Math.sin(q) * r * 0.6; p.z = p.z0 + rise * a;
+    if (heart && !p.popped && a > life - 0.03) { p.popped = true; s.add({ k: "raHeart", x: p.x, y: p.y, z: p.z, vz: 0.4, drag: 1, life: 0.6, R: p.R, minor: p.minor }); }
+  };
+}
+
 function vitalityBurst(s, M, { x, y, z, pow, rad, sub }) {
-  const R = M.R, L = leafRamp(s), m = s.m * pow, n0 = counter(s, pow, rad), n = sub ? (k) => Math.ceil(n0(k) / 2) : n0;
-  releaseFlash(s, M, x, y, z, pow, rad);
-  // a fountain: motes rise in a slow spiral, leaves of light tumble up and outward
-  const nm = n(20);
+  const R = M.R, L = leafRamp(s), m = s.m * pow, n0 = counter(s, pow, rad), n = sub ? (k) => Math.ceil(n0(k) / 2.5) : n0;
+  releaseFlash(s, M, x, y, z, pow, rad, sub ? { flash: 0.5, light: 0.22 } : { flash: 0.8 });
+  // a lotus of light opens under the feet
+  if (!sub && pow >= 0.4) s.add({ k: "raLotus", x, y, r: Math.min(1.35, rad * 1.1 + 0.55), n: 8, life: 1.7, R, update: still });
+  // motes ride a slow spiral up and some pop into tiny hearts
+  const nm = n(26);
   for (let i = 0; i < nm; i++) {
-    const q = (i / nm) * TAU * 2, r = s.rand(0.1, 0.5) * (rad + 0.3);
-    s.add({ k: "mote", x: x + Math.cos(q) * r, y: y + Math.sin(q) * r * 0.6, z: s.rand(0, 0.3), vx: -Math.sin(q) * 0.5, vy: Math.cos(q) * 0.3, vz: s.rand(0.8, 1.9), g: -0.2, drag: 1.3, life: s.rand(0.8, 1.4), R: i % 3 ? R : L, plus: s.R() < 0.55, wait: s.rand(0, 0.15), minor: i % 3 === 2 });
+    const ph = (i / nm) * TAU * 2, r0 = s.rand(0.35, 0.8) * (rad + 0.45), life = s.rand(0.8, 1.3), z0 = s.rand(0, 0.25);
+    s.add({ k: "mote", x, y, z: z0, z0, life, R: i % 3 ? R : L, plus: s.R() < 0.55, wait: s.rand(0, 0.3), minor: i >= (sub ? 2 : 8), update: spiralMote(x, y, r0, ph, (i % 2 ? 1 : -1) * s.rand(3, 4.5), s.rand(0.9, 1.6), life, !sub && i % 4 === 0) });
   }
-  for (let i = 0; i < n(12); i++) {
-    const q = s.rand(0, TAU), sp = s.rand(0.6, 1.6);
-    s.add({ k: "radLeaf", x: x + s.rand(-0.2, 0.2) * rad, y: y + s.rand(-0.2, 0.2) * rad, z: z * 0.5, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.6, vz: s.rand(1, 2.2), g: 0.9, drag: 2, life: s.rand(1, 1.7), R: L, seed: s.R(), wait: s.rand(0, 0.12) });
+  // leaves of light tumble up and outward
+  for (let i = 0; i < n(18); i++) {
+    const q = s.rand(0, TAU), sp = s.rand(0.8, 2.2);
+    s.add({ k: "radLeaf", x: x + s.rand(-0.3, 0.3) * rad, y: y + s.rand(-0.3, 0.3) * rad, z: z * 0.5, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.6, vz: s.rand(1, 2.4), g: 0.9, drag: 2, life: s.rand(1.1, 1.9), R: L, seed: s.R(), wait: s.rand(0, 0.15), minor: i >= 4 });
   }
+  for (let i = 0, N = sub ? 1 : n(5); i < N; i++) s.add({ k: "glint", x: x + s.rand(-1, 1) * (rad + 0.4), y: y + s.rand(-1, 1) * (rad + 0.4) * 0.6, z: s.rand(0.2, 1.1), life: 5 / 12, R, wait: s.rand(0.2, 0.9), minor: i >= 1, update: still });
   if (sub) return;
-  if (pow >= 0.5) s.add({ k: "ring", x, y, r: rad * 1.1 + 0.3, life: 0.7, R: L, seed: sd0(s), update: still });
-  if (pow >= 0.5) s.add({ k: "radPool", x, y, r: rad * 0.8 + 0.15, life: 4.5, R: L, seed: sd0(s), debris: true, update: still });
-  s.light(x, y, z, rad * 2 + 1, S(L, 0.85), 0.5 * Math.min(1.6, m), 1);
+  if (pow >= 0.5) s.add({ k: "ring", x, y, r: rad * 1.8 + 0.6, life: 0.9, R: L, seed: sd0(s), update: still });
+  if (pow >= 0.5) s.add({ k: "radPool", x, y, r: rad * 1.2 + 0.35, life: 4.5, R: L, seed: sd0(s), debris: true, update: still });
+  // a warm pool that swells and holds while the lotus is open
+  s.light(x, y, z, rad * 2.6 + 1.4, S(R, 0.85), 0.55 * Math.min(1.6, m), 1.4, { swell: true });
+  s.light(x, y, z, rad * 2.2 + 1.2, S(L, 0.85), 0.5 * Math.min(1.6, m), 1.8);
   flourish(s, M, x, y, z, rad, Math.round(5 * m));
 }
 
 function lightBurst(s, M, { x, y, z, pow, rad, sub }) {
-  const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n = counter(s, pow, rad);
-  releaseFlash(s, M, x, y, z, pow, rad);
-  if (sub) {
-    for (let i = 0; i < 3; i++) s.add({ k: "glint", x: x + s.rand(-1, 1) * (rad + 0.1), y: y + s.rand(-1, 1) * (rad + 0.1) * 0.6, z: Math.max(0.05, z + s.rand(-0.2, 0.4)), life: 5 / 12, R, wait: s.rand(0, 0.2), minor: i > 0, update: still });
-    for (let i = 0; i < 3; i++) { const q = s.rand(0, TAU), sp = s.rand(2, 4); s.add({ k: "spark", x, y, z, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.5, vz: s.rand(0, 1.2), drag: 3, life: 0.25, R, minor: true }); }
-    return;
-  }
-  s.add({ k: "radGlare", x, y, z, L: (5 + rad * 4) * Math.min(1.4, mm), life: 7 / 12, R, update: still });
-  s.light(x, y, z, rad * 2.6 + 1.4, S(R, 0.9), 0.9 * mm, 0.6);
-  if (pow >= 0.5) s.add({ k: "radPool", x, y, r: rad * 0.75 + 0.15, life: 2.8, R, glow: true, seed: sd0(s), debris: true, update: still });
-  for (let i = 0; i < n(8); i++) { const q = s.rand(0, TAU), sp = s.rand(3, 6); s.add({ k: "spark", x, y, z, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.5, vz: s.rand(-0.5, 1.5), drag: 3, life: s.rand(0.2, 0.35), R, minor: i % 2 === 1 }); }
-  for (let i = 0; i < n(5); i++) s.add({ k: "glint", x: x + s.rand(-1, 1) * (rad + 0.2), y: y + s.rand(-1, 1) * (rad + 0.2) * 0.6, z: Math.max(0.05, z + s.rand(-0.3, 0.5)), life: 5 / 12, R, wait: s.rand(0.05, 0.3), minor: i > 2, update: still });
+  const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n0 = counter(s, pow, rad), n = sub ? (k) => Math.ceil(n0(k) / 2.5) : n0;
+  releaseFlash(s, M, x, y, z, pow, rad, sub ? { flash: 0.6, light: 0.22 } : undefined);
+  const fan = (i, N, sp) => { const q = (i / N) * TAU + s.rand(-0.15, 0.15), v = s.rand(sp[0], sp[1]); return { vx: Math.cos(q) * v, vy: Math.sin(q) * v * 0.55, vz: s.rand(-0.5, 1.5) }; };
+  for (let i = 0, N = n(28); i < N; i++) s.add({ k: "spark", x, y, z, ...fan(i, N, [5, 13]), drag: 3, life: s.rand(0.18, 0.4), R, minor: i >= (sub ? 2 : 8) });
+  for (let i = 0, N = n(8); i < N; i++) s.add({ k: "glint", x: x + s.rand(-1, 1) * (rad + 0.5), y: y + s.rand(-1, 1) * (rad + 0.5) * 0.6, z: Math.max(0.05, z + s.rand(-0.3, 0.6)), life: 5 / 12, R, big: i === 0, wait: s.rand(0.03, 0.45), minor: i >= 2, update: still });
+  if (sub) return;
+  // the glare: a long flare across, lens ghosts down its axis, streaks shot sideways
+  s.add({ k: "radGlare", x, y, z, L: (9 + rad * 7) * Math.min(1.4, mm), life: 7 / 12, R, update: still });
+  s.add({ k: "raGhosts", x, y, z, L: (8 + rad * 8) * Math.min(1.3, mm), gk: Math.min(1.3, mm), life: 0.75, R, update: still });
+  for (let i = 0; i < 6; i++) { const side = i % 2 ? 1 : -1, v = s.rand(10, 16); s.add({ k: "streak", x, y: y + s.rand(-0.06, 0.06), z: z + s.rand(-0.1, 0.1), vx: side * v, vy: s.rand(-0.4, 0.4), drag: 7, life: s.rand(0.12, 0.2), R, minor: i >= 2 }); }
+  s.add({ k: "ring", x, y, r: Math.min(rad * 2.4 + 1, rad * 1.1 + 1.5) * Math.min(1.3, mm), life: 0.4, R, seed: sd0(s), update: still });
+  s.light(x, y, z, rad * 3.2 + 1.6, S(R, 0.9), 0.9 * mm, 0.7);
+  if (pow >= 0.5) s.add({ k: "radPool", x, y, r: rad * 1.2 + 0.3, life: 2.8, R, glow: true, seed: sd0(s), debris: true, update: still });
   flourish(s, M, x, y, z, rad, Math.round(5 * m));
 }
-
-const sd0 = (s) => s.seedInt();
 
 export default {
   id: "radiance",
@@ -149,38 +251,45 @@ export default {
   },
   trail(s, M, { x, y, z, dt }) {
     const k = kindOf(M);
-    for (let i = s.count((k === "light" ? 30 : 50) * s.m, dt); i > 0; i--) s.add({ k: "mote", x, y, z, vx: s.rand(-0.3, 0.3), vy: s.rand(-0.3, 0.3), g: -0.8, drag: 1, life: s.rand(0.4, 0.7), R: M.R, plus: s.R() < 0.3, minor: true });
-    if (k === "vitality") for (let i = s.count(9 * s.m, dt); i > 0; i--) s.add({ k: "radLeaf", x, y, z, vx: s.rand(-0.5, 0.5), vy: s.rand(-0.4, 0.4), vz: s.rand(0.2, 0.7), g: 0.6, drag: 2, life: s.rand(0.6, 1), R: leafRamp(s), seed: s.R(), minor: true });
-    if (k === "light") for (let i = s.count(6 * s.m, dt); i > 0; i--) s.add({ k: "glint", x, y, z, life: 5 / 12, R: M.R, minor: true, update: still });
+    for (let i = s.count((k === "light" ? 40 : 70) * s.m, dt); i > 0; i--) s.add({ k: "mote", x, y, z, vx: s.rand(-0.4, 0.4), vy: s.rand(-0.4, 0.4), g: k === "vitality" ? -0.8 : -0.4, drag: 1, life: s.rand(0.45, 0.8), R: M.R, plus: s.R() < 0.3, minor: s.R() < 0.7 });
+    if (k === "vitality") for (let i = s.count(14 * s.m, dt); i > 0; i--) s.add({ k: "radLeaf", x, y, z, vx: s.rand(-0.5, 0.5), vy: s.rand(-0.4, 0.4), vz: s.rand(0.2, 0.7), g: 0.6, drag: 2, life: s.rand(0.6, 1), R: leafRamp(s), seed: s.R(), minor: true });
+    if (k === "holy") for (let i = s.count(16 * s.m, dt); i > 0; i--) s.add({ k: "spark", x, y, z, vx: s.rand(-1.5, 1.5), vy: s.rand(-1.5, 1.5), vz: s.rand(-0.5, 1), g: 4, drag: 2.5, life: s.rand(0.15, 0.3), R: M.R, minor: true });
+    if (k === "light") for (let i = s.count(26 * s.m, dt); i > 0; i--) s.add({ k: "spark", x, y, z, vx: s.rand(-2, 2), vy: s.rand(-1, 1), drag: 3, life: s.rand(0.12, 0.25), R: M.R, minor: true });
+    for (let i = s.count(k === "light" ? 12 : 7, dt); i > 0; i--) s.add({ k: "glint", x, y, z, life: 5 / 12, R: M.R, minor: true, update: still });
   },
   linger(s, M, { at }) {
     const k = kindOf(M);
-    at(k === "light" ? 3 : 9, () => ({ k: "mote", vz: s.rand(0.5, 1.2), g: -0.3, drag: 1, life: s.rand(0.7, 1.2), plus: s.R() < 0.4 }));
-    if (k === "vitality") at(3, () => ({ k: "radLeaf", z: 0.1, vz: s.rand(0.5, 1), vx: s.rand(-0.3, 0.3), g: 0.25, drag: 1.5, life: s.rand(1, 1.5), R: leafRamp(s), seed: s.R() }));
-    if (k === "light") at(2, () => ({ k: "glint", z: s.rand(0.1, 0.6), life: 5 / 12, big: s.R() < 0.3, update: still }));
+    at(k === "light" ? 8 : 12, () => ({ k: "mote", vz: s.rand(0.5, 1.3), g: -0.3, drag: 1, life: s.rand(0.8, 1.4), plus: s.R() < 0.4, minor: s.R() < 0.5 }));
+    if (k === "holy") at(0.5, () => ({ k: "beam", h: s.rand(1.6, 2.4), w: s.rand(1.2, 2), life: s.rand(0.6, 0.9), update: still }));
+    if (k === "vitality") at(4, () => ({ k: "radLeaf", z: 0.1, vz: s.rand(0.5, 1), vx: s.rand(-0.3, 0.3), g: 0.25, drag: 1.5, life: s.rand(1, 1.5), R: leafRamp(s), seed: s.R() }));
+    if (k === "light") { at(7, () => ({ k: "glint", z: s.rand(0.1, 0.7), life: 5 / 12, big: s.R() < 0.3, update: still })); at(5, () => ({ k: "spark", z: 0.1, vx: s.rand(-1, 1), vy: s.rand(-0.6, 0.6), vz: s.rand(1, 2.5), g: 2, drag: 2, life: s.rand(0.3, 0.5), minor: true })); }
   },
   spray(s, M, { emit }) {
     const k = kindOf(M);
-    emit("mote", k === "light" ? 60 : 90, () => ({ drag: 1.6, g: -0.4, life: 0.7, plus: s.R() < 0.3 }));
-    if (k === "vitality") emit("radLeaf", 30, () => ({ drag: 1.8, g: 0.3, life: 0.9, R: leafRamp(s), seed: s.R() }));
-    if (k === "light") emit("spark", 40, () => ({ drag: 1.2, life: 0.35, minor: true }));
+    emit("mote", k === "light" ? 70 : 110, () => ({ drag: 1.6, g: -0.4, life: s.rand(0.6, 0.9), plus: s.R() < 0.3, minor: s.R() < 0.6 }));
+    if (k === "vitality") emit("radLeaf", 40, () => ({ drag: 1.8, g: 0.3, life: s.rand(0.9, 1.2), R: leafRamp(s), seed: s.R(), minor: s.R() < 0.5 }));
+    if (k === "holy") emit("spark", 40, () => ({ drag: 1.6, g: 2, life: s.rand(0.3, 0.45), minor: true }));
+    if (k === "light") emit("spark", 70, () => ({ drag: 1.2, life: s.rand(0.3, 0.45), minor: true }));
+    emit("glint", 8, () => ({ drag: 3, life: 5 / 12, minor: true }));
   },
   aura(s, M, { at }) {
     const k = kindOf(M);
-    at(k === "light" ? 6 : 12, () => ({ k: "mote", vz: s.rand(0.5, 1.1), g: -0.3, drag: 1, life: s.rand(0.7, 1.2), plus: s.R() < 0.5 }));
-    if (k === "vitality") at(2.5, () => ({ k: "radLeaf", vz: s.rand(0.4, 0.8), vx: s.rand(-0.3, 0.3), g: 0.2, drag: 1.5, life: s.rand(0.9, 1.3), R: leafRamp(s), seed: s.R() }));
-    if (k === "light") at(1.5, () => ({ k: "glint", life: 5 / 12, update: still }));
+    at(k === "light" ? 8 : 14, () => ({ k: "mote", vz: s.rand(0.5, 1.1), g: -0.3, drag: 1, life: s.rand(0.7, 1.2), plus: s.R() < 0.5, minor: s.R() < 0.4 }));
+    if (k === "vitality") at(3, () => ({ k: "radLeaf", vz: s.rand(0.4, 0.8), vx: s.rand(-0.3, 0.3), g: 0.2, drag: 1.5, life: s.rand(0.9, 1.3), R: leafRamp(s), seed: s.R() }));
+    if (k === "light") at(2, () => ({ k: "glint", life: 5 / 12, update: still }));
+    if (k === "holy") at(1.5, () => ({ k: "glint", life: 5 / 12, update: still, minor: true }));
   },
   tick(s, M, T) {
     const k = kindOf(M);
-    if (k === "light") { s.add({ k: "radGlare", x: T.x, y: T.y, z: 0.7 * T.h, L: 5, life: 7 / 12, R: M.R, update: still }); return; }
+    if (k === "light") { s.add({ k: "radGlare", x: T.x, y: T.y, z: 0.7 * T.h, L: 7, life: 7 / 12, R: M.R, update: still }); return; }
     if (k === "vitality") {
+      s.add({ k: "raLotus", x: T.x, y: T.y, r: 0.55 * T.size, n: 6, life: 1, R: M.R, update: still });
       for (let i = 0; i < 6; i++) s.add({ k: "radLeaf", x: T.x + s.rand(-0.2, 0.2), y: T.y, z: 0.2, vx: s.rand(-0.6, 0.6), vz: s.rand(1, 1.6), g: 0.8, drag: 2, life: 1.1, R: leafRamp(s), seed: s.R() });
-      s.add({ k: "ring", x: T.x, y: T.y, r: 0.5 * T.size, life: 0.6, R: leafRamp(s), seed: 4, update: still });
+      s.add({ k: "raHeart", x: T.x, y: T.y - 0.05, z: 1.05 * T.h, vz: 0.4, drag: 1, life: 0.7, R: M.R });
       return;
     }
-    s.add({ k: "halo", x: T.x, y: T.y, z: 0.05, vz: 1.1, drag: 0.8, life: 0.9, r: 0.45 * T.size, R: M.R });
-    s.add({ k: "beam", x: T.x, y: T.y, h: 1.8, w: 3, life: 0.7, R: M.R, update: still });
+    s.add({ k: "halo", x: T.x, y: T.y, z: 0.05, vz: 1.1, drag: 0.8, life: 0.9, r: 0.5 * T.size, R: M.R });
+    s.add({ k: "beam", x: T.x, y: T.y, h: 2.4, w: 4, life: 0.7, R: M.R, update: still });
   },
   /** A tick here is good news: no flinch. */
   gentle: true,

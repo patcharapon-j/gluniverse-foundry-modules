@@ -23,6 +23,8 @@ import { FLAVORS } from "../scripts/features/pf2e-fx/flavors.mjs";
 import { compile } from "../scripts/features/pf2e-fx/compile.mjs";
 import { FAMILY_MODULES } from "../scripts/features/pf2e-fx/families/index.mjs";
 import { FORMS } from "../scripts/features/pf2e-fx/forms.mjs";
+import { ARCH, ARCH_VOCAB } from "../scripts/features/pf2e-fx/archetypes/rules.mjs";
+import { ARCH_DRAW, missingArch } from "../scripts/features/pf2e-fx/archetypes/index.mjs";
 import { CONDITIONS } from "../scripts/features/pf2e-fx/conditions.mjs";
 import { applyLook, mergeLooks, normalizeLook } from "../scripts/features/pf2e-fx/looks.mjs";
 import { Director } from "../scripts/features/pf2e-fx/director.mjs";
@@ -81,6 +83,11 @@ for (const fam of Object.keys(FAMILIES)) {
   for (const fn of ["burst", "linger", "aura"]) ok(typeof mod?.[fn] === "function", `family ${fam} has no ${fn}()`);
 }
 for (const f of FUNCTIONS) if (f !== "harm" && f !== "hazard") ok(typeof FORMS[f] === "function", `function ${f} has no form`);
+// an archetype id semantics can pick with no drawer plays nothing at all
+for (const a of missingArch()) problems.push(`archetype ${a} has no drawer (archetypes/index.mjs)`);
+for (const a of ARCH_VOCAB) ok(!ARCH[a].func || FUNCTIONS.includes(ARCH[a].func), `archetype ${a} rescues to an unknown function ${ARCH[a].func}`);
+// every archetype has its own art: one left generic plays its function's old form for thousands of documents
+for (const a of ARCH_VOCAB) ok(!ARCH_DRAW[a]?.placeholder, `archetype ${a} is still a placeholder (plays its function's generic form)`);
 for (const slug of PF2E_CONDITIONS) ok(CONDITIONS[slug], `condition ${slug} has no entry (an overlay or { none: true })`);
 
 /* ── 3. every effect compiles, steps and paints ────────────────────────── */
@@ -192,6 +199,12 @@ for (const style of WEAPON_STYLES) for (const o of OUTCOMES) {
   for (const f of FLAVOR_VOCAB) {
     run(`flavor:${f}/harm`, { ...harmSpec("ray", "hit"), flavor: f }, 3, false);
     run(`flavor:${f}/strike`, base("kinetic", "hit", { kind: "strike", delivery: "swing", flavor: f, weapon: { style: "slash" }, targets: [target("hit")] }), 3, false);
+  }
+  // every archetype, on one target and as a self effect, both outcomes that look different
+  for (const a of ARCH_VOCAB) for (const o of ["hit", "crit"]) {
+    const func = ARCH[a].func ?? "restore";
+    run(`arch:${a}/${o}`, base("arcane", o, { kind: "attack", func, arch: a, targets: [target(o)] }), 4, o === "hit");
+    run(`arch:${a}/self`, base("fire", o, { kind: "self", func, arch: a, targets: [] }), 3, false);
   }
   for (const p of PROP_VOCAB) run(`prop:${p}`, base("kinetic", "crit", { kind: "strike", delivery: "bullet", props: [p], weapon: { style: "ranged", ranged: true }, targets: [target("crit")] }), 3, false);
 }
@@ -336,6 +349,10 @@ for (const slug of Object.keys(CONDITIONS)) {
     ok(/metagame\(\s*["']results["']\s*\)/.test(reader), "read.mjs must show a degree to players only under PF2e's 'show results' metagame setting");
     ok(/isContentVisible/.test(reader) && /blind/.test(reader), "read.mjs must refuse a message this viewer cannot read (isContentVisible, blind)");
     ok(!/emitSocket|game\.socket/.test(reader), "read.mjs must not broadcast: every client reads its own chat");
+    // an Elemental Blast's origin is the impulse (an action), which the weapon/melee/spell gate drops
+    ok(/isBlast\(ctx\)\) void onAttack/.test(reader) && /describeBlast\(/.test(reader), "read.mjs must let an Elemental Blast attack through to onAttack and describe it with describeBlast");
+    // a creature's look styles what it does, never the conditions on it
+    ok(!/slug: c\.slug, actor:/.test(reader) && !/slug: "persistent-damage", actor:/.test(reader), "read.mjs must not pass the afflicted actor's look to its condition loops or persistent damage ticks");
   }
 }
 

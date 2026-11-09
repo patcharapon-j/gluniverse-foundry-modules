@@ -79,6 +79,11 @@ export function viewFor(v, s) {
   return { ...v, ap: (x, y, z) => v.ap(x + dx, y + dy, z) };
 }
 
+/** Shapes that light the floor around themselves without asking: radius in art px, strength. */
+const SHAPE_GLOW = Object.freeze({ spark: { r: 7, k: 0.32 }, streak: { r: 6, k: 0.26 }, ember: { r: 4, k: 0.2 }, glint: { r: 6, k: 0.3 } });
+/** Self-lit parts per sim that light at full strength before the shared budget dims them. */
+const GLOW_FREE = 10;
+
 export function paintLights(s, v, lit, filter = null) {
   if (s.shed.has("lightBands")) return;
   for (const l of s.lights) {
@@ -87,9 +92,19 @@ export function paintLights(s, v, lit, filter = null) {
     lit.add(fx, fy, rx, rx * v.sq, l.c, k * 0.9);
     lit.add(lx, ly, rx * 0.42, rx * 0.42, l.c, k * 0.6);
   }
+  // every spark and ember carries its own small light (spellsprite-craft: light on everything),
+  // but a spray shares one budget: thirty sparks born on one point would otherwise stack into a
+  // clipped band-3 blot that hides the hit. Up to GLOW_FREE parts light at full strength; past
+  // that each is dimmed by sqrt(free / n), so a crowd reads brighter than one spark, never solid.
+  const shedMinor = s.shed.has("minor");
+  let n = 0;
+  for (const p of s.parts) if (!(p.wait > 0) && !p.glow && SHAPE_GLOW[p.k] && p.R && !(p.minor && shedMinor) && !(filter && !filter(p))) n++;
+  const share = n > GLOW_FREE ? Math.sqrt(GLOW_FREE / n) : 1;
   for (const p of s.parts) {
-    if (!p.glow || p.wait > 0 || (filter && !filter(p))) continue;
-    const pos = p.b ?? [p.x, p.y, p.z], [x, y] = v.ap(...pos), u = p.age / p.life, r = (p.r || 3) * 2.6 + 4;
-    lit.add(x, y, r, r, S(p.R, 0.8), 0.5 * (1 - u));
+    if (p.wait > 0 || (filter && !filter(p))) continue;
+    const pos = p.b ?? [p.x, p.y, p.z], [x, y] = v.ap(...pos), u = p.age / p.life;
+    if (p.glow) { const r = (p.r || 3) * 2.6 + 4; lit.add(x, y, r, r, S(p.R, 0.8), 0.5 * (1 - u)); continue; }
+    const g = SHAPE_GLOW[p.k];
+    if (g && p.R && !(p.minor && shedMinor)) lit.add(x, y, g.r, g.r, S(p.R, 0.85), g.k * share * (1 - u));
   }
 }

@@ -31,9 +31,10 @@ import { charge, projectile, sd, still } from "./core/motifs.mjs";
 import { ART_PER_SQUARE, DELIVERY_GROUPS, FAMILY_OF } from "./constants.mjs";
 import { familyModule } from "./families/index.mjs";
 import { CRAFTS, FORMS } from "./forms.mjs";
+import { ARCH_DRAW } from "./archetypes/index.mjs";
 import { STRIKES } from "./strikes.mjs";
 import { RANGED } from "./ranged.mjs";
-import { HARM } from "./deliveries.mjs";
+import { HARM, trackWake, wakeFx } from "./deliveries.mjs";
 import { MOTIFS } from "./motif-art.mjs";
 import { FLAVORS } from "./flavors.mjs";
 import { CONDITIONS } from "./conditions.mjs";
@@ -91,6 +92,18 @@ function strikeTargets(s, M, targets, at, from, outcomeOf) {
 }
 
 /** Projectiles: one per target, staggered. Returns the time the last one lands. */
+/**
+ * A spell with no delivery of its own still flies as deliveries.mjs's comet:
+ * a head of 10+ px with a lit wake (spellsprite-craft §1), never the old orb.
+ */
+function comet(M, r, hero) {
+  return {
+    r, head: "dlComet",
+    props: (s) => ({ hero, wake: r * Math.min(1.5, s.m) * 5 + 18, seed: sd(s) }),
+    step: (p, s, dt) => { trackWake(p, dt); wakeFx(s, M, p, dt); },
+  };
+}
+
 function fire(s, M, hand, targets, start, outcomeOf) {
   let last = start;
   targets.forEach((T, i) => {
@@ -98,7 +111,7 @@ function fire(s, M, hand, targets, start, outcomeOf) {
     const [ux, uy] = norm(T.x - hand[0], T.y - hand[1]);
     const end = o === "miss" ? [T.x + ux * 1.2 - uy * 1.4, T.y + uy * 1.2 + ux * 1.4, 0.8] : aim;
     const dist = Math.hypot(end[0] - hand[0], end[1] - hand[1]), dur = clamp(0.25 + dist * 0.035, 0.3, 0.7);
-    projectile(s, M, hand, end, t0, dur, Math.min(0.6, dist * 0.04), (s2, x, y, z, dt) => M.mod.trail?.(s2, M, { x, y, z, dt }), { bolt: M.mod.projectileBolt });
+    projectile(s, M, hand, end, t0, dur, Math.min(0.6, dist * 0.04), (s2, x, y, z, dt) => M.mod.trail?.(s2, M, { x, y, z, dt }), { bolt: M.mod.projectileBolt, ...comet(M, 6, o === "crit") });
     s.at(t0 + dur, (s2) => {
       if (o === "miss") release(s2, M, ...end, 0.3, 0.25);
       else { release(s2, M, ...aim, POW[o] ?? 1, 0.45); s2.hit(T.id, POW[o] ?? 1, { x: hand[0], y: hand[1] }, M.R); }
@@ -110,7 +123,7 @@ function fire(s, M, hand, targets, start, outcomeOf) {
 }
 
 /** A lobbed area's projectile radius, art px before rank scaling: a 20-ft burst is about half a square across. */
-const lobSize = (rad) => clamp(3.5 + rad * 1.4, 3.5, 9);
+const lobSize = (rad) => clamp(4.5 + rad * 1.8, 4.5, 12);
 
 /** The cone or line spray: particles poured from the hand along the area. */
 function spray(s, M, hand, area, from, to) {
@@ -237,7 +250,7 @@ function buildHarm(s, M) {
       const dist = Math.hypot(c[0] - hand[0], c[1] - hand[1]), dur = clamp(0.35 + dist * 0.04, 0.45, 0.9);
       // a lob carries the whole area: it is drawn at a size that promises it (a fireball, not a spark)
       const size = lobSize(rad);
-      projectile(s, M, hand, c, chargeEnd, dur, Math.min(2, 0.6 + dist * 0.12), (s2, x, y, z, dt) => M.mod.trail?.(s2, M, { x, y, z, dt, scale: size / 3 }), { bolt: M.mod.projectileBolt, r: size, big: true });
+      projectile(s, M, hand, c, chargeEnd, dur, Math.min(2, 0.6 + dist * 0.12), (s2, x, y, z, dt) => M.mod.trail?.(s2, M, { x, y, z, dt, scale: size / 3 }), { bolt: M.mod.projectileBolt, r: size, big: true, ...comet(M, size, false) });
       landAt = chargeEnd + dur;
       P.push("lob");
     }
@@ -273,7 +286,7 @@ function buildStrike(s, M) {
   style(s, M, strikeCtx(s, (T) => T.outcome ?? sp.outcome ?? "neutral"));
 }
 
-function buildForm(s, M) {
+function buildForm(s, M, drawer = null) {
   const sp = s.spec, caster = sp.caster ? bodyOf(sp.caster) : null, targets = sp.targets.map(bodyOf);
   const aim = sp.area ?? targets[0] ?? null;
   const hand = caster ? handOf(caster, aim) : null;
@@ -281,12 +294,16 @@ function buildForm(s, M) {
   // a craft (medicine) is a skill, not a spell: no charge, no circle, no material light
   const craft = CRAFTS[sp.craft];
   if (craft) { craft(s, M, { caster, targets: targets.length ? targets : caster ? [caster] : [], area: null, hand, t0: 0, release, linger, fire, self }); return; }
-  const chargeEnd = caster && !self ? 0.4 : caster ? 0.3 : 0;
-  if (caster) { windUp(s, M, caster, hand, 0, chargeEnd, () => charge(s, M, hand, caster, 0, chargeEnd)); s.phases.push("charge"); }
+  // a maneuver (archetypes/body.mjs) is a body moving, not a spell: no glyph circle, no orb at
+  // the hand, only a beat for the drawer's own anticipation. A spell that grabs still charges.
+  const maneuver = !!drawer?.noCharge && !sp.cast;
+  const chargeEnd = maneuver ? (caster ? 0.1 : 0) : caster && !self ? 0.4 : caster ? 0.3 : 0;
+  if (caster && !maneuver) { windUp(s, M, caster, hand, 0, chargeEnd, () => charge(s, M, hand, caster, 0, chargeEnd)); s.phases.push("charge"); }
   /* A helpful or controlling area still reads as its whole footprint: the
      indicator, a soft flash and the wave, without the scar or the eruptions. */
   if (sp.area) areaFX(s, M, sp.area, { tele0: 0, hitAt: Math.max(chargeEnd, 0.3), pow: 1, gentle: sp.func !== "hinder" && sp.func !== "control", erupt: false, linger: 1.4 });
-  const form = FORMS[sp.func] ?? FORMS.neutral;
+  const form = drawer ?? FORMS[sp.func] ?? FORMS.neutral;
+  if (drawer) s.phases.push(`arch: ${sp.arch}`);
   const on = self && caster ? [caster] : targets;
   form(s, M, { caster, targets: on, area: sp.area, hand, t0: chargeEnd, release, linger, fire, self });
   // the named object appears where the form lands: a Spiritual Armament's weapon, a Shield's shield
@@ -313,7 +330,11 @@ function buildCondition(s, M) {
   let tick = -1;
   s.emit(0, 1e9, (s2, _u, dt) => {
     const at = (rate, mk, onBody = true) => { for (let i = s2.count(rate * s2.m, dt); i > 0; i--) s2.add({ ...body(onBody), R, ...mk() }); };
-    if (usesFamily) M.mod.aura?.(s2, M, { at, body, T, dt });
+    // a condition with its own wrap thins the family aura under it, or the two bury the token's face
+    if (usesFamily) {
+      const k = overlay?.familyScale ?? 1;
+      M.mod.aura?.(s2, M, k === 1 ? { at, body, T, dt } : { at: (rate, mk, onBody) => at(rate * k, mk, onBody), body, T, dt: dt * k });
+    }
     overlay?.loop?.(s2, M, { at, body, T, dt });
     const k = Math.floor(s2.t / 1.4);
     if (k !== tick) {
@@ -366,6 +387,8 @@ export function compile(spec) {
   if (full.kind === "condition") buildCondition(s, M);
   else if (full.kind === "tick") buildTick(s, M);
   else if (full.kind === "strike") buildStrike(s, M);
+  // an archetype (archetypes/rules.mjs) is one animation shared by every document that means the same thing
+  else if (ARCH_DRAW[full.arch]) buildForm(s, M, ARCH_DRAW[full.arch]);
   else if (full.func === "harm" || full.func === "hazard") buildHarm(s, M);
   else buildForm(s, M);
   return s;
