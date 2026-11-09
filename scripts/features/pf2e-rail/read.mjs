@@ -176,6 +176,27 @@ export function vitalsOf(actor, ctx) {
 
 /* ── strikes ────────────────────────────────────────────────────── */
 
+/* PF2e Ranged Combat (`pf2e-ranged-combat`) marks a loaded weapon with an
+   effect copied from its compendium and aimed at the weapon; under PF2e's
+   own ammunition (the module's sub-item mode) the rounds are the weapon's
+   sub-items. */
+const RC_LOADED = "Compendium.pf2e-ranged-combat.effects.Item.nEqdxZMAHlYVXI0Z";
+
+/** A weapon that must be reloaded, where PF2e Ranged Combat is running
+ *  (`ctx.ranged`): its Reload cost (1–3 actions, else null) and whether it
+ *  is loaded now. Reload 0 and "–" weapons draw as they fire, and get none. */
+export function reloadOf(actor, item, ctx) {
+  if (!ctx.ranged || item?.type !== "weapon") return null;
+  const v = String(item.system?.reload?.value ?? "").trim();
+  if (!v || v === "-" || v === "0") return null;
+  const n = Number(v);
+  const effects = list(actor.itemTypes?.effect ?? (actor.items?.filter?.((i) => i.type === "effect")));
+  const aimed = (e) => (e.flags?.["pf2e-ranged-combat"]?.targetId ?? e.flags?.pf2e?.rulesSelections?.weapon) === item.id;
+  const loaded = effects.some((e) => (e.sourceId ?? e.flags?.core?.sourceId) === RC_LOADED && aimed(e) && !e.isExpired)
+    || list(item.subitems?.contents ?? item.subitems).some((s) => s?.isAmmoFor?.(item) && num(s.quantity ?? s.system?.quantity, 0) > 0);
+  return { cost: Number.isInteger(n) && n >= 1 && n <= 3 ? n : null, loaded };
+}
+
 /** The strikes PF2e prepared, as presses. A strike's id is its index in
  *  `actor.system.actions`, which is how PF2e's own sheet addresses it. */
 export function strikeRows(actor, ctx) {
@@ -193,6 +214,7 @@ export function strikeRows(actor, ctx) {
       id: String(i), name: a.label ?? a.item?.name ?? "", ...(baseName && baseName !== a.label ? { short: baseName } : {}),
       img: a.item?.img ?? a.imageUrl ?? null, variants, damage: f.damage ?? "", critical: f.critical ?? "",
       ...(a.ready === false ? { ready: false } : {}),
+      ...(() => { const r = reloadOf(actor, a.item, ctx); return r ? { reload: r } : {}; })(),
     });
   });
   return out;
@@ -233,10 +255,19 @@ const RANK_ORDER = (k) => (k === "c" ? -1 : k === "f" ? 99 : k);
 
 /**
  * The hand: every spellcasting entry's sheet data merged by rank.
- * `entries` is `[{ id, isPrepared, isFocusPool, isRitual, dc, atk, groups }]`
- * where `groups` is PF2e's `getSheetData().groups`. A card's id carries
+ * `entries` is `[{ id, isPrepared, isSpontaneous, isFlexible, isInnate,
+ * isFocusPool, isRitual, dc, atk, groups }]` where `groups` is PF2e's
+ * `getSheetData().groups`. A card's id carries
  * where it came from — `<entry>.<spell>.<rank>.<slot>` — so a press can be
  * cast without a lookup table that could drift from what is drawn.
+ *
+ * A card leaves the hand (`spent`) only when it was its own resource: a
+ * prepared slot cast, or an innate spell out of uses. A cantrip, a focus
+ * spell and a spontaneous or flexible caster's spell stay in the hand
+ * however often they are cast: the focus pool and the rank's slots run out,
+ * and those are counted on the pennant. (PF2e marks every spell of a
+ * spontaneous rank `expended` once its slots are gone; that is the rank's
+ * count, not the card's.)
  */
 export function spellsOf(entries, { rank = null, focus = null } = {}) {
   const usable = list(entries).filter((e) => !e.isRitual);
@@ -248,24 +279,26 @@ export function spellsOf(entries, { rank = null, focus = null } = {}) {
     for (const g of list(e.groups)) {
       const cantrips = g.id === "cantrips";
       const key = cantrips ? "c" : e.isFocusPool ? "f" : num(g.id);
+      const perCard = !cantrips && !e.isFocusPool && !e.isSpontaneous && !e.isFlexible && (e.isPrepared || e.isInnate);
+      const slotted = e.isPrepared && !e.isFlexible;
       if (key == null) continue;
       const r = ranks.get(key) ?? { key, cards: 0 };
       if (!cantrips && !e.isFocusPool) {
         const active = list(g.active);
-        const [left, max] = e.isPrepared ? [active.filter((a) => a && !a.expended).length, num(g.uses?.max, active.length)] : [num(g.uses?.value, 0), num(g.uses?.max, 0)];
+        const [left, max] = slotted ? [active.filter((a) => a && !a.expended).length, num(g.uses?.max, active.length)] : [num(g.uses?.value, 0), num(g.uses?.max, 0)];
         if (max > 0) r.slots = r.slots ? [r.slots[0] + left, r.slots[1] + max] : [left, max];
       }
       if (e.isFocusPool && !cantrips && g.uses) pool = [num(g.uses.value, 0), num(g.uses.max, 0)];
       list(g.active).forEach((a, i) => {
         if (!a?.spell) {
-          if (e.isPrepared) { cards.push({ socket: true, rank: key, id: `${e.id}.-.${key}.${i}` }); r.cards++; }
+          if (slotted) { cards.push({ socket: true, rank: key, id: `${e.id}.-.${key}.${i}` }); r.cards++; }
           return;
         }
         const sp = a.spell;
         const cast = num(a.castRank, num(sp.rank));
         cards.push({
-          id: `${e.id}.${sp.id}.${key}.${e.isPrepared ? i : ""}`, name: sp.name, rank: key, cost: spellCost(sp), img: sp.img ?? null,
-          entry: e.id, ...(e.isPrepared ? { slot: i } : {}), ...(a.expended ? { spent: true } : {}),
+          id: `${e.id}.${sp.id}.${key}.${slotted ? i : ""}`, name: sp.name, rank: key, cost: spellCost(sp), img: sp.img ?? null,
+          entry: e.id, ...(slotted ? { slot: i } : {}), ...(a.expended && perCard && !sp.atWill ? { spent: true } : {}),
           ...(typeof key === "number" && cast > num(sp.baseRank ?? sp.rank, cast) ? { heightened: cast } : {}),
         });
         r.cards++;

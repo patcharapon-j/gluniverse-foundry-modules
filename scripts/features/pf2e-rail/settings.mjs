@@ -7,7 +7,7 @@
  *   - the skill finder's pins: the USER flag `ph.pins`, `{ [actorId]: slug[] }`,
  *     so a player's pins follow them to another computer and a GM's pins
  *     for one creature never crowd another's;
- *   - whether the rail is folded, and the two preferences below: client
+ *   - whether the rail is folded, and the three preferences below: client
  *     settings, because they are about this screen.
  * The action economy is stored nowhere (turn.mjs).
  */
@@ -15,6 +15,7 @@ import { SUITE_ID } from "../../core/const.mjs";
 
 export const SETTINGS = Object.freeze({
   hideHotbar: "ph.hideHotbar",
+  hidePlayers: "ph.hidePlayers",
   gmRail: "ph.gmRail",
   folded: "ph.folded",
 });
@@ -28,6 +29,11 @@ export function registerSettings() {
   game.settings.register(SUITE_ID, SETTINGS.hideHotbar, {
     name: "GLRAIL.settings.hideHotbar.name",
     hint: "GLRAIL.settings.hideHotbar.hint",
+    scope: "client", config: true, type: Boolean, default: true,
+  });
+  game.settings.register(SUITE_ID, SETTINGS.hidePlayers, {
+    name: "GLRAIL.settings.hidePlayers.name",
+    hint: "GLRAIL.settings.hidePlayers.hint",
     scope: "client", config: true, type: Boolean, default: true,
   });
   game.settings.register(SUITE_ID, SETTINGS.gmRail, {

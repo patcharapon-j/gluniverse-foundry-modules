@@ -63,9 +63,9 @@ it has to read over any map, dark or parchment, and never move the scene.
 - **A Hero Point spent is amber in motion**: the gem cracks, and its light
   streaks to the press whose roll it rerolls and lands there amber for a
   beat. That is still the Hero Points' one signal, on the roll it bought.
-- **The live attack is the biggest number on its row**: the MAP step the next
-  attack rolls at is the widest press at title size, the spent steps shrink,
-  and the columns slide as attacks land.
+- **The MAP steps keep still**: three equal presses, none lit by the step
+  you are on (the turn bar prints the MAP). A sized, sliding live step was
+  tried and removed: too many moving parts to read a bonus by.
 - **The rail is 112px and never taller**: four rows of 24px presses in every
   plate (strikes, actions with their toggles), which is what a PF2e character
   reaches for in a turn. It was 96px (three rows) and was raised once, on

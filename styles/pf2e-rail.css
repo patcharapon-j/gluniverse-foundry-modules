@@ -32,7 +32,6 @@
 @property --gph-f { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --gph-was { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --gph-tab { syntax: "<number>"; inherits: true; initial-value: 0; }
-@property --gph-map { syntax: "<number>"; inherits: true; initial-value: 0; }
 @property --gph-crack { syntax: "<length>"; inherits: false; initial-value: 0px; }
 
 .gph {
@@ -442,38 +441,22 @@
   font-family: var(--gph-num); font-size: var(--gl-is-t-body); font-weight: 600; font-variant-numeric: tabular-nums;
   background: var(--gph-ink-3); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs);
   transition: background var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease); }
-/* The step the next attack is rolled at carries the plate's one lit fill;
-   the others step down, as the penalty does. */
-.gph-map[data-variant] { color: var(--gph-dim); }
-.gph:is(:not([data-map]), [data-map="0"]) .gph-stk:not(.is-short) .gph-map[data-variant="0"],
-.gph[data-map="1"] .gph-stk:not(.is-short) .gph-map[data-variant="1"],
-.gph[data-map="2"] .gph-stk:not(.is-short) .gph-map[data-variant="2"],
-.gph-nstk .gph-map[data-variant="0"] { background: var(--gph-ink-5); color: var(--gph-text); font-weight: 750; box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); }
-/* The live step is the widest press on the row and prints its bonus at
-   title size; the steps already spent shrink and go faint; the columns
-   slide as the turn's attacks land (the tracks are transitioned, and so is
-   --gph-map, on the same beat). The name gives and takes the difference. */
-.gph-stk { grid-template-columns: minmax(0, 1fr) var(--gph-m-live) var(--gph-m-next) var(--gph-m-next) var(--gph-m-dmg) var(--gph-m-dmg);
-  --gph-m-live: 44px; --gph-m-next: 28px; --gph-m-spent: 24px; --gph-m-dmg: 34px;
-  transition: grid-template-columns var(--gl-d-move) var(--gl-ease); }
-.gph[data-map="1"] .gph-stk { grid-template-columns: minmax(0, 1fr) var(--gph-m-spent) var(--gph-m-live) var(--gph-m-next) var(--gph-m-dmg) var(--gph-m-dmg); }
-.gph[data-map="2"] .gph-stk { grid-template-columns: minmax(0, 1fr) var(--gph-m-spent) var(--gph-m-spent) var(--gph-m-live) var(--gph-m-dmg) var(--gph-m-dmg); }
-.gph-stk .gph-map { transition: background var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease), font-size var(--gl-d-move) var(--gl-ease), color var(--gl-d-move) var(--gl-ease); }
-.gph:is(:not([data-map]), [data-map="0"]) .gph-stk .gph-map[data-variant="0"],
-.gph[data-map="1"] .gph-stk .gph-map[data-variant="1"],
-.gph[data-map="2"] .gph-stk .gph-map[data-variant="2"] { font-size: var(--gl-is-t-title); letter-spacing: -0.01em; }
-.gph[data-map="1"] .gph-stk .gph-map[data-variant="0"],
-.gph[data-map="2"] .gph-stk .gph-map:is([data-variant="0"], [data-variant="1"]) { font-size: var(--gl-is-t-meta); color: var(--gph-faint); background: var(--gph-ink-2); }
-.gph[data-map="1"] .gph-stk .gph-map[data-variant="0"]:hover,
-.gph[data-map="2"] .gph-stk .gph-map:is([data-variant="0"], [data-variant="1"]):hover { background: var(--gph-ink-6); color: var(--gph-text); }
-/* The next-MAP marker: one hairline per row under the live step, which
-   slides with it. Every step right of the live one is a next step, so the
-   offset is linear in --gph-map. */
-.gph-mapmark { position: absolute; bottom: -2px; width: var(--gph-m-live); height: 2px; background: var(--gph-paper); pointer-events: none;
-  right: calc(2 * var(--gph-m-dmg) + 3 * 2px + (2 - var(--gph-map)) * (var(--gph-m-next) + 2px));
-  transition: --gph-map var(--gl-d-move) var(--gl-ease); }
-.gph[data-mode="exploration"] .gph-mapmark { display: none; }
-.gph-stk.is-short .gph-mapmark { background: var(--gph-faint); }
+/* The three MAP steps are three equal presses, none lit: the turn bar says
+   which step the next attack is at, and the row keeps still while attacks
+   land, so a bonus can be read at a glance. */
+.gph-map[data-variant] { color: var(--gph-text); }
+/* Reload (PF2e Ranged Combat): a square beside the name, lit amber while
+   the weapon is empty, faint once it is loaded. */
+.gph-stk.has-reload { grid-template-columns: minmax(0, 1fr) 24px repeat(3, 32px) 34px 34px; }
+.gph-rld { display: grid; place-items: center; height: 24px; min-height: 24px; max-height: 24px; color: var(--gph-amber);
+  background: var(--gph-ink-3); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gph-amber) 55%, transparent); clip-path: var(--gph-clip-xs);
+  transition: background var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease); }
+.gph-rld .gph-ic { width: 13px; height: 13px; }
+/* the Reload press marks the row, so the weapon art gives the name its room */
+.gph-stk.has-reload .gph-stn img { display: none; }
+.gph-rld.is-loaded { color: var(--gph-faint); box-shadow: inset 0 0 0 1px var(--gph-line); }
+.gph-rld:hover { background: var(--gph-ink-6); color: var(--gph-text); }
+.gph-rld:active { scale: var(--gl-is-press); }
 .gph-map.is-none { background: none; box-shadow: none; cursor: default; }
 .gph-dmg { font-family: var(--gph-font); font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gph-dim); }
 .gph-dmg.is-crit { color: var(--gph-faint); }
@@ -584,6 +567,7 @@
 .gph-tb-more .gph-ic { width: 13px; height: 13px; }
 /* Exploring, a strike closes to its first attack: no MAP outside a fight. */
 .gph[data-mode="exploration"] .gph-stk { grid-template-columns: minmax(0, 1fr) 40px 34px 34px; }
+.gph[data-mode="exploration"] .gph-stk.has-reload { grid-template-columns: minmax(0, 1fr) 24px 40px 34px 34px; }
 .gph[data-mode="exploration"] .gph-stk .gph-map[data-variant]:not([data-variant="0"]),
 .gph[data-mode="exploration"] .gph-stk .gph-map.is-none { display: none; }
 
@@ -1192,7 +1176,8 @@ button.gph-shead:hover { background: var(--gph-ink-2); }
   .gph > * { --gph-pw: 128px; --gph-sw: 250px; }
   .gph-pip { width: 15px; }
   .gph-pip.is-react { width: 20px; margin-left: 3px; }
-  .gph-stk { --gph-m-live: 38px; --gph-m-next: 24px; --gph-m-spent: 21px; --gph-m-dmg: 31px; }
+  .gph-stk { grid-template-columns: minmax(0, 1fr) repeat(3, 28px) 31px 31px; }
+  .gph-stk.has-reload { grid-template-columns: minmax(0, 1fr) 22px repeat(3, 28px) 31px 31px; }
   .gph-stn { padding: 0 5px; }
   .gph-dmg { letter-spacing: 0; }
   .gph-stn img { display: none; }

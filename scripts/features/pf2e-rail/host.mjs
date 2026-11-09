@@ -16,6 +16,7 @@
  *   consumable   item.consume()
  *   toggle       actor.toggleRollOption(domain, option, itemId, value)
  *   raise shield game.pf2e.actions.raiseAShield({ actors })
+ *   reload       game.pf2eRangedCombat.reload() (PF2e Ranged Combat, when it runs)
  *   rest         game.pf2e.actions.restForTheNight({ actors })
  *
  * No roll dialog of its own, and nothing written but what those calls write,
@@ -40,6 +41,9 @@ import { FLAGS, SETTINGS, setting } from "./settings.mjs";
 import { clearKnowledgeCache, knownStat } from "../pf2e-odds/knowledge.mjs";
 import { nameFor, seesTruth } from "../pf2e-odds/view.mjs";
 import { metagame } from "../pf2e-odds/observe.mjs";
+
+/** PF2e Ranged Combat is running and offers its Reload action. */
+const rangedCombat = () => !!(game.modules.get("pf2e-ranged-combat")?.active && typeof game.pf2eRangedCombat?.reload === "function");
 
 
 const list = (v) => (Array.isArray(v) ? v : v ? Array.from(v) : []);
@@ -110,7 +114,7 @@ export class RailHost {
     window.addEventListener("resize", this.resizeH);
     this.wire();
     this.place();
-    this.hotbar();
+    this.dock();
     this.schedule();
   }
 
@@ -123,7 +127,7 @@ export class RailHost {
     this.light = new RailLight();
     this.el?.remove();
     this.el = null;
-    this.hotbar(false);
+    this.dock(false);
     document.body.style.removeProperty("--gph-rail-top");
   }
 
@@ -144,7 +148,9 @@ export class RailHost {
     this.on("updateToken", (doc, change) => { if (["name", "disposition", "hidden", "actorId", "ring", "texture", "x", "y"].some((k) => k in (change ?? {}))) this.schedule(); });
     this.on("updateUser", (user, change) => { if (user.id === game.user.id && ("character" in change || "flags" in change)) this.schedule(); });
     this.on("createChatMessage", (m) => this.onMessage(m));
-    this.on("renderHotbar", () => this.hotbar());
+    this.on("pf2eRangedCombatReload", (actor) => this.onReloaded(actor));
+    this.on("renderHotbar", () => this.dock());
+    this.on("renderPlayers", () => this.dock());
     this.on("collapseSidebar", () => requestAnimationFrame(() => { this.place(); this.publishEdge(); }));
     /* What the party knows (PF2e Odds' ledger, a Creaturedex reveal) moves the
        finder's chances, whether or not the Odds feature is on to notice. */
@@ -152,7 +158,7 @@ export class RailHost {
       const key = String(setting?.key ?? "");
       if (key.endsWith(".od.ledger") || key.endsWith(".od.partyKnowledge") || key.includes(".dex.")) { clearKnowledgeCache(); this.schedule(); }
     });
-    this.on("clientSettingChanged", (key) => { if (String(key).startsWith(`${SUITE_ID}.ph.`)) { this.hotbar(); this.schedule(); } });
+    this.on("clientSettingChanged", (key) => { if (String(key).startsWith(`${SUITE_ID}.ph.`)) { this.dock(); this.schedule(); } });
   }
 
   /** One refresh per frame however many hooks fire. A background tab starves
@@ -170,18 +176,31 @@ export class RailHost {
     this.rafT = setTimeout(run, TIMING.refreshFallback);
   }
 
-  /** The rail lives between Foundry's columns, wherever they are now. */
+  /** The rail stands in the bottom-left corner, where Foundry's player list
+   *  was, and runs to the right column, wherever it is now. A kept player
+   *  list keeps its corner, and the rail starts beside it. */
   place() {
     if (!this.el) return;
     const mid = document.getElementById("ui-middle")?.getBoundingClientRect?.();
-    this.el.style.left = `${Math.max(0, Math.round(mid?.left ?? 0))}px`;
+    const pl = document.getElementById("players");
+    const kept = pl && pl.style.display !== "none" ? pl.getBoundingClientRect() : null;
+    this.el.style.left = `${kept?.width ? Math.round(kept.right) : 0}px`;
     this.el.style.right = `${Math.max(0, Math.round(mid ? innerWidth - mid.right : 0))}px`;
   }
 
-  /** Foundry's hotbar is hidden while the rail is up; the Macros drawer shows it. */
-  hotbar(hide = !!this.el && !!this.model && setting(SETTINGS.hideHotbar, true)) {
-    const hb = document.getElementById("hotbar");
-    if (hb) hb.style.display = hide ? "none" : "";
+  /** Foundry's hotbar and player list sit where the rail does, so while a
+   *  rail is drawn both are hidden (each behind its own setting) and given
+   *  back when it is not. The Macros drawer shows the hotbar. */
+  dock(drawn = !!this.el && !!this.model) {
+    const hide = (id, key) => {
+      const el = document.getElementById(id);
+      const off = drawn && setting(key, true);
+      if (el) el.style.display = off ? "none" : "";
+      return off;
+    };
+    hide("hotbar", SETTINGS.hideHotbar);
+    const players = hide("players", SETTINGS.hidePlayers);
+    if (players !== this.playersOff) { this.playersOff = players; this.place(); }
   }
 
   /** Other docked UI sits above the rail: the distance from the bottom of the
@@ -240,7 +259,7 @@ export class RailHost {
     const spells = [];
     for (const entry of list(actor.spellcasting?.regular)) {
       const d = await safe(() => entry.getSheetData());
-      if (d) spells.push({ id: entry.id, name: entry.name, isPrepared: !!d.isPrepared, isFocusPool: !!d.isFocusPool, isRitual: !!d.isRitual, dc: entry.statistic?.dc?.value ?? null, atk: entry.statistic?.check?.mod ?? entry.statistic?.mod ?? null, groups: d.groups });
+      if (d) spells.push({ id: entry.id, name: entry.name, isPrepared: !!d.isPrepared, isSpontaneous: !!d.isSpontaneous, isFlexible: !!d.isFlexible, isInnate: !!d.isInnate, isFocusPool: !!d.isFocusPool, isRitual: !!d.isRitual, dc: entry.statistic?.dc?.value ?? null, atk: entry.statistic?.check?.mod ?? entry.statistic?.mod ?? null, groups: d.groups });
     }
     await Promise.all(jobs);
     return { formulas, blasts, spells };
@@ -282,7 +301,7 @@ export class RailHost {
   }
 
   common() {
-    return { t, loc, config: CONFIG.PF2E, stamina: !!game.pf2e?.settings?.variants?.stamina };
+    return { t, loc, config: CONFIG.PF2E, stamina: !!game.pf2e?.settings?.variants?.stamina, ranged: rangedCombat() };
   }
 
   async readNow(subj) {
@@ -349,7 +368,7 @@ export class RailHost {
   clear() {
     this.model = this.prev = null; this.subjectKey = null; this.subj = null;
     if (this.el) this.el.innerHTML = "";
-    this.hotbar();
+    this.dock();
     this.publishEdge();
   }
 
@@ -382,7 +401,7 @@ export class RailHost {
     if (this.fs.open) this.settleFinder();
     if (this.peek) this.showPeek(this.peek.model, root.querySelector(this.peek.anchor), this.peek);
     this.prev = this.model;
-    this.hotbar();
+    this.dock();
     this.publishEdge();
   }
 
@@ -593,6 +612,25 @@ export class RailHost {
     else this.update(next);
   }
 
+  /** Reload is PF2e Ranged Combat's own action: it takes no weapon, picks
+   *  the one to load itself (asking only when several could be), and says
+   *  so through its hook when one was. The actions are spent then, against
+   *  the turn the press landed in, so a cancelled pick spends nothing. */
+  reload(id, b) {
+    const s = this.model?.strikes?.list?.find((x) => x.id === id);
+    if (!s?.reload || !rangedCombat()) return this.deny(b);
+    const ctx = this.spendCtx(), actor = this.subj?.actor;
+    this.reloading = { ctx, cost: s.reload.cost, actorId: actor?.id, until: Date.now() + TIMING.rerollWindow };
+    return game.pf2eRangedCombat.reload();
+  }
+
+  onReloaded(actor) {
+    const p = this.reloading;
+    if (!p || Date.now() > p.until || actor?.id !== p.actorId) return;
+    this.reloading = null;
+    if (p.cost) this.spend(p.cost, false, p.ctx);
+  }
+
   deny(el) { el.classList.remove("is-denied"); void el.offsetWidth; el.classList.add("is-denied"); }
 
   async onClick(e) {
@@ -634,6 +672,7 @@ export class RailHost {
       if (d.act === "peek-strike") return this.peek?.kind === "strike" && this.peek.id === d.strike ? this.closePeek() : this.peekStrike(b);
       if (d.check) { this.expect(b); return this.check(d.check, e); }
       if (d.toggle) { const [domain, option, itemId] = d.toggle.split("|"); const g = m.deck?.actions?.toggles?.find((x) => x.id === d.toggle); return actor.toggleRollOption(domain, option, itemId || null, !g?.on); }
+      if (d.reload) return this.reload(d.reload, b);
       if (d.item) { const it = actor.items.get(d.item); if (!it || !(it.system?.quantity > 0)) return this.deny(b); return it.consume(); }
       if (d.action || d.stance) { const id = d.action ?? d.stance; return this.peek?.kind === "action" && this.peek.id === id ? this.closePeek() : this.peekAction(b); }
       if (d.spell) return this.cast(d.spell, b, e);

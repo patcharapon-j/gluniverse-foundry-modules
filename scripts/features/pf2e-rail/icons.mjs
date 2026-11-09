@@ -21,6 +21,7 @@ export const ICON = {
   rest: I('<path d="M10.8 2.2a5.6 5.6 0 1 0 3 8.6 5 5 0 0 1-3-8.6z"/>'),
   macros: I('<path d="M2.5 3.5h11v9h-11z"/><path d="M5 6.5 7 8.2 5 10M8.5 10h3"/>'),
   sheet: I('<path d="M3.5 1.8h6.2l2.8 2.8v9.6h-9z"/><path d="M9.5 1.8v3h3"/><path d="M5.6 8h4.8M5.6 10.8h4.8"/>'),
+  reload: I('<path d="M13 8a5 5 0 1 1-1.5-3.6"/><path d="M11.8 1.9v2.8H9"/>'),
   more: I('<circle cx="3.5" cy="8" r=".9" class="f"/><circle cx="8" cy="8" r=".9" class="f"/><circle cx="12.5" cy="8" r=".9" class="f"/>'),
   fold: I('<path d="M4 6.5 8 10.5l4-4"/>'),
   frame: I('<path d="M2.5 5.5v-3h3"/><path d="M10.5 2.5h3v3"/><path d="M13.5 10.5v3h-3"/><path d="M5.5 13.5h-3v-3"/><path d="M8 6v4M6 8h4"/>'),

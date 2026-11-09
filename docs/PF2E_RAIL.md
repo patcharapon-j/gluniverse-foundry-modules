@@ -54,6 +54,16 @@ contract; the check holds every reader to it path for path).
   or closing a drawer and the fold, so every other press stops answering
   the pointer (a spell still peeks on hover) and the nameplate says
   Observing.
+- **Reload** is PF2e Ranged Combat's, drawn only while that module runs: a
+  weapon whose `system.reload.value` is 1 or more gets a Reload press beside
+  its name, lit while it is empty. Loaded is the module's Loaded effect aimed
+  at the weapon (`flags["pf2e-ranged-combat"].targetId`), or, under PF2e's own
+  ammunition, a round among the weapon's sub-items.
+- **Spell cards** are put down (`spent`) only when the card was its own
+  resource: a prepared slot cast, or an innate spell out of uses. Cantrips,
+  focus spells and a spontaneous or flexible caster's spells stay in the hand;
+  PF2e marks a whole spontaneous rank `expended` when its slots run out, and
+  that is the rank's count on the pennant, not the cards.
 - **Foes**: disposition is read off `token.document`, never the placeable.
 - **Hazard Disable** text runs through `inlineText`, so
   `@Check[thievery|dc:18]` reads "Thievery DC 18" instead of printing raw.
@@ -72,15 +82,17 @@ Renders on a shape change (`shape.mjs` `shapeOf`), drives on a value change
 `TIMING.refreshFallback` timer beside the `requestAnimationFrame`: a background
 tab starves frames, and without the timer the rail never draws there.
 
-It mounts `#gph-host` at `--gl-z-hud`, beside `#ui-middle`, hides `#hotbar`
-while `ph.hideHotbar` is on (the Macros drawer shows the user's hotbar) and
-restores it on unmount, and publishes the rail's top edge as
+It mounts `#gph-host` at `--gl-z-hud` in the bottom-left corner, running to
+the right edge of `#ui-middle`. While a rail is drawn it hides `#hotbar`
+(`ph.hideHotbar`; the Macros drawer shows the user's hotbar) and Foundry's
+player list `#players` (`ph.hidePlayers`; a kept list keeps the corner and
+the rail starts beside it), gives both back when it is not, and publishes the rail's top edge as
 `--gph-rail-top` on `body`. `/` opens the finder from the canvas only (never
 while somebody types); Escape closes a peek or a drawer.
 
 Stored: the portrait frame in the actor flag `ph.frame`; the finder's pins in
-the user flag `ph.pins` (`{ [actorId]: slug[] }`); `ph.folded`, `ph.gmRail` and
-`ph.hideHotbar` are client settings. **The action economy is stored nowhere**:
+the user flag `ph.pins` (`{ [actorId]: slug[] }`); `ph.folded`, `ph.gmRail`,
+`ph.hideHotbar` and `ph.hidePlayers` are client settings. **The action economy is stored nowhere**:
 `turn.mjs` keeps a tally per actor on this screen, refilled when the combat's
 `id:round:turn` key names a new turn of that actor, spent only in a started
 encounter. It is a reminder, never a rule.
@@ -102,6 +114,7 @@ No press opens a dialog of the HUD's own. Where PF2e shows its
 | Post (peek) | `item.toMessage` / `spell.toMessage` |
 | Toggle / stance | `actor.toggleRollOption(domain, option, itemId, value)` |
 | Raise | `game.pf2e.actions.raiseAShield({ actors, event })` |
+| Reload (PF2e Ranged Combat) | `game.pf2eRangedCombat.reload()` — the module picks the weapon (it asks only when several could be loaded) and the actor (an open sheet, else the controlled token, else the user's character); the actions are spent on its `pf2eRangedCombatReload` hook |
 | Item | `item.consume()` |
 | Rest | `game.pf2e.actions.restForTheNight` |
 | Macro | `macro.execute()` |
@@ -189,15 +202,13 @@ within `TIMING.rerollWindow`.
 check, a hit while dying (which burns, as it should), healing. Death plays no
 bead; stabilising is the light coming back.
 
-## The live attack
+## The MAP steps
 
-The strike row's three MAP steps are sized by the step you are on
-(`--gph-m-live` / `-next` / `-spent`): the live one is the widest and
-prints its bonus at title size, the spent ones shrink and go faint, and the
-grid tracks and `--gph-map` transition on one beat, so the columns slide as
-attacks land and the marker under the live step slides with them. Every step
-right of the live one is a next step, which is what makes the marker's offset
-linear in `--gph-map`; the check holds the three grids to that.
+The strike row's three MAP steps are three equal presses, and none is lit,
+sized or marked by the step you are on: the turn bar prints the MAP, and the
+row keeps still while attacks land, so every bonus reads at a glance. (A
+live step that grew, faded and slid was tried and taken out: too much moved
+to judge a number by.)
 
 ## The echo (`echo.mjs`)
 
