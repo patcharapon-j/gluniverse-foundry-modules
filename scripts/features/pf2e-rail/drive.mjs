@@ -344,7 +344,13 @@ export function placePeek(root, anchor, peek, zoom = 1) {
   if (!root || !anchor || !peek) return;
   const rr = root.getBoundingClientRect(), ar = anchor.getBoundingClientRect();
   const w = peek.offsetWidth || 280;
-  const x = ((ar.left + ar.right) / 2 - rr.left) / zoom - w / 2;
-  peek.style.setProperty("--gph-peek-x", `${Math.round(Math.max(0, Math.min(rr.width / zoom - w, x)))}px`);
-  peek.style.setProperty("--gph-peek-y", `${Math.round((rr.bottom - ar.top) / zoom + 10)}px`);
+  const x = Math.max(0, Math.min(rr.width / zoom - w, ((ar.left + ar.right) / 2 - rr.left) / zoom - w / 2));
+  /* It stands clear of its plate and of anything risen over the plate under
+     it (the turn bar on the strikes), never on top of them. */
+  let top = Math.min(ar.top, anchor.closest(".gph-pl")?.getBoundingClientRect().top ?? ar.top);
+  const bar = root.querySelector("[data-turnbar]")?.getBoundingClientRect();
+  const px0 = rr.left + x * zoom, px1 = px0 + w * zoom;
+  if (bar && bar.right > px0 && bar.left < px1) top = Math.min(top, bar.top);
+  peek.style.setProperty("--gph-peek-x", `${Math.round(x)}px`);
+  peek.style.setProperty("--gph-peek-y", `${Math.round((rr.bottom - top) / zoom + 8)}px`);
 }

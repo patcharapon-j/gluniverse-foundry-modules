@@ -715,14 +715,6 @@ button.gph-drow:hover { background: var(--gph-ink-4); }
 .gph-dnone, .gph-dnote { margin: 0; font-size: var(--gl-is-t-body); line-height: 1.4; color: var(--gph-faint); }
 .gph-dnote { margin-top: 8px; font-size: var(--gl-is-t-meta); }
 
-.gph-skills { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 6px; width: 400px; }
-.gph-skl { display: flex; align-items: center; gap: 6px; height: 26px; min-height: 26px; max-height: 26px; padding: 0 8px; min-width: 0;
-  background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs); transition: background var(--gl-d-quick) var(--gl-ease); }
-.gph-skl:hover { background: var(--gph-ink-4); }
-.gph-skl b { font-size: var(--gl-is-t-body); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.gph-skl em { flex: none; width: 3ch; text-align: right; font-family: var(--gph-num); font-style: normal; font-size: var(--gl-is-t-body); font-weight: 600; font-variant-numeric: tabular-nums; }
-.gph-skl .gph-tag[data-rank="0"] { color: var(--gph-faint); box-shadow: inset 0 0 0 1px var(--gph-line); }
-.gph-skl:has(.gph-tag[data-rank="0"]) :is(b, em) { color: var(--gph-dim); font-weight: 500; }
 
 .gph-rest { display: grid; gap: 6px; width: 280px; }
 .gph-rb { display: grid; gap: 5px; align-content: center; height: 56px; min-height: 56px; max-height: 56px; padding: 0 12px;
@@ -1065,7 +1057,7 @@ button.gph-shead:hover { background: var(--gph-ink-2); }
    ("Lonqsword"). Every single-line label in a press gets a line box tall
    enough for the whole glyph; the press keeps its height, so the row pitch
    does not move. */
-:is(.gph-stn, .gph-row, .gph-key, .gph-move, .gph-drow, .gph-skl, .gph-tgt, .gph-fa) > b,
+:is(.gph-stn, .gph-row, .gph-key, .gph-move, .gph-drow, .gph-tgt, .gph-fa) > b,
 :is(.gph-tab, .gph-tb-k, .gph-know, .gph-drow) > span:not(.gph-cost), .gph-tog, .gph-mac b, .gph-shead b, .gph-subt { line-height: 1.5; }
 
 /* ══ NARROW ══ the rail keeps its height and gives up words, then width,
