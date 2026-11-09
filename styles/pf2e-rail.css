@@ -1,0 +1,1211 @@
+/* ══════════════════════════════════════════════════════════════════
+   PF2e HUD — the bottom rail, for playing without the sheet
+
+   Ink and Signal's frame, Pathfinder's objects (docs/adr/0013). The frame
+   says nothing: black plates a tone step apart, a 1px inset hairline, the
+   bottom-right cut, one face at five sizes, nothing under 11px. So the only
+   hue on the rail is a signal, and each has one job here:
+
+     amber   Hero Points — the gems, and a spent one's streak
+     red     danger: Hit Points under a quarter, dying, a broken shield,
+             a hostile creature's card edge
+     green   a friendly creature's card edge
+     info    temporary Hit Points, which are a shift and not a verdict
+     paper   the selected and the active: a toggle that is on, the stance
+             you are in, the foe on the plinth, whose turn it is
+
+   If removing a colour loses no information, it is ink.
+
+   The rail is 96px and is never taller. Two things stand ON it and rise
+   above: the character (the plinth) and the hand of spells. Both are objects
+   rather than readouts, and the 40–76px they take above the rail is the
+   whole of what this surface asks of the map.
+
+   Every name is `gph-` and every rule sits under `.gph`. Nothing here is
+   written on :root and no foundation token is redeclared (ADR 0001, 0012).
+   ══════════════════════════════════════════════════════════════════ */
+
+/* A seat's `--gph-f` and its kin are animated, so they are registered: an
+   unregistered custom property interpolates as a token stream, which is to
+   say it snaps. */
+@property --gph-v { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --gph-f { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --gph-was { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --gph-tab { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --gph-map { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --gph-crack { syntax: "<length>"; inherits: false; initial-value: 0px; }
+
+.gph {
+  /* Ink and Signal, aliased (ADR 0012). Sizes, cuts and states are read
+     straight from core below. */
+  --gph-ink-0: var(--gl-is-ink-0);
+  --gph-ink-1: var(--gl-is-ink-1);
+  --gph-ink-2: var(--gl-is-ink-2);
+  --gph-ink-3: var(--gl-is-ink-3);
+  --gph-ink-4: var(--gl-is-ink-4);
+  --gph-ink-5: var(--gl-is-ink-5);
+  --gph-ink-6: var(--gl-is-ink-6);
+  --gph-text: var(--gl-is-text);
+  --gph-paper: var(--gl-is-paper);
+  --gph-dim: var(--gl-is-dim);
+  --gph-faint: var(--gl-is-faint);
+  --gph-steel: var(--gl-is-steel);
+  --gph-on-slab: var(--gl-is-on-slab);
+  --gph-amber: var(--gl-is-amber);
+  --gph-red: var(--gl-is-red);
+  --gph-green: var(--gl-is-green);
+  --gph-info: var(--gl-is-info);
+  --gph-line: var(--gl-is-line);
+  --gph-line-2: var(--gl-is-line-strong);
+  --gph-hover: var(--gl-is-hover);
+  /* Proficiency ranks in PF2e's own hues (its sheet's --color-proficiency-*:
+     slate, navy, purple, bronze, oxblood), lifted from parchment darks to
+     read on ink. They are identity, not signals, and appear only as the rank
+     badge and the rule under a skill's head (ADR 0013). White letters on
+     every one: the letter carries the rank, the hue makes it findable. */
+  --gph-rank-0: var(--gl-is-ink-5);
+  --gph-rank-1: oklch(0.47 0.13 266);
+  --gph-rank-2: oklch(0.45 0.15 314);
+  --gph-rank-3: oklch(0.54 0.11 70);
+  --gph-rank-4: oklch(0.46 0.16 26);
+  --gph-font: var(--gl-is-font);
+  --gph-num: var(--gl-is-num);
+  /* A scrim for words standing on somebody's painting: the ink-0 ground at
+     the strengths the nameplate and the chips need. */
+  --gph-scrim: color-mix(in srgb, var(--gl-is-ink-0) 88%, transparent);
+  --gph-scrim-lo: color-mix(in srgb, var(--gl-is-ink-0) 72%, transparent);
+
+  /* The one chamfer, at each step of the cut scale. */
+  --gph-clip-lg: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-lg)), calc(100% - var(--gl-is-cut-lg)) 100%, 0 100%);
+  --gph-clip: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut)), calc(100% - var(--gl-is-cut)) 100%, 0 100%);
+  --gph-clip-sm: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-sm)), calc(100% - var(--gl-is-cut-sm)) 100%, 0 100%);
+  --gph-clip-xs: polygon(0 0, 100% 0, 100% calc(100% - var(--gl-is-cut-xs)), calc(100% - var(--gl-is-cut-xs)) 100%, 0 100%);
+
+  --gph-h: 112px;
+  /* how far the picture is let out of the top of the plinth */
+  --gph-rise: 76px;
+  /* a spell, item or foe card, true size: the Daggerheart compact card's
+     1 : 1.4, at the smallest size a two-line name still reads at 12px */
+  --gph-cw: 80px;
+  --gph-ch: 112px;
+  /* the fixed plates, which the turn bar is placed against */
+  --gph-pw: 148px;
+  --gph-vw: 268px;
+  --gph-sw: 300px;
+  --gph-uw: 40px;
+
+  position: absolute;
+  left: 12px;
+  right: var(--gph-gutter-r, 12px);
+  bottom: 10px;
+  container: gph / inline-size;
+  font-family: var(--gph-font);
+  color: var(--gph-text);
+  -webkit-font-smoothing: antialiased;
+  pointer-events: none;
+}
+.gph :where(.gph-rail, .gph-stack, .gph-drawer, .gph-peek) { pointer-events: auto; }
+.gph *, .gph *::before, .gph *::after { box-sizing: border-box; }
+.gph ::selection { background: color-mix(in srgb, var(--gph-amber) 40%, transparent); color: var(--gph-text); }
+
+/* Every control here is a <button>, and Foundry's elements layer sizes every
+   button to one centred 28px line. Nothing here is that, so the reset is
+   stated once and each control states its own metrics after it (the
+   Size-It-Yourself Rule). */
+.gph :where(button[class*="gph-"]) {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  line-height: 1;
+  font-family: var(--gph-font);
+  font-size: var(--gl-is-t-body);
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.gph :where(button[class*="gph-"]):focus-visible { outline: var(--gl-is-focus-ring); outline-offset: -2px; }
+.gph :where(button[class*="gph-"])[aria-disabled="true"] { cursor: not-allowed; }
+.gph-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+.gph-ic { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.gph-ic .f { fill: currentColor; stroke: none; }
+.gph-act { flex: none; fill: currentColor; stroke: none; display: block; }
+.gph-act path:not(.f) { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+.gph-acts { display: inline-flex; align-items: center; gap: 1px; font-size: var(--gl-is-t-meta); }
+.gph-cost { flex: none; display: inline-flex; align-items: center; color: var(--gph-dim); }
+
+/* The rail stacks over the light (light.mjs), which stands behind it: the
+   plates are opaque, so the light shows only on and above their edges, and
+   the figure and the held cards stay in front of its smoke. */
+.gph-rail { position: relative; z-index: 1; display: flex; align-items: flex-end; gap: 6px; height: var(--gph-h); }
+.gph-light { position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--gph-h) + 150px); z-index: 0; width: 100%; pointer-events: none; }
+.gph[data-folded] .gph-light { display: none; }
+.gph-body {
+  position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; gap: 6px; height: var(--gph-h);
+  transition: opacity var(--gl-d-quick) var(--gl-ease), translate var(--gl-d-brisk) var(--gl-ease);
+}
+
+/* ── the plate ── one surface for everything on the rail. The top hairline
+   is stronger than the sides: the rail's one lit edge, where it meets the
+   map. */
+.gph-pl {
+  position: relative; height: var(--gph-h);
+  background: var(--gph-ink-1);
+  box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line);
+  clip-path: var(--gph-clip);
+}
+.gph-none { font-size: var(--gl-is-t-meta); color: var(--gph-faint); }
+
+/* ══ THE PLINTH ═══════════════════════════════════════════════════ */
+.gph-plinth { position: relative; flex: none; width: var(--gph-pw); height: var(--gph-h); }
+.gph-plate { position: absolute; inset: 0; background: var(--gph-ink-1);
+  box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip); }
+
+/* The picture is the plinth's width and the rail's height plus the rise.
+   Inside the plate it is whole; above the plate it fades, top and sides, so
+   a rectangular painting leaves the rail as a figure rather than as a card
+   with its top cut off. Three mask layers: the side fade intersected with
+   the top fade, then the plate's own rectangle added back at full strength. */
+.gph-fig {
+  position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--gph-h) + var(--gph-rise));
+  overflow: hidden; clip-path: var(--gph-clip); z-index: 1;
+  -webkit-mask-image: linear-gradient(#000, #000), linear-gradient(to bottom, transparent 0, #000 16%), linear-gradient(to right, transparent 0, #000 18%, #000 82%, transparent 100%);
+  -webkit-mask-size: 100% var(--gph-h), 100% 100%, 100% 100%;
+  -webkit-mask-position: bottom, 0 0, 0 0;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-composite: source-over, source-in;
+  mask-image: linear-gradient(#000, #000), linear-gradient(to bottom, transparent 0, #000 16%), linear-gradient(to right, transparent 0, #000 18%, #000 82%, transparent 100%);
+  mask-size: 100% var(--gph-h), 100% 100%, 100% 100%;
+  mask-position: bottom, 0 0, 0 0;
+  mask-repeat: no-repeat;
+  mask-composite: add, intersect;
+  transition: opacity var(--gl-d-quick) var(--gl-ease), filter var(--gl-d-swift) var(--gl-ease);
+}
+/* The whole painting by default, contained and standing on the rail; a
+   frame zooms in from there. Translate before scale, so an offset is worth
+   the same pixels at any zoom. */
+.gph-img { position: absolute; inset: 0; background-repeat: no-repeat; background-size: contain; background-position: 50% 100%;
+  transform-origin: 50% 100%;
+  transform: translate(calc(var(--fdx, 0) * 1%), calc(var(--fdy, 0) * 1%)) scale(var(--fz, 1)); }
+
+.gph-nameplate {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  display: grid; gap: 4px; padding: 22px 10px 9px;
+  background: linear-gradient(to top, var(--gph-scrim) 0, var(--gph-scrim-lo) 58%, transparent 100%);
+  clip-path: var(--gph-clip);
+}
+.gph-nameplate > b { font-size: var(--gl-is-t-title); font-weight: 750; line-height: 1.1; letter-spacing: -0.005em; text-wrap: balance;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gph-sub { display: flex; align-items: center; gap: 7px; min-width: 0; padding-right: 14px; }
+.gph-spd { flex: none; font-family: var(--gph-num); font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gph[data-folded] .gph-spd { display: none; }
+.gph-subt { font-size: var(--gl-is-t-meta); font-weight: 500; line-height: 1.2; color: var(--gph-dim);
+  font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* The Hero Point gems: amber diamonds a press wide. A press on one marks up
+   to it; on the last lit one, gives it back — the sheet's own rule. The
+   drawn diamond is 11px, so the count reads on a 1080p capture; the press
+   around it is 20 by 19. */
+/* They stand in a column on the plinth's right edge, under the fold, beside
+   the figure they belong to. */
+.gph-gems { position: absolute; right: 3px; top: 30px; z-index: 5; display: flex; flex-direction: column; gap: 0; }
+.gph-gem { position: relative; width: 20px; height: 19px; min-height: 19px; max-height: 19px; display: grid; place-items: center; }
+.gph-gem::before { content: ""; width: 11px; height: 11px; rotate: 45deg; background: var(--gph-scrim);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--gph-amber) 65%, transparent), 0 0 0 1px var(--gph-scrim);
+  transition: background var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease); }
+.gph-gem.on::before { background: var(--gph-amber); box-shadow: 0 0 0 1px var(--gph-scrim); }
+.gph-gem:hover::before { box-shadow: inset 0 0 0 1.5px var(--gph-amber); }
+.gph-gem.on:hover::before { background: color-mix(in srgb, var(--gph-amber) 80%, var(--gph-text)); }
+.gph-gem:focus-visible { outline-offset: -1px; }
+.gph-gem.land::before { animation: gph-land var(--gl-d-swift) var(--gl-ease); }
+.gph-gem.drop::before { animation: gph-drop var(--gl-d-brisk) var(--gl-ease); }
+@keyframes gph-land { 0% { scale: 1.9; filter: brightness(1.8); } 100% { scale: 1; filter: none; } }
+@keyframes gph-drop { 0% { background: color-mix(in srgb, var(--gph-amber) 60%, transparent); } 100% { } }
+/* Spent (moments.mjs): the gem that went out cracks. Its amber shell flares,
+   splits along the diagonal and falls away over the gem now empty under it.
+   Where a roll was just echoed, the gem's light streaks to that press (the
+   one a reroll answers) and lands there in amber: the Hero Point, spent on
+   that roll. */
+.gph-gem.crack::after { content: ""; position: absolute; left: 50%; top: 50%; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; rotate: 45deg; pointer-events: none;
+  background: linear-gradient(90deg, var(--gph-amber) calc(50% - var(--gph-crack)), transparent calc(50% - var(--gph-crack)) calc(50% + var(--gph-crack)), var(--gph-amber) calc(50% + var(--gph-crack)));
+  animation: gph-crack var(--gl-d-reveal) var(--gl-exit) both; }
+@keyframes gph-crack {
+  0% { --gph-crack: 0px; scale: 1; filter: brightness(1.7); opacity: 1; }
+  22% { --gph-crack: 0.75px; scale: 1.35; filter: brightness(1.4); opacity: 1; }
+  100% { --gph-crack: 4px; scale: 1.7; filter: none; opacity: 0; } }
+.gph-streak { position: absolute; z-index: 40; height: 2px; margin-top: -1px; transform-origin: 0 50%; pointer-events: none; clip-path: inset(0 100% 0 0);
+  background: linear-gradient(90deg, transparent, var(--gph-amber) 72%, color-mix(in srgb, var(--gph-amber) 55%, var(--gph-text)));
+  filter: drop-shadow(0 0 3px var(--gph-amber)); }
+.gph .is-heroic { animation: gph-heroic var(--gl-d-reveal) var(--gl-ease); }
+@keyframes gph-heroic { 0%, 30% { background: var(--gph-amber); color: var(--gph-on-slab); box-shadow: inset 0 0 0 1.5px var(--gph-amber); } }
+/* Read-only (somebody else's character): the drawers open and close, the
+   fold folds and a spell still peeks on hover, but nothing else acts, so
+   nothing else answers the pointer as a press would; the nameplate says so.
+   The exclusions are the host's own gate (host.mjs onClick). */
+.gph[data-readonly] button:not([data-drawer], [data-act="fold"], [data-act="close"], [data-spell]) { pointer-events: none; }
+.gph[data-readonly] [data-spell] { cursor: default; }
+.gph-watch { justify-self: start; height: 18px; padding: 0 6px; display: flex; align-items: center; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1;
+  color: var(--gph-dim); background: var(--gph-scrim); box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: var(--gph-clip-xs); }
+
+/* Down: a dying or dead character acts on nothing in its strikes or its
+   deck, so those step back and the dying plate is the loudest thing on the
+   rail. The gems, the checks and the drawers stay lit: a Hero Point and a
+   recovery check are exactly what a dying character still reaches for. A
+   plate comes back whole under the pointer, so a GM's deliberate press is
+   still seen. */
+.gph[data-down] :is(.gph-strikes, .gph-pane) { opacity: 0.38; transition: opacity var(--gl-d-quick) var(--gl-ease); }
+.gph[data-down] :is(.gph-strikes, .gph-pane):hover { opacity: 1; }
+/* The light (light.mjs): while a pass runs the root carries data-light, and
+   each plate's top edge takes the pass's colour the moment the spark reaches
+   it (--gph-lit-d, written from the shader's own easing), then cools. Going
+   down, the strikes and the deck dim on the same beat, not all at once. */
+.gph[data-light] { --gph-lit-c: var(--gph-paper); }
+.gph[data-light="out"] { --gph-lit-c: var(--gph-red); }
+/* The turn is over: the light runs home dimmer, and each edge it passes
+   cools rather than lights. */
+.gph[data-light="home"] { --gph-lit-c: color-mix(in srgb, var(--gph-paper) 45%, transparent); }
+.gph[data-light] :is(.gph-plinth .gph-plate, .gph-turnbar, .gph-body > .gph-pl:not(.gph-deck, .gph-hand)),
+.gph[data-light] :is(.gph-deck, .gph-hand)::before { animation: gph-rimlit var(--gl-d-reveal) var(--gl-ease) var(--gph-lit-d, 0ms); }
+@keyframes gph-rimlit { 0% { box-shadow: inset 0 2px 0 var(--gph-lit-c), inset 0 0 0 1px var(--gph-line-2); } }
+.gph.is-going-down[data-down] .gph-strikes { animation: gph-down var(--gl-d-move) var(--gl-ease) var(--gph-lit-d, 0ms) both, gph-rimlit var(--gl-d-reveal) var(--gl-ease) var(--gph-lit-d, 0ms); }
+.gph.is-going-down[data-down] .gph-pane { animation: gph-down var(--gl-d-move) var(--gl-ease) var(--gph-lit-d, 0ms) both; }
+@keyframes gph-down { from { opacity: 1; } }
+/* A dying bead burns (moments.mjs): the rail's top edges catch red and
+   gutter twice, the way a light does before it fails. */
+.gph.is-flicker :is(.gph-plinth .gph-plate, .gph-turnbar, .gph-body > .gph-pl:not(.gph-deck, .gph-hand)),
+.gph.is-flicker :is(.gph-deck, .gph-hand)::before { animation: gph-flicker var(--gl-d-reveal) var(--gl-linear); }
+@keyframes gph-flicker {
+  0%, 9% { box-shadow: inset 0 2px 0 var(--gph-red), inset 0 0 0 1px var(--gph-line-2); }
+  10%, 21% { box-shadow: inset 0 0 0 1px var(--gph-line); }
+  22%, 34% { box-shadow: inset 0 2px 0 var(--gph-red), inset 0 0 0 1px var(--gph-line-2); }
+  35%, 46% { box-shadow: inset 0 0 0 1px var(--gph-line); }
+  47% { box-shadow: inset 0 2px 0 color-mix(in srgb, var(--gph-red) 60%, transparent), inset 0 0 0 1px var(--gph-line-2); } }
+
+/* Conditions ride just above the name, where the figure meets the rail: a
+   state of the character, on the character, clear of its face. They are in
+   the nameplate's flow, so a two-line name lifts them rather than running
+   under them. The chip prints its value, because Frightened 2 and
+   Frightened 1 are different rolls; a condition that hurts you takes the
+   red edge. */
+.gph-conds { display: flex; flex-wrap: wrap-reverse; gap: 3px; margin: 0 16px 1px 0; padding: 0; list-style: none; }
+.gph-cond.is-more { padding: 0 6px; }
+.gph-cond { display: flex; align-items: center; gap: 3px; height: 20px; padding: 0 5px 0 4px;
+  background: var(--gph-scrim); box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: var(--gph-clip-xs); }
+.gph-cond img { width: 13px; height: 13px; display: block; }
+.gph-cond .gph-cn { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* The first condition, the one the host ranks most pressing, says its name. */
+.gph-conds li:first-child .gph-cn { position: static; width: auto; height: auto; overflow: hidden; clip: auto; max-width: 84px; text-overflow: ellipsis;
+  font-size: var(--gl-is-t-meta); font-weight: 650; color: var(--gph-text); }
+.gph-cond b { font-family: var(--gph-num); font-size: var(--gl-is-t-meta); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--gph-text); }
+.gph-cond[data-tone="danger"] { box-shadow: inset 0 0 0 1px var(--gph-red); }
+.gph-cond[data-tone="good"] { box-shadow: inset 0 0 0 1px var(--gph-green); }
+
+.gph-frm, .gph-fold {
+  position: absolute; top: 5px; z-index: 5; width: 22px; height: 22px; min-height: 22px; max-height: 22px; display: grid; place-items: center;
+  background: var(--gph-scrim); color: var(--gph-dim); box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: var(--gph-clip-xs);
+  transition: color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease), opacity var(--gl-d-quick) var(--gl-ease);
+}
+.gph-frm { left: 5px; opacity: 0.35; }
+.gph-fold { right: 5px; }
+.gph-frm .gph-ic, .gph-fold .gph-ic { width: 12px; height: 12px; }
+.gph-plinth:is(:hover, :focus-within) .gph-frm, .gph-plinth[data-framing] .gph-frm { opacity: 1; }
+.gph-frm:hover, .gph-fold:hover { color: var(--gph-text); background: var(--gph-ink-4); }
+.gph-fold .gph-ic { transition: rotate var(--gl-d-brisk) var(--gl-ease); }
+.gph[data-folded] .gph-fold .gph-ic { rotate: 180deg; }
+
+/* Framing: the whole plinth is the handle, the words step aside so the face
+   can be placed under where it will sit, and a hairline says the picture is
+   held. Nothing animates under the hand. */
+.gph-frhint { display: none; position: absolute; left: 32px; top: 9px; z-index: 5; padding: 3px 5px;
+  font-size: var(--gl-is-t-meta); font-weight: 600; line-height: 1; color: var(--gph-text); background: var(--gph-scrim); white-space: nowrap; }
+.gph-plinth[data-framing] { cursor: grab; }
+.gph-plinth[data-framing]:active { cursor: grabbing; }
+.gph-plinth[data-framing] .gph-frhint { display: block; }
+.gph-plinth[data-framing] .gph-frm { color: var(--gph-paper); box-shadow: inset 0 0 0 1px var(--gph-paper); }
+.gph-plinth[data-framing] .gph-plate { box-shadow: inset 0 0 0 1px var(--gph-paper); }
+.gph-plinth[data-framing] :is(.gph-nameplate, .gph-conds, .gph-gems) { opacity: 0.25; pointer-events: none; }
+.gph-plinth[data-framing] .gph-fig { transition: none; }
+
+/* Dying: the figure drains, and the dying value becomes the loudest thing
+   on the plinth — beads up to the
+   dying maximum, which already has doomed taken off (core/pf2e-dying.mjs). */
+.gph-plinth[data-state] .gph-fig { filter: grayscale(0.85) brightness(0.62); }
+.gph-dying, .gph-dead { justify-self: start; display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 7px;
+  font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1; clip-path: var(--gph-clip-xs); }
+.gph-dying { color: var(--gph-on-slab); background: var(--gph-red); }
+.gph-beads { display: flex; gap: 3px; }
+.gph-beads i { width: 7px; height: 7px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--gph-on-slab); }
+.gph-beads i.on { background: var(--gph-on-slab); }
+.gph-dead { color: var(--gph-text); background: var(--gph-ink-5); box-shadow: inset 0 0 0 1px var(--gph-line-2); }
+
+/* Folded, the rail is under the edge and the Hit Points with it — but they
+   are the number this HUD exists to keep in view, so the plinth keeps them. */
+.gph-fhp { display: none; align-items: baseline; gap: 1px; font-family: var(--gph-num); font-variant-numeric: tabular-nums; }
+.gph-fhp b { font-size: var(--gl-is-t-title); font-weight: 600; line-height: 1; }
+.gph-fhp s { text-decoration: none; font-size: var(--gl-is-t-meta); color: var(--gph-dim); }
+.gph[data-folded] .gph-fhp { display: flex; }
+.gph[data-folded] .gph-subt { display: none; }
+.gph-fhp[data-state="low"] b { color: var(--gph-red); }
+
+/* ══ METERS ═══════════════════════════════════════════════════════
+   The numeral first and loudest, then the bar. Paper at rest, red under a
+   quarter; the half mark is a tick. Temp rides over the bar from its start. */
+.gph-meter { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; min-width: 0; }
+.gph-mn { display: flex; align-items: baseline; gap: 2px; min-width: 0; white-space: nowrap; font-family: var(--gph-num); font-variant-numeric: tabular-nums; }
+.gph-mn b { font-size: var(--gl-is-t-display); font-weight: 600; line-height: 0.9; letter-spacing: -0.02em; }
+.gph-mn s { text-decoration: none; font-size: var(--gl-is-t-lead); color: var(--gph-faint); }
+.gph-mn em { margin-left: 6px; font-style: normal; font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-info); font-family: var(--gph-font); }
+.gph-bar { position: relative; display: block; height: 8px; background: var(--gph-ink-0); box-shadow: inset 0 0 0 1px var(--gph-line); overflow: hidden; }
+.gph-fill { position: absolute; inset: 1px auto 1px 1px; width: calc((100% - 2px) * var(--gph-v)); background: var(--gph-paper);
+  transition: --gph-v var(--gl-d-swift) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease); }
+.gph-half { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--gph-ink-0); opacity: 0.85; }
+/* The chip trail: the length just lost stays lit in red for a beat, then
+   drains after the fill. A heal has no trail; the fill sweeps up instead. */
+.gph-chip { position: absolute; inset: 1px auto 1px 1px; width: calc((100% - 2px) * var(--gph-was)); background: var(--gph-red);
+  transition: --gph-was var(--gl-d-glide) var(--gl-ease) var(--gl-d-swift); }
+.gph-meter[data-heal] .gph-chip { transition: none; }
+.gph-meter[data-heal] .gph-fill { animation: gph-heal var(--gl-d-glide) var(--gl-ease); }
+@keyframes gph-heal { 0% { background: var(--gph-green); } 100% { } }
+.gph-tmp { position: absolute; left: 1px; top: 0; height: 2px; width: calc((100% - 2px) * var(--gph-tmp)); background: var(--gph-info);
+  transition: width var(--gl-d-swift) var(--gl-ease); }
+.gph-meter[data-state="low"] .gph-fill { background: var(--gph-red); }
+.gph-meter[data-state="low"] .gph-mn b { color: var(--gph-red); }
+/* Stamina: the same bar, thinner, with its key and count beside it. */
+.gph-meter.is-small { grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; column-gap: 6px; }
+.gph-meter.is-small .gph-bar { grid-column: 2; grid-row: 1; height: 5px; }
+.gph-meter.is-small .gph-fill { background: var(--gph-dim); }
+.gph-mk { grid-column: 1; grid-row: 1; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.04em; color: var(--gph-faint); }
+.gph-ms { grid-column: 3; grid-row: 1; font-family: var(--gph-num); font-size: var(--gl-is-t-meta); color: var(--gph-dim); font-variant-numeric: tabular-nums; }
+
+/* ══ VITALS ═══════════════════════════════════════════════════════ */
+/* Every plate stands on the rail's four rows: 24px presses, 2px apart, 5px
+   in from the top and the foot (rows at 5, 31, 57, 83), so a baseline runs
+   straight across the rail. The vitals' AC and Hit Points span the first
+   three; the checks are the fourth. */
+.gph-vitals { flex: none; width: var(--gph-vw); padding: 5px 8px 5px 7px;
+  display: grid; grid-template-columns: 50px minmax(0, 1fr); grid-template-rows: calc(3 * 24px + 2 * 2px) 24px; gap: 2px 8px; }
+.gph-ac { display: grid; place-content: center; justify-items: center; gap: 3px;
+  background: var(--gph-ink-3); box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-sm); }
+.gph-ac span { font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gph-faint); }
+.gph-ac b { font-family: var(--gph-num); font-size: var(--gl-is-t-display); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.gph-life { display: grid; align-content: space-between; min-width: 0; }
+.gph-vfoot { display: flex; align-items: center; gap: 6px; height: 24px; min-width: 0; }
+.gph-cdc { margin-left: auto; flex: none; white-space: nowrap; font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-faint); }
+.gph-cdc b { font-family: var(--gph-num); font-weight: 600; color: var(--gph-text); font-variant-numeric: tabular-nums; }
+
+/* The shield: a press with its own HP and Hardness, Raise printed on it. */
+.gph-shd { display: flex; align-items: center; gap: 5px; height: 18px; min-height: 18px; max-height: 18px; padding: 0 6px 0 4px; min-width: 0;
+  font-size: var(--gl-is-t-meta); color: var(--gph-dim);
+  background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs);
+  transition: background var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease); }
+.gph-shd .gph-ic { width: 12px; height: 12px; }
+.gph-shn { font-family: var(--gph-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gph-shn b { font-weight: 600; color: var(--gph-text); }
+.gph-shh { white-space: nowrap; color: var(--gph-faint); }
+.gph-shd em { font-style: normal; font-weight: 700; white-space: nowrap; color: var(--gph-text); }
+.gph-shd:hover { background: var(--gph-ink-4); }
+.gph-shd[data-state="raised"] { background: var(--gph-paper); color: var(--gph-on-slab); box-shadow: none; }
+.gph-shd[data-state="raised"] :is(.gph-shn b, .gph-shh, em) { color: var(--gph-on-slab); }
+.gph-shd:is([data-state="broken"], [data-state="destroyed"]) { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gph-red) 60%, transparent);
+  background: repeating-linear-gradient(115deg, color-mix(in srgb, var(--gph-red) 16%, transparent) 0 2px, transparent 2px 6px), var(--gph-ink-2); }
+.gph-shd:is([data-state="broken"], [data-state="destroyed"]) em { color: var(--gph-red); }
+/* A broken shield cannot Shield Block, so its Hardness gives way to the word that says so. */
+.gph-shd:is([data-state="broken"], [data-state="destroyed"]) .gph-shh { display: none; }
+
+/* The four checks along the foot: label and modifier, nothing else. */
+.gph-checks { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+.gph-chk { display: flex; align-items: center; justify-content: center; gap: 5px; height: 24px; min-height: 24px; max-height: 24px; padding: 0 4px;
+  background: var(--gph-ink-3); box-shadow: inset 0 1px 0 var(--gph-line), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs);
+  transition: background var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease); }
+.gph-chk span { font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gph-faint); }
+.gph-chk b { font-family: var(--gph-num); font-size: var(--gl-is-t-body); font-weight: 600; font-variant-numeric: tabular-nums; }
+.gph-chk:hover { background: var(--gph-ink-4); }
+.gph-chk:hover span { color: var(--gph-dim); }
+.gph-chk:active { scale: var(--gl-is-press); }
+
+/* ══ STRIKES ══════════════════════════════════════════════════════
+   A row of PF2e's own chat-card presses. The first attack is the one most
+   often pressed, so it carries the plate's one lit fill; the later two step
+   down, as the penalty does. */
+.gph-strikes { flex: none; width: var(--gph-sw); padding: 5px 6px; display: grid; align-content: start; gap: 2px; }
+.gph-strikes.is-none { display: grid; place-items: center; width: 160px; }
+.gph-stk, .gph-nstk { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 32px) 34px 34px; gap: 2px; height: 24px; min-width: 0; }
+.gph-stn { display: flex; align-items: center; gap: 6px; min-width: 0; height: 24px; min-height: 24px; max-height: 24px; padding: 0 6px;
+  background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs);
+  transition: background var(--gl-d-quick) var(--gl-ease); }
+.gph-stn img { width: 16px; height: 16px; flex: none; opacity: 0.9; }
+.gph-stn b { font-size: var(--gl-is-t-body); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gph-stn:hover, .gph-stn.is-peek { background: var(--gph-ink-4); }
+.gph-map, .gph-dmg { display: grid; place-items: center; height: 24px; min-height: 24px; max-height: 24px;
+  font-family: var(--gph-num); font-size: var(--gl-is-t-body); font-weight: 600; font-variant-numeric: tabular-nums;
+  background: var(--gph-ink-3); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs);
+  transition: background var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease); }
+/* The step the next attack is rolled at carries the plate's one lit fill;
+   the others step down, as the penalty does. */
+.gph-map[data-variant] { color: var(--gph-dim); }
+.gph:is(:not([data-map]), [data-map="0"]) .gph-stk:not(.is-short) .gph-map[data-variant="0"],
+.gph[data-map="1"] .gph-stk:not(.is-short) .gph-map[data-variant="1"],
+.gph[data-map="2"] .gph-stk:not(.is-short) .gph-map[data-variant="2"],
+.gph-nstk .gph-map[data-variant="0"] { background: var(--gph-ink-5); color: var(--gph-text); font-weight: 750; box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); }
+/* The live step is the widest press on the row and prints its bonus at
+   title size; the steps already spent shrink and go faint; the columns
+   slide as the turn's attacks land (the tracks are transitioned, and so is
+   --gph-map, on the same beat). The name gives and takes the difference. */
+.gph-stk { grid-template-columns: minmax(0, 1fr) var(--gph-m-live) var(--gph-m-next) var(--gph-m-next) var(--gph-m-dmg) var(--gph-m-dmg);
+  --gph-m-live: 44px; --gph-m-next: 28px; --gph-m-spent: 24px; --gph-m-dmg: 34px;
+  transition: grid-template-columns var(--gl-d-move) var(--gl-ease); }
+.gph[data-map="1"] .gph-stk { grid-template-columns: minmax(0, 1fr) var(--gph-m-spent) var(--gph-m-live) var(--gph-m-next) var(--gph-m-dmg) var(--gph-m-dmg); }
+.gph[data-map="2"] .gph-stk { grid-template-columns: minmax(0, 1fr) var(--gph-m-spent) var(--gph-m-spent) var(--gph-m-live) var(--gph-m-dmg) var(--gph-m-dmg); }
+.gph-stk .gph-map { transition: background var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease), font-size var(--gl-d-move) var(--gl-ease), color var(--gl-d-move) var(--gl-ease); }
+.gph:is(:not([data-map]), [data-map="0"]) .gph-stk .gph-map[data-variant="0"],
+.gph[data-map="1"] .gph-stk .gph-map[data-variant="1"],
+.gph[data-map="2"] .gph-stk .gph-map[data-variant="2"] { font-size: var(--gl-is-t-title); letter-spacing: -0.01em; }
+.gph[data-map="1"] .gph-stk .gph-map[data-variant="0"],
+.gph[data-map="2"] .gph-stk .gph-map:is([data-variant="0"], [data-variant="1"]) { font-size: var(--gl-is-t-meta); color: var(--gph-faint); background: var(--gph-ink-2); }
+.gph[data-map="1"] .gph-stk .gph-map[data-variant="0"]:hover,
+.gph[data-map="2"] .gph-stk .gph-map:is([data-variant="0"], [data-variant="1"]):hover { background: var(--gph-ink-6); color: var(--gph-text); }
+/* The next-MAP marker: one hairline per row under the live step, which
+   slides with it. Every step right of the live one is a next step, so the
+   offset is linear in --gph-map. */
+.gph-mapmark { position: absolute; bottom: -2px; width: var(--gph-m-live); height: 2px; background: var(--gph-paper); pointer-events: none;
+  right: calc(2 * var(--gph-m-dmg) + 3 * 2px + (2 - var(--gph-map)) * (var(--gph-m-next) + 2px));
+  transition: --gph-map var(--gl-d-move) var(--gl-ease); }
+.gph[data-mode="exploration"] .gph-mapmark { display: none; }
+.gph-stk.is-short .gph-mapmark { background: var(--gph-faint); }
+.gph-map.is-none { background: none; box-shadow: none; cursor: default; }
+.gph-dmg { font-family: var(--gph-font); font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gph-dim); }
+.gph-dmg.is-crit { color: var(--gph-faint); }
+.gph-map:hover, .gph-dmg:hover { background: var(--gph-ink-6); color: var(--gph-text); }
+.gph-map:active, .gph-dmg:active { scale: var(--gl-is-press); }
+.gph-stk.is-short :is(.gph-stn b, .gph-map) { color: var(--gph-faint); }
+.gph-stk.is-short .gph-map { background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line); }
+.gph-stk.is-short .gph-stn::after { content: ""; flex: none; margin-left: auto; width: 6px; height: 6px; rotate: 45deg; box-shadow: inset 0 0 0 1.5px var(--gph-faint); }
+
+/* A row: the actions plate's and the "N more" press everywhere. */
+.gph-row { display: flex; align-items: center; gap: 6px; height: 24px; min-height: 24px; max-height: 24px; padding: 0 6px 0 7px; min-width: 0;
+  background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs);
+  transition: background var(--gl-d-quick) var(--gl-ease); }
+.gph-strikes .gph-row { height: 24px; min-height: 24px; max-height: 24px; }
+.gph-row b { font-size: var(--gl-is-t-body); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gph-row .gph-cost { width: 22px; justify-content: flex-start; }
+.gph-row:hover, .gph-row.is-peek { background: var(--gph-ink-4); }
+.gph-row.is-more { background: transparent; }
+.gph-row.is-more b { font-weight: 500; color: var(--gph-dim); }
+.gph-row.is-more .gph-ic { margin-left: auto; width: 12px; height: 12px; color: var(--gph-faint); }
+.gph-row.is-stance b { color: var(--gph-dim); font-weight: 550; }
+/* In stance: the one rule on the plate switched on right now, so it takes
+   the paper edge the system gives the active. */
+.gph-row.is-stance.is-on { background: var(--gph-ink-4); box-shadow: inset 0 0 0 1px var(--gph-paper); }
+.gph-row.is-stance.is-on b { color: var(--gph-text); font-weight: 650; }
+.gph-row.is-spent b { color: var(--gph-faint); font-weight: 500; }
+.gph-freq { margin-left: auto; flex: none; display: flex; gap: 3px; }
+.gph-freq i { width: 6px; height: 6px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--gph-faint); }
+.gph-freq i.on { background: var(--gph-paper); box-shadow: none; }
+
+/* ══ THE TURN BAR ═════════════════════════════════════════════════
+   A tab on the strikes plate's top edge, because that is where the actions
+   it counts are spent. Your turn is a paper slab; the actions left are
+   PF2e's diamonds lit paper, the reaction its arrow. The count is this
+   screen's own: PF2e records no actions spent, so it is a reminder, not a
+   rule, and a press on a pip puts one back or takes one away. */
+.gph-turnbar {
+  position: absolute; left: calc(var(--gph-vw) + 6px); width: var(--gph-sw); bottom: calc(100% + 3px); z-index: 6;
+  display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px 0 0; overflow: hidden;
+  background: var(--gph-ink-1); box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs);
+}
+.gph-tb-k { flex: 0 1 auto; min-width: 0; height: 100%; display: flex; align-items: center; padding: 0 12px 0 9px;
+  font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1; white-space: nowrap; color: var(--gph-faint);
+  box-shadow: inset -1px 0 0 var(--gph-line); }
+.gph-tb-k > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.gph-turnbar.is-mine { box-shadow: inset 0 2px 0 var(--gph-paper), inset 0 0 0 1px var(--gph-line-2); }
+.gph-turnbar.is-mine .gph-tb-k { color: var(--gph-on-slab); background: var(--gph-paper); box-shadow: none;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+.gph-econ { display: flex; align-items: center; gap: 1px; flex: none; }
+.gph-pip { position: relative; width: 18px; height: 24px; min-height: 24px; max-height: 24px; display: grid; place-items: center; color: var(--gph-faint); }
+.gph-pip:not(.is-react)::before { content: ""; width: 10px; height: 10px; rotate: 45deg;
+  box-shadow: inset 0 0 0 1.5px var(--gph-line-2); transition: background var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease); }
+.gph-pip.on:not(.is-react)::before { background: var(--gph-paper); box-shadow: none; }
+/* Not your turn: what you will have, held back a step. */
+.gph-turnbar:not(.is-mine) .gph-pip.on:not(.is-react)::before { background: var(--gph-dim); }
+.gph-turnbar:not(.is-mine) .gph-pip.is-react.on { color: var(--gph-dim); }
+.gph-pip:hover:not(.is-react)::before { box-shadow: inset 0 0 0 1.5px var(--gph-text); }
+.gph-pip.is-extra { margin-left: 4px; }
+/* Quickened: the extra action is a gift, so it lights green. */
+.gph-pip.is-extra.on:not(.is-react)::before { background: var(--gph-green); }
+.gph-pip.is-react { width: 24px; margin-left: 5px; }
+.gph-pip.is-react .gph-act { width: 14px; height: 14px; }
+.gph-pip.is-react.on { color: var(--gph-paper); }
+.gph-pip.is-drain:not(.is-react)::before { animation: gph-drain var(--gl-d-swift) var(--gl-exit); }
+@keyframes gph-drain { 0% { background: var(--gph-paper); scale: 1.35; } 100% { } }
+.gph-tb-map { margin-left: auto; flex: none; display: flex; align-items: baseline; gap: 5px; white-space: nowrap;
+  font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.08em; color: var(--gph-faint); }
+.gph-tb-map b { font-family: var(--gph-num); font-size: var(--gl-is-t-body); font-weight: 600; letter-spacing: 0; color: var(--gph-text); font-variant-numeric: tabular-nums; }
+/* The ignition, once, when the turn comes round: the edge sweeps paper from
+   the slab outwards and the diamonds light one after another. */
+.gph-turnbar.is-igniting::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent 0, color-mix(in srgb, var(--gph-paper) 30%, transparent) 45%, transparent 70%);
+  animation: gph-sweep var(--gl-d-reveal) var(--gl-ease) both; }
+@keyframes gph-sweep { from { translate: -100% 0; } to { translate: 100% 0; } }
+.gph-turnbar.is-igniting .gph-pip.on:not(.is-react)::before { animation: gph-ignite var(--gl-d-swift) var(--gl-ease) both; animation-delay: calc(var(--gl-stagger) * (var(--i) + 2)); }
+.gph-turnbar.is-igniting .gph-pip.is-react.on { animation: gph-ignite var(--gl-d-swift) var(--gl-ease) both; animation-delay: calc(var(--gl-stagger) * (var(--i) + 2)); }
+@keyframes gph-ignite { 0% { background: transparent; scale: 0.4; opacity: 0; } 60% { scale: 1.3; opacity: 1; } 100% { } }
+/* On deck: the turn after this one is yours. The bar holds a paper edge
+   that breathes, the diamonds you are about to have are drawn in paper, and
+   the label says so in an outlined paper slab (the filled slab is your
+   turn, so the one step leads to the other), for as long as it is true; whose
+   turn it is now rides the title. The moment it becomes true (moments.mjs)
+   the bar knocks twice and the slab pops: the call to look up from whatever
+   else is open and get ready. Paper, because it is your turn, coming; never
+   the canvas light, which is a moment and not a state. */
+.gph-turnbar.is-next { box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line-2); }
+.gph-turnbar.is-next::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--gph-paper); pointer-events: none;
+  animation: gph-ondeck calc(2 * var(--gl-d-slow)) var(--gl-ease-inout) infinite; }
+@keyframes gph-ondeck { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+.gph-turnbar.is-next .gph-tb-k { color: var(--gph-paper); box-shadow: inset 0 0 0 1.5px var(--gph-paper);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+.gph-turnbar.is-next .gph-pip.on:not(.is-react)::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--gph-paper); }
+.gph-turnbar.is-next .gph-pip.is-react.on { color: var(--gph-paper); }
+.gph-turnbar.is-calling { animation: gph-knock var(--gl-d-slow) var(--gl-ease); }
+@keyframes gph-knock { 0%, 40%, 100% { translate: 0 0; } 10%, 50% { translate: 0 -5px; } 22%, 62% { translate: 0 0; } }
+.gph-turnbar.is-calling .gph-tb-k { animation: gph-ignite var(--gl-d-swift) var(--gl-ease) both; }
+.gph-turnbar.is-calling::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent 0, color-mix(in srgb, var(--gph-paper) 22%, transparent) 45%, transparent 70%);
+  animation: gph-sweep var(--gl-d-reveal) var(--gl-ease) both; }
+/* Exploring: what the character is doing while the party travels. */
+.gph-turnbar.is-explore { gap: 6px; }
+.gph-tb-acts { display: flex; gap: 3px; min-width: 0; overflow: hidden; }
+.gph-tb-acts .gph-tog { flex: none; }
+.gph-tb-more b { font-family: var(--gph-num); font-size: var(--gl-is-t-meta); font-weight: 600; }
+.gph-tb-more:has(b) { width: auto; padding: 0 4px; gap: 3px; display: flex; align-items: center; }
+.gph-tb-more { margin-left: auto; flex: none; width: 22px; height: 20px; min-height: 20px; max-height: 20px; display: grid; place-items: center; color: var(--gph-faint); }
+.gph-tb-more:hover { color: var(--gph-text); }
+.gph-tb-more .gph-ic { width: 13px; height: 13px; }
+/* Exploring, a strike closes to its first attack: no MAP outside a fight. */
+.gph[data-mode="exploration"] .gph-stk { grid-template-columns: minmax(0, 1fr) 40px 34px 34px; }
+.gph[data-mode="exploration"] .gph-stk .gph-map[data-variant]:not([data-variant="0"]),
+.gph[data-mode="exploration"] .gph-stk .gph-map.is-none { display: none; }
+
+/* A toggle is a state, so its press is a chip whose fill says it: paper
+   when on, a hairline when off. */
+.gph-tog { flex: 0 1 auto; min-width: 0; height: 18px; min-height: 18px; max-height: 18px; padding: 0 9px 0 7px; display: flex; align-items: center;
+  font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--gph-dim);
+  box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+  transition: background var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease); }
+.gph-tog:hover { background: var(--gph-ink-4); color: var(--gph-text); }
+.gph-tog.on { background: var(--gph-paper); color: var(--gph-on-slab); box-shadow: none; }
+
+/* ══ THE DECK ═════════════════════════════════════════════════════
+   The one plate without a width: it takes what the fixed plates leave, and
+   a wide screen simply shows more of the tab. The plate is drawn on
+   ::before, because spell cards stand up out of it and must not be clipped
+   by its cut. */
+.gph-deck { flex: 1 1 0; min-width: 0; display: flex; align-items: stretch; overflow: visible; clip-path: none; background: none; box-shadow: none; }
+.gph-deck::before { content: ""; position: absolute; inset: 0; background: var(--gph-ink-1);
+  box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip); }
+.gph-deck[data-tab="spells"] { min-width: calc(118px + 78px + 36px + var(--gph-cw) + (var(--n) - 1) * 5px); }
+
+/* The tabs, down the plate's left edge, so its whole height is content. The
+   marker travels between them (`--gph-tab` is registered for that). */
+.gph-tabs { position: relative; flex: none; width: 118px; padding: 5px 0 0 5px; display: grid; grid-auto-rows: 24px; gap: 2px; align-content: start;
+  box-shadow: inset -1px 0 0 var(--gph-line); }
+.gph-tab { display: flex; align-items: center; gap: 7px; height: 24px; min-height: 24px; max-height: 24px; padding: 0 7px 0 8px; min-width: 0;
+  font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gph-faint);
+  transition: color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease); }
+.gph-tab .gph-ic { width: 13px; height: 13px; }
+.gph-tab span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gph-tab b { margin-left: auto; font-family: var(--gph-num); font-weight: 600; letter-spacing: 0; color: var(--gph-faint); font-variant-numeric: tabular-nums; }
+.gph-tab:hover { color: var(--gph-text); background: var(--gph-ink-2); }
+.gph-tab.on { color: var(--gph-text); background: var(--gph-ink-3); }
+.gph-tabmark { position: absolute; left: 5px; top: calc(5px + var(--gph-tab) * 26px); width: 2px; height: 24px; background: var(--gph-paper); pointer-events: none;
+  transition: --gph-tab var(--gl-d-move) var(--gl-ease); }
+
+.gph-pane { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; padding: 5px 28px 5px 8px; }
+.gph-pane[data-pane="spells"] { padding: 0 0 0 0; }
+.gph-pane.is-swapped > * { animation: gph-pane-in var(--gl-d-brisk) var(--gl-ease) both; }
+@keyframes gph-pane-in { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+.gph-pane-none { align-self: center; margin-left: 12px; }
+.gph-expand { position: absolute; right: 5px; top: 5px; z-index: 31; width: 20px; height: 20px; min-height: 20px; max-height: 20px; display: grid; place-items: center;
+  color: var(--gph-faint); transition: color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease); }
+.gph-expand .gph-ic { width: 12px; height: 12px; }
+.gph-expand:hover { color: var(--gph-text); background: var(--gph-ink-3); }
+.gph-deck[data-tab="spells"] .gph-expand { display: none; }
+
+/* Actions: toggles above, then the rows, flowing column by column so a
+   wide deck holds more of them rather than wider ones. */
+.gph-actpane { flex: 1 1 auto; min-width: 0; display: grid; grid-template-rows: minmax(0, 1fr); align-content: start; gap: 2px; }
+.gph-actpane.has-toggles { grid-template-rows: 24px minmax(0, 1fr); }
+.gph-togs { display: flex; align-items: center; gap: 3px; min-width: 0; overflow: hidden; height: 24px; }
+.gph-togs .gph-tog { height: 24px; min-height: 24px; max-height: 24px; }
+/* Whole columns only: as many as fit, never one cut by the pane edge; what
+   does not fit is under the expand press. */
+.gph-arows { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); grid-auto-rows: 24px; gap: 2px 4px; align-content: start; overflow: hidden; min-width: 0;
+  height: calc(4 * 24px + 3 * 2px); align-self: start; }
+/* With toggles, they are the first row and the actions the other three. */
+.gph-actpane.has-toggles .gph-arows { height: calc(3 * 24px + 2 * 2px); }
+
+/* Skills: the finder's field, the target, then the actions worth reaching
+   for right now as keys, two rows deep. */
+.gph-skilltab { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: minmax(140px, 230px) minmax(0, 1fr); grid-template-rows: 24px minmax(0, 1fr); gap: 2px 8px; align-content: start; }
+.gph-skilltab .gph-search { height: 24px; }
+.gph-keys { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(218px, 1fr)); grid-auto-rows: 24px; gap: 2px 4px; align-content: start; overflow: hidden; min-width: 0; height: calc(3 * 24px + 2 * 2px); align-self: start; }
+.gph-search { display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 6px 0 8px; min-width: 0; color: var(--gph-faint); cursor: text;
+  background: var(--gph-ink-0); box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: var(--gph-clip-xs);
+  transition: box-shadow var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease); }
+.gph-search .gph-ic { width: 13px; height: 13px; }
+.gph-search input { all: unset; flex: 1 1 auto; min-width: 0; height: 100%; text-overflow: ellipsis; font-family: var(--gph-font); font-size: var(--gl-is-t-body); font-weight: 500; color: var(--gph-text); }
+.gph-search input::placeholder { color: var(--gph-faint); opacity: 1; }
+.gph-search input::-webkit-search-cancel-button { display: none; }
+.gph-search:focus-within { box-shadow: inset 0 0 0 1px var(--gph-paper); color: var(--gph-text); }
+.gph kbd { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; font-family: var(--gph-num); font-size: var(--gl-is-t-meta); font-weight: 600; line-height: 1;
+  color: var(--gph-dim); box-shadow: inset 0 0 0 1px var(--gph-line-2); }
+.gph-tgt { display: flex; align-items: center; gap: 6px; height: 26px; min-width: 0; font-size: var(--gl-is-t-meta); color: var(--gph-faint); white-space: nowrap; }
+.gph-tgt img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; object-position: 50% 15%; flex: none; box-shadow: 0 0 0 1px var(--gph-line-2); }
+.gph-tgt b { font-size: var(--gl-is-t-body); font-weight: 650; color: var(--gph-text); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gph-tgt.is-none { font-weight: 600; }
+.gph-key { display: flex; align-items: center; gap: 6px; height: 22px; min-height: 22px; max-height: 22px; padding: 0 7px 0 6px; min-width: 0;
+  background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs);
+  transition: background var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease); }
+.gph-key .gph-aic { width: 14px; height: 14px; }
+.gph-key:hover .gph-aic { color: var(--gph-text); }
+.gph-key .gph-cost { color: var(--gph-faint); }
+.gph-key > b { font-size: var(--gl-is-t-body); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gph-kmod { margin-left: auto; flex: none; font-family: var(--gph-num); font-size: var(--gl-is-t-body); font-weight: 600; font-variant-numeric: tabular-nums; }
+.gph-vs { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.gph-vs em { font-family: var(--gph-num); font-style: normal; font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-text); font-variant-numeric: tabular-nums; }
+.gph-vs.is-unknown em { color: var(--gph-faint); }
+.gph-vs em[data-tone="good"] { color: var(--gph-green); }
+.gph-vs em[data-tone="bad"] { color: var(--gph-red); }
+.gph-key .gph-vs { flex: none; }
+.gph-key .gph-vsk { display: none; }
+.gph-key .gph-vs em { min-width: 3.4ch; text-align: right; color: var(--gph-dim); }
+.gph-key:hover { background: var(--gph-ink-4); }
+.gph-key:active { scale: var(--gl-is-press); }
+.gph-key.is-locked :is(b, .gph-kmod) { color: var(--gph-faint); }
+
+/* Items: a hand of the spells' compact card (below). The pane keeps its
+   right gutter for the expand press, which opens the whole inventory. */
+.gph-pane[data-pane="items"] { padding: 0 28px 0 0; }
+.gph-deck[data-tab="items"] { min-width: calc(118px + 28px + 36px + var(--gph-cw) + (var(--n) - 1) * 5px); }
+
+/* ══ THE UTILITY COLUMN ══ rest, macros, the sheet. */
+.gph-util { flex: none; width: var(--gph-uw); padding: 6px; display: grid; grid-auto-rows: 30px; gap: 3px; align-content: center; }
+.gph-dw { position: relative; height: 30px; min-height: 30px; max-height: 30px; display: flex; align-items: center; justify-content: center;
+  color: var(--gph-dim); background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs);
+  transition: background var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease); }
+.gph-dw .gph-ic { width: 14px; height: 14px; }
+.gph-dw:hover { background: var(--gph-ink-4); color: var(--gph-text); }
+.gph-dw.on { background: var(--gph-ink-4); color: var(--gph-text); box-shadow: inset 0 0 0 1px var(--gph-paper); }
+
+/* The rank dial: which rank the hand holds, its slots under the numeral, the
+   steppers either side. The numeral opens the picker of every rank. */
+.gph-dial { position: relative; flex: none; width: 78px; display: grid; align-content: center; justify-items: center; gap: 5px; padding: 0 2px 0 4px;
+  box-shadow: inset -1px 0 0 var(--gph-line); }
+.gph-dialrow { display: flex; align-items: center; gap: 0; }
+.gph-step { display: grid; place-items: center; width: 16px; height: 34px; min-height: 34px; max-height: 34px; color: var(--gph-faint);
+  transition: color var(--gl-d-quick) var(--gl-ease); }
+.gph-step .gph-ic { width: 12px; height: 12px; }
+.gph-step:hover { color: var(--gph-text); }
+.gph-step[aria-disabled="true"] { opacity: var(--gl-is-disabled); }
+.gph-rk { display: grid; justify-items: center; gap: 2px; width: 40px; height: 38px; min-height: 38px; max-height: 38px; align-content: center;
+  background: var(--gph-ink-3); box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-sm);
+  transition: background var(--gl-d-quick) var(--gl-ease); }
+.gph-rk span { font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gph-faint); }
+.gph-rk b { font-family: var(--gph-num); font-size: var(--gl-is-t-title); font-weight: 600; line-height: 1; }
+.gph-rk:hover { background: var(--gph-ink-4); }
+.gph-slots { display: flex; gap: 3px; min-height: 7px; }
+.gph-slots i { width: 7px; height: 7px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--gph-faint); }
+.gph-slots i.on { background: var(--gph-paper); box-shadow: none; }
+.gph-sdc { font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-faint); white-space: nowrap; }
+.gph-sdc b { font-family: var(--gph-num); font-weight: 600; color: var(--gph-dim); font-variant-numeric: tabular-nums; }
+
+.gph-fan { position: relative; flex: 1 1 auto; min-width: 0; container: gphfan / inline-size; }
+.gph-held {
+  /* 36 = the fan's inset either end, which is the outer cards' tilt overhang */
+  --gph-adv: min(var(--gph-cw) + 6px, (100cqw - 36px - var(--gph-cw)) / max(var(--n) - 1, 1));
+  position: absolute; bottom: 8px; left: calc(18px + (var(--z) - 1) * var(--gph-adv)); z-index: var(--z);
+  transform-origin: 50% 135%;
+  transform: translateY(calc(var(--t) * var(--t) * 1.4px)) rotate(calc(var(--t) * 2.2deg));
+  transition: transform var(--gl-d-brisk) var(--gl-ease), translate var(--gl-d-brisk) var(--gl-ease), filter var(--gl-d-quick) var(--gl-ease);
+}
+.gph-held:is(:hover, :focus-within, .is-peek) { z-index: 30; transform: translateY(-14px) rotate(0); }
+.gph-held:is(:hover, :focus-within, .is-peek, .is-sel) ~ .gph-held { translate: 16px 0; }
+.gph-held:has(~ .gph-held:is(:hover, :focus-within, .is-peek, .is-sel)) { translate: -16px 0; }
+/* A socket is where a card is not, so it stands behind the cards that are. */
+.gph-held.is-socket { z-index: 0; }
+/* While a drawer is open the hand tucks into its tray: the drawer is what you
+   are looking at, and a hand you have put down goes below the edge. */
+.gph[data-overlay] .gph-held { transform: translateY(42px) rotate(calc(var(--t) * 1.2deg)); filter: brightness(0.55); }
+
+/* The compact card. Its painting fills it and fades to ink at the foot; the
+   rank hangs on a pennant top left and the action cost top right, the name
+   at the foot. Nothing else: the peek prints the rest whole. */
+.gph-card { position: relative; display: block; width: var(--gph-cw); height: var(--gph-ch); min-height: var(--gph-ch); max-height: var(--gph-ch);
+  background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: var(--gph-clip);
+  filter: drop-shadow(0 6px 10px var(--gl-is-shade)); }
+.gph-art { position: absolute; inset: 1px 1px 32px 1px; background: var(--gph-ink-3) center / cover no-repeat; }
+.gph-art::after { content: ""; position: absolute; inset: 40% 0 0 0; background: linear-gradient(to bottom, transparent, var(--gph-ink-2)); }
+.gph-pen { position: absolute; left: 0; top: 0; min-width: 20px; height: 22px; padding: 0 5px; display: grid; place-items: center;
+  font-family: var(--gph-num); font-size: var(--gl-is-t-lead); font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--gph-on-slab); background: var(--gph-paper); clip-path: polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%); }
+.gph-ccost { position: absolute; right: 4px; top: 4px; padding: 3px 4px; color: var(--gph-text); background: var(--gph-scrim); clip-path: var(--gph-clip-xs); }
+/* At 80px a name has 69px: the floor size, so "Smokestick" and "Alchemist's"
+   fit a line whole, and a word longer than the card breaks rather than
+   being cut by its edge. */
+.gph-cname { position: absolute; left: 6px; right: 5px; bottom: 7px; font-size: var(--gl-is-t-meta); font-weight: 700; line-height: 1.2; text-wrap: balance; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gph-card:hover { box-shadow: inset 0 0 0 1px var(--gph-paper); }
+/* Expended: still a card, visibly put down. */
+.gph-card.is-spent .gph-art { filter: grayscale(1) brightness(0.45); }
+.gph-card.is-spent .gph-cname { color: var(--gph-faint); }
+.gph-card.is-spent .gph-pen { background: var(--gph-ink-5); color: var(--gph-dim); }
+.gph-card.is-spent::after { content: ""; position: absolute; left: 8px; right: 8px; top: 44px; height: 1.5px; background: var(--gph-faint); rotate: -18deg; }
+.gph-card.is-socket { background: var(--gph-ink-0); box-shadow: inset 0 0 0 1px var(--gph-line-2); filter: none; cursor: default; }
+.gph-card.is-socket .gph-pen { background: transparent; color: var(--gph-faint); box-shadow: inset 0 0 0 1px var(--gph-line-2); }
+.gph-card.is-socket .gph-cname { color: var(--gph-faint); font-weight: 500; }
+/* An item's painting is an object on its own ground, so it is held whole
+   rather than cropped to the card. */
+.gph-card.is-item .gph-art { background-size: contain; background-color: var(--gph-ink-3); }
+.gph-card.is-item .gph-pen { font-size: var(--gl-is-t-body); }
+/* A belt, not a hand of cards: a whole row of items lies nearly flat, so its
+   outer cards stay on the plate. */
+.gph-fan.is-items .gph-held { transform: translateY(calc(var(--t) * var(--t) * 0.6px)) rotate(calc(var(--t) * 1deg)); }
+.gph-fan.is-items .gph-held:is(:hover, :focus-within) { transform: translateY(-14px) rotate(0); }
+.gph[data-overlay] .gph-fan.is-items .gph-held { transform: translateY(42px) rotate(0); }
+.gph-card:active { scale: var(--gl-is-press); }
+
+.gph-drawer { position: absolute; right: var(--gph-drawer-r, 0); bottom: calc(var(--gph-h) + 52px); z-index: 40; width: max-content; min-width: 280px; max-width: 460px;
+  background: var(--gph-ink-1); box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip);
+  filter: drop-shadow(0 24px 40px var(--gl-is-shade));
+  transform-origin: 100% 100%; animation: gph-rise var(--gl-d-brisk) var(--gl-ease); }
+.gph-drawer header { display: flex; align-items: baseline; gap: 10px; padding: 11px 14px 9px; box-shadow: inset 0 -1px 0 var(--gph-line); }
+.gph-drawer header b { font-size: var(--gl-is-t-title); font-weight: 700; line-height: 1.2; }
+.gph-drawer header span { font-size: var(--gl-is-t-meta); font-weight: 500; color: var(--gph-faint); }
+.gph-dbody { padding: 10px 12px 12px; max-height: 360px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--gph-ink-5) transparent; }
+.gph-dlist { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; min-width: 260px; }
+.gph-dhead { padding: 8px 2px 3px; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gph-faint); }
+.gph-dhead:first-child { padding-top: 0; }
+.gph-drow { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; height: 28px; min-height: 28px; max-height: 28px; padding: 0 10px 0 8px;
+  background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs); transition: background var(--gl-d-quick) var(--gl-ease); }
+button.gph-drow:hover { background: var(--gph-ink-4); }
+.gph-drow.is-read { cursor: default; }
+.gph-drow img { width: 18px; height: 18px; flex: none; }
+.gph-drow b { font-size: var(--gl-is-t-body); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gph-drow span:not(.gph-cost) { font-size: var(--gl-is-t-meta); font-weight: 500; color: var(--gph-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gph-drow em { margin-left: auto; flex: none; font-family: var(--gph-num); font-size: var(--gl-is-t-body); font-weight: 600; font-style: normal; color: var(--gph-dim); font-variant-numeric: tabular-nums; }
+.gph-drow.is-spent :is(b, em) { color: var(--gph-faint); }
+.gph-tag { flex: none; margin-left: auto; padding: 2px 6px 2px 4px; font-style: normal; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.04em; color: var(--gph-dim);
+  box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%); }
+.gph-tag + em { margin-left: 0; }
+/* A rank badge: PF2e's filled letter, white on the rank's hue. */
+.gph-tag[data-rank] { min-width: 15px; padding: 2px 4px; text-align: center; color: var(--gph-text); background: var(--gph-rank, var(--gph-rank-0));
+  box-shadow: none; clip-path: var(--gph-clip-xs); letter-spacing: 0; }
+.gph-tag[data-rank="0"] { --gph-rank: transparent; color: var(--gph-faint); box-shadow: inset 0 0 0 1px var(--gph-line-2); }
+:is(.gph-tag, .gph-shead)[data-rank="1"] { --gph-rank: var(--gph-rank-1); }
+:is(.gph-tag, .gph-shead)[data-rank="2"] { --gph-rank: var(--gph-rank-2); }
+:is(.gph-tag, .gph-shead)[data-rank="3"] { --gph-rank: var(--gph-rank-3); }
+:is(.gph-tag, .gph-shead)[data-rank="4"] { --gph-rank: var(--gph-rank-4); }
+.gph-key .gph-tag, .gph-cchk .gph-tag { margin-left: 0; padding: 1px 3px; min-width: 14px; }
+.gph-dnone, .gph-dnote { margin: 0; font-size: var(--gl-is-t-body); line-height: 1.4; color: var(--gph-faint); }
+.gph-dnote { margin-top: 8px; font-size: var(--gl-is-t-meta); }
+
+
+.gph-rest { display: grid; gap: 6px; width: 280px; }
+.gph-rb { display: grid; gap: 5px; align-content: center; height: 56px; min-height: 56px; max-height: 56px; padding: 0 12px;
+  background: var(--gph-ink-3); box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-sm); transition: background var(--gl-d-quick) var(--gl-ease); }
+.gph-rb:hover { background: var(--gph-ink-4); }
+.gph-rb b { font-size: var(--gl-is-t-lead); font-weight: 700; }
+.gph-rb span { font-size: var(--gl-is-t-meta); line-height: 1.3; color: var(--gph-faint); }
+
+.gph-macros { display: grid; grid-template-columns: repeat(5, 74px); gap: 4px; }
+.gph-mac { position: relative; display: grid; justify-items: center; align-content: center; gap: 4px; height: 64px; min-height: 64px; max-height: 64px; padding: 6px 4px;
+  background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs); transition: background var(--gl-d-quick) var(--gl-ease); }
+button.gph-mac:hover { background: var(--gph-ink-4); }
+.gph-mac img { width: 28px; height: 28px; }
+.gph-mac b { max-width: 100%; font-size: var(--gl-is-t-meta); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gph-mac.is-empty { background: var(--gph-ink-0); }
+.gph-mac .gph-mk { position: absolute; left: 4px; top: 3px; font-family: var(--gph-num); color: var(--gph-faint); }
+
+@keyframes gph-rise { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes gph-sink { to { opacity: 0; transform: translateY(8px); } }
+.gph-peek.is-closing, .gph-drawer.is-closing { animation: gph-sink var(--gl-d-tap) var(--gl-exit) forwards; pointer-events: none; }
+
+/* ══ THE PEEK ═════════════════════════════════════════════════════ */
+.gph-peek { position: absolute; z-index: 50; width: 300px; left: var(--gph-peek-x, 40%); bottom: var(--gph-peek-y, 150px);
+  animation: gph-rise var(--gl-d-quick) var(--gl-ease); filter: drop-shadow(0 18px 28px var(--gl-is-shade)); }
+.gph-rule { background: var(--gph-ink-1); box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip); }
+.gph-rule header { display: grid; gap: 3px; padding: 12px 14px 10px; }
+.gph-rule header b { font-size: var(--gl-is-t-title); font-weight: 700; line-height: 1.15; }
+.gph-rule header span { font-size: var(--gl-is-t-meta); font-weight: 500; line-height: 1.3; color: var(--gph-faint); }
+.gph-rule header span b { font-family: var(--gph-num); font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-dim); }
+.gph-traits { display: flex; flex-wrap: wrap; gap: 3px; margin: 0; padding: 0 14px 10px; list-style: none; }
+.gph-traits li { padding: 2px 7px 2px 5px; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gph-dim);
+  box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%); }
+.gph-traits li[data-tone="rare"] { color: var(--gph-amber); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gph-amber) 50%, transparent); }
+.gph-lines { margin: 0; padding: 9px 14px; display: grid; gap: 4px; box-shadow: inset 0 1px 0 var(--gph-line); }
+.gph-lines div { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; }
+.gph-lines dt { font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gph-faint); padding-top: 1px; }
+.gph-lines dd { margin: 0; font-size: var(--gl-is-t-body); line-height: 1.35; color: var(--gph-text); font-variant-numeric: tabular-nums; }
+.gph-text { padding: 10px 14px 14px; max-height: 220px; overflow-y: auto; box-shadow: inset 0 1px 0 var(--gph-line);
+  font-size: var(--gl-is-t-body); line-height: 1.5; color: var(--gph-dim); text-wrap: pretty; scrollbar-width: thin; scrollbar-color: var(--gph-ink-5) transparent; }
+.gph-text p { margin: 0 0 6px; }
+.gph-text p:last-child { margin-bottom: 0; }
+.gph-text strong, .gph-text b { color: var(--gph-text); font-weight: 650; }
+.gph-pacts { display: flex; gap: 4px; margin-top: 6px; }
+.gph-pa { flex: 1 1 auto; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 6px; height: 30px; min-height: 30px; max-height: 30px; padding: 0 10px;
+  font-size: var(--gl-is-t-body); font-weight: 650; color: var(--gph-text);
+  background: var(--gph-ink-3); box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-sm);
+  transition: background var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease); }
+.gph-pa:hover { background: var(--gph-ink-4); }
+.gph-pa:active { scale: var(--gl-is-press); }
+.gph-pa.is-primary { background: var(--gph-paper); color: var(--gph-on-slab); box-shadow: none; }
+.gph-pa.is-primary .gph-cost { color: var(--gph-on-slab); }
+.gph-pa.is-primary:hover { background: var(--gph-text); }
+.gph-pa[aria-disabled="true"] { opacity: var(--gl-is-disabled); }
+
+/* ══ THE STACK ═════════════════════════════════════════════════════
+   The party, above the plinth, standing clear of the figure's rise. */
+.gph-stack { position: absolute; left: 0; bottom: calc(var(--gph-h) + var(--gph-rise) + 12px); display: flex; flex-direction: column; gap: 4px; width: 200px; }
+.gph[data-role="gm"] .gph-stack { display: grid; grid-template-columns: repeat(2, 172px); gap: 6px 10px; width: auto; }
+
+.gph-seat { display: flex; align-items: center; gap: 6px; min-width: 0; position: relative; }
+.gph-ring { flex: none; width: var(--gph-sz); height: var(--gph-sz); overflow: visible; filter: drop-shadow(0 1px 2px var(--gl-is-shade)); }
+.gph-well { fill: var(--gph-ink-0); }
+.gph-lip { fill: none; stroke: var(--gph-line-2); stroke-width: 1; }
+.gph-band { fill: none; stroke: var(--gph-scrim); stroke-width: 7px; }
+.gph-arc { fill: none; stroke: var(--gph-paper); stroke-width: 4.5px;
+  stroke-dasharray: calc(var(--gph-len) * var(--gph-f) * 1px) calc(var(--gph-len) * 1px);
+  transition: --gph-f var(--gl-d-swift) var(--gl-ease), stroke var(--gl-d-quick) var(--gl-ease); }
+.gph-tarc { fill: none; stroke: var(--gph-info); stroke-width: 2px;
+  stroke-dasharray: calc(var(--gph-tlen) * var(--gph-tf) * 1px) calc(var(--gph-tlen) * 1px); }
+.gph-seat[data-low] .gph-arc { stroke: var(--gph-red); }
+.gph-sid { display: grid; gap: 2px; min-width: 0; padding: 3px 10px 3px 5px; margin-left: -3px;
+  background: linear-gradient(90deg, var(--gph-scrim), var(--gph-scrim-lo) 72%, transparent); text-shadow: 0 1px 2px var(--gph-ink-0); }
+.gph-sname { font-size: var(--gl-is-t-lead); font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gph-ssub { display: flex; gap: 6px; font-size: var(--gl-is-t-meta); line-height: 1.15; color: var(--gph-dim); white-space: nowrap; min-width: 0; }
+.gph-ssub b { font-family: var(--gph-num); font-weight: 600; color: var(--gph-text); font-variant-numeric: tabular-nums; }
+.gph-shp { font-family: var(--gph-num); font-variant-numeric: tabular-nums; }
+.gph-snote { overflow: hidden; text-overflow: ellipsis; }
+.gph-shero { display: flex; gap: 4px; margin-top: 2px; }
+.gph-shero i { width: 6px; height: 6px; rotate: 45deg; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gph-amber) 55%, transparent); }
+.gph-shero i.on { background: var(--gph-amber); box-shadow: none; }
+.gph-seat[data-state="dying"] .gph-snote { color: var(--gph-red); font-weight: 700; }
+.gph-seat[data-state="dying"] .gph-lip { stroke: var(--gph-red); stroke-width: 1.5; }
+.gph-seat:is([data-state="dying"], [data-state="dead"]) image { filter: grayscale(1) brightness(0.55); }
+.gph-seat.is-self .gph-lip { stroke: var(--gph-paper); }
+
+/* ══ THE GM ════════════════════════════════════════════════════════ */
+.gph-empty { flex: 0 1 auto; display: grid; align-content: center; gap: 6px; padding: 0 18px 0 16px; }
+.gph-empty b { font-size: var(--gl-is-t-lead); font-weight: 700; }
+.gph-empty span { font-size: var(--gl-is-t-meta); line-height: 1.3; color: var(--gph-faint); }
+
+.gph-npc { flex: none; width: 650px; padding: 5px 8px 5px 7px; display: grid; grid-template-columns: 50px 252px minmax(0, 1fr); gap: 0 10px; }
+.gph-ac.is-npc { align-self: stretch; }
+.gph-ac.is-dc span { letter-spacing: 0.02em; }
+.gph-npc.is-hazard { grid-template-columns: 60px 242px minmax(0, 1fr); }
+.gph-npct { display: grid; align-content: space-between; min-width: 0; }
+.gph-npct .gph-checks { grid-column: auto; }
+.gph-npc:not(.is-hazard) .gph-npct { grid-template-rows: calc(2 * 24px + 2px) 24px 24px; gap: 2px; align-content: start; }
+.gph-npc:not(.is-hazard) .gph-npct .gph-meter { align-content: start; }
+.gph-npc:not(.is-hazard) .gph-know { height: 24px; }
+.gph-know { font-size: var(--gl-is-t-meta); font-weight: 500; color: var(--gph-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gph-know b { font-family: var(--gph-num); font-weight: 600; color: var(--gph-text); font-variant-numeric: tabular-nums; }
+.gph-know { display: flex; align-items: center; gap: 8px; }
+.gph-know > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.gph-know em { font-style: normal; font-weight: 700; color: var(--gph-dim); }
+.gph-kbtn { margin-left: auto; flex: none; display: flex; align-items: center; gap: 5px; height: 20px; min-height: 20px; max-height: 20px; padding: 0 8px 0 6px;
+  font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gph-dim);
+  background: var(--gph-ink-3); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs); transition: background var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease); }
+.gph-kbtn .gph-ic { width: 12px; height: 12px; }
+.gph-kbtn:hover { background: var(--gph-ink-4); color: var(--gph-text); }
+.gph-disable { margin: 0; font-size: var(--gl-is-t-meta); line-height: 1.3; color: var(--gph-dim);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gph-disable b { font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gph-faint); margin-right: 3px; }
+.gph-moves { display: grid; align-content: start; gap: 2px; min-width: 0; }
+.gph-nstk { grid-template-columns: minmax(0, 1fr) 34px 28px 28px 36px; }
+.gph-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 24px; gap: 2px 4px; }
+.gph-move { display: flex; align-items: center; gap: 6px; height: 24px; min-height: 24px; max-height: 24px; padding: 0 8px 0 7px; min-width: 0;
+  background: var(--gph-ink-3); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs); transition: background var(--gl-d-quick) var(--gl-ease); }
+.gph-move:hover { background: var(--gph-ink-4); }
+.gph-move b { font-size: var(--gl-is-t-body); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gph-move.is-more { background: transparent; }
+.gph-move.is-more b { font-weight: 500; color: var(--gph-dim); }
+
+/* A hand: the plate is drawn on ::before so the cards can stand up out of
+   it unclipped. It grows until the cards stand side by side and no further. */
+.gph-hand { flex: 0 1 var(--gph-full); overflow: visible; clip-path: none; background: none; box-shadow: none; display: flex; align-items: stretch; }
+.gph-hand::before { content: ""; position: absolute; inset: 0; background: var(--gph-ink-1);
+  box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip); }
+
+/* The GM's hand: every non-PC token, the disposition as the card's edge. */
+.gph-foes { --gph-full: calc(36px + var(--gph-cw) + (var(--n) - 1) * (var(--gph-cw) + 6px)); min-width: calc(36px + var(--gph-cw) + (var(--n) - 1) * 24px); }
+.gph-card.is-foe { box-shadow: inset 0 0 0 1px var(--gph-line-2), inset 0 -2px 0 var(--gph-tone, var(--gph-steel)); }
+.gph-card.is-foe[data-disp="hostile"] { --gph-tone: var(--gph-red); }
+.gph-card.is-foe[data-disp="friendly"] { --gph-tone: var(--gph-green); }
+.gph-card.is-foe .gph-art { inset: 1px 1px 30px 1px; background-position: 50% 15%; }
+.gph-mini { position: absolute; left: 26px; right: 6px; top: 8px; height: 5px; background: var(--gph-scrim); box-shadow: 0 0 0 1px var(--gph-scrim); }
+.gph-mini i { position: absolute; inset: 1px auto 1px 1px; width: calc((100% - 2px) * var(--gph-f)); background: var(--gph-paper); transition: width var(--gl-d-swift) var(--gl-ease); }
+.gph-card.is-foe[data-low] .gph-mini i { background: var(--gph-red); }
+.gph-cstate { position: absolute; left: 0; top: 26px; padding: 2px 6px 2px 5px; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--gph-text); background: var(--gph-ink-5); clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%); }
+.gph-card.is-foe[data-state="dying"] .gph-cstate { background: var(--gph-red); color: var(--gph-on-slab); }
+.gph-card.is-foe:is([data-state="dying"], [data-state="dead"]) .gph-art { filter: grayscale(1) brightness(0.5); }
+.gph-card.is-foe.is-more { display: grid; place-content: center; justify-items: center; gap: 2px; background: var(--gph-ink-1); box-shadow: inset 0 0 0 1px var(--gph-line-2); }
+.gph-card.is-foe.is-more .gph-cname { position: static; font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-faint); }
+.gph-cmore { font-family: var(--gph-num); font-size: var(--gl-is-t-title); font-weight: 600; color: var(--gph-text); font-variant-numeric: tabular-nums; }
+/* The selected card sits on top and whole, and the cards after it step
+   right by what it would cover, so no neighbour loses its pennant or the
+   start of its name. The step is reserved in the advance, so the hand
+   still fits its plate. */
+.gph-foes .gph-held.is-sel { z-index: 29; }
+.gph-fan.is-foes:has(.is-sel) .gph-held { --gph-adv: min(var(--gph-cw) + 6px, (100cqw - 42px - 2 * var(--gph-cw)) / max(var(--n) - 2, 1)); }
+/* A name keeps to the strip of its card that shows, two lines deep; in a
+   crowded hand it drops to the small size and three lines so a word fits a strip whole, and
+   a number is glued to its word, so "Chanter 1" and "Chanter 2" both keep
+   what tells them apart. */
+.gph-foes .gph-held .gph-cname { right: max(6px, calc(var(--gph-cw) - var(--gph-adv) + 4px)); }
+.gph-foes .gph-held:is(.is-sel, :hover, :focus-within, :last-child) .gph-cname { right: 6px; }
+.gph-foes .gph-cname { overflow-wrap: normal; }
+.gph-foes[data-dense] .gph-cname { left: 5px; font-size: var(--gl-is-t-meta); line-height: 1.2; letter-spacing: -0.01em; -webkit-line-clamp: 3; }
+.gph-foes[data-dense] .gph-held:not(.is-sel, :hover, :focus-within, :last-child) .gph-cname { right: max(4px, calc(var(--gph-cw) - var(--gph-adv) + 1px)); }
+.gph-foes .gph-held.is-sel { transform: translateY(-6px) rotate(0); }
+.gph-foes .gph-held.is-sel::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: -6px; height: 2px; background: var(--gph-paper); }
+.gph-foes .gph-held:not(.is-sel) .gph-card { filter: drop-shadow(0 6px 10px var(--gl-is-shade)) brightness(0.8); }
+.gph-foes .gph-held:not(.is-sel):hover .gph-card { filter: drop-shadow(0 6px 10px var(--gl-is-shade)); }
+.gph-foes .is-sel ~ .gph-held { translate: max(0px, calc(var(--gph-cw) + 6px - var(--gph-adv))) 0; }
+.gph-foes .gph-held:has(~ .is-sel) { translate: none; }
+/* Whose turn it is stands up out of the hand, edged top and foot in its
+   disposition; when the turn comes round (moments.mjs) it rises higher and
+   settles, under the light running in the same colour. */
+.gph-foes .gph-held:has(> .gph-card[data-turn]) { z-index: 28; }
+.gph-card.is-foe[data-turn] { translate: 0 -10px; box-shadow: inset 0 0 0 1px var(--gph-line-2), inset 0 -3px 0 var(--gph-tone, var(--gph-steel)), inset 0 2px 0 var(--gph-tone, var(--gph-steel)); }
+.gph-card.is-foe.is-called { animation: gph-callup var(--gl-d-slow) var(--gl-ease); }
+@keyframes gph-callup { 0% { translate: 0 0; } 38% { translate: 0 -26px; } 100% { translate: 0 -10px; } }
+
+/* ══ SLIM ══ a familiar or a player-owned creature: what it does in a
+   fight and nothing it has not got. */
+/* The vitals keep their width here too: four checks a GM calls for unasked. */
+
+/* ══ FOLDED ══ the plinth and the stack stay; the rest goes under the edge. */
+.gph[data-folded] .gph-body { opacity: 0; translate: 0 calc(var(--gph-h) + 20px); pointer-events: none; }
+.gph[data-folded] :is(.gph-drawer, .gph-peek) { display: none; }
+
+/* ══ ARRIVING / CHANGING WHOSE RAIL ══
+   The rail rises once when it arrives; changing whose rail it is fades it
+   out and back — one object re-pointed, so nothing slides sideways. */
+.gph.is-arriving :is(.gph-plinth, .gph-body > *, .gph-stack) { animation: gph-arrive var(--gl-d-move) var(--gl-ease) both; }
+.gph.is-arriving .gph-body > *:nth-child(2) { animation-delay: calc(var(--gl-stagger) * 1); }
+.gph.is-arriving .gph-body > *:nth-child(3) { animation-delay: calc(var(--gl-stagger) * 2); }
+.gph.is-arriving .gph-body > *:nth-child(4) { animation-delay: calc(var(--gl-stagger) * 3); }
+.gph.is-arriving .gph-body > *:nth-child(5) { animation-delay: calc(var(--gl-stagger) * 4); }
+.gph.is-arriving .gph-stack { animation-delay: calc(var(--gl-stagger) * 4); }
+@keyframes gph-arrive { from { opacity: 0; translate: 0 14px; } to { opacity: 1; translate: 0 0; } }
+.gph.is-leaving :is(.gph-rail, .gph-stack) { opacity: 0; translate: 0 6px; transition: opacity var(--gl-d-tap) var(--gl-exit), translate var(--gl-d-tap) var(--gl-exit); }
+
+/* The flinch: transform and opacity only, so it composites. */
+.gph-plinth::after { content: ""; position: absolute; inset: auto 0 0 0; height: 60%; z-index: 2; pointer-events: none; opacity: 0;
+  background: linear-gradient(to top, color-mix(in srgb, var(--gph-red) 50%, transparent), transparent); }
+.gph-plinth.is-hit::after { animation: gph-bleed var(--gl-d-glide) var(--gl-ease); }
+.gph-plinth.is-hit .gph-fig { animation: gph-recoil var(--gl-d-swift) var(--gl-ease); }
+@keyframes gph-recoil { 22% { translate: -3px 2px; } 55% { translate: 1px 0; } }
+@keyframes gph-bleed { 0% { opacity: 0.85; } 100% { opacity: 0; } }
+
+/* A press the purse could not pay, or a strike with nothing in hand: the
+   thing that refused moves, briefly. No dialog. */
+.gph .is-denied { animation: gph-deny var(--gl-d-quick) var(--gl-ease); }
+@keyframes gph-deny { 25% { translate: -3px 0; } 60% { translate: 2px 0; } }
+
+/* A cut-out has its own edge, so the fade and the clip come off and a
+   contact shadow seats it on the rail. It stands over the plate's top edge
+   the way a figure stands on a plinth. */
+.gph-plinth.is-cut .gph-fig { -webkit-mask-image: none; mask-image: none; clip-path: none; overflow: visible;
+  filter: drop-shadow(0 6px 8px var(--gl-is-shade)) drop-shadow(0 1px 1px var(--gph-ink-0)); }
+.gph-plinth.is-cut[data-state] .gph-fig { filter: grayscale(0.85) brightness(0.62) drop-shadow(0 6px 8px var(--gl-is-shade)); }
+
+/* ══ THE SKILL FINDER ═════════════════════════════════════════════
+   The rail's hero. A panel risen over the deck, the field already focused:
+   type and it narrows, browse by what you are trying to do, and every card
+   answers cost, roll and against-what before it is pressed. */
+.gph-finder {
+  position: absolute; left: calc(var(--gph-pw) + 6px); right: calc(var(--gph-uw) + 6px); max-width: 1120px;
+  bottom: calc(var(--gph-h) + 38px); z-index: 45; max-height: min(480px, calc(100vh - 300px));
+  display: flex; flex-direction: column; pointer-events: auto;
+  background: var(--gph-ink-1); box-shadow: inset 0 1px 0 var(--gph-line-2), inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-lg);
+  filter: drop-shadow(0 24px 44px var(--gl-is-shade));
+  transform-origin: 30% 100%; animation: gph-unfold var(--gl-d-swift) var(--gl-ease) both;
+}
+@keyframes gph-unfold { from { opacity: 0; transform: translateY(18px) scaleY(0.94); } to { opacity: 1; transform: none; } }
+.gph:has(.gph-finder:not(.is-closing)) .gph-stack { opacity: 0; translate: -8px 0; pointer-events: none; }
+.gph-stack { transition: opacity var(--gl-d-quick) var(--gl-ease), translate var(--gl-d-brisk) var(--gl-ease); }
+.gph-finder.is-closing { animation: gph-sink var(--gl-d-tap) var(--gl-exit) forwards; pointer-events: none; }
+.gph-fhead { display: flex; align-items: center; gap: 10px; padding: 12px 12px 11px 14px; box-shadow: inset 0 -1px 0 var(--gph-line); }
+.gph-fhead .gph-search { flex: 1 1 auto; max-width: 440px; height: 36px; padding: 0 10px 0 11px; gap: 9px; }
+.gph-fhead .gph-search .gph-ic { width: 15px; height: 15px; }
+.gph-fhead .gph-search input { font-size: var(--gl-is-t-title); }
+.gph-tgt.is-big { height: 36px; padding: 0 12px 0 4px; gap: 8px; background: var(--gph-ink-2); box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs); }
+.gph-tgt.is-big img { width: 28px; height: 28px; }
+.gph-tgt.is-big b { font-size: var(--gl-is-t-lead); }
+.gph-tgt.is-big em { font-style: normal; font-weight: 500; color: var(--gph-faint); }
+.gph-tgt.is-big.is-none { padding: 0 12px; }
+.gph-fhead .gph-x { margin-left: auto; }
+.gph-x { flex: none; width: 28px; height: 28px; min-height: 28px; max-height: 28px; display: grid; place-items: center; color: var(--gph-faint);
+  transition: color var(--gl-d-quick) var(--gl-ease), background var(--gl-d-quick) var(--gl-ease); }
+.gph-x .gph-ic { width: 13px; height: 13px; }
+.gph-x:hover { color: var(--gph-text); background: var(--gph-ink-3); }
+.gph-drawer header .gph-x { margin-left: auto; width: 24px; height: 24px; min-height: 24px; max-height: 24px; align-self: center; }
+
+.gph-fhead, .gph-fchecks, .gph-ffoot { flex: none; }
+.gph-results { flex: 0 1 auto; min-height: 0; overflow-y: auto; padding: 12px 14px 0; scrollbar-width: thin; scrollbar-color: var(--gph-ink-5) transparent; }
+
+/* The columns: one per skill, packed like a page of text so a long column
+   and a short one share the panel without leaving holes. */
+.gph-scols { columns: 204px; column-gap: 14px; }
+.gph-scol { break-inside: avoid; display: grid; gap: 1px; margin: 0 0 12px; }
+.gph-finder:not([data-settled]) .gph-scol { animation: gph-arrive var(--gl-d-brisk) var(--gl-ease) both; animation-delay: calc(var(--gl-stagger) * min(var(--c, 0), 8) / 2); }
+.gph-shead { position: relative; display: flex; align-items: center; gap: 6px; width: 100%; height: 24px; min-height: 24px; max-height: 24px; margin: 0 0 3px; padding: 0 6px;
+  box-shadow: inset 0 -1px 0 var(--gph-line); transition: background var(--gl-d-quick) var(--gl-ease); }
+.gph-shead::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--gph-rank, var(--gph-line-2)); transform-origin: 0 50%; }
+.gph-finder:not([data-settled]) .gph-shead::after { animation: gph-rule var(--gl-d-swift) var(--gl-ease) both; animation-delay: calc(var(--gl-stagger) * (min(var(--c, 0), 8) / 2 + 2)); }
+@keyframes gph-rule { from { transform: scaleX(0); } to { transform: none; } }
+.gph-shead b { font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gph-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gph-shead .gph-tag { margin-left: 0; padding: 1px 5px 1px 3px; }
+.gph-shead em { margin-left: auto; font-family: var(--gph-num); font-style: normal; font-size: var(--gl-is-t-lead); font-weight: 600; color: var(--gph-text); font-variant-numeric: tabular-nums; }
+button.gph-shead:hover { background: var(--gph-ink-2); }
+.gph-shead.is-plain { font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gph-faint); }
+.gph-chips-v { display: grid; gap: 1px; }
+
+/* An action: one line. Picture, name, cost; the chance on the right. */
+.gph-fa { display: flex; align-items: center; gap: 7px; width: 100%; height: 24px; min-height: 24px; max-height: 24px; padding: 0 6px 0 5px; min-width: 0;
+  color: var(--gph-text); clip-path: var(--gph-clip-xs);
+  transition: background var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease), scale var(--gl-d-tap) var(--gl-ease); }
+.gph-aic { flex: none; width: 15px; height: 15px; fill: currentColor; color: var(--gph-dim); transition: color var(--gl-d-quick) var(--gl-ease); }
+.gph-fa > b { font-size: var(--gl-is-t-body); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gph-fa .gph-cost { color: var(--gph-faint); }
+.gph-fa > .gph-ic { width: 11px; height: 11px; color: var(--gph-faint); }
+.gph-cskill, .gph-cmap { flex: none; font-family: var(--gph-num); font-style: normal; font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gph-codds { margin-left: auto; flex: none; font-family: var(--gph-num); font-style: normal; font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-dim); font-variant-numeric: tabular-nums; }
+.gph-codds[data-tone="good"] { color: var(--gph-green); }
+.gph-codds[data-tone="bad"] { color: var(--gph-red); }
+.gph-fa:hover { background: var(--gph-ink-3); }
+.gph-fa:hover .gph-aic { color: var(--gph-text); }
+.gph-fa:active { scale: var(--gl-is-press); }
+.gph-fa.is-sel { background: var(--gph-ink-3); box-shadow: inset 0 0 0 1px var(--gph-paper); }
+.gph-fa.is-sel .gph-aic { color: var(--gph-paper); }
+/* Pinned to the Skills tab: a paper pin beside the chance, apart from the cost. */
+.gph-selring { position: absolute; z-index: 2; pointer-events: none; box-shadow: inset 0 0 0 1px var(--gph-paper); clip-path: var(--gph-clip-xs); }
+.gph-finder.is-sliding .gph-fa.is-sel { box-shadow: none; }
+.gph-fa.is-pinning .gph-pinmk { animation: gph-land var(--gl-d-swift) var(--gl-ease); }
+.gph-scol.is-opening .gph-fa:nth-child(n + 7) { animation: gph-arrive var(--gl-d-brisk) var(--gl-ease) both; }
+.gph-pinmk { margin-left: auto; flex: none; display: grid; place-items: center; color: var(--gph-paper); }
+.gph-pinmk .gph-ic { width: 11px; height: 11px; }
+.gph-pinmk + .gph-codds { margin-left: 0; }
+/* What the typed words matched, underlined in paper. */
+.gph-fa mark { color: inherit; background: linear-gradient(var(--gph-paper), var(--gph-paper)) 0 100% / 100% 1.5px no-repeat; }
+/* tall enough a line box that the mark’s foot is not clipped with the ellipsis */
+.gph-fa > b { line-height: 1.5; }
+.gph-more { display: flex; align-items: center; height: 22px; min-height: 22px; max-height: 22px; padding: 0 6px 0 27px; width: 100%; font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-faint); }
+.gph-more:hover { color: var(--gph-text); }
+
+/* The checks with no action here, and the Lores, along the foot. */
+.gph-fchecks { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; padding: 8px 12px 8px 14px; box-shadow: inset 0 1px 0 var(--gph-line); }
+.gph-fchecks > span { margin-right: 6px; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gph-faint); }
+.gph-cchk { display: flex; align-items: center; gap: 6px; height: 22px; min-height: 22px; max-height: 22px; padding: 0 7px;
+  box-shadow: inset 0 0 0 1px var(--gph-line); clip-path: var(--gph-clip-xs); transition: background var(--gl-d-quick) var(--gl-ease); }
+.gph-cchk b { font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-dim); }
+.gph-cchk em { font-family: var(--gph-num); font-style: normal; font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-text); font-variant-numeric: tabular-nums; }
+.gph-cchk:hover { background: var(--gph-ink-3); }
+.gph-fmap { flex: none; display: flex; align-items: baseline; gap: 5px; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.08em; color: var(--gph-faint); }
+.gph-fmap b { font-family: var(--gph-num); font-size: var(--gl-is-t-body); font-weight: 600; letter-spacing: 0; color: var(--gph-text); }
+.gph-ffoot { display: flex; align-items: center; gap: 16px; padding: 7px 14px 8px; box-shadow: inset 0 1px 0 var(--gph-line); font-size: var(--gl-is-t-meta); color: var(--gph-faint); }
+.gph-fhint { margin-left: auto; flex: none; display: flex; align-items: center; gap: 14px; }
+.gph-fhint > span { display: flex; align-items: center; gap: 3px; }
+/* Narrow, the explanation keeps its room and the hints keep the two keys
+   nothing else on screen teaches (pin and close). */
+@container gph (max-width: 1260px) { .gph-fhint > span:nth-child(-n + 3) { display: none; } }
+/* The selected action in words: name, roll, defence, chance. */
+.gph-fsel { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 9px; margin: 0; white-space: nowrap; overflow: hidden; color: var(--gph-dim); }
+.gph-fsel > b { font-size: var(--gl-is-t-body); font-weight: 650; color: var(--gph-text); }
+.gph-fsel > span i { font-style: normal; color: var(--gph-faint); }
+.gph-fsel > span b { font-family: var(--gph-num); font-weight: 600; color: var(--gph-text); }
+.gph-fsel > em { font-style: normal; font-weight: 650; color: var(--gph-text); }
+.gph-fsel > em[data-tone="good"] { color: var(--gph-green); }
+.gph-fsel > em[data-tone="bad"] { color: var(--gph-red); }
+.gph-fsel > .gph-fdim { color: var(--gph-faint); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* ══ THE ECHO ══ the press shows what it rolled: the total, flipping in,
+   on the degree's tone, then gone. Only for a roll this viewer can see. */
+.gph [data-echo] { position: relative; }
+.gph-echo { position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center; gap: 6px; pointer-events: none;
+  font-family: var(--gph-num); font-size: var(--gl-is-t-body); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--gph-on-slab); background: var(--gph-paper);
+  transform-origin: 50% 0; animation: gph-echo calc(var(--gl-d-cinematic) * 2) var(--gl-ease) both; }
+.gph-echo i { font-family: var(--gph-font); font-style: normal; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.gph-echo[data-degree="3"] { background: var(--gph-green); }
+.gph-echo[data-degree="1"] { background: var(--gph-ink-5); color: var(--gph-text); }
+.gph-echo[data-degree="0"] { background: var(--gph-red); }
+:is(.gph-map, .gph-chk, .gph-dmg, .gph-pa) > .gph-echo i { display: none; }
+@keyframes gph-echo { 0% { transform: perspective(200px) rotateX(-90deg); opacity: 0; } 9% { transform: none; opacity: 1; } 82% { opacity: 1; } 100% { opacity: 0; } }
+
+/* A spell cast leaves the hand upward before the rail redraws without it. */
+.gph-held.is-cast { animation: gph-cast var(--gl-d-glide) var(--gl-exit) forwards; pointer-events: none; }
+@keyframes gph-cast { 0% { } 30% { transform: translateY(-22px) rotate(0) scale(1.04); } 100% { transform: translateY(-70px) rotate(0) scale(0.92); opacity: 0; } }
+/* A condition that just arrived lands like a gem. */
+.gph-cond[data-new] { animation: gph-land var(--gl-d-swift) var(--gl-ease); }
+/* Dying is the one state on the rail that keeps moving: the beads beat. */
+.gph-dying .gph-beads i.on { animation: gph-beat var(--gl-d-slow) var(--gl-ease-inout) infinite; }
+@keyframes gph-beat { 0%, 100% { scale: 1; } 18% { scale: 1.45; } 34% { scale: 1; } 48% { scale: 1.25; } }
+/* A recovery check lands (moments.mjs). A bead put out breathes out: a pale
+   ring leaves it and fades. A bead lit burns: it flares white-hot and
+   swells, then settles into the beat; the rail's edges flicker with it. */
+.gph-beads i { position: relative; }
+.gph-dying .gph-beads i.is-burn { animation: gph-burn var(--gl-d-reveal) var(--gl-ease) both; animation-delay: calc(var(--k, 0) * var(--gl-d-flash)); }
+@keyframes gph-burn { 0% { scale: 0.3; box-shadow: 0 0 0 0 var(--gph-on-slab); } 30% { scale: 1.9; background: var(--gph-on-slab); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gph-on-slab) 45%, transparent); } 100% { scale: 1; } }
+.gph-dying .gph-beads i.is-exhale::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  background: var(--gph-on-slab); animation: gph-exhale var(--gl-d-reveal) var(--gl-exit) both; animation-delay: calc(var(--k, 0) * var(--gl-d-flash)); }
+@keyframes gph-exhale { 0% { opacity: 0.95; scale: 1; translate: 0 0; } 100% { opacity: 0; scale: 2.6; translate: 0 -5px; } }
+
+/* ── one-line labels ── an ellipsis needs overflow hidden, and a line box
+   shorter than the font's descent then clips g, p, q and y flat
+   ("Lonqsword"). Every single-line label in a press gets a line box tall
+   enough for the whole glyph; the press keeps its height, so the row pitch
+   does not move. */
+:is(.gph-stn, .gph-row, .gph-key, .gph-move, .gph-drow, .gph-tgt, .gph-fa) > b,
+:is(.gph-tab, .gph-tb-k, .gph-know, .gph-drow) > span:not(.gph-cost), .gph-tog, .gph-mac b, .gph-shead b, .gph-subt { line-height: 1.5; }
+
+/* ══ NARROW ══ the rail keeps its height and gives up words, then width,
+   never a number someone is about to act on (ADR 0013 records the order):
+     1. the deck's tabs drop their labels to icons;
+     2. the plinth, vitals and strikes tighten — the strike's icon goes, its
+        name and every number stay — and the deck closes its rows to one
+        width and its hand to a pile.
+   The turn bar and the finder are placed against the plates, so they move
+   with them. */
+@container gph (max-width: 1260px) {
+  .gph-tabs { width: 34px; padding-left: 4px; }
+  .gph-tab { justify-content: center; padding: 0; }
+  .gph-tab :is(span, b) { display: none; }
+  .gph-tabmark { left: 4px; }
+  .gph-deck[data-tab="spells"] { min-width: calc(30px + 78px + 36px + var(--gph-cw) + (var(--n) - 1) * 5px); }
+  .gph-deck[data-tab="items"] { min-width: calc(30px + 28px + 36px + var(--gph-cw) + (var(--n) - 1) * 5px); }
+}
+@container gph (max-width: 1080px) {
+  .gph > * { --gph-pw: 128px; --gph-sw: 250px; }
+  .gph-pip { width: 15px; }
+  .gph-pip.is-react { width: 20px; margin-left: 3px; }
+  .gph-stk { --gph-m-live: 38px; --gph-m-next: 24px; --gph-m-spent: 21px; --gph-m-dmg: 31px; }
+  .gph-stn { padding: 0 5px; }
+  .gph-dmg { letter-spacing: 0; }
+  .gph-stn img { display: none; }
+  .gph-arows { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); }
+  .gph-skilltab { grid-template-columns: minmax(0, 1fr); }
+  .gph-skilltab .gph-tgt { display: none; }
+  .gph-keys { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .gph-turnbar .gph-tb-k { padding: 0 10px 0 8px; }
+}
+
+/* ── cost ──────────────────────────────────────────────────────────────
+   Every live change goes through a setter that touches one plate, and a
+   fixed-width plate cannot change its neighbours' geometry, so it says so.
+   Not the deck (its cards overhang it on purpose) and not the plinth (the
+   figure rises out of it): containment would clip both. */
+.gph-vitals, .gph-strikes, .gph-util, .gph-npc { contain: layout style; }
