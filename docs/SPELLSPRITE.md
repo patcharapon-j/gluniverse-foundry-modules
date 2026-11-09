@@ -68,9 +68,14 @@ is energy and the element otherwise, as an orb at range and a touch in melee.
 
 A Strike whose `system.attackEffects` lists Grab, Knockdown or Push (Improved
 too; `riderOf` also reads Rend) carries `rider: { arch, slug }`, and plays only
-its blow. In PF2e the maneuver is a follow-up: the creature's Grab, Knockdown
-or Push action, or a Grapple, Trip or Shove check, which already plays its
-archetype with its own outcome. Drawing it on the Strike too grabbed twice when
+its blow. In PF2e the maneuver is a follow-up: a Grapple, Trip or Shove check,
+which already plays its archetype with its own outcome, or the creature's Grab,
+Knockdown or Push action. That action's card plays nothing when it only rolls
+the check (`checkBacked`: its text, `@Localize` expanded, carries
+`[[/act grapple]]`, an action link, or an `@Check[athletics]` tagged
+`action:grapple`; a bare Athletics check rolls with no `action:` option and is
+often the target's way out, as in Tangled Forest Trip), so the check plays
+it once with the body part; a roll-free card plays it and uses the body part up. Drawing it on the Strike too grabbed twice when
 it was followed up, and showed a grab that never happened when it was not.
 
 So `read.mjs` remembers, per attacker **token** (`Riders` in `handoff.mjs`),
@@ -92,8 +97,9 @@ happening (`passives.mjs` cites the system source for each):
 
 - **Frightful Presence** (any `fear` aura): its Will saves carry the passive as
   `flags.pf2e.origin`. A save with no cast to join goes to `onPassiveRoll`,
-  the saves of one passive are joined like a cast's, and `fear` plays from the
-  creature onto everyone who saved.
+  the saves of one passive are joined like a cast's, per source token
+  (`passiveJoinKey`: two tokens of one linked actor share the item's uuid), and
+  `fear` plays from that token onto everyone who saved against it.
 - **Other auras**: a save card (Stench) or a damage card (Dragon Heat) from the
   passive pulses `HARM.aura` round the creature. On `combatTurnChange`, which
   reaches every client, a creature with a visible aura (`turnPulse`: the

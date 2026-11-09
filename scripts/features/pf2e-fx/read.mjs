@@ -23,7 +23,7 @@
  *   self-effect    the item named by context.item on the speaker's actor.
  *
  * A Strike that lists Grab, Knockdown or Push plays only its blow. PF2e's
- * follow-up (the creature's Grab action, a Grapple check) plays the maneuver
+ * follow-up (a Grapple check; a Grab action card only when it rolls none) plays the maneuver
  * with its own outcome, and draws it with the body part the Strike landed with
  * when it comes from the same token inside TIMING.handoff (handoff.mjs).
  *
@@ -40,8 +40,8 @@ import { seedOf } from "./core/rand.mjs";
 import { LOOK_FLAG, SETTINGS, TIMING } from "./constants.mjs";
 import { applyLook, mergeLooks } from "./looks.mjs";
 import { describeBlast, describeCondition, describeItem, describeSkillAction, describeTick, outcomeFrom, slugOf, traitsOf } from "./semantics.mjs";
-import { HANDOFF_ARCHES, Riders, limbOf } from "./handoff.mjs";
-import { Seen, auraArea, auraDesc, auraShown, fearDesc, observable, passiveKey, passiveOf, regenDesc, turnAdvanced, turnPulse } from "./passives.mjs";
+import { HANDOFF_ARCHES, Riders, checkBacked, limbOf } from "./handoff.mjs";
+import { Seen, auraArea, auraDesc, auraShown, fearDesc, observable, passiveJoinKey, passiveKey, passiveOf, regenDesc, turnAdvanced, turnPulse } from "./passives.mjs";
 
 /* ── settings and viewer ───────────────────────────────────────────────── */
 
@@ -49,6 +49,7 @@ const setting = (key, fallback) => {
   try { const v = game.settings.get(SUITE_ID, key); return v ?? fallback; } catch { return fallback; }
 };
 const enabled = (key) => setting(key, true) !== false;
+const localize = (key) => game.i18n?.localize?.(key) ?? key;
 
 /** May this viewer read the message at all? pf2e-odds' landingOf gate, which
  *  itself answers only for check cards; a cast card or a tick has no roll. */
@@ -463,6 +464,9 @@ function onCard(message, ctx, origin) {
   });
   if (!desc || desc.silent) return;
   if (desc.kind === "attack" && isSpell) return; // the attack roll plays it
+  // a Grab / Knockdown / Push card that rolls a Grapple / Trip / Shove: that check plays the maneuver,
+  // with its outcome and the Strike's body part, so the card plays nothing and leaves the memory
+  if (!isSpell && HANDOFF_ARCHES.has(desc.arch) && checkBacked(desc.arch, item, localize)) return;
   const rec = openCast(message, item, desc, casterToken);
   const stray = strayRegions.get(message.id);
   if (stray) { strayRegions.delete(message.id); attachRegion(rec, stray); return; }
@@ -786,7 +790,7 @@ export function primeScene(dir = director) {
  */
 
 const PASSIVE_ORIGINS = new Set(["action", "feat"]);
-/** origin uuid → the open join of one passive's saves */
+/** passiveJoinKey(source token, origin uuid) → the open join of one creature's passive's saves */
 const passiveRolls = new Map();
 /** Keys already played: one regen and one turn pulse per creature per round. */
 const passiveSeen = new Seen(256);
@@ -830,13 +834,16 @@ function onPassiveRoll(message, ctx, origin) {
   const p = passiveFromUuid(origin.uuid);
   if (!p || p.kind === "regen") return;
   if (enabled(SETTINGS.standDown) && aaPlays(p.item)) return;
-  let rec = passiveRolls.get(origin.uuid);
+  // two tokens of one linked actor share the item: each one's saves are its own join, from it
+  const source = tokenOf(ctx?.origin?.token) ?? tokenOf(p.item.actor);
+  const key = passiveJoinKey(source?.id, origin.uuid);
+  let rec = passiveRolls.get(key);
   if (!rec || rec.fired || nowS() - rec.at > TIMING.joinWindow) {
     rec = {
-      id: message.id, key: origin.uuid, at: nowS(), p, actor: p.item.actor ?? null,
-      source: tokenOf(ctx?.origin?.token) ?? tokenOf(p.item.actor), saves: new Map(), messages: [], timer: null, fired: false,
+      id: message.id, key, at: nowS(), p, actor: p.item.actor ?? null,
+      source, saves: new Map(), messages: [], timer: null, fired: false,
     };
-    passiveRolls.set(origin.uuid, rec);
+    passiveRolls.set(key, rec);
   }
   rec.messages.push(message);
   const who = ctx?.type === "saving-throw" ? speakerToken(message) ?? tokenOf(ctx?.token) : tokenOf(ctx?.target?.token);

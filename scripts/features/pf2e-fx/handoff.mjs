@@ -17,6 +17,45 @@
 /** The archetypes a Strike rider hands over to (semantics.mjs RIDER_RULES). */
 export const HANDOFF_ARCHES = Object.freeze(new Set(["grab", "trip", "shove", "rend"]));
 
+/** The PF2e action each hand-off archetype's follow-up check rolls. Rend has none: it just deals damage. */
+const FOLLOW_UP_ACTION = Object.freeze({ grab: "grapple", trip: "trip", shove: "shove" });
+/** packs/actions ids of Grapple, Trip and Shove, for `@UUID[Compendium.pf2e.actionspf2e.Item.<id>]` links. */
+const ACTION_IDS = Object.freeze({ PMbdMWc2QroouFGD: "grapple", ge56Lu1xXVFYUnLP: "trip", "7blmbDrQFNfdT731": "shove" });
+
+/**
+ * Is a maneuver action's card only the button for a check? PF2e's Grab,
+ * Improved Grab, Knockdown and Push (packs/bestiary-ability-glossary-srd) are
+ * `@Localize[PF2E.NPC.Abilities.Glossary.*]`, whose text has the monster
+ * "attempt to [[/act grapple]]" (trip, shove); older printings link the action
+ * (`@UUID[...actionspf2e.Item.<id>]{Trip}`). That check is the maneuver, and
+ * plays it with its real outcome and the Strike's body part, so the card plays
+ * nothing. A card with none of these (an older "automatically Grabs") is the
+ * maneuver itself. A bare `@Check[athletics]` does not count: its roll carries
+ * no `action:` option, so nothing would play it (Clutch, Reposition), and it is
+ * as often the TARGET's way out (Tangled Forest Trip: "a Reflex save, Acrobatics
+ * or Athletics"), whose save joins the card. Only one that tags the action
+ * itself (`@Check[athletics|traits:action:trip]`) is the attacker's maneuver.
+ * @param {string} arch   the card's archetype
+ * @param {object} item   the action item (its `system.description.value` is read raw)
+ * @param {(key: string) => string} [localize]  expands `@Localize[key]` (game.i18n.localize)
+ */
+export function checkBacked(arch, item, localize = null) {
+  const act = FOLLOW_UP_ACTION[arch];
+  if (!act) return false;
+  let text = String(item?.system?.description?.value ?? "");
+  if (localize) {
+    text = text.replace(/@Localize\[([^\]]+)\]/g, (m, key) => {
+      try { const v = localize(key); return typeof v === "string" ? v : m; } catch { return m; }
+    });
+  }
+  if (new RegExp(`\\[\\[/act ${act}\\b`, "i").test(text)) return true;
+  for (const m of text.matchAll(/@Check\[(?:type:)?athletics\b([^\]]*)\]/gi)) if (new RegExp(`\\baction:${act}\\b`, "i").test(m[1])) return true;
+  for (const m of text.matchAll(/@UUID\[Compendium\.pf2e\.actionspf2e\.Item\.([A-Za-z0-9-]+)\](?:\{([^}]*)\})?/g)) {
+    if ((ACTION_IDS[m[1]] ?? m[1].toLowerCase()) === act || String(m[2] ?? "").trim().toLowerCase() === act) return true;
+  }
+  return false;
+}
+
 /** A Strike's body part, from its described spec: what a follow-up draws with. */
 export function limbOf(desc, itemSlug = null) {
   if (!desc) return null;

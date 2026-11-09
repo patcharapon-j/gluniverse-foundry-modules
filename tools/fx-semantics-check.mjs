@@ -14,12 +14,12 @@
  * Exit code 1 on any failure.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   describeItem, describeBlast, describeCondition, describeSkillAction, describeTick, outcomeFrom,
   weaponStyleOf, inlineTemplate, inlineDamage, runeMaterials,
 } from "../scripts/features/pf2e-fx/semantics.mjs";
-import { HANDOFF_ARCHES, Riders, limbOf } from "../scripts/features/pf2e-fx/handoff.mjs";
+import { HANDOFF_ARCHES, Riders, checkBacked, limbOf } from "../scripts/features/pf2e-fx/handoff.mjs";
 import { FUNCTIONS, MATERIALS, WEAPON_STYLES, DELIVERIES, TRADITIONS, DELIVERY_VOCAB, MOTIF_VOCAB, PROP_VOCAB, FLAVOR_VOCAB } from "../scripts/features/pf2e-fx/constants.mjs";
 
 const fails = [];
@@ -361,6 +361,36 @@ try {
   if (R.take("tok", FOLLOW[5][1].arch, { at: 1 }) !== null) fails.push("handoff: a Trip took a tongue grab's body part"); else passed++;
   if (R.take("tok", "grab", { at: 13 }) !== null) fails.push("handoff: a Grapple 13 s later took the body part (past the 12 s window)"); else passed++;
   if (R.take("other", "grab", { at: 1 }) !== null) fails.push("handoff: a token that never struck took a body part"); else passed++;
+
+  /* A maneuver card that only rolls the check (checkBacked) plays nothing: the
+     check plays it, with its outcome and the body part. Trimmed from PF2e's
+     en.json glossary, Menace Under Otari's sod hound and Agents of Edgewatch. */
+  const card = (desc) => ({ system: { description: { value: desc } } });
+  const GLOSSARY = {
+    "PF2E.NPC.Abilities.Glossary.Grab": "<p>If used after a Strike, the monster attempts to [[/act grapple]] the creature using the body part it attacked with.</p>",
+    "PF2E.NPC.Abilities.Glossary.Knockdown": "<p>The monster attempts to [[/act trip]] the creature.</p>",
+  };
+  const loc = (k) => GLOSSARY[k] ?? k;
+  const BACKED = [
+    ["glossary Grab (@Localize)", "grab", card("<p>@Localize[PF2E.NPC.Abilities.Glossary.Grab]</p>"), loc, true],
+    ["glossary Knockdown (@Localize)", "trip", card("<p>@Localize[PF2E.NPC.Abilities.Glossary.Knockdown]</p>"), loc, true],
+    ["glossary Grab unlocalized", "grab", card("<p>@Localize[PF2E.NPC.Abilities.Glossary.Grab]</p>"), null, false],
+    ["an inline [[/act shove]]", "shove", card("<p>attempts to [[/act shove]] the target</p>"), null, true],
+    ["an action link to Trip", "trip", card("<p>attempt to @UUID[Compendium.pf2e.actionspf2e.Item.ge56Lu1xXVFYUnLP]{Trip} the target</p>"), null, true],
+    // a bare inline Athletics check rolls with no action: option, so nothing plays it: the card is the maneuver
+    ["a bare @Check[athletics]", "grab", card("<p>@Check[athletics|defense:fortitude]</p>"), null, false],
+    ["an @Check[athletics] tagged as the Grapple", "grab", card("<p>@Check[athletics|traits:attack,action:grapple]</p>"), null, true],
+    ["an @Check[athletics] tagged as another maneuver", "grab", card("<p>@Check[athletics|traits:action:trip]</p>"), null, false],
+    ["a target's save-or-Athletics", "trip", card("<p>must attempt a @Check[reflex|dc:37] save, @Check[acrobatics|dc:37] check, or @Check[athletics|dc:37] check</p>"), null, false],
+    ["a Grab that automatically Grabs", "grab", card("<p>The monster automatically Grabs the target until the end of the monster's next turn.</p>"), null, false],
+    ["a Knockdown card that rolls a Grapple", "trip", card("<p>[[/act grapple]]</p>"), null, false],
+    ["Constrict (a Fortitude save)", "grab", card("<p>@Damage[(0)[bludgeoning]], @Check[fortitude|dc:|basic]</p>"), null, false],
+    ["Rend (no check)", "rend", card("<p>[[/act grapple]]</p>"), null, false],
+    ["junk", "grab", null, null, false],
+  ];
+  for (const [label, arch, item, localize, want] of BACKED) {
+    if (checkBacked(arch, item, localize) !== want) fails.push(`handoff: checkBacked(${label}) is ${!want}, want ${want}`); else passed++;
+  }
 }
 
 /* The same against the real packs: a wolf's jaws knock down, a crocodile's grab,
@@ -389,6 +419,41 @@ try {
       if (r.fails.length) fails.push(`rider spot ${spot.label}: ${r.fails.join("; ")}`); else passed++;
     }
     riderNote = `, ${n} real-data rider checks`;
+    /* checkBacked on the real items, with PF2e's own en.json behind @Localize */
+    const lang = `${cov.DEFAULT_PACKS}/../lang/en.json`;
+    if (existsSync(lang)) {
+      const en = JSON.parse(readFileSync(lang, "utf8"));
+      const localize = (k) => { const v = k.split(".").reduce((o, p) => o?.[p], en); return typeof v === "string" ? v : k; };
+      const byName = async (pack, name, raw) => {
+        for (const [k, d] of await cov.loadPack(`${cov.DEFAULT_PACKS}/${pack}`)) {
+          if (d?.name !== name || d.type !== "action") continue;
+          const isLoc = /@Localize/.test(d.system?.description?.value ?? "");
+          if (raw === null ? !k.startsWith("!actors") : (k.startsWith("!actors") && isLoc === !raw)) return d;
+        }
+        return null;
+      };
+      const REAL = [
+        ["bestiary-ability-glossary-srd", "Grab", null, "grab", true],
+        ["bestiary-ability-glossary-srd", "Improved Grab", null, "grab", true],
+        ["bestiary-ability-glossary-srd", "Knockdown", null, "trip", true],
+        ["bestiary-ability-glossary-srd", "Improved Knockdown", null, "trip", true],
+        ["bestiary-ability-glossary-srd", "Push", null, "shove", true],
+        ["bestiary-ability-glossary-srd", "Improved Push", null, "shove", true],
+        ["pathfinder-monster-core", "Grab", false, "grab", true],
+        ["menace-under-otari-bestiary", "Knockdown", true, "trip", true],
+        ["agents-of-edgewatch-bestiary", "Grab", true, "grab", false],
+        // the TARGET's Reflex save, Acrobatics or Athletics: save-backed, so the card plays and its save joins
+        ["fists-of-the-ruby-phoenix-bestiary", "Tangled Forest Trip", true, "trip", false],
+      ];
+      let m = 0;
+      for (const [pack, name, raw, arch, want] of REAL) {
+        const d = await byName(pack, name, raw);
+        if (!d) { fails.push(`checkBacked spot ${pack} ${name}: not found`); continue; }
+        m++;
+        if (checkBacked(arch, d, localize) !== want) fails.push(`checkBacked spot ${pack} ${name}: ${!want}, want ${want} (${String(d.system?.description?.value).slice(0, 120)})`); else passed++;
+      }
+      riderNote += `, ${m} real-data check-backed maneuvers`;
+    }
   }
 } catch (e) {
   riderNote = `, real-data rider checks unavailable (${e.message})`;

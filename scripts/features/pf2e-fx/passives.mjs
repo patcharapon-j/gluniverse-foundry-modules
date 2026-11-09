@@ -137,6 +137,9 @@ export function turnPulse(passives) {
 /** One play per creature per round: `pas:<kind>:<tokenId>:<round>`. */
 export const passiveKey = (kind, tokenId, round) => `pas:${kind}:${tokenId}:${round}`;
 
+/** One open join of a passive's saves per SOURCE TOKEN: two tokens of one linked actor share the item uuid. */
+export const passiveJoinKey = (tokenId, originUuid) => `${tokenId ?? ""}|${originUuid ?? ""}`;
+
 /** Did the turn move forward? Rewinding, or a re-sort that lands on the same turn, plays nothing. */
 export function turnAdvanced(prior, current) {
   if (!current || !(current.round > 0) || !current.combatantId) return false;
