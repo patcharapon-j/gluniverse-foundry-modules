@@ -12,10 +12,11 @@
  */
 
 import { TAU, clamp, lerp, easeOut, hash, fadeOut } from "../core/rand.mjs";
-import { S, hsl2rgb } from "../core/palette.mjs";
+import { S, WHITE, hsl2rgb } from "../core/palette.mjs";
 import { registerShapes, snapH } from "../core/shapes.mjs";
 import { physics } from "../core/sim.mjs";
 import { out, sd, still, releaseFlash, counter, flourish } from "../core/motifs.mjs";
+import { dustLobes } from "./physical.mjs";
 
 /** The prism's fringe: six hues around the wheel, light and saturated. */
 const PRISM = Object.freeze([0, 48, 120, 188, 245, 300].map((h) => Object.freeze(hsl2rgb(h, 0.85, 0.72))));
@@ -170,6 +171,50 @@ registerShapes({
   },
 }, { flat: ["psyStain"] });
 
+
+/* ── the bloom: a mind spike (deliveries.mjs bloom, Daze and its kin) ─── */
+
+registerShapes({
+  /**
+   * The mind spike, at the head: a lance of thought driven up out of the skull
+   * (white root on the hero frame only), the skull's crack running out round
+   * it in jagged forks, and a four-point star at the brow. It strikes in two
+   * frames, holds three, then the lance breaks off and rises as it fades.
+   */
+  psySpike(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 8) return;
+    const [x, y] = v.ap(p.x, p.y, p.z), r = p.r, a = fr < 5 ? 1 : (9 - fr) / 4, top = v.kind === "top";
+    const hot = p.hero && fr < 2, root = hot ? WHITE : S(p.R, 1);
+    // the lance: tapered, a lit spine, a dark edge on one side so it reads on parchment
+    const H = r * [0.55, 1.15, 1.35, 1.3, 1.25, 1.1, 0.95, 0.8, 0.65][fr] * (top ? 0.75 : 1), lift = fr >= 5 ? (fr - 4) * 3 : 0, W = 2 + r / 18;
+    for (let j = 0; j <= H; j++) {
+      const f = j / H, w = W * (1 - f) ** 0.8 + 0.3, yy = y - 5 - j - lift;
+      for (let i = Math.floor(-w); i <= Math.ceil(w); i++) {
+        const e = Math.abs(i) / Math.max(0.6, w); if (e > 1) continue;
+        const c = e < 0.34 ? (f < 0.3 ? root : S(p.R, 0.95)) : i < 0 ? S(p.R, 0.82 - f * 0.15) : S(p.R, 0.55);
+        P.dot(x + i, yy, c, a, 2);
+      }
+    }
+    // the crack: forks running out round the head, two segments each, a branch off the elbow
+    const grow = Math.min(1, (fr + 1) / 2), gone = fr > 3 ? (fr - 3) / 5 : 0, sq = top ? 0.8 : 0.45;
+    for (let k = 0; k < p.n; k++) {
+      const q = (k / p.n) * TAU + hash(k, p.seed) * 0.6, L = r * (0.6 + 0.45 * hash(k, p.seed, 1)) * grow;
+      const kq = q + (hash(k, p.seed, 2) < 0.5 ? -0.35 : 0.35);
+      const mx = x + Math.cos(q) * L * 0.5, my = y + Math.sin(q) * L * 0.5 * sq, ex = mx + Math.cos(kq) * L * 0.5, ey = my + Math.sin(kq) * L * 0.5 * sq;
+      const c = (f) => (f < gone ? null : S(p.R, f < 0.4 ? 1 : f < 0.75 ? 0.88 : 0.7));
+      P.line(x, y, mx, my, null, 2, a, (f) => c(f * 0.5));
+      P.line(mx, my, ex, ey, null, 2, a, (f) => c(0.5 + f * 0.5));
+      if (fr >= 1 && k % 2 === 0) { const bq = kq + (k % 4 ? 0.9 : -0.9); P.line(mx, my, mx + Math.cos(bq) * L * 0.3, my + Math.sin(bq) * L * 0.3 * sq, S(p.R, 0.75), 1, a); }
+    }
+    // the brow star
+    if (fr < 4) {
+      const L = [4, 7, 5, 3][fr] * (r / 22) + 1;
+      P.line(x - L, y, x + L, y, null, 2, a, () => (hot ? WHITE : S(p.R, 1)));
+      P.line(x, y - L, x, y + L, null, 2, a, () => (hot ? WHITE : S(p.R, 1)));
+    }
+  },
+});
+
 const MENTAL = "mental", ILLUSION = "illusion";
 const kindOf = (M) => (M.material === MENTAL ? MENTAL : M.material === ILLUSION ? ILLUSION : "spirit");
 
@@ -179,60 +224,84 @@ const kindOf = (M) => (M.material === MENTAL ? MENTAL : M.material === ILLUSION 
  * `sub`: one of many eruptions across an area (area.mjs). Lighter: no crown,
  * glyph, decoy or floor stain (the scar is areaFX's), fewer of everything.
  */
-const lighter = (n, sub) => (sub ? (k) => Math.ceil(n(k) / 2) : n);
+const lighter = (n, sub) => (sub ? (k) => Math.ceil(n(k) / 2.5) : n);
+
+/** A mote that circles a point at a fixed height, like the stars round a dazed head. */
+function orbit(cx, cy, z, r, ph, w) {
+  return (p) => { const q = ph + w * p.age; p.x = cx + Math.cos(q) * r; p.y = cy + Math.sin(q) * r * 0.45; p.z = z + Math.sin(q * 2) * 0.04; };
+}
 
 function mentalBurst(s, M, { x, y, z, pow, rad, sub }) {
   const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n = lighter(counter(s, pow, rad), sub), aps = s.spec.aps;
-  releaseFlash(s, M, x, y, z, pow, rad);
-  if (!sub) s.light(x, y, z, rad * 1.6 + 0.8, S(R, 0.8), 0.5 * mm, 1.1, { flicker: true });
-  const rings = sub ? 1 : pow > 1.2 ? 4 : pow >= 0.5 ? 3 : 2;
+  releaseFlash(s, M, x, y, z, pow, rad, sub ? { flash: 0.6, light: 0.22 } : undefined);
+  if (!sub) s.light(x, y, z, rad * 2.4 + 1.2, S(R, 0.8), 0.6 * mm, 1.4, { flicker: true });
+  // thought-rings rippling out in a train, the last ones reaching well past the target
+  const rings = sub ? 2 : pow > 1.2 ? 6 : pow >= 0.5 ? 5 : 3;
   for (let i = 0; i < rings; i++) {
-    s.add({ k: "psyRing", x, y, z: z + (i % 2) * 0.12, r0: 2, r1: (rad * 1.05 + 0.4) * aps * (0.55 + 0.45 * ((i + 1) / rings)), life: 0.55 + i * 0.05, R, seed: i * 3, wait: i * 0.09, update: still });
+    s.add({ k: "psyRing", x, y, z: z + (i % 2) * 0.12, r0: 2, r1: Math.min(rad * 1.9 + 0.9, rad * 1.1 + 1.4) * aps * (0.45 + 0.55 * ((i + 1) / rings)) * (sub ? 0.6 : 1), life: 0.6 + i * 0.06, R, seed: i * 3, wait: i * 0.08, update: still });
   }
-  if (rad <= 0.5 && pow >= 0.6 && !sub) s.add({ k: "psyCrown", x, y, z: z + 0.55, r: 5 * Math.min(1.3, mm), n: pow > 1.2 ? 9 : 7, life: 1.4, R, wait: 0.08, update: still });
-  if (rad > 0.5 && !sub) s.add({ k: "glyph", x, y, r: rad * 0.85, life: 1.1, R, glyphs: undefined, spin: -1, update: still });
-  for (let i = 0; i < n(10); i++) s.add({ k: "spark", x, y, z, ...out(s, s.rand(2.5, 5)), g: 2, drag: 2.5, life: s.rand(0.25, 0.45), R, minor: i % 2 === 1 });
-  for (let i = 0; i < n(8); i++) s.add({ k: "mote", x: x + s.rand(-1, 1) * rad * 0.6, y: y + s.rand(-1, 1) * rad * 0.6, z: z + s.rand(-0.2, 0.3), vz: s.rand(0.2, 0.6), drag: 1.5, life: s.rand(0.6, 1), R, plus: s.R() < 0.3, minor: i % 3 === 2 });
+  // and the same on the floor, slower, as a decal
+  if (!sub) for (let i = 0; i < 2; i++) s.add({ k: "psyRing", x, y, z: 0.02, r0: 3, r1: Math.min(rad * 2.2 + 1.1, rad * 1.1 + 1.6) * aps, life: 0.9, R, flat: 0.5, flatTop: 0.9, decal: true, dash: i === 1, seed: 7 + i, wait: 0.1 + i * 0.2, update: still });
+  if (rad <= 0.5 && pow >= 0.6 && !sub) s.add({ k: "psyCrown", x, y, z: z + 0.55, r: 6 * Math.min(1.3, mm), n: pow > 1.2 ? 9 : 7, life: 1.5, R, wait: 0.08, update: still });
+  if (!sub && pow >= 0.5) s.add({ k: "glyph", x, y, r: rad * 1.3 + 0.5, life: 1.3, R, glyphs: undefined, spin: -1, update: still });
+  // dazed: stars that circle the head
+  if (!sub && pow >= 0.5) for (let i = 0; i < 5; i++) s.add({ k: "mote", x, y, z: z + 0.45, life: 1.3, R, plus: true, wait: 0.12, update: orbit(x, y, z + 0.45, 0.32 + rad * 0.3, (i / 5) * TAU, 5) });
+  for (let i = 0, N = n(22); i < N; i++) s.add({ k: "spark", x, y, z, ...out(s, s.rand(3, 8)), g: 2, drag: 2.5, life: s.rand(0.25, 0.55), R, minor: i >= (sub ? 2 : 6) });
+  for (let i = 0, N = n(20); i < N; i++) s.add({ k: "mote", x: x + s.rand(-1, 1) * (rad + 0.4), y: y + s.rand(-1, 1) * (rad + 0.4) * 0.7, z: z + s.rand(-0.2, 0.4), vz: s.rand(0.2, 0.7), drag: 1.5, life: s.rand(0.6, 1.2), R, plus: s.R() < 0.35, wait: s.rand(0, 0.3), minor: i >= (sub ? 1 : 5) });
   if (sub) return;
   stain(s, M, x, y, pow, rad, "mental");
   flourish(s, M, x, y, z, rad, Math.round(5 * m));
 }
 
 function illusionBurst(s, M, { x, y, z, pow, rad, sub }) {
-  const R = M.R, m = s.m * pow, n = lighter(counter(s, pow, rad), sub), aps = s.spec.aps;
-  releaseFlash(s, M, x, y, z, pow, rad);
-  for (let i = 0; i < n(10); i++) s.add({ k: "psyShard", x, y, z, ...out(s, s.rand(1.8, 4)), g: 3, drag: 2.2, life: s.rand(0.45, 0.8), R, L: s.R() < 0.4 ? 5 : 4, seed: s.R(), spin: s.R() < 0.5 ? 1 : -1, update: shardMove });
-  for (let i = 0; i < n(9); i++) s.add({ k: "psyPrism", x: x + s.rand(-1, 1) * (rad + 0.2), y: y + s.rand(-1, 1) * (rad + 0.2) * 0.7, z: Math.max(0.05, z + s.rand(-0.3, 0.6)), life: s.rand(0.7, 1.1), R, hue: i, big: s.R() < 0.4, fake: true, wait: s.rand(0, 0.3), update: still });
+  const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n = lighter(counter(s, pow, rad), sub), aps = s.spec.aps;
+  releaseFlash(s, M, x, y, z, pow, rad, sub ? { flash: 0.6, light: 0.22 } : undefined);
+  // mirrors close in on the spot from a ring round it, then everything shatters
+  if (!sub) for (let i = 0; i < 8; i++) {
+    const q = (i / 8) * TAU, d = rad + 0.55, life = 0.22;
+    s.add({ k: "psyShard", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.7, z, vx: -Math.cos(q) * d / life, vy: -Math.sin(q) * d * 0.7 / life, life, R, L: 6, seed: i / 8, spin: i % 2 ? 1 : -1, update: shardMove, minor: i % 2 === 1 });
+  }
+  for (let i = 0, N = n(22); i < N; i++) s.add({ k: "psyShard", x, y, z, ...out(s, s.rand(2, 5.5)), g: 3, drag: 2, life: s.rand(0.5, 0.95), R, L: s.R() < 0.4 ? 6 : 4, seed: s.R(), spin: s.R() < 0.5 ? 1 : -1, wait: sub ? 0 : 0.2, update: shardMove, minor: i >= (sub ? 2 : 7) });
+  for (let i = 0, N = n(20); i < N; i++) s.add({ k: "psyPrism", x: x + s.rand(-1, 1) * (rad + 0.5), y: y + s.rand(-1, 1) * (rad + 0.5) * 0.7, z: Math.max(0.05, z + s.rand(-0.3, 0.7)), life: s.rand(0.7, 1.2), R, hue: i, big: s.R() < 0.4, fake: true, wait: s.rand(0.1, 0.4), minor: i >= (sub ? 2 : 6) });
   if (sub) return;
-  // the decoy: a second, false release beside the real one that dissolves, comes back for a beat, and is gone
-  const q = s.rand(0, TAU), d = rad * 0.6 + 0.45, fx = x + Math.cos(q) * d, fy = y + Math.sin(q) * d * 0.6;
-  s.add({ k: "psyRing", x: fx, y: fy, z, r0: 2, r1: (rad * 0.6 + 0.3) * aps, life: 1.1, R, dash: true, fake: true, wait: 0.05, update: still });
-  for (let i = 0; i < 4; i++) s.add({ k: "psyPrism", x: fx + s.rand(-0.2, 0.2), y: fy + s.rand(-0.15, 0.15), z: z + s.rand(-0.1, 0.4), life: 1, R, hue: i * 2, fake: true, wait: 0.05, update: still });
-  s.add({ k: "psyRing", x, y, z, r0: 3, r1: (rad * 1.1 + 0.4) * aps, life: 0.6, R, dash: true, update: still });
+  // two decoys: false releases beside the real one that dissolve, come back for a beat, and are gone
+  for (let j = 0; j < 2; j++) {
+    const q = s.rand(0, TAU) + j * Math.PI, d = rad * 0.7 + 0.6, fx = x + Math.cos(q) * d, fy = y + Math.sin(q) * d * 0.6;
+    s.add({ k: "psyRing", x: fx, y: fy, z, r0: 2, r1: Math.min(rad * 0.8 + 0.4, rad * 1.1 + 0.9) * aps, life: 1.2, R, dash: true, fake: true, wait: 0.12 + j * 0.08, update: still });
+    s.add({ k: "psyCrown", x: fx, y: fy, z: z * 0.8, r: 4 * Math.min(1.3, mm), n: 6, life: 1.2, R, fake: true, wait: 0.12 + j * 0.08, update: still });
+    for (let i = 0; i < 5; i++) s.add({ k: "psyPrism", x: fx + s.rand(-0.25, 0.25), y: fy + s.rand(-0.15, 0.15), z: z + s.rand(-0.1, 0.5), life: 1.1, R, hue: i * 2 + j, fake: true, big: i === 0, wait: 0.12 + j * 0.08, minor: i >= 2, update: still });
+  }
+  s.add({ k: "psyRing", x, y, z, r0: 3, r1: Math.min(rad * 1.9 + 0.9, rad * 1.1 + 1.4) * aps, life: 0.65, R, dash: true, update: still });
+  s.add({ k: "psyRing", x, y, z: 0.02, r0: 3, r1: Math.min(rad * 2.2 + 1, rad * 1.1 + 1.5) * aps, life: 1, R, dash: true, fake: true, flat: 0.5, flatTop: 0.9, decal: true, wait: 0.15, update: still });
   stain(s, M, x, y, pow, rad, "illusion");
   flourish(s, M, x, y, z, rad, Math.round(5 * m));
 }
 
 function spiritBurst(s, M, { x, y, z, pow, rad, sub }) {
   const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n = lighter(counter(s, pow, rad), sub);
-  releaseFlash(s, M, x, y, z, pow, rad);
-  const nw = n(7);
-  for (let i = 0; i < nw; i++) s.add({ k: "psyWisp", x, y, z, ox: x, oy: y, spiral: true, ph: (i / nw) * TAU + s.rand(-0.3, 0.3), rr: 0.05, grow: s.rand(0.9, 1.6) * (0.6 + rad * 0.4), spin: (i % 2 ? 1 : -1) * s.rand(3, 4.5), rise: s.rand(0.3, 0.9), life: s.rand(0.8, 1.3), len: 11, R, glow: i < 2, minor: i % 4 === 3, update: wispMove });
-  const ns = sub ? 1 : pow >= 0.5 ? Math.max(1, Math.round((1 + rad * 2) * Math.min(1.3, mm))) : 1;
+  releaseFlash(s, M, x, y, z, pow, rad, sub ? { flash: 0.6, light: 0.22 } : undefined);
+  // wisps spiral out from the spot on long ghostly trails
+  const nw = n(13);
+  for (let i = 0; i < nw; i++) s.add({ k: "psyWisp", x, y, z, ox: x, oy: y, spiral: true, ph: (i / nw) * TAU + s.rand(-0.3, 0.3), rr: 0.05, grow: s.rand(1, 1.9) * (0.7 + rad * 0.45), spin: (i % 2 ? 1 : -1) * s.rand(3, 4.5), rise: s.rand(0.3, 1), life: s.rand(0.9, 1.5), len: 14, R, glow: i < 2, minor: i >= (sub ? 2 : 5), update: wispMove });
+  // soul-flames burning without fuel round the spot
+  const ns = sub ? 1 : pow >= 0.5 ? Math.max(2, Math.round((2 + rad * 3) * Math.min(1.3, mm))) : 1;
   for (let i = 0; i < ns; i++) {
-    const a = s.rand(0, TAU), d = i ? Math.sqrt(s.R()) * rad * 0.7 : 0;
-    s.add({ k: "psySoul", x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.7, z: i ? 0 : Math.max(0, z - 0.45), h: (i ? s.rand(9, 14) : 16) * Math.min(1.3, mm), w: i ? 2.2 : 3, life: s.rand(0.9, 1.3), R, seed: s.R() * 10, wait: i * 0.05, glow: !i, update: still });
+    const a = s.rand(0, TAU), d = i ? Math.sqrt(s.R()) * (rad + 0.4) : 0;
+    s.add({ k: "psySoul", x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.7, z: i ? 0 : Math.max(0, z - 0.45), h: (i ? s.rand(12, 18) : 22) * Math.min(1.3, mm), w: i ? 2.6 : 3.8, life: s.rand(1, 1.5), R, seed: s.R() * 10, wait: i * 0.05, glow: !i, minor: i >= 3, update: still });
   }
-  for (let i = 0; i < n(10); i++) s.add({ k: "mote", x: x + s.rand(-1, 1) * rad * 0.7, y: y + s.rand(-1, 1) * rad * 0.5, z: s.rand(0.05, 0.6), vz: s.rand(0.4, 1), g: -0.2, drag: 1.4, life: s.rand(0.8, 1.4), R, minor: i % 2 === 1 });
+  // cold mist and motes drifting up
+  for (let i = 0, N = sub ? 0 : n(3); i < N; i++) s.add({ k: "phDust", x: x + s.rand(-0.3, 0.3) * rad, y: y + s.rand(-0.2, 0.2) * rad, z: 0.1, vx: s.rand(-0.5, 0.5), vy: s.rand(-0.3, 0.3), vz: s.rand(0.2, 0.5), drag: 1.5, r: s.rand(7, 10), life: s.rand(1.2, 1.7), R, tone: 0.75, a0: 0.3, lobes: dustLobes(s), wait: s.rand(0.05, 0.2), minor: i >= 1 });
+  for (let i = 0, N = n(22); i < N; i++) s.add({ k: "mote", x: x + s.rand(-1, 1) * (rad + 0.4), y: y + s.rand(-1, 1) * (rad + 0.4) * 0.6, z: s.rand(0.05, 0.6), vz: s.rand(0.5, 1.2), g: -0.2, drag: 1.4, life: s.rand(0.9, 1.6), R, minor: i >= (sub ? 1 : 6) });
   if (sub) return;
-  s.add({ k: "halo", x, y, z: 0.05, vz: 0.8, drag: 0.8, life: 1, r: rad * 0.5 + 0.25, R, wait: 0.1 });
+  for (let i = 0; i < 2; i++) s.add({ k: "halo", x, y, z: 0.05, vz: 0.9, drag: 0.8, life: 1.1, r: rad * 0.6 + 0.3, R, wait: 0.1 + i * 0.2 });
+  s.add({ k: "ring", x, y, r: Math.min(rad * 2 + 0.9, rad * 1.1 + 1.4) * Math.min(1.3, mm), life: 0.6, R, broken: true, seed: sd(s), update: still });
   stain(s, M, x, y, pow, rad, "spirit");
   flourish(s, M, x, y, z, rad, Math.round(5 * m));
 }
 
 /** The floor stain, as flame leaves its scorch: only a real release leaves one. */
 function stain(s, M, x, y, pow, rad, mode) {
-  if (pow >= 0.5) s.add({ k: "psyStain", x, y, r: rad * 0.8 + 0.15, life: 4.5, R: M.R, mode, seed: sd(s), debris: true, update: still });
+  if (pow >= 0.5) s.add({ k: "psyStain", x, y, r: rad * 1.3 + 0.35, life: 4.5, R: M.R, mode, seed: sd(s), debris: true, update: still });
 }
 
 const wisp = (s, R, extra) => ({ k: "psyWisp", R, update: wispMove, ...extra });
@@ -248,62 +317,105 @@ export default {
   trail(s, M, { x, y, z, dt }) {
     const R = M.R, k = kindOf(M);
     if (k === MENTAL) {
-      for (let i = s.count(9 * s.m, dt); i > 0; i--) s.add({ k: "psyRing", x, y, z, r0: 1, r1: 6, life: 0.3, R, thin: true, flat: 0.9, update: still });
-      for (let i = s.count(20 * s.m, dt); i > 0; i--) s.add({ k: "mote", x, y, z, vx: s.rand(-0.3, 0.3), vy: s.rand(-0.3, 0.3), drag: 2, life: s.rand(0.3, 0.5), R, minor: true });
+      for (let i = s.count(14 * s.m, dt); i > 0; i--) s.add({ k: "psyRing", x, y, z, r0: 1, r1: 9, life: 0.35, R, thin: true, flat: 0.9, update: still });
+      for (let i = s.count(34 * s.m, dt); i > 0; i--) s.add({ k: "mote", x, y, z, vx: s.rand(-0.4, 0.4), vy: s.rand(-0.4, 0.4), drag: 2, life: s.rand(0.35, 0.6), R, plus: s.R() < 0.2, minor: s.R() < 0.7 });
     } else if (k === ILLUSION) {
-      for (let i = s.count(16 * s.m, dt); i > 0; i--) s.add({ k: "psyPrism", x: x + s.rand(-0.06, 0.06), y: y + s.rand(-0.06, 0.06), z, life: s.rand(0.35, 0.55), R, hue: Math.floor(s.R() * 6), fake: true, update: still });
-      for (let i = s.count(7 * s.m, dt); i > 0; i--) s.add({ k: "psyShard", x, y, z, vx: s.rand(-0.6, 0.6), vy: s.rand(-0.6, 0.6), vz: s.rand(0, 0.6), g: 2, drag: 2, life: 0.35, L: 3, R, seed: s.R(), update: shardMove, minor: true });
+      for (let i = s.count(26 * s.m, dt); i > 0; i--) s.add({ k: "psyPrism", x: x + s.rand(-0.08, 0.08), y: y + s.rand(-0.08, 0.08), z, life: s.rand(0.35, 0.6), R, hue: Math.floor(s.R() * 6), fake: true, minor: s.R() < 0.6, update: still });
+      for (let i = s.count(12 * s.m, dt); i > 0; i--) s.add({ k: "psyShard", x, y, z, vx: s.rand(-0.8, 0.8), vy: s.rand(-0.8, 0.8), vz: s.rand(0, 0.6), g: 2, drag: 2, life: 0.4, L: 3, R, seed: s.R(), update: shardMove, minor: true });
     } else {
-      for (let i = s.count(26 * s.m, dt); i > 0; i--) s.add({ k: "mote", x, y, z, vx: s.rand(-0.25, 0.25), vy: s.rand(-0.25, 0.25), vz: s.rand(0, 0.3), drag: 1.5, life: s.rand(0.35, 0.6), R, minor: true });
-      for (let i = s.count(5 * s.m, dt); i > 0; i--) s.add(wisp(s, R, { x, y, z, vx: s.rand(-0.6, 0.6), vy: s.rand(-0.6, 0.6), vz: s.rand(0.1, 0.5), drag: 2, life: s.rand(0.4, 0.6), len: 6, s: 1 }));
+      for (let i = s.count(40 * s.m, dt); i > 0; i--) s.add({ k: "mote", x, y, z, vx: s.rand(-0.3, 0.3), vy: s.rand(-0.3, 0.3), vz: s.rand(0, 0.3), drag: 1.5, life: s.rand(0.4, 0.7), R, minor: s.R() < 0.7 });
+      for (let i = s.count(9 * s.m, dt); i > 0; i--) s.add(wisp(s, R, { x, y, z, vx: s.rand(-0.8, 0.8), vy: s.rand(-0.8, 0.8), vz: s.rand(0.1, 0.6), drag: 2, life: s.rand(0.45, 0.7), len: 7, s: 1, minor: s.R() < 0.5 }));
     }
   },
 
   linger(s, M, { at }) {
     const k = kindOf(M);
     if (k === MENTAL) {
-      at(3.5, () => ({ k: "psyRing", r0: 1, r1: 9, life: 0.7, flat: 0.5, flatTop: 0.9, z: 0.05, decal: true, update: still }));
-      at(8, () => ({ k: "mote", vz: s.rand(0.3, 0.7), drag: 1.2, life: s.rand(0.6, 1), plus: s.R() < 0.3, minor: s.R() < 0.5 }));
+      at(4.5, () => ({ k: "psyRing", r0: 1, r1: 12, life: 0.8, flat: 0.5, flatTop: 0.9, z: 0.05, decal: true, update: still }));
+      at(10, () => ({ k: "mote", vz: s.rand(0.3, 0.8), drag: 1.2, life: s.rand(0.6, 1.1), plus: s.R() < 0.3, minor: s.R() < 0.5 }));
     } else if (k === ILLUSION) {
-      at(10, () => ({ k: "psyPrism", z: s.rand(0.1, 0.7), life: s.rand(0.6, 1), hue: Math.floor(s.R() * 6), fake: s.R() < 0.4, big: s.R() < 0.35, update: still }));
-      at(2.5, () => ({ k: "psyShard", z: 0.1, vz: s.rand(0.4, 0.8), g: -0.1, drag: 1.5, life: s.rand(0.6, 0.9), L: s.R() < 0.4 ? 4 : 3, seed: s.R(), update: shardMove }));
-      at(0.7, () => ({ k: "psyRing", z: 0.05, r0: 1, r1: 7, life: 0.9, dash: true, fake: true, flat: 0.5, decal: true, update: still }));
+      at(13, () => ({ k: "psyPrism", z: s.rand(0.1, 0.8), life: s.rand(0.6, 1.1), hue: Math.floor(s.R() * 6), fake: s.R() < 0.4, big: s.R() < 0.35, minor: s.R() < 0.5, update: still }));
+      at(3.5, () => ({ k: "psyShard", z: 0.1, vz: s.rand(0.4, 0.9), g: -0.1, drag: 1.5, life: s.rand(0.6, 1), L: s.R() < 0.4 ? 5 : 3, seed: s.R(), update: shardMove }));
+      at(1, () => ({ k: "psyRing", z: 0.05, r0: 1, r1: 9, life: 0.9, dash: true, fake: true, flat: 0.5, decal: true, update: still }));
     } else {
-      at(3.5, () => ({ k: "psySoul", z: 0, h: s.rand(7, 11), w: 2, life: s.rand(0.7, 1.1), seed: s.R() * 10, update: still }));
-      at(5, () => wisp(s, M.R, { z: 0.1, vz: s.rand(0.4, 0.8), vx: s.rand(-0.3, 0.3), drag: 1, life: s.rand(0.7, 1.1), len: 8 }));
-      at(5, () => ({ k: "mote", vz: s.rand(0.4, 0.9), g: -0.2, drag: 1.3, life: s.rand(0.7, 1.1), minor: true }));
+      at(4.5, () => ({ k: "psySoul", z: 0, h: s.rand(9, 14), w: 2.2, life: s.rand(0.8, 1.2), seed: s.R() * 10, update: still }));
+      at(6, () => wisp(s, M.R, { z: 0.1, vz: s.rand(0.4, 0.9), vx: s.rand(-0.3, 0.3), drag: 1, life: s.rand(0.8, 1.2), len: 10 }));
+      at(6, () => ({ k: "mote", vz: s.rand(0.4, 0.9), g: -0.2, drag: 1.3, life: s.rand(0.7, 1.1), minor: true }));
     }
   },
 
   spray(s, M, { emit }) {
     const k = kindOf(M);
     if (k === MENTAL) {
-      emit("psyRing", 24, () => ({ drag: 1.4, r0: 2, r1: 8, life: 0.55, flat: 0.8, thin: true, update(p, _s, dt) { physics(p, dt, _s); } }));
-      emit("mote", 40, () => ({ drag: 1.6, life: 0.6, minor: true }));
+      emit("psyRing", 34, () => ({ drag: 1.4, r0: 2, r1: 11, life: 0.6, flat: 0.8, thin: true, update(p, _s, dt) { physics(p, dt, _s); } }));
+      emit("mote", 60, () => ({ drag: 1.6, life: s.rand(0.6, 0.9), plus: s.R() < 0.2, minor: s.R() < 0.6 }));
+      emit("spark", 20, () => ({ drag: 2, g: 1, life: 0.35, minor: true }));
     } else if (k === ILLUSION) {
-      emit("psyShard", 34, () => ({ drag: 1.5, g: 1, life: s.rand(0.5, 0.75), L: 4, seed: s.R(), update: shardMove }));
-      emit("psyPrism", 30, () => ({ drag: 1.8, life: 0.6, hue: Math.floor(s.R() * 6), fake: true, minor: true, update(p, _s, dt) { physics(p, dt, _s); } }));
+      emit("psyShard", 48, () => ({ drag: 1.5, g: 1, life: s.rand(0.5, 0.8), L: s.R() < 0.3 ? 6 : 4, seed: s.R(), update: shardMove, minor: s.R() < 0.5 }));
+      emit("psyPrism", 46, () => ({ drag: 1.8, life: s.rand(0.5, 0.8), hue: Math.floor(s.R() * 6), fake: true, big: s.R() < 0.25, minor: true, update(p, _s, dt) { physics(p, dt, _s); } }));
     } else {
-      emit("psyWisp", 26, () => ({ drag: 1.3, g: -0.3, life: s.rand(0.6, 0.85), len: 10, update: wispMove }));
-      emit("mote", 40, () => ({ drag: 1.6, g: -0.3, life: 0.7, minor: true }));
+      emit("psyWisp", 38, () => ({ drag: 1.3, g: -0.3, life: s.rand(0.6, 0.95), len: 12, update: wispMove, minor: s.R() < 0.5 }));
+      emit("mote", 60, () => ({ drag: 1.6, g: -0.3, life: s.rand(0.6, 0.9), minor: s.R() < 0.6 }));
     }
   },
 
+  /**
+   * A mind spike (spellsprite-craft §5 status/confused, shadow/soul-drain):
+   * needles of thought converge on the head, the spike is driven up out of it
+   * with the skull's crack forking round, thought-rings ripple out at head
+   * height to well past the creature and on the floor, and stars circle the
+   * dazed head. Illusion breaks into mirror shards and prism glints, spirit
+   * into wisps.
+   */
+  bloom(s, M, B) {
+    const R = M.R, k = kindOf(M), aps = s.spec.aps, { x, y, head, r, sz } = B, rs = r / aps;
+    s.at(B.at, (s2) => {
+      for (let i = 0; i < 12; i++) {
+        const q = (i / 12) * TAU + s2.rand(-0.15, 0.15), d = rs * 1.7 + 0.3, life = 0.17, zz = head + s2.rand(-0.15, 0.45);
+        s2.add({ k: "streak", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.7, z: zz, vx: -Math.cos(q) * d / life, vy: -Math.sin(q) * d * 0.7 / life, vz: (head - zz) / life, life, R, minor: i % 2 === 1, update(p, _s, dt) { p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; } });
+      }
+      s2.light(x, y, 0.2, rs * 1.6 + 0.6, S(R, 0.9), 0.5, 0.2, { swell: true });
+    });
+    s.at(B.b, (s2) => {
+      s2.add({ k: "psySpike", x, y, z: head, r, n: B.saved ? 4 : B.crit ? 8 : 6, hero: B.crit, life: 0.8, R, seed: sd(s2), update: still });
+      s2.light(x, y, head, rs * 1.4 + 0.5, S(R, 0.95), B.crit ? 0.75 : 0.45, 0.3, { flicker: true });
+      s2.light(x, y, 0.1, rs * 2.6 + 0.8, S(R, 0.8), 0.45, 1.3);
+      // thought-rings at head height, the last reaching well past the creature; two more on the floor
+      const rings = B.saved ? 2 : B.crit ? 5 : 4;
+      for (let i = 0; i < rings; i++) s2.add({ k: "psyRing", x, y, z: head - i * 0.06, r0: 3, r1: r * (0.9 + 0.32 * i), life: 0.5 + i * 0.06, R, seed: i * 3, dash: k === ILLUSION && i % 2 === 1, wait: i * 0.06, thin: i > 1, update: still });
+      for (let i = 0; i < (B.saved ? 1 : 2); i++) s2.add({ k: "psyRing", x, y, z: 0.02, r0: 3, r1: r * (1.5 + i * 0.4), life: 0.9, R, flat: 0.5, flatTop: 0.9, decal: true, dash: i === 1, seed: 7 + i, wait: 0.06 + i * 0.14, update: still });
+      // sparks thrown out of the crack, flat and fast
+      for (let i = 0, N = Math.round(14 * B.k); i < N; i++) {
+        const q = s2.rand(0, TAU), sp = s2.rand(5, 11) * B.k;
+        s2.add({ k: "spark", x, y, z: head, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.8, vz: s2.rand(-0.5, 2.5), g: 3, drag: 2.6, life: s2.rand(0.22, 0.45), R, minor: i > 4 });
+      }
+      if (k === ILLUSION) for (let i = 0, N = Math.round(10 * B.k); i < N; i++) s2.add({ k: "psyShard", x, y, z: head, ...out(s2, s2.rand(2.5, 5.5) * B.k), g: 3, drag: 2, life: s2.rand(0.5, 0.9), R, L: i % 3 ? 4 : 6, seed: s2.R(), spin: i % 2 ? 1 : -1, update: shardMove, minor: i > 3 });
+      else if (k === "spirit") for (let i = 0, N = Math.round(7 * B.k); i < N; i++) s2.add(wisp(s2, R, { x, y, z: head, ox: x, oy: y, spiral: true, ph: (i / N) * TAU, rr: 0.05, grow: s2.rand(1.1, 1.8) * rs, spin: (i % 2 ? 1 : -1) * s2.rand(3, 4.5), rise: s2.rand(0.3, 0.7), life: s2.rand(0.7, 1.1), len: 10, minor: i > 2 }));
+      else for (let i = 0, N = Math.round(8 * B.k); i < N; i++) s2.add({ k: "mote", x: x + s2.rand(-1, 1) * rs, y: y + s2.rand(-0.7, 0.7) * rs, z: head + s2.rand(-0.3, 0.3), vz: s2.rand(0.3, 0.8), drag: 1.5, life: s2.rand(0.6, 1.1), R, plus: i % 3 === 0, minor: i > 2 });
+    });
+    // dazed: stars round the head once the spike has gone in
+    if (!B.saved || k === MENTAL) s.at(B.b + 0.22, (s2) => {
+      const n = B.saved ? 3 : B.crit ? 6 : 5;
+      for (let i = 0; i < n; i++) s2.add({ k: k === ILLUSION ? "psyPrism" : "mote", x, y, z: head + 0.3, life: B.saved ? 0.8 : 1.3, R, plus: true, hue: i, big: i === 0, update: orbit(x, y, head + 0.28 * sz, 0.3 * sz + rs * 0.25, (i / n) * TAU, 5) });
+    });
+    if (!B.saved) s.at(B.b + 0.1, (s2) => stain(s2, M, x, y, 1, rs * 0.7, kindOf(M)));
+  },
+
   auraStart(s, M, T) {
-    if (kindOf(M) === MENTAL) s.add({ k: "psyCrown", x: T.x, y: T.y - 0.3 * T.size, z: 1.12 * T.h, r: 5 * Math.sqrt(T.size), life: 1e9, R: M.R, update: still });
+    if (kindOf(M) === MENTAL) s.add({ k: "psyCrown", x: T.x, y: T.y - 0.3 * T.size, z: 1.12 * T.h, r: 6 * Math.sqrt(T.size), life: 1e9, R: M.R, update: still });
   },
 
   aura(s, M, { at, T }) {
     const k = kindOf(M);
     if (k === MENTAL) {
-      at(1.1, () => ({ k: "psyRing", x: T.x, y: T.y, z: s.rand(0.3, 0.8) * T.h, r0: 3, r1: 0.6 * T.size * s.spec.aps, life: 0.6, thin: true, update: still }));
-      at(4, () => ({ k: "mote", vz: s.rand(0.2, 0.5), drag: 1.5, life: s.rand(0.6, 0.9), minor: true }));
+      at(1.4, () => ({ k: "psyRing", x: T.x, y: T.y, z: s.rand(0.3, 0.8) * T.h, r0: 3, r1: 0.75 * T.size * s.spec.aps, life: 0.65, thin: true, update: still }));
+      at(5, () => ({ k: "mote", vz: s.rand(0.2, 0.5), drag: 1.5, life: s.rand(0.6, 0.9), plus: s.R() < 0.3, minor: true }));
     } else if (k === ILLUSION) {
-      at(5, () => ({ k: "psyPrism", life: s.rand(0.6, 1), hue: Math.floor(s.R() * 6), fake: true, update: still }));
-      at(1.2, () => ({ k: "psyShard", vz: s.rand(0.3, 0.6), g: -0.1, drag: 1.5, life: 0.7, L: 3, seed: s.R(), update: shardMove }));
+      at(7, () => ({ k: "psyPrism", life: s.rand(0.6, 1), hue: Math.floor(s.R() * 6), fake: true, update: still }));
+      at(1.6, () => ({ k: "psyShard", vz: s.rand(0.3, 0.6), g: -0.1, drag: 1.5, life: 0.7, L: 3, seed: s.R(), update: shardMove }));
     } else {
-      at(2, () => ({ k: "psySoul", z: 0, h: s.rand(6, 10), w: 2, life: s.rand(0.7, 1), seed: s.R() * 10, update: still }), false);
-      at(2.5, () => wisp(s, M.R, { vz: s.rand(0.4, 0.8), vx: s.rand(-0.3, 0.3), drag: 1, life: s.rand(0.7, 1.1), len: 8 }));
+      at(2.4, () => ({ k: "psySoul", z: 0, h: s.rand(7, 12), w: 2.2, life: s.rand(0.7, 1), seed: s.R() * 10, update: still }), false);
+      at(3, () => wisp(s, M.R, { vz: s.rand(0.4, 0.8), vx: s.rand(-0.3, 0.3), drag: 1, life: s.rand(0.7, 1.1), len: 9 }));
     }
   },
 };

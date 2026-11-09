@@ -51,6 +51,46 @@ export const B = (...rows) => {
 /** A bitmap mirrored left to right (a left wing from a right one). */
 export const mirror = (bm) => Object.freeze(bm.map((r) => [...r].reverse().join("")));
 
+/**
+ * A bitmap drawn at twice its size the way a pixel artist would redraw it, not
+ * blown up: Scale2x (EPX) rounds every diagonal step into a smooth edge, then
+ * the edges are re-rimmed one pixel wide (lit on the top and left, shaded on
+ * the bottom and right), so the object is twice as big while its outline,
+ * rims and highlights stay one art pixel. A white hero pixel stays one pixel.
+ * spellsprite-craft §1: the art pixel never grows, the object does.
+ */
+export function up2(bm) {
+  const h = bm.length, w = bm[0].length, at = (i, j) => (i < 0 || j < 0 || i >= w || j >= h ? "." : bm[j][i]);
+  const soft = (c) => (c === "w" ? "1" : c);
+  const out = Array.from({ length: h * 2 }, () => new Array(w * 2).fill("."));
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const P = at(i, j), A = at(i, j - 1), Bq = at(i + 1, j), C = at(i - 1, j), D = at(i, j + 1);
+    let e = [P, P, P, P];
+    if (P === "w") e = ["w", "1", "1", "1"];
+    else {
+      if (C === A && C !== D && A !== Bq) e[0] = soft(A);
+      if (A === Bq && A !== C && Bq !== D) e[1] = soft(Bq);
+      if (D === C && D !== Bq && C !== A) e[2] = soft(C);
+      if (Bq === D && Bq !== A && D !== C) e[3] = soft(D);
+    }
+    out[j * 2][i * 2] = e[0]; out[j * 2][i * 2 + 1] = e[1]; out[j * 2 + 1][i * 2] = e[2]; out[j * 2 + 1][i * 2 + 1] = e[3];
+  }
+  const on = (i, j) => i >= 0 && j >= 0 && i < w * 2 && j < h * 2 && out[j][i] !== ".";
+  const rim = out.map((row, j) => row.map((c, i) => {
+    if (c === "." || c === "w" || c === "k") return c;
+    const n = Number(c);
+    if (!on(i, j - 1) || !on(i - 1, j)) return String(Math.max(1, n - 1));
+    if (!on(i, j + 1) || !on(i + 1, j)) return String(Math.min(6, n + 1));
+    return c;
+  }).join(""));
+  return Object.freeze(rim);
+}
+/** A bitmap, redrawn at twice its size (see up2). */
+export const B2 = (...rows) => up2(B(...rows));
+
+/** How much bigger the procedural objects draw than their authored sizes: spellsprite-craft §1. */
+const MO = 1.6;
+
 const CODE = { w: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, k: 7 };
 const IDX = [6, 6, 5, 4, 3, 2, 1];
 /** A bitmap tone in a ramp, `dim` steps darker. */
@@ -300,12 +340,12 @@ const TRAILS = {
   /** Three parallel talon marks trailing the head. */
   rake(v, P, p) {
     const pts = pathOf(v, p);
-    for (const off of [-3, 0, 3]) walkBack(pts, 9, (x, y, d, nx, ny) => P.dot(x + nx * off, y + ny * off, d < 2 ? WHITE : S(p.R, 0.95 - d * 0.05), 1, 2));
+    for (const off of [-5, 0, 5]) walkBack(pts, 18, (x, y, d, nx, ny) => { P.dot(x + nx * off, y + ny * off, d < 2 ? WHITE : S(p.R, 0.95 - d * 0.03), 1, 2); if (d < 10) P.dot(x + nx * (off + 1), y + ny * (off + 1), S(p.R, 0.7), 1, 2); });
   },
   /** Speed lines behind a punch. */
   speed(v, P, p) {
     const pts = pathOf(v, p);
-    for (const off of [-4, 0, 4]) walkBack(pts, 14, (x, y, d, nx, ny) => { if (d > 5 && d < 14 - Math.abs(off)) P.dot(x + nx * off, y + ny * off, S(p.R, 0.78), 1, 1); });
+    for (const off of [-7, -3, 3, 7]) walkBack(pts, 26, (x, y, d, nx, ny) => { if (d > 6 && d < 26 - Math.abs(off) * 1.5) P.dot(x + nx * off, y + ny * off, S(p.R, d < 14 ? 0.9 : 0.7), 1, 1); });
   },
   /** A gust: two lines along the path, each ending in a curl. */
   wind(v, P, p) {
@@ -332,14 +372,14 @@ const TRAILS = {
 // Directional objects point RIGHT (they are turned to face their flight);
 // standing ones are upright.
 
-const SWORD = B(
+const SWORD = B2(
   "..3............",
   "..311111111111.",
   "543222222222222w",
   "..344444444444.",
   "..3............",
 );
-const AXE = B(
+const AXE = B2(
   ".....1111111",
   "......22222.",
   ".......222..",
@@ -350,7 +390,7 @@ const AXE = B(
   "......22222.",
   ".....1111111",
 );
-const MACE = B(
+const MACE = B2(
   ".........1...",
   "........121..",
   ".......12221.",
@@ -359,7 +399,7 @@ const MACE = B(
   "........323..",
   ".........3...",
 );
-const HAMMER = B(
+const HAMMER = B2(
   "........11111",
   "........12222",
   "........12222",
@@ -368,18 +408,18 @@ const HAMMER = B(
   "........34444",
   "........34444",
 );
-const SPEAR = B(
+const SPEAR = B2(
   "..............11..",
   "44444444444443222w",
   "..............44..",
 );
-const ARROW = B(
+const ARROW = B2(
   "1.1......2.",
   ".444444442w",
   "1.1......2.",
 );
-const NEEDLE = B("4.3222111w");
-const HAND = B(
+const NEEDLE = B2("4.3222111w");
+const HAND = B2(
   "...1.1....",
   ".1.1.1.1..",
   ".1.1.1.1..",
@@ -392,7 +432,7 @@ const HAND = B(
   "...3333...",
 );
 /** A hand closed into a grab, seen from the front. */
-const HAND_SHUT = B(
+const HAND_SHUT = B2(
   "..........",
   "..........",
   "..........",
@@ -404,7 +444,7 @@ const HAND_SHUT = B(
   "..122222..",
   "...3333...",
 );
-const FIST = B(
+const FIST = B2(
   "...11111..",
   "..1222221.",
   "4412323231",
@@ -414,93 +454,93 @@ const FIST = B(
   "....3333..",
 );
 const EYE = [
-  B(".............", ".............", ".............", "3333333333333", ".............", ".............", "............."),
-  B(".............", ".............", "...3333333...", "3111122211113", "..333333333..", ".............", "............."),
-  B("....33333....", "..331111133..", ".31112221113.", "31112kwk21113", ".31112221113.", "..331111133..", "....33333...."),
+  B2(".............", ".............", ".............", "3333333333333", ".............", ".............", "............."),
+  B2(".............", ".............", "...3333333...", "3111122211113", "..333333333..", ".............", "............."),
+  B2("....33333....", "..331111133..", ".31112221113.", "31112kwk21113", ".31112221113.", "..331111133..", "....33333...."),
 ];
-const HEART = B(".11.22.", "1w12222", "1122223", ".12223.", "..123..", "...3...");
-const HEART_BIG = B(".111.222.", "1w1112222", "112222223", "122222233", ".1222233.", "..12233..", "...123...", "....3....");
+const HEART = B2(".11.22.", "1w12222", "1122223", ".12223.", "..123..", "...3...");
+const HEART_BIG = B2(".111.222.", "1w1112222", "112222223", "122222233", ".1222233.", "..12233..", "...123...", "....3....");
 const HEART_MINI = B("1.2", "122", ".2.");
-const SKULL = B("..11111..", ".1111111.", "111111112", "1kk111kk2", "1kk111kk2", "1111k1112", ".1121212.", "..1k1k1..", "..22222..");
-const SKULL_LIT = B("..11111..", ".1111111.", "111111112", "1ww111ww2", "1ww111ww2", "1111k1112", ".1121212.", "..1k1k1..", "..22222..");
-const SKULL_GAPE = B("..11111..", ".1111111.", "111111112", "1kk111kk2", "1kk111kk2", "1111k1112", ".1121212.", "..1k1k1..", ".........", "..1k1k1..", "..22222..");
-const BONE = B("11.....11", "122222221", "33.....33");
+const SKULL = B2("..11111..", ".1111111.", "111111112", "1kk111kk2", "1kk111kk2", "1111k1112", ".1121212.", "..1k1k1..", "..22222..");
+const SKULL_LIT = B2("..11111..", ".1111111.", "111111112", "1ww111ww2", "1ww111ww2", "1111k1112", ".1121212.", "..1k1k1..", "..22222..");
+const SKULL_GAPE = B2("..11111..", ".1111111.", "111111112", "1kk111kk2", "1kk111kk2", "1111k1112", ".1121212.", "..1k1k1..", ".........", "..1k1k1..", "..22222..");
+const BONE = B2("11.....11", "122222221", "33.....33");
 /** A bone jutting from the ground, knobbed end up. */
-const BONE_UP = B("1.1", "121", ".2.", ".2.", ".2.", ".3.", ".3.", "343");
-const DROP = B("..1..", "..1..", ".121.", "12222", "1w223", "12233", ".333.");
+const BONE_UP = B2("1.1", "121", ".2.", ".2.", ".2.", ".3.", ".3.", "343");
+const DROP = B2("..1..", "..1..", ".121.", "12222", "1w223", "12233", ".333.");
 const WING = [
-  B("........111", "......11221", "....112221.", "..1122221..", ".122222 1..", "1222221.1..", "2222.2.2...", "3.3.3......"),
-  B("...........", "...........", "........11.", "..111122221", ".12222222.1", "12222221.1.", "2222.2.2...", "3.3.3......"),
+  B2("........111", "......11221", "....112221.", "..1122221..", ".122222 1..", "1222221.1..", "2222.2.2...", "3.3.3......"),
+  B2("...........", "...........", "........11.", "..111122221", ".12222222.1", "12222221.1.", "2222.2.2...", "3.3.3......"),
 ];
-const FEATHER = B("...11111..", "4432222221", "...33333..");
+const FEATHER = B2("...11111..", "4432222221", "...33333..");
 const SUN_DISC = null; // procedural (moSun)
-const MOON = B("..1111.", ".112...", "112....", "12.....", "12.....", "112....", ".112...", "..1111.");
-const STAR = B("...1...", "..111..", "1111111", ".11w11.", "..111..", ".11.11.", ".1...1.");
-const BOULDER = B("..2222..", ".211112.", "211w1123", "21111223", "32112233", ".333333.");
-const MENHIR = B("..22..", ".2112.", ".2112.", "21112.", "21123.", "21123.", "21123.", "21123.", "2112334", "4444444");
-const SHARD = B("...1...", "..1w2..", ".11223.", "1122333", ".12233.", "..223..", "...3...");
-const SPIKE = B("1.......", "2211....", "322221w.", "4433....", "3.......");
-const THORN = B("..1....", "..21...", "3322221w", "..43...", "..3....");
+const MOON = B2("..1111.", ".112...", "112....", "12.....", "12.....", "112....", ".112...", "..1111.");
+const STAR = B2("...1...", "..111..", "1111111", ".11w11.", "..111..", ".11.11.", ".1...1.");
+const BOULDER = B2("..2222..", ".211112.", "211w1123", "21111223", "32112233", ".333333.");
+const MENHIR = B2("..22..", ".2112.", ".2112.", "21112.", "21123.", "21123.", "21123.", "21123.", "2112334", "4444444");
+const SHARD = B2("...1...", "..1w2..", ".11223.", "1122333", ".12233.", "..223..", "...3...");
+const SPIKE = B2("1.......", "2211....", "322221w.", "4433....", "3.......");
+const THORN = B2("..1....", "..21...", "3322221w", "..43...", "..3....");
 const WAVE = [
-  B("..............", "..............", "........222...", "......221111..", ".....2111..1..", "...221111.....", ".22111111.....", "33333333333333"),
-  B(".......22221..", ".....2211111w.", "....2111...11.", "...2111.....1.", "..21111.......", ".2111111......", "21111111......", "33333333333333"),
-  B("..............", ".........2222.", "......221111w1", "....2211111.11", "..22111111..1.", ".2111111111...", "21111111111...", "33333333333333"),
+  B2("..............", "..............", "........222...", "......221111..", ".....2111..1..", "...221111.....", ".22111111.....", "33333333333333"),
+  B2(".......22221..", ".....2211111w.", "....2111...11.", "...2111.....1.", "..21111.......", ".2111111......", "21111111......", "33333333333333"),
+  B2("..............", ".........2222.", "......221111w1", "....2211111.11", "..22111111..1.", ".2111111111...", "21111111111...", "33333333333333"),
 ];
 const VINE_LEAF = B(".11", "122", "33.");
 const FLOWER = [
-  B("...", "...", ".2.", ".4.", ".4."),
-  B(".....", "..2..", ".212.", "..4..", "..4..", ".44.."),
-  B("..1.1..", ".11211.", "1121211", ".22w22.", "1121211", ".11211.", "..141..", "...4...", "..44..."),
+  B2("...", "...", ".2.", ".4.", ".4."),
+  B2(".....", "..2..", ".212.", "..4..", "..4..", ".44.."),
+  B2("..1.1..", ".11211.", "1121211", ".22w22.", "1121211", ".11211.", "..141..", "...4...", "..44..."),
 ];
-const LEAF = B("..111..", "4322221", "..333..");
-const MUSHROOM = B("..111..", ".12w21.", "1222222", "3333333", "..343..", "..343..", ".44444.");
+const LEAF = B2("..111..", "4322221", "..333..");
+const MUSHROOM = B2("..111..", ".12w21.", "1222222", "3333333", "..343..", "..343..", ".44444.");
 const GHOST = [
-  B("..11111..", ".1111111.", "111111111", "11kk1kk11", "11kk1kk11", "111111111", "1111k1111", "111111111", "111111111", "11.111.11", "1...1...1"),
-  B("..11111..", ".1111111.", "111111111", "11kk1kk11", "11kk1kk11", "111111111", "1111k1111", "111111111", "111111111", "111.111.1", ".1...1..."),
+  B2("..11111..", ".1111111.", "111111111", "11kk1kk11", "11kk1kk11", "111111111", "1111k1111", "111111111", "111111111", "11.111.11", "1...1...1"),
+  B2("..11111..", ".1111111.", "111111111", "11kk1kk11", "11kk1kk11", "111111111", "1111k1111", "111111111", "111111111", "111.111.1", ".1...1..."),
 ];
 const RUNES = [
-  B("1.1..", "11..1", "1..1.", "1.1..", "11...", "1....", "1...."),
-  B("1....", "11...", "1.1..", "1..1.", "1.1..", "11...", "1...."),
-  B("1.1.1", ".111.", "..1..", "..1..", "..1..", "..1..", "..1.."),
-  B("...1.", "..1..", ".1...", "..1..", "...1.", "..1..", ".1..."),
-  B("..1..", ".111.", "1.1.1", "..1..", "..1..", "..1..", "..1.."),
+  B2("1.1..", "11..1", "1..1.", "1.1..", "11...", "1....", "1...."),
+  B2("1....", "11...", "1.1..", "1..1.", "1.1..", "11...", "1...."),
+  B2("1.1.1", ".111.", "..1..", "..1..", "..1..", "..1..", "..1.."),
+  B2("...1.", "..1..", ".1...", "..1..", "...1.", "..1..", ".1..."),
+  B2("..1..", ".111.", "1.1.1", "..1..", "..1..", "..1..", "..1.."),
 ];
 /** A cipher alphabet for words: 3×5 letters that read as writing, not as any language. */
 const LETTERS = [
   B("111", "1.1", "111", "1..", "1.."), B("1.1", "1.1", "111", "..1", "..1"), B("111", "..1", ".1.", "1..", "111"),
   B("11.", "1.1", "11.", "1.1", "11."), B("1..", "1..", "111", "1.1", "111"), B(".1.", "1.1", "111", "1.1", "1.1"),
 ];
-const NOTE = B("..11.", "..1.1", "..1.1", "..1..", "221..", "2221.", ".22..");
-const NOTES2 = B("..1111", "..1..1", "..1..1", "..1..1", "221221", "222222", ".22.22");
-const BELL = B("....3....", "...222...", "..21112..", "..21112..", "..21112..", ".2111112.", "211111112", "333333333", "....w....");
-const MIRROR = B("..444..", ".42114.", "4211w14", "421w114", "42w1114", "4w11124", "4111224", "4112224", ".41224.", "..444..", "...4...", "..444..");
+const NOTE = B2("..11.", "..1.1", "..1.1", "..1..", "221..", "2221.", ".22..");
+const NOTES2 = B2("..1111", "..1..1", "..1..1", "..1..1", "221221", "222222", ".22.22");
+const BELL = B2("....3....", "...222...", "..21112..", "..21112..", "..21112..", ".2111112.", "211111112", "333333333", "....w....");
+const MIRROR = B2("..444..", ".42114.", "4211w14", "421w114", "42w1114", "4w11124", "4111224", "4112224", ".41224.", "..444..", "...4...", "..444..");
 const DOOR = [
-  B("..44444..", ".4222224.", "422222224", "422232224", "422232224", "422222224", "422222224", "42222221k", "422222224", "422232224", "422232224", "422222224", "444444444"),
-  B("..44444..", ".4w11224.", "4w111224.", "4w111234.", "4w111234.", "4w111224.", "4w111224.", "4w11122k.", "4w111224.", "4w111234.", "4w111234.", "4w111224.", "444444444"),
-  B("..44444..", ".4ww1114.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "444444444"),
+  B2("..44444..", ".4222224.", "422222224", "422232224", "422232224", "422222224", "422222224", "42222221k", "422222224", "422232224", "422232224", "422222224", "444444444"),
+  B2("..44444..", ".4w11224.", "4w111224.", "4w111234.", "4w111234.", "4w111224.", "4w111224.", "4w11122k.", "4w111224.", "4w111234.", "4w111234.", "4w111224.", "444444444"),
+  B2("..44444..", ".4ww1114.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "4www1112.", "444444444"),
 ];
 const MASK = [
-  B(".1111111.", "111111111", "1kk111kk1", "11k111k11", "111121111", ".1112111.", "..1kkk1..", "...111..."),
-  B(".1111111.", "111111111", "1kk111kk1", "1k11111k1", "111121111", ".1k121k1.", "..1kkk1..", "...111..."),
+  B2(".1111111.", "111111111", "1kk111kk1", "11k111k11", "111121111", ".1112111.", "..1kkk1..", "...111..."),
+  B2(".1111111.", "111111111", "1kk111kk1", "1k11111k1", "111121111", ".1k121k1.", "..1kkk1..", "...111..."),
 ];
-const CROWN = B("1...1...1", "11.111.11", "1w11w11w1", "111111111", "2121w1212", "333333333");
-const COIN = [B(".111.", "12221", "12w21", "12221", ".333."), B(".11.", "1221", "1w21", "1221", ".33."), B("1", "2", "w", "2", "3"), B(".11.", "1221", "12w1", "1221", ".33.")];
-const CARD = [B("11111", "1...1", "1.2.1", "12w21", "1.2.1", "1...1", "11111"), B("111", "1.1", "121", "1w1", "121", "1.1", "111"), B("1", "1", "2", "w", "2", "1", "1"), B("222", "434", "343", "434", "343", "434", "222")];
-const SNAKE_HEAD = B(".222...", "2112k1.", "21111w1", "22333.w", ".33....");
+const CROWN = B2("1...1...1", "11.111.11", "1w11w11w1", "111111111", "2121w1212", "333333333");
+const COIN = [B2(".111.", "12221", "12w21", "12221", ".333."), B2(".11.", "1221", "1w21", "1221", ".33."), B2("1", "2", "w", "2", "3"), B2(".11.", "1221", "12w1", "1221", ".33.")];
+const CARD = [B2("11111", "1...1", "1.2.1", "12w21", "1.2.1", "1...1", "11111"), B2("111", "1.1", "121", "1w1", "121", "1.1", "111"), B2("1", "1", "2", "w", "2", "1", "1"), B2("222", "434", "343", "434", "343", "434", "222")];
+const SNAKE_HEAD = B2(".222...", "2112k1.", "21111w1", "22333.w", ".33....");
 const DRAGON = [
-  B("..3.........", "..33........", ".222221.....", "21112k22111.", "2111111111w1", "22233333....", ".2333333w3w.", "..333333333."),
-  B("..3.........", "..33........", ".222221.....", "21112k22111w", "2111111..w..", "2223.........", ".2333...w.w..", "..3333333333."),
+  B2("..3.........", "..33........", ".222221.....", "21112k22111.", "2111111111w1", "22233333....", ".2333333w3w.", "..333333333."),
+  B2("..3.........", "..33........", ".222221.....", "21112k22111w", "2111111..w..", "2223.........", ".2333...w.w..", "..3333333333."),
 ];
 const WOLF = [
-  B(".1.1.......", ".2121......", "21111111...", "2112k11111.", "21111111w1k", ".2223333...", "..23w3w3...", "...3333...."),
-  B(".1.1.......", ".2121......", "21111111111", "2112k111..k", "211111.....", ".2223..w.w.", "..23333333.", "...3333...."),
+  B2(".1.1.......", ".2121......", "21111111...", "2112k11111.", "21111111w1k", ".2223333...", "..23w3w3...", "...3333...."),
+  B2(".1.1.......", ".2121......", "21111111111", "2112k111..k", "211111.....", ".2223..w.w.", "..23333333.", "...3333...."),
 ];
-const SHIELD = B("333333333", "311121113", "311121113", "322222223", "311121113", ".3112113.", ".3111113.", "..31113..", "...313...", "....3....");
-const WEB_BALL = B(".212.", "21312", "13w31", "21312", ".212.");
+const SHIELD = B2("333333333", "311121113", "311121113", "322222223", "311121113", ".3112113.", ".3111113.", "..31113..", "...313...", "....3....");
+const WEB_BALL = B2(".212.", "21312", "13w31", "21312", ".212.");
 const FLAME = [
-  B("...1...", "..11...", "..121..", ".1221..", ".12w21.", "122w221", "1233321", ".13331."),
-  B("....1..", "...11..", "..121..", ".11221.", ".12w21.", "12ww221", "1223321", ".13331."),
-  B("..1....", "..11...", ".1221..", ".12211.", ".12w21.", "122w221", "1233221", ".13331."),
+  B2("...1...", "..11...", "..121..", ".1221..", ".12w21.", "122w221", "1233321", ".13331."),
+  B2("....1..", "...11..", "..121..", ".11221.", ".12w21.", "12ww221", "1223321", ".13331."),
+  B2("..1....", "..11...", ".1221..", ".12211.", ".12w21.", "122w221", "1233221", ".13331."),
 ];
 const CHAIN_HOOK = B(".11.", "1..1", "1..1", ".11.");
 
@@ -519,14 +559,14 @@ registerShapes({
 
   /** Jaws seen from the front: two rows of fangs that open to `gap` px and snap. */
   moJaws(v, P, p) {
-    const fr = Math.floor(p.age * 12), [cx, cy] = v.ap(p.x, p.y, p.z), w = p.w ?? 6, a = env(p);
-    const gap = typeof p.gap === "function" ? p.gap(p, fr) : p.gap ?? 3;
+    const fr = Math.floor(p.age * 12), [cx, cy] = v.ap(p.x, p.y, p.z), w = Math.round((p.w ?? 6) * MO), a = env(p);
+    const gap = (typeof p.gap === "function" ? p.gap(p, fr) : p.gap ?? 3) * MO;
     for (let i = -w; i <= w; i++) {
-      const e = Math.abs(i) / w, arc = Math.round(e * e * 3), up = cy - gap - arc, dn = cy + gap + arc;
-      P.dot(cx + i, up - 1, S(p.R, 0.95), a, 2); P.dot(cx + i, up - 2, S(p.R, 0.62), a, 2);
-      P.dot(cx + i, dn + 1, S(p.R, 0.78), a, 2); P.dot(cx + i, dn + 2, S(p.R, 0.45), a, 2);
-      if ((i + w) % 3 === 1 && Math.abs(i) < w) {
-        const L = e < 0.4 ? 3 : 2;
+      const e = Math.abs(i) / w, arc = Math.round(e * e * 5), up = cy - gap - arc, dn = cy + gap + arc;
+      P.dot(cx + i, up - 1, S(p.R, 0.95), a, 2); P.dot(cx + i, up - 2, S(p.R, 0.72), a, 2); P.dot(cx + i, up - 3, S(p.R, 0.5), a, 2);
+      P.dot(cx + i, dn + 1, S(p.R, 0.78), a, 2); P.dot(cx + i, dn + 2, S(p.R, 0.55), a, 2); P.dot(cx + i, dn + 3, S(p.R, 0.4), a, 2);
+      if ((i + w) % 4 === 1 && Math.abs(i) < w) {
+        const L = e < 0.4 ? 5 : e < 0.75 ? 4 : 3;
         for (let k = 0; k < L; k++) { P.dot(cx + i, up + k, k === L - 1 ? WHITE : S(p.R, 1), a, 2); P.dot(cx + i, dn - k, k === L - 1 ? WHITE : S(p.R, 1), a, 2); }
       }
     }
@@ -534,7 +574,7 @@ registerShapes({
 
   /** A sun: a disc and eight rays that turn and pulse. */
   moSun(v, P, p) {
-    const fr = Math.floor(p.age * 12), [cx, cy] = v.ap(p.x, p.y, p.z), r = p.sz ?? 4, a = env(p);
+    const fr = Math.floor(p.age * 12), [cx, cy] = v.ap(p.x, p.y, p.z), r = (p.sz ?? 4) * MO, a = env(p);
     P.shade(cx - r - 1, cy - r - 1, cx + r + 1, cy + r + 1, (x, y) => {
       const d = Math.hypot(x - cx, y - cy) / r; if (d > 1) return null;
       return { c: d < 0.45 ? WHITE : d > 0.82 ? S(p.R, 0.78) : S(p.R, 1), a };
@@ -548,7 +588,7 @@ registerShapes({
   /** A puffy cloud of three lobes, lit on top; `dark` for a storm. */
   moCloud(v, P, p) {
     let [cx, cy] = v.ap(p.x, p.y, p.z); [cx, cy] = snapH(p, v, cx, cy);
-    const r = p.sz ?? 5, a = env(p), base = p.dark ? 0.3 : 0.7, fr = Math.floor(p.age * 12);
+    const r = (p.sz ?? 5) * MO, a = env(p), base = p.dark ? 0.3 : 0.7, fr = Math.floor(p.age * 12);
     const L = [[0, -0.15, 1], [-1.15, 0.25, 0.7], [1.2, 0.25, 0.72], [-0.55, -0.5, 0.68], [0.6, -0.45, 0.72]];
     P.shade(cx - r * 2.2, cy - r * 1.6, cx + r * 2.2, cy + r * 1.3, (x, y) => {
       if (y > cy + r * 0.62) return null;
@@ -564,7 +604,7 @@ registerShapes({
 
   /** A funnel of wind: stacked rings widening upward, the dashes on them turning. */
   moFunnel(v, P, p) {
-    const fr = Math.floor(p.age * 12), [bx, by] = v.ap(p.x, p.y, p.z), H = p.sz ?? 16, a = env(p), top = v.kind === "top";
+    const fr = Math.floor(p.age * 12), [bx, by] = v.ap(p.x, p.y, p.z), H = (p.sz ?? 16) * 1.4, a = env(p), top = v.kind === "top";
     const grow = Math.min(1, (fr + 1) / 4);
     for (let j = 0; j < H * grow; j += 2) {
       const f = j / H, rx = 1.5 + f * f * H * 0.55, ry = Math.max(1, rx * (top ? 0.9 : 0.3)), sway = Math.sin(f * 4 + fr * 0.7) * 2 * f;
@@ -589,7 +629,7 @@ registerShapes({
 
   /** A swarm: a buzzing knot of dots round a point. */
   moSwarm(v, P, p) {
-    const fr = Math.floor(p.age * 12), [cx, cy] = v.ap(p.x, p.y, p.z), n = p.n ?? 14, r = p.sz ?? 6, a = env(p);
+    const fr = Math.floor(p.age * 12), [cx, cy] = v.ap(p.x, p.y, p.z), n = Math.round((p.n ?? 14) * 1.7), r = (p.sz ?? 6) * MO, a = env(p);
     for (let i = 0; i < n; i++) {
       const q = hash(i, p.seed ?? 1) * TAU + fr * (0.5 + hash(i, 3) * 0.9) * (i % 2 ? 1 : -1), d = r * (0.3 + 0.7 * hash(i, fr >> 1, 9));
       const x = cx + Math.cos(q) * d, y = cy + Math.sin(q) * d * 0.7;
@@ -600,7 +640,7 @@ registerShapes({
 
   /** A tree: a trunk that rises, then a canopy of three lobes that swells. */
   moTree(v, P, p) {
-    const [bx, by] = v.ap(p.x, p.y, 0), H = p.sz ?? 18, a = env(p), top = v.kind === "top", g = clamp(p.age / (p.growT ?? 0.5)), fr = Math.floor(p.age * 12);
+    const [bx, by] = v.ap(p.x, p.y, 0), H = (p.sz ?? 18) * 1.4, a = env(p), top = v.kind === "top", g = clamp(p.age / (p.growT ?? 0.5)), fr = Math.floor(p.age * 12);
     const lift = top ? 0.45 : 1, th = Math.round(H * 0.45 * lift * Math.min(1, g * 2));
     for (let j = 0; j < th; j++) { P.dot(bx, by - j, S(p.R, 0.45), a, 2); P.dot(bx + 1, by - j, S(p.R, 0.3), a, 2); if (j < 2) { P.dot(bx - 1, by - j, S(p.R, 0.45), a, 2); P.dot(bx + 2, by - j, S(p.R, 0.3), a, 2); } }
     const cg = clamp(g * 2 - 0.8); if (cg <= 0) return;
@@ -619,7 +659,7 @@ registerShapes({
 
   /** A wall of blocks that rises out of the ground across `w` px, `sz` px tall. */
   moWall(v, P, p) {
-    const [bx, by] = v.ap(p.x, p.y, 0), w = p.w ?? 16, H = (p.sz ?? 12) * (v.kind === "top" ? 0.5 : 1), a = env(p);
+    const [bx, by] = v.ap(p.x, p.y, 0), w = (p.w ?? 16) * 1.3, H = (p.sz ?? 12) * 1.3 * (v.kind === "top" ? 0.5 : 1), a = env(p);
     const h = Math.round(H * easeOut(clamp(p.age / (p.growT ?? 0.25))));
     for (let j = 0; j < h; j++) for (let i = -w / 2; i < w / 2; i++) {
       const row = Math.floor(j / 3), seam = j % 3 === 2 || ((i + 100 + (row % 2) * 3) % 6 === 0);
@@ -629,27 +669,35 @@ registerShapes({
 
   /** Sound: pairs of arcs opening out from a point, like ( ) ( ). */
   moRings(v, P, p) {
-    const u = clamp(p.age / p.life), [cx, cy] = v.ap(p.x, p.y, p.z), n = p.n ?? 3, a = 1 - u, R0 = p.sz ?? 10;
+    const u = clamp(p.age / p.life), [cx, cy] = v.ap(p.x, p.y, p.z), n = p.n ?? 3, a = 1 - u, R0 = (p.sz ?? 10) * MO;
     for (let k = 0; k < n; k++) {
       const uk = u * 1.4 - k * 0.22; if (uk <= 0 || uk >= 1) continue;
-      const r = 3 + R0 * easeOut(uk);
-      for (const side of [-1, 1]) for (let i = -4; i <= 4; i++) {
-        const q = (i / 4) * 0.7;
-        P.dot(cx + side * Math.cos(q) * r, cy + Math.sin(q) * r * 0.9, S(p.R, k === 0 ? 0.95 : 0.78), a, 2);
+      const r = 3 + R0 * easeOut(uk), m = Math.max(4, Math.round(r * 0.9));
+      for (const side of [-1, 1]) for (let i = -m; i <= m; i++) {
+        const q = (i / m) * 0.75, x = cx + side * Math.cos(q) * r, y = cy + Math.sin(q) * r * 0.9;
+        P.dot(x, y, S(p.R, k === 0 ? 1 : 0.82), a, 2);
+        P.dot(x - side, y, S(p.R, k === 0 ? 0.72 : 0.55), a, 2);
       }
     }
   },
 
   /** Three claw gouges raked across a point, revealed top to bottom in two frames. */
   moClaw(v, P, p) {
-    const fr = Math.floor(p.age * 12), [cx, cy] = v.ap(p.x, p.y, p.z), L = p.sz ?? 12, show = Math.min(1, (fr + 1) / 2), a = env(p);
-    const sq = p.flat ? v.sq : 1;
+    const [cx, cy] = v.ap(p.x, p.y, p.z), L = (p.sz ?? 12) * MO, a = env(p), sq = p.flat ? v.sq : 1, gap = Math.max(4, Math.round(L * 0.24));
     for (let k = -1; k <= 1; k++) {
+      // each mark rakes in 2 frames, a frame after the one before; then it cools, then closes from both ends
+      const age = p.flat ? 1 : p.age - (k + 1) / 24, fr = Math.floor(age * 12);
+      if (age < 0) continue;
+      const show = p.flat ? 1 : Math.min(1, (fr + 1) / 2), shut = p.flat ? 0 : clamp((age - 0.22) / Math.max(0.1, p.life - 0.3)) * 0.5;
+      const heat = p.flat ? 0.3 : fr < 2 ? 1 : fr < 4 ? 0.9 : 0.72;
       for (let i = 0; i <= L * show; i++) {
-        const f = i / L, x = cx + k * 4 + (f - 0.5) * L * 0.55 * (p.flip ?? 1) + Math.sin(f * Math.PI) * 2, y = cy + ((f - 0.5) * L) * sq;
-        const thick = f > 0.15 && f < 0.85 ? 1 : 0, c = p.flat ? S(p.R, 0.3) : f > show - 0.12 && fr < 2 ? WHITE : S(p.R, 0.95);
-        P.dot(x, y, c, a, p.flat ? 0 : 2);
-        if (thick) P.dot(x + 1, y, p.flat ? S(p.R, 0.45) : S(p.R, 0.72), a, p.flat ? 0 : 2);
+        const f = i / L; if (f < shut || f > 1 - shut) continue;
+        const x = cx + k * gap + (f - 0.5) * L * 0.6 * (p.flip ?? 1) + Math.sin(f * Math.PI) * 3, y = cy + (f - 0.5) * L * sq;
+        const mid = Math.sin(Math.PI * f), thick = mid > 0.75 ? 2 : mid > 0.3 ? 1 : 0;
+        if (p.flat) { if (i % 3 === 2) continue; P.dot(x, y, S(p.R, 0.3), a, 0); if (thick) P.dot(x + 1, y, S(p.R, 0.45), a, 0); continue; }
+        const head = f > show - 0.15 && fr < 2;
+        P.dot(x, y, head ? WHITE : S(p.R, heat), a, 2);
+        for (let t = 1; t <= thick; t++) P.dot(x + t, y, S(p.R, heat - 0.18 * t), a, 2);
       }
     }
   },
@@ -706,36 +754,37 @@ registerShapes({
 
   /** A lash: an S-curve cracked across a point, revealed in two frames, a white snap at its end. */
   moLash(v, P, p) {
-    const fr = Math.floor(p.age * 12), [cx, cy] = v.ap(p.x, p.y, p.z), L = p.sz ?? 16, show = Math.min(1, (fr + 1) / 2), a = env(p);
+    const fr = Math.floor(p.age * 12), [cx, cy] = v.ap(p.x, p.y, p.z), L = (p.sz ?? 16) * MO, show = Math.min(1, (fr + 1) / 2), a = env(p);
     let last = null;
     for (let i = 0; i <= L * show; i++) {
-      const f = i / L, x = cx + (f - 0.5) * L * (p.flip ?? 1), y = cy - 4 + f * 8 + Math.sin(f * TAU) * 3;
-      P.dot(x, y, S(p.R, 0.95), a, 2); if (f < 0.4) P.dot(x, y + 1, S(p.R, 0.62), a, 2);
+      const f = i / L, x = cx + (f - 0.5) * L * (p.flip ?? 1), y = cy - 6 + f * 12 + Math.sin(f * TAU) * 5;
+      P.dot(x, y, S(p.R, 0.95), a, 2); if (f < 0.6) P.dot(x, y + 1, S(p.R, 0.62), a, 2); if (f < 0.25) P.dot(x, y + 2, S(p.R, 0.45), a, 2);
       last = [x, y];
     }
-    if (last && fr === 1) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, -2], [-2, 2], [2, 2], [-2, -2]]) P.dot(last[0] + dx, last[1] + dy, WHITE, 1, 2);
+    if (last && fr === 1) for (let k = 1; k <= 4; k++) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7], [-0.7, -0.7]]) P.dot(last[0] + dx * k, last[1] + dy * k, k < 3 ? WHITE : S(p.R, 1), 1, 2);
   },
 
   /** Lightning crackling round a body: short arcs between points near it, re-struck. */
   moCrackle(v, P, p) {
-    const st = Math.floor(p.age * 16), r = rng((p.seed ?? 3) * 977 + st), [cx, cy] = v.ap(p.x, p.y, p.z), R0 = (p.r ?? 0.45) * v.aps, a = env(p);
-    for (let k = 0; k < (p.n ?? 2); k++) {
+    const st = Math.floor(p.age * 16), r = rng((p.seed ?? 3) * 977 + st), [cx, cy] = v.ap(p.x, p.y, p.z), R0 = (p.r ?? 0.45) * v.aps * 1.35, a = env(p);
+    for (let k = 0; k < (p.n ?? 2) + 1; k++) {
       if (r() < 0.25) continue;
       const q0 = r() * TAU, q1 = q0 + 0.8 + r() * 1.2;
       let x = cx + Math.cos(q0) * R0, y = cy + Math.sin(q0) * R0 * 0.9;
       const x1 = cx + Math.cos(q1) * R0, y1 = cy + Math.sin(q1) * R0 * 0.9;
       for (let i = 0; i < 6; i++) {
-        const nx = lerp(x, x1, 1 / (6 - i)) + (r() - 0.5) * 4, ny = lerp(y, y1, 1 / (6 - i)) + (r() - 0.5) * 4;
-        P.line(x, y, nx, ny, S(p.R, 1), 2, a); x = nx; y = ny;
+        const nx = lerp(x, x1, 1 / (6 - i)) + (r() - 0.5) * 6, ny = lerp(y, y1, 1 / (6 - i)) + (r() - 0.5) * 6;
+        P.line(x, y, nx, ny, S(p.R, 1), 2, a); P.line(x + 1, y, nx + 1, ny, S(p.R, 0.72), 2, a); x = nx; y = ny;
       }
     }
   },
 
   /** A small circle with a glyph in it, turning: a sigil. */
   moSigil(v, P, p) {
-    const fr = Math.floor(p.age * 12), [cx, cy] = v.ap(p.x, p.y, p.z), r = p.sz ?? 5, a = env(p), G = GLYPHS[(fr >> 2) % GLYPHS.length];
-    P.ellipse(cx, cy, r, r, (q) => ({ c: S(p.R, Math.floor(q * 3 + fr) % 2 ? 0.95 : 0.72), a }), 2);
-    for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) if (G[j * 3 + k] === "1") P.dot(cx - 1 + k, cy - 1 + j, S(p.R, 1), a, 2);
+    const fr = Math.floor(p.age * 12), [cx, cy] = v.ap(p.x, p.y, p.z), r = (p.sz ?? 5) * 1.7, a = env(p), G = GLYPHS[(fr >> 2) % GLYPHS.length];
+    P.ellipse(cx, cy, r, r, (q) => ({ c: S(p.R, Math.floor(q * 3 + fr) % 2 ? 1 : 0.72), a }), 2);
+    P.ellipse(cx, cy, r - 2, r - 2, (q) => (Math.floor(q * 4 - fr) % 3 === 0 ? null : { c: S(p.R, 0.62), a }), 2);
+    for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) if (G[j * 3 + k] === "1") for (const [ox, oy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) P.dot(cx - 3 + k * 2 + ox, cy - 3 + j * 2 + oy, S(p.R, ox || oy ? 0.85 : 1), a, 2);
   },
 }, { flat: [] });
 
@@ -756,8 +805,8 @@ export const pop = (s, R, bm, o) => s.add({ k: "moSprite", R, bm, life: 1, updat
 
 /** A flash and a light, sized by power. */
 export function flare(s, M, x, y, z, pow = 1, r = 0.5) {
-  s.add({ k: "flash", x, y, z, life: (pow > 1.2 ? 2 : 1) / 12, r: (r * 0.5 + 0.2) * s.spec.aps * 0.6 * Math.min(1.4, pow), R: M.R, update: still });
-  s.light(x, y, z, r * 2 + 1, S(M.R, 0.85), (M.dark ? 0.5 : 1) * Math.min(1.4, pow), 0.6);
+  s.add({ k: "flash", x, y, z, life: (pow > 1.2 ? 2 : 1) / 12, r: (r * 0.5 + 0.2) * (s.spec.aps ?? 26) * 0.95 * Math.min(1.4, pow), R: M.R, update: still });
+  s.light(x, y, z, r * 3 + 1.4, S(M.R, 0.85), (M.dark ? 0.5 : 1) * Math.min(1.4, pow), 0.7);
 }
 
 /** Points round (x, y) within `rad` squares: one at the centre, the rest on a ring. */
@@ -909,7 +958,7 @@ export const MOTIFS = {
   },
   hammer: {
     carrier: (s, M, p) => ride(p, { bm: HAMMER, face: true, spin: TAU / 8 }),
-    impact: (s, M, o) => later(s, o.at, (s2) => drop(s2, M.R, HAMMER, { x: o.x, y: o.y, z: z0(o) + 0.1, ang: Math.PI / 2, from: 1.3, fall: 0.16, life: 0.7, from2: 0, land: (s3) => {
+    impact: (s, M, o) => later(s, o.at, (s2) => drop(s2, M.R, HAMMER, { x: o.x, y: o.y, z: z0(o) + 0.1, ang: Math.PI / 2, from: 1.3, fall: 0.16, life: 1, from2: 0, land: (s3) => {
       flare(s3, M, o.x, o.y, z0(o), o.pow, 0.4);
       s3.add({ k: "ring", x: o.x, y: o.y, r: 0.6 + (o.rad ?? 0), life: 0.5, R: M.R, broken: true, seed: 13, update: still });
       s3.shake = Math.max(s3.shake, o.pow > 1.2 ? 2.5 : 1.3);
@@ -984,7 +1033,7 @@ export const MOTIFS = {
     carrier: (s, M, p) => ride(p, { trail: "speed", bm: FIST, face: true, keepUp: true }),
     impact: (s, M, o) => later(s, o.at, (s2) => {
       const [ux, uy] = fromCaster(s2, o.x, o.y), z = z0(o);
-      s2.add({ k: "moSprite", R: M.R, bm: FIST, x: o.x - ux * 0.8, y: o.y - uy * 0.8, z, life: 0.5, hero: 1, from: 0.5, ang: Math.atan2(uy * 0.5, ux), flip: false, update(p, s3) {
+      s2.add({ k: "moSprite", R: M.R, bm: FIST, x: o.x - ux * 0.8, y: o.y - uy * 0.8, z, life: 0.8, hero: 1, from: 0.65, ang: Math.atan2(uy * 0.5, ux), flip: false, update(p, s3) {
         const k = clamp(p.age / 0.09), back = clamp((p.age - 0.2) / 0.2), d = lerp(0.8, 0.15, k) + back * 0.3;
         p.x = o.x - ux * d; p.y = o.y - uy * d;
         if (ux < 0) { p.flip = true; p.ang = Math.atan2(uy * 0.5, ux) + Math.PI; }
@@ -998,8 +1047,10 @@ export const MOTIFS = {
     carrier: (s, M, p) => ride(p, { trail: "rake" }),
     impact: (s, M, o) => later(s, o.at, (s2) => {
       const [ux] = fromCaster(s2, o.x, o.y), z = z0(o);
-      s2.add({ k: "moClaw", x: o.x, y: o.y, z, sz: o.pow > 1.2 ? 16 : 12, flip: ux >= 0 ? 1 : -1, life: 0.5, R: M.R, update: still });
-      if (o.pow > 1.2) s2.add({ k: "moClaw", x: o.x, y: o.y, z, sz: 14, flip: ux >= 0 ? -1 : 1, life: 0.45, R: M.R, wait: 0.12, update: still });
+      s2.add({ k: "moClaw", x: o.x, y: o.y, z, sz: o.pow > 1.2 ? 16 : 12, flip: ux >= 0 ? 1 : -1, life: 0.8, from: 0.55, R: M.R, update: still });
+      if (o.pow > 1.2) s2.add({ k: "moClaw", x: o.x, y: o.y, z, sz: 14, flip: ux >= 0 ? -1 : 1, life: 0.7, from: 0.55, R: M.R, wait: 0.12, update: still });
+      s2.light(o.x, o.y, z, 1.2, S(M.R, 0.85), 0.8, 0.5);
+      for (let i = 0; i < (o.pow > 1.2 ? 12 : 7); i++) { const q = s2.rand(0, TAU), sp = s2.rand(1.5, 3.5); s2.add({ k: "spark", x: o.x, y: o.y, z, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.5, vz: s2.rand(0.5, 2), g: 7, drag: 1.5, life: s2.rand(0.25, 0.45), R: M.R, minor: i > 3 }); }
       s2.at(s2.t + 1 / 12, (s3) => flare(s3, M, o.x, o.y, z, o.pow * 0.8, 0.3));
     }),
     residue: (s, M, { x, y, at }) => later(s, at, (s2) => s2.add({ k: "moClawFlat", flat: true, x, y, z: 0, sz: 12, life: 2.2, from: 0.5, R: M.R, update: still })),
@@ -1251,7 +1302,7 @@ export const MOTIFS = {
     carrier: (s, M, p) => ride(p, { frames: [WAVE[1], WAVE[2]], loop: true, fps: 6, face: "lr", shed(q, s2, dt) { if (s2.count(16, dt)) s2.add({ k: "droplet", x: q.x, y: q.y, z: q.z + 0.15, vx: s2.rand(-0.6, 0.6), vz: s2.rand(0.5, 1.5), g: 7, life: 0.5, R: M.R, minor: true }); } }),
     impact: (s, M, o) => later(s, o.at, (s2) => {
       const [ux] = fromCaster(s2, o.x, o.y), side = ux >= 0 ? -1 : 1, z = Math.max(0, z0(o) - 0.55);
-      s2.add({ k: "moSprite", R: M.R, frames: [WAVE[0], WAVE[1], WAVE[1], WAVE[2], WAVE[2]], fps: 14, x: o.x + side * 0.5, y: o.y + 0.02, z, base: true, flip: side > 0, life: 0.55, from: 0.6, update(p) { p.x = o.x + side * lerp(0.5, -0.1, easeOut(clamp(p.age / 0.35))); } });
+      s2.add({ k: "moSprite", R: M.R, frames: [WAVE[0], WAVE[1], WAVE[1], WAVE[2], WAVE[2]], fps: 14, x: o.x + side * 0.5, y: o.y + 0.02, z, base: true, flip: side > 0, life: 0.95, from: 0.7, update(p) { p.x = o.x + side * lerp(0.6, -0.1, easeOut(clamp(p.age / 0.35))); } });
       s2.at(s2.t + 0.28, (s3) => {
         for (let i = 0; i < (o.pow > 1.2 ? 12 : 8); i++) { const q = s3.rand(-1, 1) + (side > 0 ? Math.PI : 0); s3.add({ k: "droplet", x: o.x, y: o.y, z: 0.6, vx: Math.cos(q) * s3.rand(1, 2.5), vy: Math.sin(q) * 0.8, vz: s3.rand(1, 2.6), g: 8, life: 1, R: M.R, big: i % 3 === 0, minor: i % 2 === 1, onGround: splat }); }
         flare(s3, M, o.x, o.y, 0.5, o.pow * 0.8, 0.35);

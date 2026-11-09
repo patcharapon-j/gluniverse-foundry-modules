@@ -37,6 +37,11 @@ export const TIMING = Object.freeze({
   diceWait: 6,
   /** Effects older than this when they would start are dropped (a late join). */
   stale: 12,
+  /** A follow-up Grab / Knockdown / Push (or its check) this long after the Strike that set it up
+   *  draws with that Strike's body part (handoff.mjs), arrival to arrival: the Strike's dice take up
+   *  to diceWait, which leaves the GM at least as long again to press the follow-up. Later than this it
+   *  is more likely a fresh Grapple than the follow-through of that bite. */
+  handoff: 12,
   /** The longest frame step a host feeds the sim; a stalled tab does not fast-forward. */
   maxDt: 0.05,
 });

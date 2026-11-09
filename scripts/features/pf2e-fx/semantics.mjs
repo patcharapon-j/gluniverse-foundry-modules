@@ -31,6 +31,7 @@
 import { classify } from "../pf2e-aoe/classifier.mjs";
 import { CONDITIONS } from "./conditions.mjs";
 import { FUNCTIONS, MATERIALS, TRADITIONS } from "./constants.mjs";
+import { ARCH, pickArch } from "./archetypes/rules.mjs";
 import { BASE_GROUP, STYLE_OF, actionDelivery, baseItemOf, flavorOf, inVocab, motifOf, nameElement, propsOf, strikeDelivery } from "./depict.mjs";
 
 const MATERIAL_SET = new Set(MATERIALS);
@@ -443,6 +444,9 @@ const MOVEMENT_SLUG = /^(fly|haste|longstrider|jump|tailwind|spider-climb|water-
 
 const HINDER_TRAITS =["incapacitation", "emotion", "fear", "mental", "misfortune", "curse", "disease", "sleep", "poison", "death", "possession"];
 
+/** Traits that hinder only when there is something to resist: a mental buff carries them too. */
+const SOFT_HINDER = new Set(["mental", "emotion"]);
+
 function pickFunc(item, ctx) {
   const { traits, damage, curated, slug, area, sys } = ctx;
   if (curated?.func) return { func: curated.func, src: "curated" };
@@ -471,7 +475,9 @@ function pickFunc(item, ctx) {
   if (traits.has("illusion") || traits.has("darkness") || traits.has("shadow")) return { func: "conceal", src: "trait" };
   if (/(^|-)(ward|wards|warding|protection|barrier|shield|armor|aegis|bulwark|resistance|resist)(-|$)/.test(slug)) return { func: "protect", src: "slug" };
   const save = sys.defense?.save?.statistic ?? (/@Check\[(fortitude|reflex|will)/i.exec(ctx.description)?.[1] ?? null);
-  if (HINDER_TRAITS.some((t) => traits.has(t))) return { func: "hinder", src: "trait" };
+  const hinders = HINDER_TRAITS.filter((t) => traits.has(t));
+  if (hinders.length && !save && !sys.defense?.passive && hinders.every((t) => SOFT_HINDER.has(t))) return { func: "support", src: "trait-soft" };
+  if (hinders.length) return { func: "hinder", src: "trait" };
   if (save || sys.defense?.passive) return { func: "hinder", src: "defense" };
   if (traits.has("fortune") || traits.has("aura") || traits.has("stance")) return { func: "support", src: "trait" };
   if (area) return { func: ctx.spell ? "terrain" : sys.category === "offensive" ? "harm" : "terrain", src: "area" };
@@ -549,6 +555,33 @@ export function weaponStyleOf(item, opts = {}) {
   return strikeOf(item, opts).weapon;
 }
 
+/**
+ * Strike riders (docs/SPELLSPRITE_ARCHETYPES.md §1.1): the body archetype a
+ * Strike's `system.attackEffects.value` hands over to after its hit, first
+ * match wins. PF2e's own riders are grab, improved-grab, constrict,
+ * greater-constrict, knockdown, improved-knockdown, push, improved-push and
+ * trip (CONFIG.PF2E.attackEffects); a creature may also list one of its own
+ * actions by slug (tongue-grab, grabbing-trunk, push-20-feet). Pull, web and
+ * every affliction are not body beats and ride nothing. Rend is matched
+ * exactly, so Rend Faith stays a curse.
+ */
+const RIDER_RULES = [
+  ["grab", /(^|-)(grab|grabbing|grapple|attach|seize|snatch|clutch|constrict|wrap|engulf|swallow-whole)(-|$)/],
+  ["trip", /(^|-)(knockdown|trip|topple)(-|$)/],
+  ["shove", /(^|-)(push|shove|knockback|reposition)(-|$)/],
+  ["rend", /^(improved-)?(rend|tear|eviscerate|rip-and-tear)$/],
+];
+
+/** A Strike's rider: `{ arch, slug }` (the slug picks a variant: constrict → coils), or null. */
+export function riderOf(item) {
+  const ae = sysOf(item).attackEffects;
+  for (const raw of Array.isArray(ae?.value) ? ae.value : Array.isArray(ae) ? ae : []) {
+    const slug = slugify(raw);
+    for (const [arch, rx] of RIDER_RULES) if (rx.test(slug)) return { arch, slug };
+  }
+  return null;
+}
+
 /* ── the entry points ──────────────────────────────────────────────────── */
 
 /** A consumable with one of these does something worth drawing. */
@@ -557,7 +590,7 @@ const CONSUMABLE_TRAITS = ["magical", "alchemical", "potion", "elixir", "talisma
 const GEAR_TYPES = new Set(["armor", "shield", "backpack", "treasure", "kit", "equipment", "book", "ammo", "lore", "ancestry", "heritage", "background", "class", "deity", "effect", "campaignFeature", "spellcastingEntry"]);
 
 function blank(extra = {}) {
-  return { kind: "auto", func: "neutral", material: "neutral", accent: null, rank: 1, tradition: null, weapon: null, area: null, mode: null, condition: null, slug: null, silent: null, craft: null, delivery: null, motif: null, props: [], flavor: null, why: {}, ...extra };
+  return { kind: "auto", func: "neutral", material: "neutral", accent: null, rank: 1, tradition: null, weapon: null, area: null, mode: null, condition: null, slug: null, silent: null, craft: null, delivery: null, motif: null, props: [], flavor: null, arch: null, why: {}, ...extra };
 }
 
 /**
@@ -579,7 +612,15 @@ function depictSpec(item, spec, ctx) {
   const p = propsOf(item, { traits, damage: ctx.damage ?? [], rank: spec.rank, cantrip: traits.has("cantrip"), scale: !spec.silent && ctx.scale !== false });
   const f = curated.flavor !== undefined ? { flavor: curated.flavor, src: "curated" } : flavorOf(item, { traits, tradition: spec.tradition, spell: !!ctx.spell });
   const v = inVocab({ delivery, motif: m.motif, props: p.props, flavor: f.flavor });
-  return { ...spec, ...v, why: { ...spec.why, delivery: v.delivery ? dsrc : "none", motif: v.motif ? m.src : "none", props: p.src, flavor: v.flavor ? f.src : "none" } };
+  const out = { ...spec, ...v, arch: null, why: { ...spec.why, delivery: v.delivery ? dsrc : "none", motif: v.motif ? m.src : "none", props: p.src, flavor: v.flavor ? f.src : "none", arch: "none" } };
+  const a = curated.arch !== undefined ? (curated.arch ? { arch: curated.arch, src: "curated" } : null) : pickArch(item, out, traits);
+  if (!a) return out;
+  out.arch = a.arch; out.why.arch = a.src;
+  // an archetype that rescues lifts a costed action out of silence (Mighty Rage, Flurry of Blows, Pounce)
+  if (out.silent === "no-function") { out.silent = null; out.func = ARCH[a.arch].func ?? out.func; out.kind = out.kind === "auto" ? "self" : out.kind; out.why.func = "arch"; }
+  // a rescued action with no material of its own takes its archetype's (a bare Drink Blood drains void)
+  if (out.why.func === "arch" && out.material === "neutral" && ARCH[a.arch].material) { out.material = ARCH[a.arch].material; out.why.material = "arch"; }
+  return out;
 }
 
 /**
@@ -653,6 +694,8 @@ function describeItemUnsafe(item, opts) {
     return done(blank({
       ...base, kind: "strike", func: "harm", material: material === "neutral" ? "kinetic" : material, accent, weapon, mode: "attack",
       area: weapon.splash && weapon.ranged ? { shape: "burst", r: 1, len: null, width: null } : null,
+      // Grab, Knockdown, Push, Rend: the archetype beat played after the hit (compile.mjs buildStrike)
+      rider: riderOf(item),
       why: { kind: "strike", func: "strike", material: material === "neutral" ? "default" : src },
     }));
   }
@@ -725,6 +768,32 @@ export function describeSkillAction(actionSlug, traits = []) {
   const m = [...t].map((x) => TRAIT_MATERIAL[x]).find(Boolean) ?? materialFromName(slug.replace(/-/g, " "));
   if (t.has("mental") || t.has("emotion") || t.has("fear")) return fix(blank({ slug, kind: "attack", func: "hinder", material: m ?? "mental", mode: "attack", why: { func: "trait", material: "trait" } }));
   return fix(blank({ slug, silent: "no-function", why: { silent: "unknown" } }));
+}
+
+/** The kineticist's elements, each a material of its own. */
+const BLAST_ELEMENTS = new Set(["air", "earth", "fire", "metal", "water", "wood"]);
+
+/**
+ * An Elemental Blast's attack. PF2e posts it as an attack roll whose origin is
+ * the impulse (an `action` item), with the chosen element, damage type and
+ * reach in `context.identifier` (`air.electricity.ranged.1`). The impulse alone
+ * reads as a generic control form, so the blast is described from that choice:
+ * an energy damage type is the material (air dealing electricity is lightning),
+ * physical damage keeps the element (air dealing slashing is a gust).
+ * @param {object} item   the impulse
+ * @param {{element?: string, damageType?: string, melee?: boolean}} blast
+ */
+export function describeBlast(item, { element = null, damageType = null, melee = false } = {}) {
+  const el = BLAST_ELEMENTS.has(slugify(element)) ? slugify(element)
+    : asArray(sysOf(item)?.traits?.value).map(slugify).find((t) => BLAST_ELEMENTS.has(t)) ?? null;
+  const dt = slugify(damageType);
+  const material = dt && !PHYSICAL.has(dt) && MATERIAL_SET.has(dt) ? dt : el ?? "kinetic";
+  const base = describeItem(item, { use: "cast" });
+  return {
+    ...base, kind: "attack", func: "harm", material, mode: "attack", silent: null,
+    delivery: melee ? "touch" : "orb", flavor: base.flavor ?? "impulse",
+    why: { ...base.why, kind: "blast", func: "blast", material: dt && material === dt ? "blast-damage" : "blast-element", delivery: "blast" },
+  };
 }
 
 /** PF2e conditions that are states of knowledge or attitude, not something to draw. */

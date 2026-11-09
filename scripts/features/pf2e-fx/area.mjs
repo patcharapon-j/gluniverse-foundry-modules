@@ -20,7 +20,7 @@
  */
 
 import { TAU, clamp, easeOut, hash } from "./core/rand.mjs";
-import { S } from "./core/palette.mjs";
+import { S, WHITE } from "./core/palette.mjs";
 import { registerShapes } from "./core/shapes.mjs";
 import { still } from "./core/motifs.mjs";
 
@@ -146,16 +146,18 @@ registerShapes({
   zone(v, P, p) {
     const G = p.geom, inv = groundInverse(v, G.x, G.y);
     if (!inv) return;
-    const aps = v.aps, rimW = 1.4 / aps, tele = p.tele ?? 0, k = p.age - tele, gentle = !!p.gentle;
-    const spread = p.spread ?? 0, scarLen = Math.max(0.2, p.life - tele - spread - 0.42);
+    const aps = v.aps, rimW = 2.4 / aps, tele = p.tele ?? 0, k = p.age - tele, gentle = !!p.gentle;
+    const spread = p.spread ?? 0, scarLen = Math.max(0.2, p.life - tele - spread - 0.67);
     const march = Math.floor(p.age * 12), prog = clamp(p.age / Math.max(0.05, tele));
     /* Every stage, resolved once per frame: the colours do not depend on the pixel. */
     const C = {
       teleRim: { c: S(p.R, 0.85), a: 1 }, teleRimOff: { c: S(p.R, 0.55), a: 0.5 },
       teleOn: { c: S(p.R, 0.62), a: 0.5 }, teleOff: { c: S(p.R, 0.45), a: 0.25 },
-      hot: { c: S(p.R, gentle ? 0.85 : 1), a: gentle ? 0.5 : 1 }, hotRim: { c: S(p.R, 1), a: 1 },
-      warm: { c: S(p.R, 0.85), a: gentle ? 0.5 : 0.75 }, warmRim: { c: S(p.R, 0.95), a: 1 },
-      glow: { c: S(p.R, 0.62), a: gentle ? 0.25 : 0.5 }, glowRim: { c: S(p.R, 0.85), a: 1 },
+      // the fill is a flash under the eruptions, never a lid: the top of a cold, electric or force
+      // ramp is near white, and an opaque hot fill read as a white disc that hid the burst
+      hot: { c: S(p.R, gentle ? 0.8 : 0.9), a: gentle ? 0.25 : 0.5 }, hotRim: { c: S(p.R, 1), a: 1 },
+      warm: { c: S(p.R, 0.75), a: gentle ? 0.25 : 0.5 }, warmRim: { c: S(p.R, 0.95), a: 1 },
+      glow: { c: S(p.R, 0.6), a: 0.25 }, glowRim: { c: S(p.R, 0.85), a: 1 },
       scarRim: { c: S(p.R, 0.7), a: 1 },
     };
     const [x0, y0, x1, y1] = boxOf(v, G);
@@ -169,11 +171,13 @@ registerShapes({
         if (rimmed) return ((Math.floor((wx + wy) * aps / 3) + march) & 3) < 2 ? C.teleRim : C.teleRimOff;
         return k < 0 && m.d > prog ? C.teleOff : C.teleOn;
       }
+      /* Hot for two frames, warm for two, glowing for four: long enough to
+         be seen from across the table (spellsprite-craft §1). */
       const fr = Math.floor(kl * 12);
-      if (fr <= 0) return rimmed ? C.hotRim : C.hot;
-      if (fr === 1) return rimmed ? C.warmRim : C.warm;
-      if (fr <= 4) return rimmed ? C.glowRim : C.glow;
-      const u = clamp((kl - 5 / 12) / scarLen);
+      if (fr <= 1) return rimmed ? C.hotRim : C.hot;
+      if (fr <= 3) return rimmed ? C.warmRim : C.warm;
+      if (fr <= 7) return rimmed ? C.glowRim : C.glow;
+      const u = clamp((kl - 8 / 12) / scarLen);
       if (rimmed) return u < 0.5 ? C.scarRim : null;
       /* The scar burns out in chunks, the rim first and the middle last. */
       if (grain(wx, wy, aps, p.seed) * 0.75 + (1 - m.d) * 0.25 < u * 1.05) return null;
@@ -186,7 +190,10 @@ registerShapes({
     const G = p.geom, u = clamp(p.age / p.dur), f = easeOut(u), ext = extentOf(G), aps = v.aps;
     const at = f * ext, fade = u < 0.85 ? 1 : 1 - (u - 0.85) / 0.15;
     if (fade <= 0) return;
-    const bands = [[0, S(p.R, 1)], [1, S(p.R, 0.95)], [2, S(p.R, 0.75)], [3, S(p.R, 0.6)]].slice(0, p.thick ?? 4);
+    /* A front six pixels deep (gentle three): a white-hot leading edge on its
+       first frames, then the ramp falling away behind it. */
+    const lead = u < 0.25 && !p.gentle ? WHITE : S(p.R, 1);
+    const bands = [[0, lead], [1, S(p.R, 1)], [2, S(p.R, 0.95)], [3, S(p.R, 0.85)], [4, S(p.R, 0.72)], [5, S(p.R, 0.6)]].slice(0, p.thick ?? 6);
     const o = 1;
     if (G.shape === "cone" || G.shape === "line") {
       for (const [b, c] of bands) {
@@ -214,6 +221,14 @@ registerShapes({
       if (rx < 1) continue;
       P.ellipse(cx, cy, rx, Math.max(0.5, rx * v.sq), (q) => (p.broken && hash(Math.floor(q * 10), p.seed) < 0.15 ? null : { c, a: fade }), o);
     }
+    /* Spikes of the material thrown off the front, every 30°, riding it out. */
+    if (!p.gentle && !p.broken) {
+      const n = Math.max(8, Math.round(at * aps / 6)), len = 3 + 5 * (1 - u);
+      for (let i = 0; i < n; i++) {
+        const q = (i / n) * TAU + hash(i, p.seed) * 0.3, r0 = at * aps, r1 = r0 + len * (0.6 + 0.6 * hash(i, p.seed, 1));
+        P.line(cx + Math.cos(q) * r0, cy + Math.sin(q) * r0 * v.sq, cx + Math.cos(q) * r1, cy + Math.sin(q) * r1 * v.sq, null, 1, fade, (f) => S(p.R, f < 0.5 ? 1 : 0.8));
+      }
+    }
   },
 }, { flat: ["zone", "shock"] });
 
@@ -236,19 +251,33 @@ export function areaFX(s, M, A, { tele0, hitAt, pow, gentle = false, erupt = tru
   const seed = Math.floor(s.R() * 1e6);
   const tele = Math.max(0, hitAt - tele0);
   const spread = shockDur * 0.95;
-  s.at(tele0, (s2) => s2.add({ k: "zone", x: G.x, y: G.y, geom: G, tele, spread, life: tele + spread + 0.42 + linger, R: M.R, gentle, seed, update: still }));
+  s.at(tele0, (s2) => s2.add({ k: "zone", x: G.x, y: G.y, geom: G, tele, spread, life: tele + spread + 0.67 + linger, R: M.R, gentle, seed, update: still }));
   s.at(hitAt, (s2) => {
-    s2.add({ k: "shock", x: G.x, y: G.y, geom: G, dur: shockDur, life: shockDur, R: M.R, thick: gentle ? 2 : 4, seed, update: still });
-    if (crit) s2.add({ k: "shock", x: G.x, y: G.y, geom: G, dur: shockDur * 1.5, life: shockDur * 1.5, R: M.R, thick: 2, broken: true, seed: seed + 1, wait: 0.08, update: still });
-    /* Light the whole area, then the front as it travels. */
+    s2.add({ k: "shock", x: G.x, y: G.y, geom: G, dur: shockDur, life: shockDur, R: M.R, thick: gentle ? 3 : 6, gentle, seed, update: still });
+    if (crit) s2.add({ k: "shock", x: G.x, y: G.y, geom: G, dur: shockDur * 1.5, life: shockDur * 1.5, R: M.R, thick: 3, broken: true, seed: seed + 1, wait: 0.08, update: still });
+    /* The front lands on the rim: a flare of light all round the edge as it arrives. */
+    s2.at(hitAt + shockDur * 0.85, (s3) => {
+      const n = G.shape === "cone" ? 4 : G.shape === "line" ? 2 : clamp(Math.round(ext * 3), 5, 10);
+      for (let i = 0; i < n; i++) {
+        let x, y;
+        if (G.shape === "cone") { const q = G.dir - G.half + (2 * G.half * (i + 0.5)) / n; x = G.x + Math.cos(q) * G.len * 0.95; y = G.y + Math.sin(q) * G.len * 0.95; }
+        else if (G.shape === "line") { const f = i ? 0.98 : 0.6; x = G.x + Math.cos(G.dir) * G.len * f; y = G.y + Math.sin(G.dir) * G.len * f; }
+        else { const q = (i / n) * TAU; x = G.x + Math.cos(q) * G.r * 0.95; y = G.y + Math.sin(q) * G.r * 0.95; }
+        s3.light(x, y, 0.3, 1.1, S(M.R, 0.95), gentle ? 0.35 : 0.6, 0.4);
+      }
+    });
+    /* Light the whole area, then the front as it travels. The pools overlap and sit over the
+       particles, so they stay below a wash: at full strength a cone flattened into a cream fan. */
     if (G.shape === "cone" || G.shape === "line") {
       /* Light that follows the footprint, not a disc round its middle. */
       for (const f of [0.22, 0.55, 0.85]) {
-        const r = G.shape === "line" ? G.width * 0.9 + 0.5 : Math.tan(G.half) * G.len * f + 0.6;
-        s2.light(G.x + Math.cos(G.dir) * G.len * f, G.y + Math.sin(G.dir) * G.len * f, 0.4, r, S(M.R, 0.9), gentle ? 0.5 : 0.85, 0.55 + shockDur * (0.5 + f));
+        const r = G.shape === "line" ? G.width * 1.3 + 0.9 : Math.tan(G.half) * G.len * f * 1.25 + 0.9;
+        s2.light(G.x + Math.cos(G.dir) * G.len * f, G.y + Math.sin(G.dir) * G.len * f, 0.4, r, S(M.R, 0.9), gentle ? 0.32 : 0.5, 0.7 + shockDur * (0.5 + f));
       }
     } else {
-      s2.light(G.x, G.y, 0.4, ext * 0.95 + 0.6, S(M.R, 0.9), gentle ? 0.6 : 1, 0.55 + shockDur);
+      /* a pool reaching past the rim, and a hot one over the middle */
+      s2.light(G.x, G.y, 0.4, ext * 1.25 + 1, S(M.R, 0.9), gentle ? 0.4 : 0.62, 0.7 + shockDur);
+      if (!gentle && !M.dark) s2.light(G.x, G.y, 0.6, ext * 0.55 + 0.6, S(M.R, 1), 0.8, 0.3);
     }
     if (!gentle && !M.mod.gentle) s2.shake = Math.max(s2.shake, Math.min(5, 1 + ext * 0.45 * pow));
   });
@@ -262,7 +291,7 @@ export function areaFX(s, M, A, { tele0, hitAt, pow, gentle = false, erupt = tru
         /* Every other eruption is "minor": a loaded table sheds half the
            crowd and keeps the coverage. */
         s2.minorScope = i % 2 === 1;
-        try { M.mod.burst(s2, M, { x: pt.x, y: pt.y, z: 0.25 + R() * 0.2, pow: sub, rad: clamp(step * 0.42, 0.3, 0.6), sub: true }); }
+        try { M.mod.burst(s2, M, { x: pt.x, y: pt.y, z: 0.25 + R() * 0.2, pow: sub, rad: clamp(step * 0.5, 0.36, 0.75), sub: true }); }
         finally { s2.minorScope = false; }
       });
     });

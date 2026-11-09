@@ -1,16 +1,20 @@
 /**
  * Earthwork: earth, metal.
  *
- * Earth: stone spikes burst out of a cracked crater, boulders with weight arc,
- * bounce and settle, dust rolls out low along the ground, grit trickles after.
- * Metal: a ringing clang, glinting shrapnel that tumbles and then lies still,
- * hot sparks off steel, iron filings snapped into field lines, thin blades.
+ * Earth erupts: the floor cracks with a glow, stone spikes ram up out of a
+ * crater, a band of dust is thrown across the ground, boulders and a hundred
+ * grains of grit arc out, bounce and settle with a puff each, and dust rolls
+ * out low and thins (nature/earth-spike, explosions/dirt-explosion).
+ * Metal rings: a hard white clang and rings of resonance, a spray of hot
+ * sparks off steel, glinting shrapnel that tumbles and then lies still, iron
+ * filings snapped into field lines, thin blades.
  */
 
 import { TAU, hash, pnoise, inPoly, rng, fadeOut } from "../core/rand.mjs";
 import { RAMP, S, WHITE } from "../core/palette.mjs";
 import { registerShapes } from "../core/shapes.mjs";
-import { out, sd, lobes, still, releaseFlash, counter, flourish } from "../core/motifs.mjs";
+import { out, sd, still, releaseFlash, counter, flourish } from "../core/motifs.mjs";
+import { grit, dustRing, dustLobes } from "./physical.mjs";
 
 /* ── physics helpers ──────────────────────────────────────────────────── */
 
@@ -22,16 +26,18 @@ export function settle(p, s) {
   } else { p.z = 0; p.vz = 0; p.vx *= 0.6; p.vy *= 0.6; p.restAt ??= p.age; }
 }
 
-/** A heavy rock's first landing kicks up a puff. */
+/** A heavy rock's first landing kicks up a puff of dust and a spit of grit. */
 function thud(p, s) {
-  s.add({ k: "smoke", x: p.x, y: p.y, z: 0.05, vx: p.vx * 0.2, vz: 0.15, drag: 2.5, r: 2.5, life: 0.5, lobes: [[0, 0, 1], [0.6, 0.2, 0.6]], R: p.R, tone: 0.5, minor: true });
+  s.add({ k: "phDust", x: p.x, y: p.y, z: 0.04, vx: p.vx * 0.2, vy: p.vy * 0.2, vz: 0.1, drag: 2.5, r: 2 + p.s, life: s.rand(0.5, 0.8), R: p.R, tone: 0.55, a0: 0.5, minor: true });
+  grit(s, p.R, p.x, p.y, 0.05, 4, { sp: [0.8, 2.2], up: [1, 2.5], life: [0.4, 0.8], keep: 0 });
 }
 
-/** A spike crumbles as it sinks: a few pebbles fall off it. */
+/** A spike crumbles as it sinks: pebbles fall off it with a little dust. */
 function crumble(p, s) {
   if (p.crumbled || p.age < p.life * 0.72) return;
   p.crumbled = true;
-  for (let i = 0; i < 3; i++) s.add({ k: "boulder", x: p.x + s.rand(-0.08, 0.08), y: p.y, z: s.rand(0.15, 0.35), vx: s.rand(-0.8, 0.8), vy: s.rand(-0.3, 0.3), vz: s.rand(0.3, 1), g: 9, bounce: 0.25, onGround: settle, life: s.rand(1.2, 2), R: p.R, s: s.R() < 0.4 ? 2 : 1, seed: sd(s), a0: s.rand(0, TAU), debris: true, minor: i > 0 });
+  for (let i = 0; i < 3; i++) s.add({ k: "boulder", x: p.x + s.rand(-0.08, 0.08), y: p.y, z: s.rand(0.15, 0.45), vx: s.rand(-0.8, 0.8), vy: s.rand(-0.3, 0.3), vz: s.rand(0.3, 1), g: 9, bounce: 0.25, onGround: settle, life: s.rand(1.2, 2), R: p.R, s: s.R() < 0.4 ? 2 : 1, seed: sd(s), a0: s.rand(0, TAU), debris: true, minor: i > 0 });
+  if (!p.sharp) s.add({ k: "phDust", x: p.x, y: p.y, z: 0.04, vx: s.rand(-0.4, 0.4), vz: 0.05, drag: 2, r: p.w + 2, life: 0.8, R: p.R, tone: 0.55, a0: 0.4, minor: true });
 }
 
 const isMetal = (M) => M.material === "metal";
@@ -39,86 +45,105 @@ const isMetal = (M) => M.material === "metal";
 /** A cluster of spikes for a release, nearest-first for the 3D view. */
 function spikes(s, R, x, y, rad, mm, sharp, sub = false) {
   // an area eruption raises one or two, so a field of them reads as stone coming up, not a thicket
-  const N = sub ? (s.R() < 0.55 ? 1 : 2) : Math.round((3 + rad * 2.2) * Math.min(1.4, mm) * (sharp ? 0.8 : 1)), list = [], q0 = hash(s.seed, 3) * TAU;
+  const N = sub ? (s.R() < 0.55 ? 1 : 2) : Math.round((3 + rad * 2.4) * Math.min(1.4, mm) * (sharp ? 0.9 : 1)), list = [], q0 = hash(s.seed, 3) * TAU;
   for (let i = 0; i < N; i++) {
     let q, d;
     if (sub) { q = s.rand(0, TAU); d = rad * s.rand(0, 0.5); }
-    else if (s.take === 0) { q = (i / N) * TAU + s.rand(-0.25, 0.25); d = rad * s.rand(0.4, 0.75); }
-    else if (s.take === 1) { q = s.rand(0, TAU); d = Math.sqrt(s.R()) * rad * 0.8; }
-    else { q = q0 + ((i % 3) / 3) * TAU + s.rand(-0.12, 0.12); d = rad * (0.25 + (0.65 * (Math.floor(i / 3) + 1)) / Math.ceil(N / 3)); }
-    const k = 1 - (d / (rad + 0.6)) * 0.45;
-    list.push({ k: "rockspike", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d, h: s.rand(12, 20) * mm * k, w: (sharp ? s.rand(1.4, 2.2) : s.rand(3, 4.8)) * Math.min(1.3, mm), lean: Math.cos(q) * s.rand(1, 4), life: s.rand(1.7, 2.4), R, seed: sd(s), sharp, wait: d * 0.12, debris: true, update: crumble });
+    else if (s.take === 0) { q = (i / N) * TAU + s.rand(-0.25, 0.25); d = rad * s.rand(0.45, 0.85) + 0.15; }
+    else if (s.take === 1) { q = s.rand(0, TAU); d = Math.sqrt(s.R()) * rad * 0.9 + 0.1; }
+    else { q = q0 + ((i % 3) / 3) * TAU + s.rand(-0.12, 0.12); d = rad * (0.25 + (0.75 * (Math.floor(i / 3) + 1)) / Math.ceil(N / 3)) + 0.1; }
+    const k = 1 - (d / (rad + 0.8)) * 0.4;
+    list.push({ k: "rockspike", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d, h: s.rand(18, 30) * mm * k * (sub ? 0.85 : 1), w: (sharp ? s.rand(1.6, 2.6) : s.rand(3.6, 6)) * Math.min(1.3, mm), lean: Math.cos(q) * s.rand(1.5, 5), life: s.rand(1.8, 2.6), R, seed: sd(s), sharp, wait: d * 0.1, debris: true, update: crumble });
   }
-  if (s.take === 1 && !sharp && !sub) list.push({ k: "rockspike", x, y, h: 22 * mm, w: 5 * Math.min(1.3, mm), lean: s.rand(-2, 2), life: 2.4, R, seed: sd(s), wait: 0, debris: true, update: crumble });
+  // the main spike: one tall ram in the middle, side shards round it
+  if (!sub && (s.take === 1 || rad <= 0.5)) list.push({ k: "rockspike", x, y: y - 0.02, h: (sharp ? 30 : 34) * mm, w: (sharp ? 2.8 : 6.5) * Math.min(1.3, mm), lean: s.rand(-2, 2), life: 2.6, R, seed: sd(s), sharp, wait: 0, debris: true, update: crumble });
   // farther first: in the 3D view a larger y stands further back
   list.sort((a, b) => b.y - a.y).forEach((p) => s.add(p));
 }
 
-/** A cone or line of spikes erupting in a wave that runs out from the hand. */
+/** A cone or line of spikes erupting in a wave that runs out from the hand, throwing grit and dust. */
 function spikeFront(s, M, { hand, dir, half, len, dt }, sharp) {
   const st = (s.ewFront ??= { t0: s.t });
-  const u = (s.t - st.t0) / 0.5;
+  const u = (s.t - st.t0) / 0.55;
   if (u > 1) return;
-  const d = 0.7 + u * (len - 0.7), rate = (len * (half > 0.3 ? 4 : 2.6) * (sharp ? 0.7 : 1)) / 0.5;
+  const d = 0.7 + u * (len - 0.7), rate = (len * (half > 0.3 ? 3.8 : 3) * (sharp ? 0.8 : 1)) / 0.55;
   for (let i = s.count(rate, dt); i > 0; i--) {
-    const q = dir + s.rand(-half, half) * 0.85, dd = d + s.rand(-0.25, 0.25);
-    s.add({ k: "rockspike", x: hand[0] + Math.cos(q) * dd, y: hand[1] + Math.sin(q) * dd, h: s.rand(8, 14) * Math.min(1.4, s.m), w: sharp ? s.rand(1.3, 2) : s.rand(2.2, 3.6), lean: Math.cos(q) * s.rand(1, 3), life: s.rand(1.2, 1.7), R: M.R, seed: sd(s), sharp, debris: true, update: crumble });
+    const q = dir + s.rand(-half, half) * 0.85, dd = d + s.rand(-0.25, 0.25), px = hand[0] + Math.cos(q) * dd, py = hand[1] + Math.sin(q) * dd;
+    s.add({ k: "rockspike", x: px, y: py, h: s.rand(13, 22) * Math.min(1.4, s.m), w: sharp ? s.rand(1.5, 2.3) : s.rand(3, 4.6), lean: Math.cos(q) * s.rand(1, 3.5), life: s.rand(1.3, 1.9), R: M.R, seed: sd(s), sharp, debris: true, update: crumble });
+    grit(s, sharp ? M.R : M.R, px, py, 0.1, 5, { sp: [1, 4], up: [2, 4.5], life: [0.6, 1.1], keep: 0 });
+    if (!sharp && s.R() < 0.25) s.add({ k: "phDust", x: px, y: py, z: 0.04, vx: Math.cos(q) * s.rand(0.6, 1.5), vy: Math.sin(q) * s.rand(0.6, 1.5), vz: 0.05, drag: 2.2, r: s.rand(4, 7), life: s.rand(0.7, 1.1), R: M.R, tone: 0.5, a0: 0.45, lobes: dustLobes(s), minor: true });
   }
 }
 
 /* ── earth ────────────────────────────────────────────────────────────── */
 
 function earthBurst(s, M, { x, y, z, pow, rad, sub }) {
-  const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n = counter(s, pow, rad);
-  releaseFlash(s, M, x, y, z, pow, rad);
+  const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n0 = counter(s, pow, rad), n = sub ? (k) => Math.ceil(n0(k) / 2.5) : n0;
+  releaseFlash(s, M, x, y, z, pow, rad, sub ? { flash: 0.6, light: 0.22 } : undefined);
+  // the cracks glow from underneath for a moment (earth-spike's heat), then cool
+  if (!sub) s.light(x, y, 0.1, rad * 2 + 1.1, S(RAMP.fire, 0.7), 0.5, 0.7);
   if (pow >= 0.5 || sub) {
-    if (!sub || s.R() < 0.4) s.add({ k: "fissure", x, y, r: rad * (sub ? 0.7 : 0.95) + 0.25, life: 5, R, seed: sd(s), debris: true, update: still });
-    spikes(s, R, x, y, rad, sub ? s.rand(0.5, 0.75) : mm, false, sub);
+    if (!sub || s.R() < 0.4) s.add({ k: "fissure", x, y, r: rad * (sub ? 0.9 : 1.5) + 0.35, life: 5, R, seed: sd(s), debris: true, update: still });
+    spikes(s, R, x, y, rad, sub ? s.rand(0.55, 0.8) : mm, false, sub);
   }
-  for (let i = 0, N = sub ? n(3) : n(7); i < N; i++) {
-    const o = out(s, s.rand(1.8, 4.2)), big = i < 2;
-    o.vz = Math.abs(o.vz) + s.rand(2, 3.5);
-    s.add({ k: "boulder", x, y, z: Math.max(0.1, z * 0.5), ...o, g: 11, drag: 0.5, bounce: 0.3, onGround: settle, thud: big ? thud : null, life: s.rand(3, 4.5), R, s: big ? s.rand(3.5, 5) * Math.min(1.3, mm) : s.rand(1, 3), seed: sd(s), a0: s.rand(0, TAU), spin: s.R() < 0.5 ? -1 : 1, debris: true, minor: !big && i % 3 === 2 });
+  // the band of dust thrown across the floor, and a broken ring behind it
+  if (!sub) {
+    s.add({ k: "ring", x, y, r: Math.min(rad * 2.4 + 1, rad * 1.1 + 1.5) * Math.min(1.3, mm), life: 0.5, R, seed: sd(s), update: still });
+    s.add({ k: "ring", x, y, r: Math.min(rad * 1.7 + 0.7, rad * 1.1 + 1.2) * Math.min(1.3, mm), life: 0.7, R, broken: true, seed: sd(s), wait: 0.06, update: still });
   }
-  // dust rolls out low from the rim, leaving the spikes clear
-  const nd = sub ? Math.min(2, n(5)) : n(5);
-  for (let i = 0; i < nd; i++) {
-    const q = (i / nd) * TAU + s.rand(-0.3, 0.3), sp = s.rand(1, 1.8) * (0.6 + rad * 0.4), d = rad * 0.75;
-    s.add({ k: "smoke", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d, z: 0.05, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: 0.1, g: -0.03, drag: 2.6, r: s.rand(3, 4.5) * Math.min(1.4, m), life: s.rand(0.8, 1.2), lobes: lobes(s), R, tone: 0.33, wait: s.rand(0.06, 0.14) });
+  // boulders with weight: thrown high, they bounce, puff and settle
+  for (let i = 0, N = n(15); i < N; i++) {
+    const big = i < (sub ? 1 : 4), q = s.rand(0, TAU), sp = s.rand(1.6, 6) * (big ? 0.7 : 1);
+    s.add({ k: "boulder", x, y, z: Math.max(0.1, z * 0.5), vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s.rand(2.5, 5.5), g: 14, drag: 0.5, bounce: 0.32, onGround: settle, thud: big ? thud : null, life: s.rand(2.4, 3.8), R, s: big ? s.rand(3.5, 5.5) * Math.min(1.3, mm) : s.rand(1, 3), seed: sd(s), a0: s.rand(0, TAU), spin: s.R() < 0.5 ? -1 : 1, debris: true, minor: i >= (sub ? 1 : 6) });
   }
-  if (!sub) s.add({ k: "smoke", x, y: y + 0.05, z: 0.2, vz: 0.7, g: -0.1, drag: 1.6, r: s.rand(3.5, 4.5) * Math.min(1.3, m), life: 1, lobes: lobes(s), R, tone: 0.5, wait: 0.18 });
-  if (pow >= 0.8 && !sub) s.shake = Math.max(s.shake, 1 + pow);
+  // grit: the bulk of the throw
+  grit(s, R, x, y, Math.max(0.05, z * 0.4), n(56), { sp: [1.5, 8.5], up: [2, 6], life: [1, 2], keep: sub ? 2 : 8 });
+  // hot sparks struck off stone
+  for (let i = 0, N = n(6); i < N; i++) s.add({ k: "spark", x, y, z: Math.max(0.1, z * 0.5), ...out(s, s.rand(4, 10)), g: 14, drag: 2, life: s.rand(0.2, 0.45), R: RAMP.fire, minor: i >= 2 });
+  // dust rolls out low from the rim, leaving the spikes clear; a plume rises in the middle
+  dustRing(s, R, x, y, sub ? Math.min(3, n(6)) : n(9), { r0: rad * 0.6, sp: [1.2, 2.8], r: [6, 11], life: [1, 1.6], tone: 0.5, a0: 0.42, wait: [0.05, 0.14], keep: sub ? 1 : 3 });
+  if (!sub) for (let i = 0; i < 3; i++) s.add({ k: "phDust", x: x + s.rand(-0.2, 0.2), y: y + 0.05, z: 0.2, vx: s.rand(-0.3, 0.3), vz: s.rand(0.5, 0.9), g: -0.1, drag: 1.6, r: s.rand(7, 10) * Math.min(1.3, m), life: s.rand(1.2, 1.7), R, tone: 0.55, a0: 0.5, lobes: dustLobes(s), wait: 0.15 + i * 0.06, minor: i > 0 });
+  if (pow >= 0.8 && !sub) s.shake = Math.max(s.shake, 1.2 + pow);
   flourish(s, M, x, y, z, rad, Math.round(5 * m));
 }
 
-function earthTrail(s, M, { x, y, z, dt }) {
-  const R = M.R;
+function earthTrail(s, M, { x, y, z, dt, scale = 1 }) {
+  const R = M.R, k = Math.max(1, scale);
   // the boulder riding the projectile's head (one frame long, replaced every step)
-  s.add({ k: "boulder", x, y, z, s: 3.5 * Math.min(1.4, s.m), life: dt * 1.5, R, seed: 5, rot: Math.floor(s.t * 12) * 0.85, update: still });
-  for (let i = s.count(26 * s.m, dt); i > 0; i--) s.add({ k: "boulder", x: x + s.rand(-0.06, 0.06), y: y + s.rand(-0.06, 0.06), z, vx: s.rand(-0.4, 0.4), vy: s.rand(-0.3, 0.3), vz: s.rand(-0.5, 0.5), g: 9, drag: 0.6, bounce: 0.25, onGround: settle, life: s.rand(1.2, 2), R, s: 1, seed: sd(s), debris: true, minor: s.R() < 0.5 });
-  for (let i = s.count(12 * s.m, dt); i > 0; i--) s.add({ k: "smoke", x, y, z, vz: 0.1, drag: 2.5, r: s.rand(1.5, 2.4), life: s.rand(0.35, 0.5), lobes: [[0, 0, 1]], R, tone: 0.5 });
+  s.add({ k: "boulder", x, y, z, s: 4.5 * Math.min(1.4, s.m) * Math.sqrt(k), life: dt * 1.5, R, seed: 5, rot: Math.floor(s.t * 12) * 0.85, update: still });
+  for (let i = s.count(16 * s.m, dt); i > 0; i--) s.add({ k: "boulder", x: x + s.rand(-0.06, 0.06), y: y + s.rand(-0.06, 0.06), z, vx: s.rand(-0.6, 0.6), vy: s.rand(-0.5, 0.5), vz: s.rand(-0.3, 0.8), g: 12, drag: 0.6, bounce: 0.25, onGround: settle, life: s.rand(1.2, 2), R, s: s.R() < 0.3 ? 2 : 1, seed: sd(s), debris: true, minor: s.R() < 0.6 });
+  for (let i = s.count(44 * s.m, dt); i > 0; i--) s.add({ k: "phGrit", x, y, z, vx: s.rand(-0.9, 0.9), vy: s.rand(-0.9, 0.9), vz: s.rand(-0.2, 1.2), g: 16, drag: 1, bounce: 0.2, life: s.rand(0.6, 1.1), R, t: s.rand(0.33, 0.83), s: 1, seed: s.seedInt(), debris: true, minor: true });
+  for (let i = s.count(18 * s.m, dt); i > 0; i--) s.add({ k: "phDust", x, y, z, vz: 0.1, drag: 2.5, r: s.rand(2.5, 4) * Math.sqrt(k), life: s.rand(0.4, 0.6), R, tone: 0.55, a0: 0.5, minor: s.R() < 0.4 });
 }
 
 /* ── metal ────────────────────────────────────────────────────────────── */
 
 function metalBurst(s, M, { x, y, z, pow, rad, sub }) {
-  const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n = counter(s, pow, rad);
-  releaseFlash(s, M, x, y, z, pow, rad);
-  s.add({ k: "clang", x, y, z, r: Math.round(3 + 2 * mm), life: 5 / 12, R, update: still });
-  for (let i = 0, N = sub ? n(8) : n(16); i < N; i++) s.add({ k: "sliver", x, y, z, ...out(s, s.rand(3, 7)), g: 9, drag: 1.1, bounce: 0.35, onGround: settle, life: s.rand(1.8, 2.8), R, len: s.R() < 0.4 ? 4 : 3, seed: s.R(), glint: true, debris: i % 2 === 0, minor: i % 4 === 3 });
-  for (let i = 0; i < n(8); i++) s.add({ k: "spark", x, y, z, ...out(s, s.rand(4, 8)), g: 9, drag: 1.4, bounce: 0.4, life: s.rand(0.25, 0.5), R: RAMP.fire, minor: i % 2 === 1 });
+  const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n0 = counter(s, pow, rad), n = sub ? (k) => Math.ceil(n0(k) / 2.5) : n0;
+  releaseFlash(s, M, x, y, z, pow, rad, sub ? { flash: 0.6, light: 0.22 } : undefined);
+  s.add({ k: "clang", x, y, z, r: Math.round((sub ? 3 : 4.5) + 2.5 * mm), life: 5 / 12, R, update: still });
+  // it rings: thin rings of resonance chasing each other out
+  if (!sub) for (let i = 0; i < 3; i++) s.add({ k: "ring", x, y, r: Math.min(rad * 2.2 + 0.8, rad * 1.1 + 1.3) * (1 + i * 0.28) * Math.min(1.3, mm), life: 0.38 + i * 0.08, R, seed: sd(s), broken: i === 2, wait: i * 0.1, update: still });
+  // glinting shrapnel that tumbles, then lies still and catches the light
+  for (let i = 0, N = n(26); i < N; i++) s.add({ k: "sliver", x, y, z, ...out(s, s.rand(3.5, 9)), g: 14, drag: 1.2, bounce: 0.35, onGround: settle, life: s.rand(1.8, 2.8), R, len: s.R() < 0.4 ? 5 : 3, seed: s.R(), glint: true, debris: i % 2 === 0, minor: i >= 6 });
+  // hot sparks off steel: the loudest part of a metal hit
+  for (let i = 0, N = n(30); i < N; i++) s.add({ k: "spark", x, y, z, ...out(s, s.rand(5, 13)), g: 14, drag: 2, bounce: 0.45, life: s.rand(0.25, 0.6), R: i % 4 === 3 ? R : RAMP.fire, minor: i >= 8 });
+  for (let i = 0, N = sub ? 1 : n(5); i < N; i++) s.add({ k: "glint", x: x + s.rand(-1, 1) * (rad + 0.5), y: y + s.rand(-1, 1) * (rad + 0.5) * 0.7, z: s.rand(0.05, 0.8), life: 5 / 12, R, big: i === 0, wait: s.rand(0.08, 0.6), minor: i >= 2, update: still });
+  grit(s, R, x, y, Math.max(0.05, z * 0.5), n(10), { sp: [2, 7], up: [1, 3.5], tone: [0.5, 1], keep: 1 });
   if (pow >= 0.5 || sub) {
-    if (!sub || s.R() < 0.3) s.add({ k: "filings", x, y, r: rad * (sub ? 0.7 : 0.95) + 0.25, life: 4.5, R, seed: sd(s), debris: true, update: still });
-    spikes(s, R, x, y, rad, sub ? s.rand(0.55, 0.8) : mm, true, sub);
+    if (!sub || s.R() < 0.3) s.add({ k: "filings", x, y, r: rad * (sub ? 0.9 : 1.5) + 0.35, life: 4.5, R, seed: sd(s), debris: true, update: still });
+    spikes(s, R, x, y, rad, sub ? s.rand(0.6, 0.85) : mm, true, sub);
   }
+  if (pow >= 0.8 && !sub) s.shake = Math.max(s.shake, 0.8 + pow * 0.6);
   flourish(s, M, x, y, z, rad, Math.round(5 * m));
 }
 
 function metalTrail(s, M, { x, y, z, dt }) {
   const R = M.R;
-  s.add({ k: "sliver", x, y, z, len: 5, turn: Math.floor(s.t * 24) & 3, life: dt * 1.5, R, seed: 0, glint: true, update: still });
-  for (let i = s.count(22 * s.m, dt); i > 0; i--) s.add({ k: "sliver", x, y, z, vx: s.rand(-0.6, 0.6), vy: s.rand(-0.6, 0.6), vz: s.rand(-0.3, 0.6), g: 4, drag: 2, len: 2, life: s.rand(0.4, 0.6), R, seed: s.R(), glint: true, minor: s.R() < 0.5 });
-  for (let i = s.count(4, dt); i > 0; i--) s.add({ k: "glint", x, y, z, life: 5 / 12, R, minor: true, update: still });
+  s.add({ k: "sliver", x, y, z, len: 7, turn: Math.floor(s.t * 24) & 3, life: dt * 1.5, R, seed: 0, glint: true, update: still });
+  for (let i = s.count(30 * s.m, dt); i > 0; i--) s.add({ k: "sliver", x, y, z, vx: s.rand(-0.8, 0.8), vy: s.rand(-0.8, 0.8), vz: s.rand(-0.3, 0.8), g: 6, drag: 2, len: 2, life: s.rand(0.4, 0.7), R, seed: s.R(), glint: true, minor: s.R() < 0.6 });
+  for (let i = s.count(26 * s.m, dt); i > 0; i--) s.add({ k: "spark", x, y, z, vx: s.rand(-2, 2), vy: s.rand(-2, 2), vz: s.rand(-0.5, 1.5), g: 8, drag: 2.5, life: s.rand(0.15, 0.3), R: RAMP.fire, minor: true });
+  for (let i = s.count(7, dt); i > 0; i--) s.add({ k: "glint", x, y, z, life: 5 / 12, R, minor: true, update: still });
 }
 
 /* ── the family ───────────────────────────────────────────────────────── */
@@ -129,45 +154,99 @@ export default {
   trail(s, M, ctx) { (isMetal(M) ? metalTrail : earthTrail)(s, M, ctx); },
   linger(s, M, { at }) {
     if (isMetal(M)) {
-      at(2.5, () => ({ k: "glint", z: s.rand(0.05, 0.5), life: 5 / 12, update: still }));
+      at(4, () => ({ k: "glint", z: s.rand(0.05, 0.6), life: 5 / 12, big: s.R() < 0.2, update: still }));
+      at(3, () => ({ k: "sliver", z: s.rand(0.3, 0.8), vz: s.rand(0.5, 1.2), g: 10, bounce: 0.3, onGround: settle, life: s.rand(1, 1.6), len: 3, seed: s.R(), glint: true, debris: true, minor: true }));
+      at(0.6, () => ({ k: "rockspike", h: s.rand(9, 14), w: s.rand(1.4, 2), lean: s.rand(-2, 2), life: s.rand(1, 1.4), seed: sd(s), sharp: true, debris: true, update: crumble }));
       return;
     }
-    at(1.4, () => ({ k: "smoke", z: 0.1, vx: s.rand(-0.3, 0.3), vz: 0.15, g: -0.03, drag: 1.5, r: s.rand(3, 4.5), life: s.rand(1, 1.4), lobes: lobes(s), tone: 0.5 }));
-    at(4, () => ({ k: "boulder", z: s.rand(0.5, 1), g: 9, bounce: 0.3, onGround: settle, life: 1.6, s: 1, seed: sd(s), debris: true, minor: true }));
+    at(2, () => ({ k: "phDust", z: 0.04, vx: s.rand(-0.3, 0.3), vz: 0.1, g: -0.03, drag: 1.5, r: s.rand(5, 8), life: s.rand(1.1, 1.6), tone: 0.5, a0: 0.4, lobes: dustLobes(s) }));
+    at(8, () => ({ k: "phGrit", z: s.rand(0.5, 1.2), g: 18, bounce: 0.2, life: s.rand(0.8, 1.4), t: s.rand(0.33, 0.83), s: s.R() < 0.4 ? 2 : 1, seed: s.seedInt(), debris: true, minor: true }));
+    at(3, () => ({ k: "boulder", z: s.rand(0.5, 1), g: 9, bounce: 0.3, onGround: settle, life: 1.6, s: s.R() < 0.3 ? 2 : 1, seed: sd(s), debris: true, minor: true }));
+    at(0.7, () => ({ k: "rockspike", h: s.rand(9, 15), w: s.rand(2.6, 4), lean: s.rand(-2, 2), life: s.rand(1.1, 1.5), seed: sd(s), debris: true, update: crumble }));
+  },
+  /**
+   * The stone burst (spellsprite-craft §5 nature/earth-spike,
+   * explosions/dirt-explosion): the ground shivers and grit hops for the
+   * drawn-in beat, then the stone bursts round the body: slabs flung out of a
+   * hollow middle, tumbling and falling, a ring of spikes punching up round
+   * the feet, rocks bouncing and settling, grit and dust rolling out over a
+   * cracked floor. Metal bursts as steel: blades and slivers, a clang, sparks.
+   */
+  bloom(s, M, B) {
+    const R = M.R, metal = isMetal(M), aps = s.spec.aps, { x, y, z, r, sz } = B, rs = r / aps;
+    s.at(B.at, (s2) => {
+      grit(s2, R, x, y, 0.04, 10, { sp: [0.3, 1.2], up: [1.5, 3], life: [0.25, 0.4], keep: 2, spread: rs * 0.8 });
+      s2.light(x, y, 0.1, rs * 1.4 + 0.5, S(metal ? R : RAMP.fire, 0.7), 0.35, 0.2, { swell: true });
+      s2.shake = Math.max(s2.shake, 0.6);
+    });
+    s.at(B.b, (s2) => {
+      s2.add({ k: "ewBurst", x, y, z: z * 0.8, r: r * 1.2, n: B.saved ? 5 : B.crit ? 9 : 7, metal, hero: B.crit, life: 0.85, R, seed: sd(s2), update: still });
+      if (metal) s2.add({ k: "clang", x, y, z: B.head, r: Math.round(3 + 1.5 * B.k), life: 4 / 12, R, wait: 1 / 12, update: still });
+      s2.light(x, y, 0.1, rs * 2.2 + 0.7, S(metal ? R : RAMP.fire, 0.7), 0.5 * B.k, 0.5);
+      s2.shake = Math.max(s2.shake, (B.crit ? 2.4 : 1.2) * B.k);
+      if (B.crit) s2.crit();
+      // the ring of spikes round the feet, nearest drawn last
+      const list = [];
+      for (let i = 0, N = B.saved ? 3 : Math.round(6 * B.k); i < N; i++) {
+        const q = (i / N) * TAU + s2.rand(-0.25, 0.25), d = rs * s2.rand(0.5, 0.72) + 0.1;
+        list.push({ k: "rockspike", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.85, h: s2.rand(15, 24) * Math.min(1.4, B.k) * sz, w: metal ? s2.rand(1.6, 2.4) : s2.rand(3.4, 5), lean: Math.cos(q) * s2.rand(2, 5), life: s2.rand(1.3, 1.8), R, seed: sd(s2), sharp: metal, wait: i * 0.015, debris: true, minor: i > 4, update: crumble });
+      }
+      list.sort((a, b) => b.y - a.y).forEach((p) => s2.add(p));
+      // rocks (or shrapnel) flung, bouncing and settling
+      for (let i = 0, N = Math.round(9 * B.k); i < N; i++) {
+        const q = s2.rand(0, TAU), sp = s2.rand(1.8, 5) * B.k, big = i < 3;
+        if (metal) s2.add({ k: "sliver", x, y, z, ...out(s2, s2.rand(3.5, 8) * B.k), g: 14, drag: 1.2, bounce: 0.35, onGround: settle, life: s2.rand(1.4, 2.2), R, len: i % 3 ? 3 : 5, seed: s2.R(), glint: true, debris: true, minor: i > 4 });
+        else s2.add({ k: "boulder", x, y, z: z * 0.5, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(2.5, 5), g: 14, drag: 0.5, bounce: 0.32, onGround: settle, thud: big ? thud : null, life: s2.rand(1.8, 2.8), R, s: big ? s2.rand(3, 4.5) * sz : s2.rand(1, 2.5), seed: sd(s2), a0: s2.rand(0, TAU), spin: i % 2 ? -1 : 1, debris: true, minor: i > 4 });
+      }
+      for (let i = 0, N = Math.round((metal ? 16 : 6) * B.k); i < N; i++) s2.add({ k: "spark", x, y, z, ...out(s2, s2.rand(5, 11)), g: 14, drag: 2, bounce: 0.4, life: s2.rand(0.2, 0.5), R: metal && i % 3 ? R : RAMP.fire, minor: i > 3 });
+      grit(s2, R, x, y, z * 0.4, Math.round(24 * B.k), { sp: [1.5, 7], up: [2, 5.5], life: [0.8, 1.6], keep: 5 });
+      dustRing(s2, metal ? RAMP.kinetic : R, x, y, B.saved ? 3 : 6, { r0: rs * 0.4, sp: [1.2, 2.6], r: [6, 10], life: [0.9, 1.4], tone: 0.5, a0: 0.42, keep: 2 });
+      if (!B.saved) s2.add({ k: metal ? "filings" : "fissure", x, y, r: rs * 1.05 + 0.25, life: 3.6, R, seed: sd(s2), debris: true, update: still });
+      s2.add({ k: "ring", x, y, r: rs * 1.7 + 0.4, life: 0.45, R, broken: true, seed: sd(s2), update: still });
+    });
   },
   spray(s, M, ctx) {
     const { emit } = ctx;
     if (isMetal(M)) {
       spikeFront(s, M, ctx, true);
-      emit("sliver", 55, () => ({ g: 3, drag: 1.3, bounce: 0.3, onGround: settle, life: s.rand(0.8, 1.2), len: 3, seed: s.R(), glint: true }));
-      emit("spark", 18, () => ({ R: RAMP.fire, drag: 1.5, g: 4, life: 0.4, minor: true }));
+      emit("sliver", 70, () => ({ g: 4, drag: 1.3, bounce: 0.3, onGround: settle, life: s.rand(0.8, 1.3), len: s.R() < 0.3 ? 5 : 3, seed: s.R(), glint: true, minor: s.R() < 0.6 }));
+      emit("spark", 44, () => ({ R: RAMP.fire, drag: 1.6, g: 5, life: s.rand(0.3, 0.5), minor: true }));
+      emit("glint", 6, () => ({ life: 5 / 12, drag: 3, minor: true }));
       return;
     }
     spikeFront(s, M, ctx, false);
-    emit("boulder", 22, () => ({ g: 7, drag: 1.2, bounce: 0.3, onGround: settle, life: s.rand(1.5, 2.5), s: s.rand(1, 3), seed: sd(s), a0: s.rand(0, TAU), debris: true }));
-    emit("smoke", 30, () => ({ drag: 2, g: -0.05, life: s.rand(0.7, 1), r: s.rand(2.5, 4), lobes: lobes(s), tone: 0.5 }));
+    emit("boulder", 26, () => ({ g: 9, drag: 1.2, bounce: 0.3, onGround: settle, life: s.rand(1.5, 2.5), s: s.rand(1, 3.5), seed: sd(s), a0: s.rand(0, TAU), debris: true, minor: s.R() < 0.5 }));
+    emit("phGrit", 90, () => ({ g: 12, drag: 1.4, bounce: 0.2, life: s.rand(0.8, 1.4), t: s.rand(0.33, 0.83), s: s.R() < 0.4 ? 2 : 1, seed: s.seedInt(), debris: true, minor: true }));
+    emit("phDust", 14, () => ({ drag: 2, g: -0.05, life: s.rand(0.7, 1.1), r: s.rand(5, 8), tone: 0.5, a0: 0.45, lobes: dustLobes(s), minor: s.R() < 0.5 }));
   },
   auraStart(s, M, T) {
-    if (isMetal(M)) s.add({ k: "filings", x: T.x, y: T.y, r: 0.5 * T.size, life: 1e9, R: M.R, seed: 13, update: still });
-    else s.add({ k: "fissure", x: T.x, y: T.y, r: 0.45 * T.size, life: 1e9, R: M.R, seed: 13, update: still });
+    if (isMetal(M)) s.add({ k: "filings", x: T.x, y: T.y, r: 0.55 * T.size, life: 1e9, R: M.R, seed: 13, update: still });
+    else s.add({ k: "fissure", x: T.x, y: T.y, r: 0.55 * T.size, life: 1e9, R: M.R, seed: 13, update: still });
   },
   aura(s, M, { at }) {
     if (isMetal(M)) {
-      at(2, () => ({ k: "glint", life: 5 / 12, update: still }));
-      at(3, () => ({ k: "sliver", g: 1.5, drag: 3, len: 2, life: 1.1, seed: s.R(), glint: true, minor: true }));
+      at(3, () => ({ k: "glint", life: 5 / 12, update: still }));
+      at(4, () => ({ k: "sliver", g: 1.5, drag: 3, len: 2, life: 1.1, seed: s.R(), glint: true, minor: true }));
       return;
     }
-    at(5, () => ({ k: "boulder", g: 6, bounce: 0.2, onGround: settle, life: 1.4, s: 1, seed: sd(s), debris: true }));
-    at(0.9, () => ({ k: "smoke", z: 0.1, vz: 0.2, drag: 1.5, r: s.rand(2.5, 3.5), life: 1.1, lobes: lobes(s), tone: 0.5 }), false);
+    at(7, () => ({ k: "boulder", g: 6, bounce: 0.2, onGround: settle, life: 1.4, s: 1, seed: sd(s), debris: true, minor: s.R() < 0.5 }));
+    at(6, () => ({ k: "phGrit", g: 10, life: s.rand(0.5, 0.9), t: s.rand(0.33, 0.83), s: 1, seed: s.seedInt(), minor: true }));
+    at(1.2, () => ({ k: "phDust", z: 0.05, vz: 0.15, drag: 1.5, r: s.rand(4, 6), life: 1.2, tone: 0.5, a0: 0.4, lobes: dustLobes(s) }), false);
   },
   tick(s, M, T) {
-    if (isMetal(M)) { s.add({ k: "clang", x: T.x, y: T.y, z: 0.6 * T.h, r: 3, life: 5 / 12, R: M.R, update: still }); return; }
-    for (let i = 0; i < 3; i++) {
-      const q = (i / 3) * TAU + 0.4;
-      s.add({ k: "rockspike", x: T.x + Math.cos(q) * 0.35 * T.size, y: T.y + Math.sin(q) * 0.3 * T.size, h: 8, w: 2.4, lean: Math.cos(q) * 2, life: 0.9, R: M.R, seed: sd(s), wait: i * 0.04, update: crumble });
+    if (isMetal(M)) {
+      s.add({ k: "clang", x: T.x, y: T.y, z: 0.6 * T.h, r: 4, life: 5 / 12, R: M.R, update: still });
+      for (let i = 0; i < 8; i++) s.add({ k: "spark", x: T.x, y: T.y, z: 0.6 * T.h, ...out(s, s.rand(3, 7)), g: 10, drag: 2, life: s.rand(0.2, 0.4), R: RAMP.fire, minor: i > 2 });
+      return;
     }
+    for (let i = 0; i < 4; i++) {
+      const q = (i / 4) * TAU + 0.4;
+      s.add({ k: "rockspike", x: T.x + Math.cos(q) * 0.38 * T.size, y: T.y + Math.sin(q) * 0.32 * T.size, h: 11, w: 3, lean: Math.cos(q) * 2, life: 0.9, R: M.R, seed: sd(s), wait: i * 0.04, update: crumble });
+    }
+    grit(s, M.R, T.x, T.y, 0.1, 10, { sp: [1, 3.5], up: [1.5, 3.5], life: [0.5, 0.9], keep: 2 });
   },
 };
+
 
 /* ── shapes ───────────────────────────────────────────────────────────── */
 
@@ -190,6 +269,32 @@ function fissures(seed) {
 }
 
 registerShapes({
+  /**
+   * The stone burst, round a body (deliveries.mjs bloom): slabs of rock (or
+   * blades of steel) blown out of a hollow middle, each a jagged quad with a
+   * lit top face and a dark flank, turning a step a frame as it flies and
+   * dropping as it slows. Metal shows a bright cutting edge on every blade.
+   */
+  ewBurst(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 9) return;
+    const [x, y] = v.ap(p.x, p.y, p.z), sq = v.kind === "top" ? 0.85 : 0.55, R = p.R, u = p.age / p.life, a = u < 0.7 ? 1 : (1 - u) / 0.3;
+    const out = 1 - (1 - Math.min(1, u * 1.7)) ** 2.2, r0 = Math.max(6, p.r * 0.3);
+    for (let k = 0; k < p.n; k++) {
+      const q = (k / p.n) * TAU + hash(k, p.seed) * 0.5, c = Math.cos(q), sn = Math.sin(q), sz = (p.metal ? 3 : 4.2) * (0.75 + 0.5 * hash(k, p.seed, 1)) * Math.min(1.4, p.r / 26);
+      const d = r0 + (p.r - r0) * out * (0.8 + 0.4 * hash(k, p.seed, 2)), drop = u > 0.35 ? (u - 0.35) ** 2 * 50 : 0;
+      const cx = x + c * d, cy = y + sn * d * sq - (1 - u) * 4 + drop, rot = q + fr * 0.7 * (k % 2 ? 1 : -1);
+      // a jagged quad: four corners at uneven radii
+      const pts = [0, 1, 2, 3].map((i) => { const t = rot + (i * TAU) / 4 + (hash(k, i, p.seed) - 0.5) * 0.6, rr = sz * (p.metal && i % 2 ? 0.45 : 0.8 + 0.4 * hash(k, i, p.seed + 1)); return [cx + Math.cos(t) * rr, cy + Math.sin(t) * rr]; });
+      const x0 = Math.min(...pts.map((q2) => q2[0])), x1 = Math.max(...pts.map((q2) => q2[0])), y0 = Math.min(...pts.map((q2) => q2[1])), y1 = Math.max(...pts.map((q2) => q2[1]));
+      P.shade(x0 - 1, y0 - 1, x1 + 1, y1 + 1, (px, py) => {
+        if (!inPoly(pts, px + 0.5, py + 0.5)) return null;
+        const up = (py - y0) / Math.max(1, y1 - y0), lit = (px - x0) / Math.max(1, x1 - x0) - up;
+        const col = p.hero && fr === 0 ? WHITE : up < 0.3 ? S(R, p.metal ? 1 : 0.83) : lit > 0 ? S(R, 0.6) : S(R, 0.33);
+        return a < 1 ? { c: col, a } : col;
+      }, 1);
+      if (p.metal) P.line(pts[0][0], pts[0][1], pts[2][0], pts[2][1], S(R, 1), 1, a);
+    }
+  },
   /** A tumbling rock: a lumpy hexagon, lit from the top left, that stops turning when it rests. */
   boulder(v, P, p) {
     const [x, y] = v.ap(p.x, p.y, p.z), a = fadeOut(p.age / p.life, 0.8), R = p.R, r = p.s;

@@ -33,6 +33,7 @@ import { lobes, still, splat } from "./core/motifs.mjs";
 import { registerShapes } from "./core/shapes.mjs";
 import { FAMILY_OF } from "./constants.mjs";
 import { familyModule } from "./families/index.mjs";
+import { contact, trackWake, wakeFx } from "./deliveries.mjs";
 
 const norm = (x, y) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
 const norm3 = (x, y, z) => { const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; };
@@ -125,6 +126,18 @@ function fly(s, M, ctx, at, path, dur, part, { ease = null, onStep = null } = {}
   });
 }
 
+/**
+ * Air peeling off a flying weapon (pixelfx arrow): streaks thrown back from
+ * beside it, stretching with their speed. Minor, and no light: a plain arrow
+ * does not glow.
+ */
+function airFx(s, q, dt, { rate = 34, off = 0.12, R = RAMP.air } = {}) {
+  for (let i = s.count(rate, dt); i > 0; i--) {
+    const sg = s.R() < 0.5 ? -1 : 1, o = off * s.rand(0.8, 1.8) * sg, sp = s.rand(4, 7);
+    s.add({ k: "streak", x: q.x - q.dy * o - q.dx * 0.1, y: q.y + q.dx * o - q.dy * 0.1, z: q.z, vx: -q.dx * sp, vy: -q.dy * sp, vz: -q.dz * sp, life: s.rand(0.08, 0.14), R, minor: true });
+  }
+}
+
 /** Where a shot's ends are, in time: it leaves at `at` and lands `dur` later. */
 const travel = (G, end, speed, lo, hi) => clamp(Math.hypot(end[0] - G.muzzle[0], end[1] - G.muzzle[1]) / speed, lo, hi);
 
@@ -162,8 +175,17 @@ const roundsOf = (s) => (s.props.has("automatic") ? 3 : 1);
 /** A muzzle flash: a sharp star along the shot and a pool of light. */
 function muzzleFlash(s, G, R, r, { light = 1 } = {}) {
   const m = G.muzzle, [dx, dy] = [G.ux, G.uy];
+  // half a square of flame along the barrel (pixelfx muzzle-pistol), sparks spat out ahead of it
+  r *= 1.6;
   s.add({ k: "rgMuzzle", x: m[0] + dx * 0.08, y: m[1] + dy * 0.08, z: m[2], dx, dy, dz: 0, r, life: 3 / 12, R, update: still });
-  if (light > 0) s.light(m[0] + dx * 0.25, m[1] + dy * 0.25, m[2], 0.6 + r * 0.05, S(R, 0.85), 0.6 * light, 0.18);
+  for (let i = 0; i < 5; i++) {
+    const q = Math.atan2(dy, dx) + s.rand(-0.5, 0.5), sp = s.rand(6, 11);
+    s.add({ k: "spark", x: m[0] + dx * 0.15, y: m[1] + dy * 0.15, z: m[2], vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s.rand(-0.5, 1.5), g: 6, drag: 3, life: s.rand(0.12, 0.24), R, minor: i > 1 });
+  }
+  if (light > 0) {
+    s.light(m[0] + dx * 0.25, m[1] + dy * 0.25, m[2], 0.9 + r * 0.06, S(R, 0.88), 0.8 * light, 0.22);
+    s.light(m[0] + dx * 0.15, m[1] + dy * 0.15, m[2], 0.5 + r * 0.02, S(R, 1), 0.7 * light, 0.08);
+  }
 }
 
 /** A grey cloud of burnt powder that hangs at the barrel. */
@@ -186,12 +208,13 @@ function recoil(s, G, ctx, k = 1) {
 /** The crit's second impact: a star, a fan of speed lines thrown out along the shot, a ring. */
 function critImpact(s, M, G, scale = 1) {
   const T = G.T, z = 0.6 * T.h, x = T.x - 0.05, y = T.y, base = Math.atan2(G.uy, G.ux);
-  s.add({ k: "star", x, y, z, L: 9 * scale * Math.min(1.4, s.m) * G.sz, life: 3 / 12, R: M.R, update: still });
-  for (let i = 0; i < 7; i++) {
-    const q = base + (i - 3) * 0.34 + s.rand(-0.06, 0.06), sp = s.rand(8, 11) * scale;
-    s.add({ k: "streak", x, y, z, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s.rand(-1.5, 2.5), life: s.rand(0.14, 0.2), R: M.R, minor: i % 2 === 1 });
+  s.add({ k: "star", x, y, z, L: 15 * scale * Math.min(1.4, s.m) * G.sz, life: 3 / 12, R: M.R, update: still });
+  for (let i = 0; i < 11; i++) {
+    const q = base + (i - 5) * 0.24 + s.rand(-0.06, 0.06), sp = s.rand(10, 15) * scale;
+    s.add({ k: "streak", x, y, z, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s.rand(-1.5, 2.5), life: s.rand(0.14, 0.22), R: M.R, minor: i % 2 === 1 });
   }
-  s.add({ k: "ring", x: T.x, y: T.y, r: 0.75 * (T.size ?? 1) * scale, life: 0.4, R: M.R, broken: true, seed: 5, update: still });
+  s.add({ k: "ring", x: T.x, y: T.y, r: 1.1 * (T.size ?? 1) * scale, life: 0.45, R: M.R, broken: true, seed: 5, update: still });
+  s.add({ k: "ring", x: T.x, y: T.y, r: 0.6 * (T.size ?? 1) * scale, life: 0.3, R: M.R, seed: 6, update: still });
 }
 
 /** What the props add to a landing: a shock ring, a splash on the neighbours, a glint of magic. */
@@ -229,6 +252,8 @@ function splashOn(s, M, ctx, G, at, k) {
 function landHit(s, M, ctx, G, { pow = 0.75, rad = 0.3, at = G.body, push = 1 } = {}) {
   const P = G.crit ? 1.6 : Math.min(1.1, pow);
   ctx.release(s, M, at[0], at[1], at[2], P, rad);
+  // the contact every shot shares: sparks thrown 1.2+ squares, mostly on along the shot, a floor ring, a hot pool
+  contact(s, M, at[0], at[1], at[2], (G.crit ? 1.35 : 0.9) * Math.sqrt(G.sz) * Math.max(0.6, pow), { dir: [G.ux, G.uy] });
   s.hit(G.T.id, G.crit ? 1.6 : push, { x: G.muzzle[0], y: G.muzzle[1] }, M.R);
   ctx.motif?.impact?.(s, M, { x: at[0], y: at[1], z: at[2], pow: P, rad, at: s.t });
   if (G.crit) {
@@ -246,6 +271,8 @@ function landHit(s, M, ctx, G, { pow = 0.75, rad = 0.3, at = G.body, push = 1 } 
 /** A shot landing wide: a scuff of dust where it ends, nothing on the body. */
 function landMiss(s, M, ctx, G, at, { pow = 0.3, rad = 0.15 } = {}) {
   ctx.release(s, at[2] < 0.2 ? DUST : M, at[0], at[1], Math.max(0.05, at[2]), pow, rad);
+  // a miss still reads: a puff of grit and a few sparks where it ends
+  contact(s, at[2] < 0.2 ? DUST : M, at[0], at[1], Math.max(0.05, at[2]), 0.45, { dir: [G.ux, G.uy] });
   propsAt(s, M, ctx, G, at, false);
 }
 
@@ -271,19 +298,27 @@ function shaft(s, M, ctx, { bolt = false } = {}) {
     s.at(Math.max(0, t0 - 0.12), (s2) => s2.add({ k: "glint", x: G0.muzzle[0], y: G0.muzzle[1], z: G0.muzzle[2] + 0.15, life: 5 / 12, R: M.R, big: !bolt, update: still }));
   }
   const volley = s.props.has("volley"), H = M.id === "kinetic" ? RAMP.metal : M.R, F = M.id === "kinetic" ? RAMP.linen : M.R;
-  const len = bolt ? 0.36 : 0.55;
+  // a shaft you can follow across the board: an arrow nearly a square long (pixelfx arrow: 36 px)
+  const len = bolt ? 0.62 : 0.9;
   const last = perTarget(ctx, t0, 0.16, (T, at) => {
     const G = geom(ctx, T), path = arcPath(G, bolt ? 0.04 : volley ? 0.6 : 0.16);
     const dur = travel(G, path.b, bolt ? 26 : 18, 0.1, bolt ? 0.32 : 0.5);
-    s.at(at, (s2) => { if (bolt) s2.add({ k: "rgMuzzle", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r: 3, life: 2 / 12, R: RAMP.kinetic, update: still }); });
-    fly(s, M, ctx, at, path, dur, { k: "rgArrow", len, bolt, R: M.R, H, F }, {
-      onStep: M.id !== "kinetic" ? (s3, q, dt) => M.mod.trail?.(s3, M, { x: q.x, y: q.y, z: q.z, dt: dt * 0.5 }) : null,
+    s.at(at, (s2) => {
+      // the string's snap: a ring of air off the bow and a few streaks along the shot
+      s2.add({ k: "rgRing", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r0: 2, r: bolt ? 8 : 6, life: 0.25, R: RAMP.air, update: still });
+      if (bolt) s2.add({ k: "rgMuzzle", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r: 5, life: 2 / 12, R: RAMP.kinetic, update: still });
+    });
+    fly(s, M, ctx, at, path, dur, { k: "rgArrow", len, bolt, R: M.R, H, F, magic: M.id !== "kinetic" }, {
+      onStep: (s3, q, dt) => {
+        airFx(s3, q, dt);
+        if (M.id !== "kinetic") { M.mod.trail?.(s3, M, { x: q.x, y: q.y, z: q.z, dt: dt * 0.8 }); trackWake(q, dt); q.r = 4; wakeFx(s3, M, q, dt, 0.4); }
+      },
     });
     s.at(at + dur, (s2) => {
       const e = bez(path.a, path.c, path.b, 1), e0 = bez(path.a, path.c, path.b, 0.95), dir = norm3(e[0] - e0[0], e[1] - e0[1], e[2] - e0[2]);
       if (G.miss) { landMiss(s2, M, ctx, G, path.b); stuck(s2, "rgArrow", [path.b[0], path.b[1], 0.02], dir, M.R, { len, bolt, H, F }); return; }
       landHit(s2, M, ctx, G, { pow: bolt ? 0.95 : 0.7, push: bolt ? 1.3 : 1 });
-      if (bolt) { s2.shake = Math.max(s2.shake, 0.9); s2.add({ k: "ring", x: G.T.x, y: G.T.y, r: 0.5 * G.sz, life: 0.3, R: RAMP.kinetic, broken: true, seed: 3, update: still }); }
+      if (bolt) { s2.shake = Math.max(s2.shake, 0.9); s2.add({ k: "ring", x: G.T.x, y: G.T.y, r: 0.8 * G.sz, life: 0.32, R: RAMP.kinetic, broken: true, seed: 3, update: still }); }
       if (!G.crit) { stuck(s2, "rgArrow", G.body, dir, M.R, { len, bolt, H, F, quiver: true, life: 1.1 }); return; }
       // driven through: the shaft comes out the far side and buries itself behind
       const out = [G.T.x + G.ux * 1.3 * G.sz, G.T.y + G.uy * 1.3 * G.sz, 0.02], z0 = G.body[2];
@@ -304,20 +339,20 @@ function thrown(s, M, ctx) {
   const last = perTarget(ctx, t0, 0.18, (T, at) => {
     const G = geom(ctx, T), path = arcPath(G, 0.45);
     const dur = travel(G, path.b, 12, 0.22, 0.6), ang = s.rand(0, TAU);
-    fly(s, M, ctx, at, path, dur, { k: "rgSpin", len: 0.5, ang, R: M.R, H, seed: s.seedInt() }, {
-      onStep: M.id !== "kinetic" ? (s3, q, dt) => M.mod.trail?.(s3, M, { x: q.x, y: q.y, z: q.z, dt: dt * 0.5 }) : null,
+    fly(s, M, ctx, at, path, dur, { k: "rgSpin", len: 0.8, ang, R: M.R, H, seed: s.seedInt(), blur: true }, {
+      onStep: (s3, q, dt) => { airFx(s3, q, dt, { rate: 24, off: 0.3 }); if (M.id !== "kinetic") M.mod.trail?.(s3, M, { x: q.x, y: q.y, z: q.z, dt: dt * 0.6 }); },
     });
     s.at(at + dur, (s2) => {
       if (G.miss) {
         landMiss(s2, M, ctx, G, path.b);
         // it skids on and lies there
-        s2.add({ k: "rgSpin", x: path.b[0], y: path.b[1], z: 0.05, vx: G.ux * 1.6, vy: G.uy * 1.6, vz: 0.6, g: 9, drag: 2.5, bounce: 0.3, dx: G.ux, dy: G.uy, dz: 0, len: 0.5, ang, spinT: 0.3, R: M.R, H, life: 1.8, debris: true });
+        s2.add({ k: "rgSpin", x: path.b[0], y: path.b[1], z: 0.05, vx: G.ux * 1.6, vy: G.uy * 1.6, vz: 0.6, g: 9, drag: 2.5, bounce: 0.3, dx: G.ux, dy: G.uy, dz: 0, len: 0.8, ang, spinT: 0.3, R: M.R, H, life: 1.8, debris: true });
         return;
       }
-      landHit(s2, M, ctx, G, { pow: 0.8 });
-      if (G.crit) { s2.add({ k: "rgSpin", x: G.body[0], y: G.body[1], z: G.body[2], dx: G.ux, dy: G.uy, dz: 0, len: 0.5, ang: 0.6, rest: true, R: M.R, H, life: 0.9, debris: true, update: still }); return; }
+      landHit(s2, M, ctx, G, { pow: 0.85, rad: 0.36 });
+      if (G.crit) { s2.add({ k: "rgSpin", x: G.body[0], y: G.body[1], z: G.body[2], dx: G.ux, dy: G.uy, dz: 0, len: 0.8, ang: 0.6, rest: true, R: M.R, H, life: 0.9, debris: true, update: still }); return; }
       // the blow lands and the weapon drops, tumbling, at the target's feet
-      s2.add({ k: "rgSpin", x: G.body[0], y: G.body[1], z: G.body[2], vx: -G.ux * 0.9 + G.px * 0.5, vy: -G.uy * 0.9 + G.py * 0.5, vz: 1.8, g: 9, drag: 0.6, bounce: 0.35, dx: G.ux, dy: G.uy, dz: 0, len: 0.5, ang, spinT: 0.45, R: M.R, H, life: 1.8, debris: true });
+      s2.add({ k: "rgSpin", x: G.body[0], y: G.body[1], z: G.body[2], vx: -G.ux * 0.9 + G.px * 0.5, vy: -G.uy * 0.9 + G.py * 0.5, vz: 1.8, g: 9, drag: 0.6, bounce: 0.35, dx: G.ux, dy: G.uy, dz: 0, len: 0.8, ang, spinT: 0.45, R: M.R, H, life: 1.8, debris: true });
     });
     return at + dur;
   });
@@ -332,7 +367,7 @@ function dart(s, M, ctx) {
   const last = perTarget(ctx, t0, 0.12, (T, at) => {
     const G = geom(ctx, T), path = arcPath(G, 0.08), dur = travel(G, path.b, 22, 0.12, 0.35);
     fly(s, M, ctx, at, path, dur, { k: "rgStar", R: M.R, H }, {
-      onStep: M.id !== "kinetic" ? (s3, q, dt) => M.mod.trail?.(s3, M, { x: q.x, y: q.y, z: q.z, dt: dt * 0.4 }) : null,
+      onStep: (s3, q, dt) => { airFx(s3, q, dt, { rate: 40, off: 0.1 }); if (M.id !== "kinetic") M.mod.trail?.(s3, M, { x: q.x, y: q.y, z: q.z, dt: dt * 0.6 }); },
     });
     s.at(at + dur, (s2) => {
       if (G.miss) { landMiss(s2, M, ctx, G, path.b, { pow: 0.2, rad: 0.1 }); s2.add({ k: "rgStar", x: path.b[0], y: path.b[1], z: 0.04, stuck: true, life: 1.8, R: M.R, H, debris: true, update: still }); return; }
@@ -361,7 +396,7 @@ function stone(s, M, ctx) {
   }
   const last = perTarget(ctx, t0, 0.2, (T, at) => {
     const G = geom(ctx, T, { z: 0.95 }), path = arcPath(G, 0.32), dur = travel(G, path.b, 16, 0.16, 0.45);
-    fly(s, M, ctx, at, path, dur, { k: "rgPebble", R });
+    fly(s, M, ctx, at, path, dur, { k: "rgPebble", R }, { onStep: (s3, q, dt) => airFx(s3, q, dt, { rate: 30, off: 0.12 }) });
     s.at(at + dur, (s2) => {
       if (G.miss) {
         landMiss(s2, M, ctx, G, path.b);
@@ -370,7 +405,7 @@ function stone(s, M, ctx) {
       }
       landHit(s2, M, ctx, G, { pow: 0.6, rad: 0.22, at: [G.body[0], G.body[1], 0.85 * G.T.h] });
       // bonk: a little star on the head and the stone bouncing off
-      s2.add({ k: "star", x: G.T.x, y: G.T.y, z: 1.05 * G.T.h, L: 4, life: 3 / 12, R: RAMP.light, update: still });
+      s2.add({ k: "star", x: G.T.x, y: G.T.y, z: 1.05 * G.T.h, L: 8, life: 3 / 12, R: RAMP.light, update: still });
       s2.add({ k: "rgPebble", x: G.body[0], y: G.body[1], z: 0.85 * G.T.h, vx: -G.ux * 1.4 + G.px * 0.6, vy: -G.uy * 1.4 + G.py * 0.6, vz: 2.4, g: 9, drag: 0.6, bounce: 0.4, life: 1.6, R, debris: true });
     });
     return at + dur;
@@ -386,17 +421,18 @@ function rock(s, M, ctx) {
   const last = perTarget(ctx, t0, 0.22, (T, at) => {
     const G = geom(ctx, T, { z: 1.05 }), body = [G.body[0], G.body[1], 0.7 * T.h];
     const path = arcPath(G, 1.5, G.miss ? G.ground : body), dur = travel(G, path.b, 9, 0.4, 0.9);
-    const r = 6.5 * Math.sqrt(ctx.caster?.size ?? 1);
-    fly(s, M, ctx, at, path, dur, { k: "rgBoulder", r, R, seed: s.seedInt() });
+    const r = 9.5 * Math.sqrt(ctx.caster?.size ?? 1);
+    fly(s, M, ctx, at, path, dur, { k: "rgBoulder", r, R, seed: s.seedInt() }, { onStep: (s3, q, dt) => airFx(s3, q, dt, { rate: 26, off: 0.32 }) });
     s.at(at + dur, (s2) => {
       const spot = G.miss ? path.b : [T.x - G.ux * 0.25, T.y - G.uy * 0.25, 0];
-      s2.shake = Math.max(s2.shake, G.miss ? 1.4 : 2.2);
-      s2.add({ k: "ring", x: spot[0], y: spot[1], r: 1.1, life: 0.5, R: RAMP.earth, broken: true, seed: 13, update: still });
-      for (let i = 0; i < 8; i++) {
-        const q = s2.rand(0, TAU), sp = s2.rand(1.5, 3.8);
-        s2.add({ k: "chunk", x: spot[0], y: spot[1], z: 0.1, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(1.5, 3.5), g: 9, drag: 0.8, bounce: 0.3, life: s2.rand(1.4, 2.2), R: RAMP.earth, s: 2, wide: i % 3 === 0, debris: true, minor: i > 5 });
+      s2.shake = Math.max(s2.shake, G.miss ? 1.8 : 2.8);
+      s2.add({ k: "ring", x: spot[0], y: spot[1], r: 1.6, life: 0.55, R: RAMP.earth, broken: true, seed: 13, update: still });
+      s2.add({ k: "ring", x: spot[0], y: spot[1], r: 0.9, life: 0.35, R: RAMP.earth, seed: 14, update: still });
+      for (let i = 0; i < 16; i++) {
+        const q = s2.rand(0, TAU), sp = s2.rand(1.8, 4.8);
+        s2.add({ k: "chunk", x: spot[0], y: spot[1], z: 0.1, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(1.5, 4.5), g: 9, drag: 0.8, bounce: 0.3, life: s2.rand(1.4, 2.2), R: RAMP.earth, s: i % 4 === 0 ? 3 : 2, wide: i % 3 === 0, debris: true, minor: i > 6 });
       }
-      for (let i = 0; i < 3; i++) s2.add({ k: "smoke", x: spot[0] + s2.rand(-0.4, 0.4), y: spot[1] + s2.rand(-0.2, 0.2), z: 0.05, vx: s2.rand(-0.8, 0.8), vy: s2.rand(-0.3, 0.3), vz: 0.2, drag: 2, r: s2.rand(3, 5), life: s2.rand(0.9, 1.3), lobes: lobes(s2), R: RAMP.earth, tone: 0.5, minor: i > 1 });
+      for (let i = 0; i < 5; i++) s2.add({ k: "smoke", x: spot[0] + s2.rand(-0.5, 0.5), y: spot[1] + s2.rand(-0.3, 0.3), z: 0.05, vx: s2.rand(-1.2, 1.2), vy: s2.rand(-0.5, 0.5), vz: 0.2, drag: 2, r: s2.rand(4.5, 7), life: s2.rand(1, 1.5), lobes: lobes(s2), R: RAMP.earth, tone: 0.5, minor: i > 1 });
       if (G.miss) landMiss(s2, ground, ctx, G, path.b, { pow: 0.45, rad: 0.3 });
       else landHit(s2, M.id === "kinetic" ? ground : M, ctx, G, { pow: 0.95, rad: 0.4, at: body, push: 1.4 });
       // the boulder rolls on and settles
@@ -415,11 +451,17 @@ function bomb(s, M0, ctx) {
   const t0 = aim(s, M, ctx, { lead: 0.22 });
   const last = perTarget(ctx, t0, 0.18, (T, at) => {
     const G = geom(ctx, T, { z: 0.95 }), path = arcPath(G, 0.7), dur = travel(G, path.b, 11, 0.3, 0.7);
-    fly(s, M, ctx, at, path, dur, { k: "rgFlask", R: M.R }, { onStep: (s3, q, dt) => { if (s3.R() < dt * 30) s3.add({ k: "ember", x: q.x, y: q.y, z: q.z + 0.15, vz: 0.3, life: 0.4, R: M.R, seed: s3.seedInt(), minor: true }); } });
+    fly(s, M, ctx, at, path, dur, { k: "rgFlask", R: M.R }, {
+      onStep: (s3, q, dt) => {
+        // the lit fuse spits and the flask glows: a light rides it
+        for (let i = s3.count(50, dt); i > 0; i--) s3.add({ k: i % 2 ? "ember" : "spark", x: q.x, y: q.y, z: q.z + 0.2, vx: s3.rand(-0.8, 0.8), vy: s3.rand(-0.8, 0.8), vz: s3.rand(0.3, 1.2), g: 2, drag: 2, life: s3.rand(0.25, 0.45), R: M.R, seed: s3.seedInt(), minor: true });
+        q.lt = (q.lt ?? 1) + dt; if (q.lt >= 1 / 30) { q.lt = 0; s3.light(q.x, q.y, q.z, 1, S(M.R, 0.9), 0.5, 0.1, { flicker: true }); }
+      },
+    });
     s.at(at + dur, (s2) => {
       const at2 = G.miss ? path.b : G.body;
-      for (let i = 0; i < 7; i++) {
-        const q = s2.rand(0, TAU), sp = s2.rand(2, 4.5);
+      for (let i = 0; i < 13; i++) {
+        const q = s2.rand(0, TAU), sp = s2.rand(2.5, 6);
         s2.add({ k: "shard", x: at2[0], y: at2[1], z: Math.max(0.1, at2[2]), vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(0.5, 2.5), g: 9, drag: 1, bounce: 0.3, life: s2.rand(0.6, 1.1), R: RAMP.air, seed: s2.R(), minor: i > 3 });
       }
       if (G.miss) {
@@ -430,7 +472,7 @@ function bomb(s, M0, ctx) {
         return;
       }
       landHit(s2, M, ctx, G, { pow: 0.85, rad: 0.35 });
-      if (!s2.props.has("splash")) s2.add({ k: "ring", x: G.T.x, y: G.T.y, r: 0.7, life: 0.45, R: M.R, broken: true, seed: 7, update: still });
+      if (!s2.props.has("splash")) s2.add({ k: "ring", x: G.T.x, y: G.T.y, r: 1.05, life: 0.45, R: M.R, broken: true, seed: 7, update: still });
       ctx.linger(s2, M, G.T.x, G.T.y, 0.4, s2.t + 0.1, s2.t + 1.2);
     });
     return at + dur;
@@ -462,9 +504,11 @@ function grenade(s, M0, ctx) {
     });
     s.at(t3 + beep, (s2) => {
       const at2 = [rest[0], rest[1], 0.25];
-      s2.shake = Math.max(s2.shake, G.miss ? 1.2 : 1.8);
-      s2.add({ k: "ring", x: rest[0], y: rest[1], r: 1.05, life: 0.5, R: M.R, broken: true, seed: 21, update: still });
-      for (let i = 0; i < 3; i++) s2.add({ k: "smoke", x: rest[0] + s2.rand(-0.3, 0.3), y: rest[1] + s2.rand(-0.2, 0.2), z: 0.3, vx: s2.rand(-0.5, 0.5), vz: s2.rand(0.4, 0.8), g: -0.1, drag: 1.5, r: s2.rand(4, 6), life: s2.rand(1.2, 1.8), lobes: lobes(s2), R: RAMP.metal, tone: 0.45, wait: 0.15, minor: i > 1 });
+      s2.shake = Math.max(s2.shake, G.miss ? 1.6 : 2.4);
+      s2.add({ k: "ring", x: rest[0], y: rest[1], r: 1.55, life: 0.5, R: M.R, broken: true, seed: 21, update: still });
+      s2.add({ k: "ring", x: rest[0], y: rest[1], r: 0.9, life: 0.32, R: M.R, seed: 22, update: still });
+      contact(s2, M, rest[0], rest[1], 0.2, 1.2);
+      for (let i = 0; i < 4; i++) s2.add({ k: "smoke", x: rest[0] + s2.rand(-0.4, 0.4), y: rest[1] + s2.rand(-0.25, 0.25), z: 0.3, vx: s2.rand(-0.7, 0.7), vz: s2.rand(0.4, 0.8), g: -0.1, drag: 1.5, r: s2.rand(5.5, 8), life: s2.rand(1.2, 1.8), lobes: lobes(s2), R: RAMP.metal, tone: 0.45, wait: 0.15, minor: i > 1 });
       if (G.miss) { ctx.release(s2, M, ...at2, 0.6, 0.35); propsAt(s2, M, ctx, G, at2, false); return; }
       ctx.release(s2, M, ...at2, G.crit ? 1.6 : 1.05, 0.5);
       s2.hit(T.id, G.crit ? 1.6 : 1.2, { x: rest[0], y: rest[1] + 0.01 }, M.R);
@@ -492,10 +536,14 @@ function sfGun(s) {
 }
 
 /** A tracer from `a` to `b` taking `dur`, its tail `span` of the path long. */
-function tracer(s, M, ctx, at, a, b, dur, { span = 0.3, R = M.R, w = 1, lag = null, tdur = null, trail = false } = {}) {
+function tracer(s, M, ctx, at, a, b, dur, { span = 0.3, R = M.R, w = 2, lag = null, tdur = null, trail = false, light = true } = {}) {
   s.at(at, (s2) => {
-    const p = s2.add({ k: "rgTracer", x: b[0], y: b[1], z: b[2], a, b, dur, span, lag: lag ?? dur * 0.6, tdur: tdur ?? dur, w, life: (lag ?? dur * 0.6) + (tdur ?? dur), R, hot: true, update: still });
+    // the trace hangs a beat longer than the round takes, so the eye can follow it (pixelfx bullet-tracer: 120 px)
+    const lg = (lag ?? dur * 0.6) + 2 / 12;
+    const p = s2.add({ k: "rgTracer", x: b[0], y: b[1], z: b[2], a, b, dur, span, lag: lg, tdur: tdur ?? Math.max(dur, 2 / 12), w, life: lg + (tdur ?? Math.max(dur, 2 / 12)), R, hot: true, update: still });
     ctx.motif?.carrier?.(s2, M, p);
+    // light down the line of the shot, not just where it lands
+    if (light) for (const f of [0.25, 0.6, 0.95]) s2.light(lerp(a[0], b[0], f), lerp(a[1], b[1], f), lerp(a[2], b[2], f), 1, S(R, 0.88), 0.45, lg + 0.06);
   });
   if (trail && M.id !== "kinetic") s.emit(at, at + dur, (s2, u, dt) => M.mod.trail?.(s2, M, { x: lerp(a[0], b[0], u), y: lerp(a[1], b[1], u), z: lerp(a[2], b[2], u), dt: dt * 0.6 }));
 }
@@ -514,7 +562,7 @@ function bullet(s, M, ctx) {
       const to = G.miss ? [G.air[0] + G.px * r * 0.12, G.air[1] + G.py * r * 0.12, G.air[2] + r * 0.06] : [G.body[0], G.body[1], G.body[2] + (r - (n - 1) / 2) * 0.1];
       const dur = travel(G, to, 70, 0.03, 0.09);
       s.at(ta, (s2) => {
-        muzzleFlash(s2, G, flashR, sf ? 5 : 8, { light: sf ? 0.6 : 1 });
+        muzzleFlash(s2, G, flashR, sf ? 5.5 : 8, { light: sf ? 0.7 : 1 });
         if (!sf) powderSmoke(s2, G, r === 0 ? 4 : 1, kick ? 1.25 : 1);
         else {
           s2.add({ k: "smoke", x: G.muzzle[0] + G.ux * 0.1, y: G.muzzle[1] + G.uy * 0.1, z: G.muzzle[2], vz: 0.3, drag: 2, r: 1.5, life: 0.4, lobes: [[0, 0, 1]], R: RAMP.metal, tone: 0.6, minor: true });
@@ -522,7 +570,7 @@ function bullet(s, M, ctx) {
         }
         if (kick && r === 0) recoil(s2, G, ctx, s2.props.has("unwieldy") ? 1.3 : 1);
       });
-      tracer(s, M, ctx, ta, G.muzzle, to, dur, { span: 0.35, R: tr, w: boosted ? 2 : 1, trail: true });
+      tracer(s, M, ctx, ta, G.muzzle, to, dur, { span: 0.6, R: tr, w: boosted ? 3 : 2, trail: true });
       s.at(ta + dur, (s2) => {
         if (G.miss) {
           // it cracks past the shoulder and kicks up dust somewhere behind
@@ -550,7 +598,7 @@ function pellets(s, M, ctx) {
     // a miss sends the whole cone past the clear side
     const off = G.miss ? Math.sign(G.px * -G.uy + G.py * G.ux || 1) * (half + Math.atan2(0.6 * G.sz, dist)) : 0;
     s.at(at, (s2) => {
-      muzzleFlash(s2, G, flashR, wide ? 11 : 9);
+      muzzleFlash(s2, G, flashR, wide ? 12 : 10);
       if (!sf) powderSmoke(s2, G, 5, 1.3);
       if (kick) recoil(s2, G, ctx, 1.2);
     });
@@ -561,14 +609,14 @@ function pellets(s, M, ctx) {
       const L = onBody ? dist - 0.1 : dist + s.rand(0.6, 1.6);
       const to = [G.muzzle[0] + Math.cos(q) * L, G.muzzle[1] + Math.sin(q) * L, onBody ? G.body[2] + s.rand(-0.15, 0.15) : G.miss ? G.over[2] + s.rand(0, 0.5) : s.rand(0.05, 0.5)];
       const dur = travel(G, to, 55, 0.04, 0.12), ta = at + s.rand(0, 0.02);
-      tracer(s, M, ctx, ta, G.muzzle, to, dur, { span: 0.25, R: tr });
-      if (!onBody) s.at(ta + dur, (s2) => s2.add({ k: "spark", x: to[0], y: to[1], z: Math.max(0.05, to[2]), vx: s2.rand(-1, 1), vy: s2.rand(-1, 1), vz: s2.rand(1, 2), g: 9, life: 0.25, R: RAMP.kinetic, minor: i % 2 === 1 }));
+      tracer(s, M, ctx, ta, G.muzzle, to, dur, { span: 0.4, R: tr, light: i % 3 === 0 });
+      if (!onBody) s.at(ta + dur, (s2) => { for (let k = 0; k < 3; k++) s2.add({ k: "spark", x: to[0], y: to[1], z: Math.max(0.05, to[2]), vx: s2.rand(-2.5, 2.5), vy: s2.rand(-2.5, 2.5), vz: s2.rand(1, 3), g: 9, drag: 1.5, life: 0.3, R: RAMP.kinetic, minor: k > 0 || i % 2 === 1 }); });
       land = Math.max(land, ta + dur);
     }
     s.at(at + 0.06, (s2) => {
       if (G.miss) { landMiss(s2, M, ctx, G, G.ground, { pow: 0.3, rad: 0.25 }); return; }
       landHit(s2, M, ctx, G, { pow: 0.75, rad: 0.32 });
-      for (let i = 0; i < 3; i++) s2.add({ k: "spark", x: G.body[0] + s2.rand(-0.2, 0.2), y: G.body[1] + s2.rand(-0.15, 0.15), z: G.body[2] + s2.rand(-0.2, 0.2), vx: G.ux * s2.rand(2, 4), vy: G.uy * s2.rand(2, 4), vz: s2.rand(0.5, 2), g: 9, drag: 1, life: 0.3, R: M.R, minor: i > 0 });
+      for (let i = 0; i < 8; i++) s2.add({ k: "spark", x: G.body[0] + s2.rand(-0.25, 0.25), y: G.body[1] + s2.rand(-0.2, 0.2), z: G.body[2] + s2.rand(-0.2, 0.2), vx: G.ux * s2.rand(3, 7) + s2.rand(-2, 2), vy: G.uy * s2.rand(3, 7) + s2.rand(-2, 2), vz: s2.rand(0.5, 2.5), g: 9, drag: 1.5, life: 0.35, R: M.R, minor: i > 1 });
     });
     return land;
   });
@@ -583,21 +631,21 @@ function slug(s, M, ctx) {
     const G = geom(ctx, T), to = G.miss ? G.air : G.body;
     s.at(at, (s2) => {
       muzzleFlash(s2, G, M.id !== "kinetic" ? M.R : RAMP.light, 7);
-      s2.add({ k: "rgRing", x: G.muzzle[0] + G.ux * 0.12, y: G.muzzle[1] + G.uy * 0.12, z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r0: 2, r: 9, life: 0.3, R: RAMP.air, update: still });
-      s2.add({ k: "rgRing", x: G.muzzle[0] + G.ux * 0.4, y: G.muzzle[1] + G.uy * 0.4, z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r0: 1, r: 6, life: 0.25, R: RAMP.air, wait: 1 / 12, minor: true, update: still });
+      s2.add({ k: "rgRing", x: G.muzzle[0] + G.ux * 0.12, y: G.muzzle[1] + G.uy * 0.12, z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r0: 3, r: 14, life: 0.32, R: RAMP.air, update: still });
+      s2.add({ k: "rgRing", x: G.muzzle[0] + G.ux * 0.45, y: G.muzzle[1] + G.uy * 0.45, z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r0: 2, r: 10, life: 0.28, R: RAMP.air, wait: 1 / 12, minor: true, update: still });
       if (!sf) powderSmoke(s2, G, 2);
       s2.shake = Math.max(s2.shake, 0.6);
       if (s2.props.has("kickback") || s2.props.has("unwieldy")) recoil(s2, G, ctx, 1.2);
     });
     // the whole distance in a frame, held two, then the tail runs in
-    tracer(s, M, ctx, at, G.muzzle, to, 1 / 120, { span: 1, R: tr, w: 2, lag: 2 / 12, tdur: 3 / 12, trail: true });
+    tracer(s, M, ctx, at, G.muzzle, to, 1 / 120, { span: 1, R: tr, w: 3, lag: 2 / 12, tdur: 3 / 12, trail: true });
     s.at(at + 0.02, (s2) => {
       if (G.miss) { s2.at(s2.t + 0.04, (s3) => landMiss(s3, M, ctx, G, G.ground, { pow: 0.35, rad: 0.18 })); return; }
       landHit(s2, M, ctx, G, { pow: 1.0, rad: 0.3, push: 1.5 });
       s2.shake = Math.max(s2.shake, 1.3);
       // it goes on out the far side: a spray of grit along the shot
-      for (let i = 0; i < 6; i++) {
-        const q = Math.atan2(G.uy, G.ux) + s2.rand(-0.35, 0.35), sp = s2.rand(4, 7);
+      for (let i = 0; i < 12; i++) {
+        const q = Math.atan2(G.uy, G.ux) + s2.rand(-0.4, 0.4), sp = s2.rand(6, 11);
         s2.add({ k: "spark", x: G.T.x + G.ux * 0.2, y: G.T.y + G.uy * 0.2, z: G.body[2], vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(-0.5, 1.5), g: 6, drag: 1.5, life: s2.rand(0.2, 0.35), R: RAMP.kinetic, minor: i % 2 === 1 });
       }
     });
@@ -618,23 +666,24 @@ function laser(s, M0, ctx) {
     for (let r = 0; r < n; r++) {
       const ta = at + r * (n > 1 ? 0.12 : 0), final = r === n - 1, pulse = n > 1;
       const to = G.miss ? [G.air[0] + G.px * r * 0.1, G.air[1] + G.py * r * 0.1, G.air[2]] : [G.body[0], G.body[1], G.body[2] + (r - (n - 1) / 2) * 0.08];
-      const hold = (pulse ? 2 : G.crit ? 6 : 4) / 12;
+      const hold = (pulse ? 3 : G.crit ? 7 : 5) / 12;
       s.at(ta, (s2) => {
-        s2.add({ k: "rgMuzzle", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r: 3, life: 2 / 12, R: M.R, update: still });
-        const p = s2.add({ k: "rgBeam", x: to[0], y: to[1], z: to[2], a: G.muzzle, b: to, w: boosted || (G.crit && final) ? 2 : 1, hold, life: hold + 2 / 12, R: M.R, glow: true, r: 3, update: still });
+        s2.add({ k: "rgMuzzle", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r: 7, life: 2 / 12, R: M.R, update: still });
+        const p = s2.add({ k: "rgBeam", x: to[0], y: to[1], z: to[2], a: G.muzzle, b: to, w: boosted || (G.crit && final) ? 3 : 2, hold, life: hold + 2 / 12, R: M.R, glow: true, r: 5, update: still });
         ctx.motif?.carrier?.(s2, M, p);
-        s2.light(G.muzzle[0], G.muzzle[1], G.muzzle[2], 1, S(M.R, 0.85), 0.6, hold + 0.1);
-        if (!G.miss) s2.light(to[0], to[1], to[2], 1.3, S(M.R, 0.85), 0.8, hold + 0.15);
+        s2.light(G.muzzle[0], G.muzzle[1], G.muzzle[2], 1.3, S(M.R, 0.88), 0.8, hold + 0.1);
+        for (const f of [0.3, 0.65]) s2.light(lerp(G.muzzle[0], to[0], f), lerp(G.muzzle[1], to[1], f), lerp(G.muzzle[2], to[2], f), 1.1, S(M.R, 0.88), 0.5, hold + 0.1);
+        if (!G.miss) s2.light(to[0], to[1], to[2], 1.6, S(M.R, 0.9), 0.9, hold + 0.15);
       });
       s.at(ta + 1 / 60, (s2) => {
         if (G.miss) return;
         if (final) landHit(s2, M, ctx, G, { pow: 0.65, rad: 0.24, at: to });
         else { ctx.release(s2, M, to[0], to[1], to[2], 0.4, 0.16); s2.hit(T.id, 0.6, { x: G.muzzle[0], y: G.muzzle[1] }, M.R); }
-        for (let i = 0; i < 2; i++) s2.add({ k: "ember", x: to[0] + s2.rand(-0.1, 0.1), y: to[1] + s2.rand(-0.06, 0.06), z: to[2] + s2.rand(-0.1, 0.1), vz: s2.rand(0.3, 0.7), g: -0.3, drag: 1, life: s2.rand(0.5, 0.8), R: M.R, seed: s2.seedInt(), minor: i > 0 });
-        if (final) s2.add({ k: "scorch", x: T.x + G.ux * 0.12, y: T.y + G.uy * 0.12 + 0.12, r: 0.2, life: 2.2, R: RAMP.smoke, seed: 4, debris: true, update: still });
+        for (let i = 0; i < 5; i++) s2.add({ k: "ember", x: to[0] + s2.rand(-0.15, 0.15), y: to[1] + s2.rand(-0.1, 0.1), z: to[2] + s2.rand(-0.1, 0.1), vz: s2.rand(0.3, 0.9), g: -0.3, drag: 1, life: s2.rand(0.5, 0.9), R: M.R, seed: s2.seedInt(), minor: i > 1 });
+        if (final) s2.add({ k: "scorch", x: T.x + G.ux * 0.12, y: T.y + G.uy * 0.12 + 0.12, r: 0.32, life: 2.2, R: RAMP.smoke, seed: 4, debris: true, update: still });
       });
       // a miss scorches a line on the floor where the beam's end dips past
-      if (G.miss && final) s.at(ta + 0.02, (s2) => s2.add({ k: "scorch", x: G.ground[0], y: G.ground[1], r: 0.18, life: 2, R: RAMP.smoke, seed: 6, debris: true, update: still }));
+      if (G.miss && final) s.at(ta + 0.02, (s2) => s2.add({ k: "scorch", x: G.ground[0], y: G.ground[1], r: 0.28, life: 2, R: RAMP.smoke, seed: 6, debris: true, update: still }));
       end = ta + hold;
     }
     return end;
@@ -645,30 +694,33 @@ function laser(s, M0, ctx) {
 
 /** Plasma: a glowing glob, bright and wobbling, that splashes. */
 function plasma(s, M0, ctx) {
-  const M = subst(s, M0, "electricity"), t0 = aim(s, M, ctx, { lead: 0.22 }), n = roundsOf(s), r0 = s.props.has("boost") ? 6 : 4.8;
+  const M = subst(s, M0, "electricity"), t0 = aim(s, M, ctx, { lead: 0.22 }), n = roundsOf(s), r0 = s.props.has("boost") ? 8.5 : 7;
   const last = perTarget(ctx, t0, 0.22, (T, at) => {
     const G = geom(ctx, T);
     let end = at;
     for (let r = 0; r < n; r++) {
       const ta = at + r * 0.11, final = r === n - 1;
       const path = arcPath(G, 0.06), dur = travel(G, path.b, 16, 0.16, 0.45);
-      s.at(ta, (s2) => { s2.add({ k: "rgMuzzle", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r: 4, life: 2 / 12, R: M.R, update: still }); s2.light(G.muzzle[0], G.muzzle[1], G.muzzle[2], 1, S(M.R, 0.85), 0.7, 0.2); });
-      fly(s, M, ctx, ta, path, dur, { k: "rgGlob", r: final ? r0 : r0 * 0.75, R: M.R, hot: true, seed: s.seedInt(), glow: true }, {
+      s.at(ta, (s2) => { s2.add({ k: "rgMuzzle", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r: 7, life: 2 / 12, R: M.R, update: still }); s2.light(G.muzzle[0], G.muzzle[1], G.muzzle[2], 1.3, S(M.R, 0.88), 0.85, 0.22); });
+      // a plasma ball: a comet head of 14 px and its wake (pixelfx plasma-shot)
+      fly(s, M, ctx, ta, path, dur, { k: "dlComet", r: final ? r0 : r0 * 0.75, wake: 46, R: M.R, hero: G.crit && final, seed: s.seedInt(), glow: true }, {
         onStep: (s3, q, dt) => {
+          trackWake(q, dt);
           M.mod.trail?.(s3, M, { x: q.x, y: q.y, z: q.z, dt: dt * 0.5 });
-          if (s3.R() < dt * 60) s3.add({ k: "rgGlob", x: q.x - q.dx * 0.12, y: q.y - q.dy * 0.12, z: q.z, vz: -0.2, drag: 3, r: 2.2, life: 0.16, R: M.R, hot: true, seed: s3.seedInt(), minor: true });
+          wakeFx(s3, M, q, dt, 0.6);
+          if (s3.R() < dt * 40) s3.add({ k: "rgGlob", x: q.x - q.dx * 0.2, y: q.y - q.dy * 0.2, z: q.z, vz: -0.2, drag: 3, r: 2.6, life: 0.18, R: M.R, hot: true, seed: s3.seedInt(), minor: true });
         },
       });
       s.at(ta + dur, (s2) => {
         const at2 = G.miss ? path.b : G.body;
-        for (let i = 0; i < 5; i++) {
-          const q = s2.rand(0, TAU), sp = s2.rand(1.5, 3.2);
-          s2.add({ k: "rgGlob", x: at2[0], y: at2[1], z: Math.max(0.1, at2[2]), vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(0.5, 2), g: 8, drag: 1, r: 1.2, life: s2.rand(0.4, 0.7), R: M.R, hot: true, seed: s2.seedInt(), minor: i > 2 });
+        for (let i = 0; i < 9; i++) {
+          const q = s2.rand(0, TAU), sp = s2.rand(2, 4.5);
+          s2.add({ k: "rgGlob", x: at2[0], y: at2[1], z: Math.max(0.1, at2[2]), vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(0.5, 2.5), g: 8, drag: 1, r: i < 3 ? 2.4 : 1.2, life: s2.rand(0.4, 0.7), R: M.R, hot: true, seed: s2.seedInt(), minor: i > 3 });
         }
         if (G.miss) { landMiss(s2, M, ctx, G, at2, { pow: 0.45, rad: 0.25 }); return; }
         if (final) landHit(s2, M, ctx, G, { pow: 0.85, rad: 0.33 });
         else { ctx.release(s2, M, ...at2, 0.45, 0.2); s2.hit(T.id, 0.6, { x: G.muzzle[0], y: G.muzzle[1] }, M.R); }
-        if (final) s2.add({ k: "ring", x: T.x, y: T.y, r: 0.55, life: 0.4, R: M.R, update: still });
+        if (final) s2.add({ k: "ring", x: T.x, y: T.y, r: 0.85, life: 0.4, R: M.R, update: still });
       });
       end = ta + dur;
     }
@@ -687,14 +739,17 @@ function zap(s, M0, ctx) {
     for (let r = 0; r < n; r++) {
       const ta = at + r * 0.1, final = r === n - 1, to = G.miss ? G.over : G.body, life = G.crit && final ? 0.34 : 0.22;
       s.at(ta, (s2) => {
-        const p = s2.add({ k: "bolt", x: to[0], y: to[1], z: to[2], a: G.muzzle, b: to, life, R: M.R, seed: s2.seedInt(), glow: true, update: still });
+        // a bolt two pixels thick with a halo and forks (pixelfx chain-lightning), lit all along
+        const p = s2.add({ k: "dlArc", x: to[0], y: to[1], z: to[2], a: G.muzzle, b: to, w: 2, life, R: M.R, seed: s2.seedInt(), glow: true, r: 6, update: still });
         ctx.motif?.carrier?.(s2, M, p);
-        if (G.crit && final) s2.add({ k: "bolt", x: to[0], y: to[1], z: to[2], a: G.muzzle, b: [to[0], to[1], to[2] + 0.15], life, R: M.R, seed: s2.seedInt(), update: still });
+        s2.add({ k: "dlArc", x: to[0], y: to[1], z: to[2], a: G.muzzle, b: [to[0], to[1], to[2] + 0.1], w: 1, life: life * 0.7, R: M.R, seed: s2.seedInt(), minor: true, update: still });
+        if (G.crit && final) s2.add({ k: "dlArc", x: to[0], y: to[1], z: to[2], a: G.muzzle, b: [to[0], to[1], to[2] + 0.15], w: 2, life, R: M.R, seed: s2.seedInt(), update: still });
         // a miss arcs over the shoulder and grounds itself in the floor past
-        if (G.miss) s2.add({ k: "bolt", x: G.ground[0], y: G.ground[1], z: 0.05, a: to, b: [G.ground[0], G.ground[1], 0.05], life, R: M.R, seed: s2.seedInt(), glow: true, update: still });
-        s2.light(G.muzzle[0], G.muzzle[1], G.muzzle[2], 1.2, S(M.R, 0.85), 0.9, life, { flicker: true });
-        s2.light(to[0], to[1], to[2], 1.4, S(M.R, 0.85), 0.9, life + 0.1, { flicker: true });
-        for (let i = 0; i < 3; i++) s2.add({ k: "spark", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], vx: G.ux * s2.rand(1, 3) + s2.rand(-1.5, 1.5), vy: G.uy * s2.rand(1, 3) + s2.rand(-1.5, 1.5), vz: s2.rand(0, 2), g: 7, life: 0.25, R: M.R, minor: i > 0 });
+        if (G.miss) s2.add({ k: "dlArc", x: G.ground[0], y: G.ground[1], z: 0.05, a: to, b: [G.ground[0], G.ground[1], 0.05], w: 2, life, R: M.R, seed: s2.seedInt(), glow: true, r: 6, update: still });
+        s2.light(G.muzzle[0], G.muzzle[1], G.muzzle[2], 1.5, S(M.R, 0.88), 1, life, { flicker: true });
+        s2.light(lerp(G.muzzle[0], to[0], 0.5), lerp(G.muzzle[1], to[1], 0.5), lerp(G.muzzle[2], to[2], 0.5), 1.4, S(M.R, 0.88), 0.7, life, { flicker: true });
+        s2.light(to[0], to[1], to[2], 1.8, S(M.R, 0.9), 1, life + 0.12, { flicker: true });
+        for (let i = 0; i < 6; i++) s2.add({ k: "spark", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], vx: G.ux * s2.rand(2, 5) + s2.rand(-2.5, 2.5), vy: G.uy * s2.rand(2, 5) + s2.rand(-2.5, 2.5), vz: s2.rand(0, 2.5), g: 7, drag: 1.5, life: 0.3, R: M.R, minor: i > 1 });
       });
       s.at(ta + 0.03, (s2) => {
         if (G.miss) { landMiss(s2, M, ctx, G, G.ground, { pow: 0.35, rad: 0.18 }); s2.add({ k: "scorch", x: G.ground[0], y: G.ground[1], r: 0.2, life: 2, seed: 8, debris: true, update: still }); return; }
@@ -718,17 +773,17 @@ function sonicwave(s, M0, ctx) {
       const ta = at + k * 0.06;
       s.at(ta, (s2) => {
         const p = s2.add({
-          k: "rgArc", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r: 3, life: dur, R: M.R, minor: k === n - 1,
-          update(q) { const u = clamp(q.age / dur); q.x = lerp(G.muzzle[0], to[0], u); q.y = lerp(G.muzzle[1], to[1], u); q.z = lerp(G.muzzle[2], to[2], u); q.r = 4 + 8 * u; },
+          k: "rgArc", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r: 5, life: dur, R: M.R, minor: k === n - 1, glow: k === 0,
+          update(q) { const u = clamp(q.age / dur); q.x = lerp(G.muzzle[0], to[0], u); q.y = lerp(G.muzzle[1], to[1], u); q.z = lerp(G.muzzle[2], to[2], u); q.r = 6 + 14 * u; },
         });
         if (k === 0) ctx.motif?.carrier?.(s2, M, p);
       });
     }
-    s.at(at, (s2) => s2.add({ k: "rgRing", x: G.muzzle[0] + G.ux * 0.1, y: G.muzzle[1] + G.uy * 0.1, z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r0: 2, r: 6, life: 0.25, R: M.R, update: still }));
+    s.at(at, (s2) => s2.add({ k: "rgRing", x: G.muzzle[0] + G.ux * 0.1, y: G.muzzle[1] + G.uy * 0.1, z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r0: 3, r: 10, life: 0.28, R: M.R, update: still }));
     s.at(at + dur, (s2) => {
       if (G.miss) { landMiss(s2, M, ctx, G, G.ground, { pow: 0.25, rad: 0.15 }); return; }
       landHit(s2, M, ctx, G, { pow: 0.75, rad: 0.3 });
-      for (let k = 0; k < 3; k++) s2.add({ k: "rgRing", x: G.body[0], y: G.body[1], z: G.body[2], dx: G.ux, dy: G.uy, dz: 0, r0: 4, r: 12 * G.sz, life: 0.35, R: M.R, wait: k * 0.07, minor: k === 2, update: still });
+      for (let k = 0; k < 3; k++) s2.add({ k: "rgRing", x: G.body[0], y: G.body[1], z: G.body[2], dx: G.ux, dy: G.uy, dz: 0, r0: 5, r: 18 * G.sz, life: 0.38, R: M.R, wait: k * 0.07, minor: k === 2, update: still });
     });
     return at + dur + (n - 1) * 0.06;
   });
@@ -750,14 +805,26 @@ function jet(s, M0, ctx) {
     s.emit(at, at + d, (s2, _u, dt) => {
       const emit = (k, rate, mk) => {
         // a weapon's stream runs at an even speed and dies exactly at its reach
-        for (let i = s2.count(rate * 0.9, dt); i > 0; i--) {
+        for (let i = s2.count(rate * 1.5, dt); i > 0; i--) {
           const q = dir + s2.rand(-half, half), life = FLOW * s2.rand(0.9, 1.1), sp = len / life;
           s2.add({ k, x: hand[0], y: hand[1], z: hand[2] - 0.1, R: M.R, ...mk(), vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(-0.15, 0.15), drag: 0, life });
         }
       };
       M.mod.spray?.(s2, M, { emit, hand, dir, half, len, dt });
     });
-    s.at(at, (s2) => { s2.add({ k: "rgMuzzle", x: hand[0], y: hand[1], z: hand[2], dx: G.ux, dy: G.uy, dz: 0, r: 4, life: 3 / 12, R: M.R, update: still }); s2.light(hand[0], hand[1], hand[2], 1.4, S(M.R, 0.85), 0.8, d); });
+    s.at(at, (s2) => {
+      s2.add({ k: "rgMuzzle", x: hand[0], y: hand[1], z: hand[2], dx: G.ux, dy: G.uy, dz: 0, r: 8, life: 3 / 12, R: M.R, update: still });
+      s2.light(hand[0], hand[1], hand[2], 1.9, S(M.R, 0.9), 0.95, d);
+      // light down the stream while it pours
+      for (const f of [0.35, 0.75]) s2.light(hand[0] + Math.cos(dir) * len * f, hand[1] + Math.sin(dir) * len * f, 0.4, 1.3, S(M.R, 0.88), 0.6, d + 0.1, { flicker: M.flicker });
+    });
+    // hot streaks racing the stream (pixelfx flamethrower's core)
+    s.emit(at, at + d, (s2, _u, dt) => {
+      for (let i = s2.count(60, dt); i > 0; i--) {
+        const q = dir + s2.rand(-half, half) * 0.6, life = FLOW * s2.rand(0.8, 1), sp = len / life;
+        s2.add({ k: "streak", x: hand[0], y: hand[1], z: hand[2] - 0.1, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(-0.15, 0.15), life, R: M.R, minor: i > 1 });
+      }
+    });
     const reach = at + FLOW * (dist / len);
     s.at(reach, (s2) => {
       if (G.miss) { landMiss(s2, M, ctx, G, G.ground, { pow: 0.35, rad: 0.25 }); return; }
@@ -774,17 +841,18 @@ function jet(s, M0, ctx) {
 function mindbeam(s, M0, ctx) {
   const M = subst(s, M0, "mental"), t0 = aim(s, M, ctx, { lead: 0.24 });
   const last = perTarget(ctx, t0, 0.22, (T, at) => {
-    const G = geom(ctx, T, { z: 0.9 }), to = G.miss ? G.air : [G.body[0], G.body[1], 0.82 * T.h], hold = G.crit ? 0.55 : 0.4;
+    const G = geom(ctx, T, { z: 0.9 }), to = G.miss ? G.air : [G.body[0], G.body[1], 0.82 * T.h], hold = G.crit ? 0.6 : 0.45;
     s.at(at, (s2) => {
-      const p = s2.add({ k: "rgWave", x: to[0], y: to[1], z: to[2], a: G.muzzle, b: to, dur: 0.12, hold, life: hold + 0.2, amp: G.crit ? 4 : 3, lambda: 15, R: M.R, glow: true, r: 2, update: still });
+      const p = s2.add({ k: "rgWave", x: to[0], y: to[1], z: to[2], a: G.muzzle, b: to, dur: 0.12, hold, life: hold + 0.2, amp: G.crit ? 7 : 5.5, lambda: 20, R: M.R, glow: true, r: 4, update: still });
       ctx.motif?.carrier?.(s2, M, p);
-      s2.add({ k: "rgRing", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r0: 2, r: 5, life: 0.3, R: M.R, update: still });
+      s2.add({ k: "rgRing", x: G.muzzle[0], y: G.muzzle[1], z: G.muzzle[2], dx: G.ux, dy: G.uy, dz: 0, r0: 3, r: 9, life: 0.32, R: M.R, update: still });
+      for (const f of [0.3, 0.7]) s2.light(lerp(G.muzzle[0], to[0], f), lerp(G.muzzle[1], to[1], f), lerp(G.muzzle[2], to[2], f), 1.2, S(M.R, 0.88), 0.5, hold + 0.1);
     });
     s.at(at + 0.12, (s2) => {
       if (G.miss) { s2.add({ k: "rgRing", x: to[0], y: to[1], z: to[2], dx: G.ux, dy: G.uy, dz: 0, r0: 2, r: 6, life: 0.3, R: M.R, update: still }); return; }
       landHit(s2, M, ctx, G, { pow: 0.65, rad: 0.26, at: to });
       // ripples run out round the head
-      for (let k = 0; k < 3; k++) s2.add({ k: "halo", x: T.x, y: T.y, z: 1.05 * T.h, r: 0.25 + k * 0.08, life: 0.45, R: M.R, wait: k * 0.1, minor: k === 2, update: still });
+      for (let k = 0; k < 3; k++) s2.add({ k: "halo", x: T.x, y: T.y, z: 1.05 * T.h, r: 0.38 + k * 0.14, life: 0.5, R: M.R, wait: k * 0.1, minor: k === 2, update: still });
     });
     return at + hold;
   });
@@ -797,18 +865,21 @@ function spit(s, M0, ctx) {
   const M = subst(s, M0, "acid"), t0 = aim(s, M, ctx, { lead: 0.2 });
   const last = perTarget(ctx, t0, 0.18, (T, at) => {
     const G = geom(ctx, T, { z: 0.85 }), path = arcPath(G, 0.5), dur = travel(G, path.b, 12, 0.22, 0.55);
-    fly(s, M, ctx, at, path, dur, { k: "rgGlob", r: 2.6, R: M.R, spit: true, seed: s.seedInt() }, {
-      onStep: (s3, q, dt) => { if (s3.R() < dt * 18) s3.add({ k: "drip", x: q.x, y: q.y, z: q.z, vx: q.dx * 0.5, vy: q.dy * 0.5, g: 6, life: 2, R: M.R, onGround: splat, minor: true }); },
+    fly(s, M, ctx, at, path, dur, { k: "rgGlob", r: 4.6, R: M.R, spit: true, seed: s.seedInt() }, {
+      onStep: (s3, q, dt) => {
+        for (let i = s3.count(36, dt); i > 0; i--) s3.add({ k: "drip", x: q.x - q.dx * 0.1, y: q.y - q.dy * 0.1, z: q.z, vx: q.dx * 0.5 + s3.rand(-0.4, 0.4), vy: q.dy * 0.5 + s3.rand(-0.4, 0.4), g: 6, life: 2, R: M.R, onGround: splat, minor: true });
+        if (s3.R() < dt * 30) s3.add({ k: "rgGlob", x: q.x - q.dx * 0.16, y: q.y - q.dy * 0.16, z: q.z, vz: -0.3, drag: 3, r: 2.4, life: 0.16, R: M.R, spit: true, seed: s3.seedInt(), minor: true });
+      },
     });
     s.at(at + dur, (s2) => {
       const at2 = G.miss ? path.b : G.body;
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 10; i++) {
         const q = s2.rand(0, TAU), sp = s2.rand(1, 2.4);
         s2.add({ k: "drip", x: at2[0], y: at2[1], z: Math.max(0.1, at2[2]), vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(0.5, 1.6), g: 7, life: 2, R: M.R, onGround: splat, minor: i > 2 });
       }
       if (G.miss) { landMiss(s2, M, ctx, G, at2, { pow: 0.25, rad: 0.15 }); s2.add({ k: "puddle", x: at2[0], y: at2[1], r: 0.18, life: 2, R: M.R, debris: true, update: still }); return; }
-      landHit(s2, M, ctx, G, { pow: 0.65, rad: 0.25 });
-      s2.add({ k: "puddle", x: T.x + 0.1, y: T.y + 0.18, r: 0.2, life: 2, R: M.R, debris: true, update: still });
+      landHit(s2, M, ctx, G, { pow: 0.7, rad: 0.3 });
+      s2.add({ k: "puddle", x: T.x + 0.1, y: T.y + 0.18, r: 0.32, life: 2, R: M.R, debris: true, update: still });
     });
     return at + dur;
   });
@@ -846,16 +917,20 @@ function missile(s, M0, ctx) {
     fly(s, M, ctx, at, path, dur, { k: "rgRocket", R: M.R }, {
       ease: (u) => u * u * (0.6 + 0.4 * u) / 1,
       onStep: (s3, q, dt) => {
-        for (let i = s3.count(60, dt); i > 0; i--) { const b = 0.3 + s3.rand(0, 0.25); s3.add({ k: "smoke", x: q.x - q.dx * b, y: q.y - q.dy * b, z: q.z - q.dz * b, vz: 0.12, drag: 2, r: s3.rand(1.8, 2.8), life: s3.rand(0.8, 1.2), lobes: [[0, 0, 1], [0.4, 0.2, 0.6]], R: RAMP.metal, tone: 0.6, minor: i > 1 }); }
+        for (let i = s3.count(60, dt); i > 0; i--) { const b = 0.45 + s3.rand(0, 0.25); s3.add({ k: "smoke", x: q.x - q.dx * b, y: q.y - q.dy * b, z: q.z - q.dz * b, vz: 0.12, drag: 2, r: s3.rand(2.5, 4), life: s3.rand(0.8, 1.2), lobes: [[0, 0, 1], [0.4, 0.2, 0.6]], R: RAMP.metal, tone: 0.6, minor: i > 1 }); }
+        for (let i = s3.count(40, dt); i > 0; i--) s3.add({ k: "spark", x: q.x - q.dx * 0.45, y: q.y - q.dy * 0.45, z: q.z, vx: -q.dx * s3.rand(2, 5) + s3.rand(-1, 1), vy: -q.dy * s3.rand(2, 5) + s3.rand(-1, 1), vz: s3.rand(-0.5, 0.8), g: 3, drag: 2, life: s3.rand(0.15, 0.3), R: RAMP.fire, minor: true });
+        q.lt = (q.lt ?? 1) + dt; if (q.lt >= 1 / 30) { q.lt = 0; s3.light(q.x - q.dx * 0.4, q.y - q.dy * 0.4, q.z, 1.2, S(RAMP.fire, 0.9), 0.6, 0.1, { flicker: true }); }
       },
     });
     s.at(at + dur, (s2) => {
       const at2 = G.miss ? [path.b[0], path.b[1], 0.15] : G.body;
-      s2.shake = Math.max(s2.shake, G.miss ? 1.4 : 2.2);
-      s2.add({ k: "ring", x: at2[0], y: at2[1], r: 1.2, life: 0.55, R: M.R, broken: true, seed: 31, update: still });
-      for (let i = 0; i < 4; i++) s2.add({ k: "smoke", x: at2[0] + s2.rand(-0.35, 0.35), y: at2[1] + s2.rand(-0.2, 0.2), z: 0.3, vx: s2.rand(-0.6, 0.6), vz: s2.rand(0.4, 0.9), g: -0.1, drag: 1.4, r: s2.rand(4, 6.5), life: s2.rand(1.4, 2), lobes: lobes(s2), R: RAMP.metal, tone: 0.45, wait: 0.15, minor: i > 1 });
+      s2.shake = Math.max(s2.shake, G.miss ? 1.8 : 2.8);
+      s2.add({ k: "ring", x: at2[0], y: at2[1], r: 1.75, life: 0.55, R: M.R, broken: true, seed: 31, update: still });
+      s2.add({ k: "ring", x: at2[0], y: at2[1], r: 1, life: 0.35, R: M.R, seed: 32, update: still });
+      contact(s2, M, at2[0], at2[1], at2[2], 1.3);
+      for (let i = 0; i < 5; i++) s2.add({ k: "smoke", x: at2[0] + s2.rand(-0.45, 0.45), y: at2[1] + s2.rand(-0.25, 0.25), z: 0.3, vx: s2.rand(-0.8, 0.8), vz: s2.rand(0.4, 0.9), g: -0.1, drag: 1.4, r: s2.rand(5.5, 9), life: s2.rand(1.4, 2), lobes: lobes(s2), R: RAMP.metal, tone: 0.45, wait: 0.15, minor: i > 1 });
       if (G.miss) { ctx.release(s2, M, ...at2, 0.7, 0.35); propsAt(s2, M, ctx, G, at2, false); return; }
-      landHit(s2, M, ctx, G, { pow: 1.1, rad: 0.6, push: 1.4 });
+      landHit(s2, M, ctx, G, { pow: 1.1, rad: 0.7, push: 1.4 });
     });
     return at + dur;
   });
@@ -893,7 +968,7 @@ function stamp(P, x, y, rows, pal, turn = 0, o = 1) {
 
 const FLASK = ["...c...", "..ggg..", "...g...", "..glg..", ".glllg.", "glllhlg", "gllllld", ".gdddg."];
 const GRENADE = [".bb.", "bppb", "bmmb", "bppb", ".bb."];
-const PEBBLE = [".hm.", "hmmd", "mmdd", ".dd."];
+const PEBBLE = [".hhm..", "hhmmmd", "hmmmdd", "mmmddd", ".mddd.", "..dd.."];
 
 registerShapes({
   /** An arrow (or a heavier crossbow quarrel): a shaft, a metal head, fletching. Stuck ones quiver. */
@@ -902,19 +977,31 @@ registerShapes({
     const [sx, sy, hx, hy] = scr(v, p, p.dx, p.dy, p.dz);
     let [tx, ty] = v.ap(p.x - p.dx * p.len, p.y - p.dy * p.len, p.z - p.dz * p.len);
     if (p.quiver && fr < 6) { const w = (fr % 2 ? 1 : -1) * (fr < 3 ? 1.5 : 0.8); tx += -sy * w; ty += sx * w; }
-    const [ax, ay] = across(sx, sy), head = S(p.H, 0.95), shaftC = S(RAMP.wood, p.bolt ? 0.45 : 0.6), shaftHi = S(RAMP.wood, 0.75);
-    P.line(tx, ty, hx, hy, null, 1, 1, (f) => (f > 0.82 ? head : shaftC));
-    if (p.bolt) P.line(tx + ax, ty + ay, hx - sx * 2 + ax, hy - sy * 2 + ay, null, 1, 1, () => shaftHi);
-    // the head: a point and two barbs
-    const qx = -sy, qy = sx, bx = hx - sx * 2, by = hy - sy * 2;
-    P.px(hx, hy, p.stuck ? head : WHITE, 1);
-    P.px(bx + qx * 1.2, by + qy * 1.2, S(p.H, 0.7), 1); P.px(bx - qx * 1.2, by - qy * 1.2, S(p.H, 0.7), 1);
-    // fletching at the tail
-    const F1 = S(p.F, 0.85), F2 = S(p.F, 0.6);
-    for (const k of p.bolt ? [0.5] : [0.5, 2]) {
-      const fx = tx + sx * k, fy = ty + sy * k;
-      P.px(fx + qx * 1.4, fy + qy * 1.4, k < 1 ? F2 : F1, 1); P.px(fx - qx * 1.4, fy - qy * 1.4, k < 1 ? F2 : F1, 1);
+    const [ax, ay] = across(sx, sy), head = S(p.H, 0.95), shaftC = S(RAMP.wood, p.bolt ? 0.45 : 0.6), shaftHi = S(RAMP.wood, 0.78);
+    const qx = -sy, qy = sx, L = Math.hypot(hx - tx, hy - ty);
+    // in flight: a line of displaced air behind the tail, a square long, thinning to dashes
+    if (!p.stuck && L > 2) {
+      const wx = tx - sx * 26, wy = ty - sy * 26, wc = p.magic ? S(p.R, 0.85) : S(RAMP.air, 0.9), wd = p.magic ? S(p.R, 0.62) : S(RAMP.air, 0.62);
+      P.line(wx, wy, tx - sx * 2, ty - sy * 2, null, 0, 1, (f, i) => (f > 0.55 ? (f > 0.8 ? wc : wd) : (i + fr) % 3 ? null : wd));
     }
+    // the shaft: two pixels, a lit top line
+    P.line(tx, ty, hx - sx * 3, hy - sy * 3, null, 1, 1, () => shaftC);
+    P.line(tx + ax, ty + ay, hx - sx * 3 + ax, hy - sy * 3 + ay, null, 1, 1, (_f, i) => (i % 6 === 3 ? S(RAMP.wood, 0.9) : shaftHi));
+    // the head: a broadhead four long and five wide, a white point in flight
+    for (let k = 0; k < 4; k++) {
+      const bx = hx - sx * k, by = hy - sy * k, wdt = k === 0 ? 0 : k === 1 ? 1 : k === 2 ? 2 : 1.4;
+      for (let j = -Math.ceil(wdt); j <= Math.ceil(wdt); j++) {
+        if (Math.abs(j) > wdt + 0.2) continue;
+        P.px(bx + qx * j, by + qy * j, k === 0 ? (p.stuck ? head : WHITE) : j < 0 ? head : S(p.H, 0.62), 1);
+      }
+    }
+    // fletching at the tail: three vanes either side, fluttering
+    const F1 = S(p.F, 0.9), F2 = S(p.F, 0.62), flut = fr % 2;
+    for (const k of p.bolt ? [0.5, 2] : [0.5, 2, 3.5]) {
+      const fx = tx + sx * k, fy = ty + sy * k, sp = (k < 1 ? 2.6 : k < 3 ? 2 : 1.4) + (flut && !p.stuck ? 0.4 : 0);
+      for (let j = 1; j <= Math.round(sp); j++) { P.px(fx + qx * j, fy + qy * j, j === 1 ? F2 : F1, 1); P.px(fx - qx * j, fy - qy * j, j === 1 ? F2 : F1, 1); }
+    }
+    if (p.quiver && fr < 4) P.px(tx - sx, ty - sy, S(RAMP.air, 0.95), 1);
   },
   /** A tracer: a white-hot head and a coloured tail; `w` 2 is a heavy round. */
   rgTracer(v, P, p) {
@@ -924,7 +1011,12 @@ registerShapes({
     const [hx, hy] = pt(h), [tx, ty] = pt(Math.max(tl, h - p.span)), fr = Math.floor(p.age * 12);
     const body = fr === 0 ? S(p.R, 1) : S(p.R, 0.9), tail = S(p.R, 0.62);
     P.line(tx, ty, hx, hy, null, 1, 1, (f) => (f > 0.8 ? WHITE : f > 0.35 ? body : tail));
-    if (p.w > 1) { const [ax, ay] = across(hx - tx, hy - ty); P.line(tx + ax, ty + ay, hx + ax, hy + ay, null, 1, 1, (f) => (f > 0.25 ? (fr === 0 ? WHITE : S(p.R, 0.75)) : null)); }
+    const [ax, ay] = across(hx - tx, hy - ty);
+    // a heavy round's body: rows either side of the core, the hot near end wider than the cold far one
+    if (p.w > 1) P.line(tx + ax, ty + ay, hx + ax, hy + ay, null, 1, 1, (f) => (f > 0.25 ? (fr === 0 ? WHITE : S(p.R, 0.8)) : null));
+    if (p.w > 2) P.line(tx - ax, ty - ay, hx - ax, hy - ay, null, 1, 1, (f) => (f > 0.5 ? S(p.R, 0.85) : f > 0.2 ? S(p.R, 0.62) : null));
+    // the round itself at the head: a slug of light
+    if (h < 1) for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (Math.abs(i) + Math.abs(j) < 2) P.px(hx + i, hy + j, j === 0 && i === 0 ? WHITE : S(p.R, 1), 2);
   },
   /** A muzzle flash: a sharp star thrown along the barrel, white for one frame. */
   rgMuzzle(v, P, p) {
@@ -953,17 +1045,35 @@ registerShapes({
     const e = v.kind === "side" ? [0, 0, 1] : [-gy, gx, 0];
     const ax = Math.cos(th) * gx + Math.sin(th) * e[0], ay = Math.cos(th) * gy + Math.sin(th) * e[1], az = Math.sin(th) * e[2];
     const [x0, y0] = v.ap(p.x - ax * L, p.y - ay * L, p.z - az * L), [x1, y1] = v.ap(p.x + ax * L, p.y + ay * L, p.z + az * L);
+    // the turn it just made, as a smear of the head's arc (pixelfx spin-slash)
+    if (turning && p.blur) for (let g = 0; g <= 18; g++) {
+      // a smear of the head's circle behind it, three eighths of a turn, two pixels deep where it is fresh
+      const tg = th - (g / 18) * (TAU * 0.375), bx = Math.cos(tg) * gx + Math.sin(tg) * e[0], by = Math.cos(tg) * gy + Math.sin(tg) * e[1], bz = Math.sin(tg) * e[2];
+      const [sx2, sy2] = v.ap(p.x + bx * L * 1.05, p.y + by * L * 1.05, p.z + bz * L * 1.05), c = S(RAMP.air, g < 6 ? 0.95 : g < 12 ? 0.75 : 0.55);
+      P.px(sx2, sy2, c, 0);
+      if (g < 9) { const [ix, iy] = v.ap(p.x + bx * L * 0.82, p.y + by * L * 0.82, p.z + bz * L * 0.82); P.px(ix, iy, S(RAMP.air, 0.62), 0); }
+    }
     P.line(x0, y0, x1, y1, null, 1, 1, (f) => (f > 0.72 ? S(p.H, 0.9) : S(RAMP.wood, 0.55)));
-    const l = Math.hypot(x1 - x0, y1 - y0) || 1, qx = -(y1 - y0) / l, qy = (x1 - x0) / l;
-    for (let k = 1; k <= 2; k++) { P.px(x1 + qx * k, y1 + qy * k, S(p.H, k === 1 ? 0.8 : 0.6), 1); P.px(x1 - (x1 - x0) / l + qx * k, y1 - (y1 - y0) / l + qy * k, S(p.H, 0.55), 1); }
-    if (turning && Math.floor(p.age * 12) % 3 === 0) P.px(x1, y1, WHITE, 1);
+    { const [ox, oy] = across(x1 - x0, y1 - y0); P.line(x0 + ox, y0 + oy, x1 + ox, y1 + oy, null, 1, 1, (f) => (f > 0.72 ? S(p.H, 0.7) : S(RAMP.wood, 0.4))); }
+    const l = Math.hypot(x1 - x0, y1 - y0) || 1, qx = -(y1 - y0) / l, qy = (x1 - x0) / l, ux = (x1 - x0) / l, uy = (y1 - y0) / l;
+    // the head: a blade four deep and four out from the haft, a lit edge on its far side
+    for (let d = 0; d < 4; d++) for (let k = 1; k <= 4; k++) {
+      if (k > 4 - (d === 0 || d === 3 ? 1 : 0)) continue;
+      P.px(x1 - ux * d + qx * k, y1 - uy * d + qy * k, S(p.H, k === 4 || (k === 3 && (d === 0 || d === 3)) ? 0.95 : d < 2 ? 0.75 : 0.55), 1);
+    }
+    if (turning && Math.floor(p.age * 12) % 3 === 0) P.px(x1 + qx * 4, y1 + qy * 4, WHITE, 1);
   },
   /** A shuriken or a dart: four points turning; a stuck one is still. */
   rgStar(v, P, p) {
     const [x0, y0] = v.ap(p.x, p.y, p.z), x = Math.round(x0), y = Math.round(y0), turn = p.stuck ? 1 : Math.floor(p.age * 24) % 2;
     const arms = turn ? [[1, 1], [-1, 1], [1, -1], [-1, -1]] : [[1, 0], [-1, 0], [0, 1], [0, -1]];
     P.px(x, y, S(p.H, 0.45), 1);
-    for (const [dx, dy] of arms) { P.px(x + dx, y + dy, S(p.H, 0.95), 1); P.px(x + dx * 2, y + dy * 2, S(p.H, 0.7), 1); }
+    for (const [dx, dy] of arms) {
+      P.px(x + dx, y + dy, S(p.H, 0.95), 1); P.px(x + dx * 2, y + dy * 2, S(p.H, 0.85), 1); P.px(x + dx * 3, y + dy * 3, S(p.H, 0.7), 1);
+      // each blade has a back edge, so the star reads as four blades and not a plus
+      P.px(x + dx * 2 - dy, y + dy * 2 + dx, S(p.H, 0.55), 1);
+    }
+    if (!p.stuck && Math.floor(p.age * 12) % 2 === 0) P.px(x + arms[0][0] * 3, y + arms[0][1] * 3, WHITE, 1);
   },
   /** A sling stone. */
   rgPebble(v, P, p) {
@@ -1014,7 +1124,7 @@ registerShapes({
     const n = Math.ceil(R * 3);
     for (let i = 0; i <= n; i++) {
       const q = -1.15 + (2.3 * i) / n, cq = Math.cos(q), sq = Math.sin(q);
-      for (const [k, t] of [[0, 0.95], [1, 0.62]]) P.dot(x + sx * cq * (R - k) * 0.45 + qx * sq * (R - k), y + sy * cq * (R - k) * 0.45 + qy * sq * (R - k), S(p.R, t), a, 1);
+      for (const [k, t] of [[0, 1], [1, 0.82], [2, 0.6]]) P.dot(x + sx * cq * (R - k) * 0.45 + qx * sq * (R - k), y + sy * cq * (R - k) * 0.45 + qy * sq * (R - k), S(p.R, t), a, 1);
     }
   },
   /** A ring standing across the shot (a muzzle crack, a concussive shock, a ripple). */
@@ -1031,10 +1141,18 @@ registerShapes({
     const fr = Math.floor(p.age * 12), [ax, ay] = v.ap(...p.a), [bx, by] = v.ap(...p.b), [ox, oy] = across(bx - ax, by - ay);
     const fade = p.age > p.hold ? (p.age - p.hold) / Math.max(1e-3, p.life - p.hold) : 0;
     const w = fade > 0.5 ? 0 : fade > 0 ? Math.min(1, p.w) : p.w;
-    if (w >= 2) for (const sg of [-2, 2]) P.line(ax + ox * sg, ay + oy * sg, bx + ox * sg, by + oy * sg, null, 0, 1, (f, i) => ((i + fr) % 2 ? S(p.R, 0.5) : null));
-    if (w >= 1) for (const sg of [-1, 1]) P.line(ax + ox * sg, ay + oy * sg, bx + ox * sg, by + oy * sg, null, 1, 1, () => (fr === 0 ? S(p.R, 1) : S(p.R, 0.7)));
+    // the outer glow: a ragged band of the ramp's middle, then the edge rows, then the white core
+    if (w >= 3) for (const sg of [-3, 3]) P.line(ax + ox * sg, ay + oy * sg, bx + ox * sg, by + oy * sg, null, 0, 1, (f, i) => (hash(i >> 1, fr, sg) < 0.35 ? null : S(p.R, 0.55)));
+    if (w >= 2) for (const sg of [-2, 2]) P.line(ax + ox * sg, ay + oy * sg, bx + ox * sg, by + oy * sg, null, w >= 3 ? 1 : 0, 1, (f, i) => (w >= 3 ? S(p.R, 0.75) : (i + fr) % 2 ? S(p.R, 0.55) : null));
+    if (w >= 1) for (const sg of [-1, 1]) P.line(ax + ox * sg, ay + oy * sg, bx + ox * sg, by + oy * sg, null, 1, 1, () => (fr === 0 ? S(p.R, 1) : S(p.R, 0.88)));
     P.line(ax, ay, bx, by, null, 2, 1, () => (fade > 0.5 ? S(p.R, 0.95) : WHITE));
-    if (fade === 0) for (let j = -w - 1; j <= w + 1; j++) P.px(bx + ox * j, by + oy * j, j === 0 ? WHITE : S(p.R, 1), 2);
+    if (fade === 0) {
+      for (let j = -w - 1; j <= w + 1; j++) P.px(bx + ox * j, by + oy * j, j === 0 ? WHITE : S(p.R, 1), 2);
+      // the burn where it lands: a hot disc and short rays round it
+      const R2 = w + 2 + (fr & 1);
+      P.shade(bx - R2, by - R2, bx + R2, by + R2, (x, y) => { const d = Math.hypot(x - bx, y - by); return d > R2 ? null : d < R2 * 0.5 ? WHITE : S(p.R, d > R2 - 1 ? 0.75 : 1); }, 2);
+      for (let k = 0; k < 6; k++) { const q = (k / 6) * TAU + fr * 0.5; P.line(bx + Math.cos(q) * (R2 + 1), by + Math.sin(q) * (R2 + 1), bx + Math.cos(q) * (R2 + 4), by + Math.sin(q) * (R2 + 4), S(p.R, 0.85), 1); }
+    }
   },
   /** A psychic beam: two strands winding round each other, a white node where they cross. */
   rgWave(v, P, p) {
@@ -1045,9 +1163,11 @@ registerShapes({
     for (let i = Math.floor(gone); i <= reach; i++) {
       const env = Math.min(1, i / 4, (L - i) / 4 + 0.5), y1 = Math.sin((i / p.lambda) * TAU - fr * 1.7) * p.amp * env;
       const x0 = ax + sx * i, y0 = ay + sy * i;
-      P.px(x0 + qx * y1, y0 + qy * y1, S(p.R, 0.95), 1);
-      P.px(x0 - qx * y1, y0 - qy * y1, S(p.R, 0.65), 1);
-      if (Math.abs(y1) < 0.5) P.px(x0, y0, WHITE, 1);
+      // two strands two pixels thick, a faint core thread between them
+      P.px(x0 + qx * y1, y0 + qy * y1, S(p.R, 1), 1); P.px(x0 + qx * (y1 + 1), y0 + qy * (y1 + 1), S(p.R, 0.82), 1);
+      P.px(x0 - qx * y1, y0 - qy * y1, S(p.R, 0.75), 1); P.px(x0 - qx * (y1 + 1), y0 - qy * (y1 + 1), S(p.R, 0.58), 1);
+      if (i % 2 === 0) P.px(x0, y0, S(p.R, 0.62), 0);
+      if (Math.abs(y1) < 0.8) for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) P.px(x0 + dx, y0 + dy, dx || dy ? S(p.R, 1) : WHITE, 1);
     }
   },
   /** A net or a web: a diamond lattice flying open, wrapped round a creature, or lying flat. */
@@ -1059,7 +1179,7 @@ registerShapes({
       return on1 && on2 ? knot : on1 || on2 ? rope : null;
     };
     if (p.mode === "fly") {
-      const half = Math.round(2 + p.open * 7), X = Math.round(cx), Y = Math.round(cy);
+      const half = Math.round(3 + p.open * 10), X = Math.round(cx), Y = Math.round(cy);
       P.shade(X - half, Y - half, X + half, Y + half, (_x, _y, ix, iy) => (Math.abs(ix - X) + Math.abs(iy - Y) <= half ? (Math.abs(ix - X) + Math.abs(iy - Y) === half ? knot : cell(ix, iy, X, Y, 3)) : null), 1);
       return;
     }
@@ -1084,11 +1204,15 @@ registerShapes({
   rgRocket(v, P, p) {
     const fr = Math.floor(p.age * 12), [sx, sy, x0, y0] = scr(v, p, p.dx, p.dy, p.dz), x = Math.round(x0), y = Math.round(y0), qx = -sy, qy = sx;
     const [ox, oy] = across(sx, sy);
-    P.line(x - sx * 7, y - sy * 7, x, y, null, 1, 1, (f) => (f > 0.85 ? S(p.R, 0.9) : S(RAMP.metal, 0.85)));
-    P.line(x - sx * 7 + ox, y - sy * 7 + oy, x - sx + ox, y - sy + oy, null, 1, 1, (f) => (f > 0.8 ? S(p.R, 0.7) : S(RAMP.metal, 0.55)));
-    for (const k of [-1.6, 2.6]) P.px(x - sx * 7 + qx * k, y - sy * 7 + qy * k, S(RAMP.metal, 0.45), 1);
-    const L = 3 + (fr % 2) * 2;
-    P.line(x - sx * 8, y - sy * 8, x - sx * (8 + L), y - sy * (8 + L), null, 2, 1, (f) => (f < 0.4 ? WHITE : S(RAMP.fire, 0.85)));
+    // a body eleven long and three wide, a nose in the material, fins, and a long white-hot exhaust
+    P.line(x - sx * 11, y - sy * 11, x, y, null, 1, 1, (f) => (f > 0.85 ? S(p.R, 0.9) : S(RAMP.metal, 0.9)));
+    P.line(x - sx * 11 + ox, y - sy * 11 + oy, x - sx + ox, y - sy + oy, null, 1, 1, (f) => (f > 0.8 ? S(p.R, 0.7) : S(RAMP.metal, 0.62)));
+    P.line(x - sx * 11 - ox, y - sy * 11 - oy, x - sx - ox, y - sy - oy, null, 1, 1, (f) => (f > 0.8 ? S(p.R, 0.8) : S(RAMP.metal, 0.75)));
+    for (const k of [-2, -3, 2, 3]) P.px(x - sx * 10 + qx * k, y - sy * 10 + qy * k, S(RAMP.metal, 0.45), 1);
+    const L = 6 + (fr % 2) * 3;
+    P.line(x - sx * 12, y - sy * 12, x - sx * (12 + L), y - sy * (12 + L), null, 2, 1, (f) => (f < 0.35 ? WHITE : S(RAMP.fire, f < 0.7 ? 0.9 : 0.72)));
+    P.line(x - sx * 12 + ox, y - sy * 12 + oy, x - sx * (12 + L * 0.6) + ox, y - sy * (12 + L * 0.6) + oy, null, 1, 1, () => S(RAMP.fire, 0.85));
+    P.line(x - sx * 12 - ox, y - sy * 12 - oy, x - sx * (12 + L * 0.6) - ox, y - sy * (12 + L * 0.6) - oy, null, 1, 1, () => S(RAMP.fire, 0.85));
   },
   /** A tech weapon's lock: four corner brackets closing on the target, blinking. */
   rgReticle(v, P, p) {

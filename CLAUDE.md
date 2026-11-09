@@ -1873,7 +1873,10 @@ texture is resized through `base.resource.update()` with its frame parked at
 1×1 first**, or a shrinking canvas throws. To see it: `node
 tools/fx-canvas-preview.mjs && node tools/preview-server.mjs`, then
 `/.preview/fx-canvas.html` (judge stills with `seek`; headless Chrome starves
-animation frames). See `docs/SPELLSPRITE.md`.
+animation frames). See `docs/SPELLSPRITE.md`. Before drawing, resizing or
+reviewing an effect, load the `spellsprite-craft` skill: effects read big and
+JRPG, and are benchmarked against the pixelfx reference with
+`node tools/fx-reference.mjs` (fetched locally, never shipped).
 
 **When touching the shared frame budget or any feature's shedding**
 (`core/budget.mjs`, `core/gl-surfaces.mjs`, `core/pan.mjs`, any `SHED_ORDER`,

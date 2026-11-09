@@ -8,16 +8,17 @@
  */
 
 import { TAU, clamp, easeOut, hash, pnoise, fadeOut } from "../core/rand.mjs";
-import { S } from "../core/palette.mjs";
+import { S, WHITE } from "../core/palette.mjs";
 import { registerShapes, snapH } from "../core/shapes.mjs";
-import { out, sd, still, releaseFlash, counter, flourish } from "../core/motifs.mjs";
+import { sd, still, releaseFlash, counter, flourish } from "../core/motifs.mjs";
+import { dustRing, dustLobes } from "./physical.mjs";
 
 /** A drop that lands: a ripple, a two-frame splash, and now and then a wet spot. */
 function wet(p, s) {
   p.life = 0;
-  s.add({ k: "ripple", x: p.x, y: p.y, r: s.rand(0.14, 0.24), n: 1, life: 0.5, R: p.R, debris: true, update: still });
-  s.add({ k: "splash", x: p.x, y: p.y, z: 0, life: 3 / 12, R: p.R, update: still });
-  if (s.R() < 0.4) s.add({ k: "sheen", x: p.x, y: p.y, r: s.rand(0.06, 0.1), life: s.rand(1.6, 2.6), R: p.R, seed: sd(s), small: true, debris: true, update: still });
+  s.add({ k: "ripple", x: p.x, y: p.y, r: s.rand(0.16, 0.28) * (p.big ? 1.4 : 1), n: 1, life: 0.55, R: p.R, debris: true, minor: p.minor, update: still });
+  s.add({ k: "splash", x: p.x, y: p.y, z: 0, life: 3 / 12, R: p.R, minor: p.minor, update: still });
+  if (!p.minor && s.R() < 0.4) s.add({ k: "sheen", x: p.x, y: p.y, r: s.rand(0.06, 0.1), life: s.rand(1.6, 2.6), R: p.R, seed: sd(s), small: true, debris: true, update: still });
 }
 
 /**
@@ -55,33 +56,83 @@ function rollCrest(p, s, dt) {
   }
 }
 
+/** Mist rolling out low over the water: translucent, pale, gone in a second. */
+const mist = (s, R, x, y, N, o = {}) => dustRing(s, R, x, y, N, { sp: [0.9, 2], r: [6, 10], life: [0.8, 1.3], tone: 0.83, a0: 0.32, wait: [0.04, 0.12], keep: 1, ...o });
+
+/** Foam: white flecks flung off the crown that fall fast and vanish. */
+function foam(s, R, x, y, z, N, sp = [1.5, 4.5]) {
+  for (let i = 0; i < N; i++) {
+    const q = s.rand(0, TAU), v = s.rand(sp[0], sp[1]);
+    s.add({ k: "flake", x: x + Math.cos(q) * 0.15, y: y + Math.sin(q) * 0.15, z: z + s.rand(0.1, 0.5), vx: Math.cos(q) * v, vy: Math.sin(q) * v, vz: s.rand(1, 3.5), g: 12, drag: 1.6, life: s.rand(0.4, 0.8), R, big: s.R() < 0.2, minor: i >= 3 });
+  }
+}
+
 export default {
   id: "tide",
+  /**
+   * The splash (spellsprite-craft §5 water/splash, water/wave-crash): water
+   * wells up round the feet for the drawn-in beat, then bursts over the body:
+   * sheets of it thrown out of a hollow middle in arcs that fall and break into
+   * drops, a crown thrown up round the feet, droplets landing as rings and
+   * plinks past the creature, foam, mist, and a wet sheen left on the floor.
+   */
+  bloom(s, M, B) {
+    const R = M.R, aps = s.spec.aps, { x, y, z, r, sz } = B, rs = r / aps;
+    s.at(B.at, (s2) => {
+      s2.add({ k: "ripple", x, y, r: rs * 0.9 + 0.2, n: 2, life: 0.3, R, update: still });
+      for (let i = 0; i < 8; i++) s2.add({ k: "waterbubble", x: x + s2.rand(-0.3, 0.3) * sz, y: y + s2.rand(-0.2, 0.2) * sz, z: s2.rand(0.05, z), vz: s2.rand(0.6, 1.4), drag: 2, life: s2.rand(0.16, 0.24), R, seed: sd(s2), minor: i > 3 });
+      s2.light(x, y, 0.1, rs * 1.3 + 0.5, S(R, 0.83), 0.35, 0.2, { swell: true });
+    });
+    s.at(B.b, (s2) => {
+      s2.add({ k: "tdSplash", x, y, z, r: r * 1.2, n: B.saved ? 6 : B.crit ? 12 : 9, hero: B.crit, life: 0.75, R, seed: sd(s2), update: still });
+      for (let i = 0, N = B.saved ? 2 : 4; i < N; i++) { const q = (i / N) * TAU + 0.4, d = rs * 0.62 + 0.1; s2.add({ k: "crown", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.85, z: 0, r: 0.16 * sz, h: 14 * Math.min(1.4, B.k) * sz, n: 8, life: 7 / 12, R, seed: sd(s2), wait: i * 0.03, update: still }); }
+      s2.light(x, y, 0.1, rs * 2 + 0.7, S(R, 0.9), 0.5 * B.k, 0.6);
+      if (B.crit) s2.crit();
+      for (let i = 0, N = Math.round(22 * B.k); i < N; i++) {
+        const q = s2.rand(0, TAU), v = s2.rand(1.8, 5) * B.k;
+        s2.add({ k: "droplet", x, y, z, vx: Math.cos(q) * v, vy: Math.sin(q) * v, vz: s2.rand(2, 4.5), g: 13, drag: 0.5, life: 3, R, big: i % 3 === 0, onGround: wet, minor: i > 7 });
+      }
+      foam(s2, R, x, y, z, Math.round(10 * B.k));
+      mist(s2, R, x, y, B.saved ? 2 : 4, { r0: rs * 0.4 });
+      s2.add({ k: "ring", x, y, r: rs * 1.7 + 0.4, life: 0.45, R, seed: sd(s2), update: still });
+      for (let i = 0; i < (B.saved ? 1 : 3); i++) s2.add({ k: "ripple", x, y, r: (rs * 1.6 + 0.3) * (1 - i * 0.18), n: 2, life: 1.1, R, wait: 0.1 + i * 0.22, update: still });
+      if (!B.saved) s2.add({ k: "sheen", x, y, r: rs * 0.85 + 0.2, life: 3.4, R, seed: sd(s2), debris: true, update: still });
+      for (let i = 0; i < 3; i++) s2.add({ k: "glint", x: x + s2.rand(-1, 1) * rs, y: y + s2.rand(-0.7, 0.7) * rs, z: s2.rand(0.05, 0.6), life: 5 / 12, R, wait: s2.rand(0.1, 0.5), minor: i > 0, update: still });
+    });
+  },
+
   burst(s, M, { x, y, z, pow, rad, sub }) {
-    const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n = counter(s, pow, rad);
-    releaseFlash(s, M, x, y, z, pow, rad);
+    const R = M.R, m = s.m * pow, mm = Math.min(1.6, m), n0 = counter(s, pow, rad), n = sub ? (k) => Math.ceil(n0(k) / 2.5) : n0;
+    releaseFlash(s, M, x, y, z, pow, rad, sub ? { flash: 0.6, light: 0.22 } : undefined);
     // an area eruption is one splash each, varied in size, over a pool that only sometimes lies down
-    const cr = (rad * 0.42 + 0.18) * Math.min(1.3, mm) * (sub ? s.rand(0.8, 1.2) : 1), ch = 12 * mm * (sub ? s.rand(0.7, 1.1) : 1), cz = z > 0.3 && !sub ? z * 0.5 : 0;
+    const cr = (rad * 0.62 + 0.3) * Math.min(1.3, mm) * (sub ? s.rand(0.7, 1) : 1), ch = 20 * mm * (sub ? s.rand(0.6, 0.9) : 1), cz = z > 0.3 && !sub ? z * 0.5 : 0;
     if (s.take === 1 && rad > 0.6 && !sub) for (let i = 0; i < 3; i++) {
       const q = (i / 3) * TAU + 0.5;
-      s.add({ k: "crown", x: x + Math.cos(q) * rad * 0.55, y: y + Math.sin(q) * rad * 0.55, z: 0, r: cr * 0.6, h: ch * 0.75, n: 8, life: 7 / 12, R, seed: sd(s), wait: 0.06 + i * 0.06, update: still });
+      s.add({ k: "crown", x: x + Math.cos(q) * rad * 0.6, y: y + Math.sin(q) * rad * 0.6, z: 0, r: cr * 0.6, h: ch * 0.75, n: 10, life: 7 / 12, R, seed: sd(s), wait: 0.06 + i * 0.06, update: still });
     }
-    s.add({ k: "crown", x, y, z: cz, r: cr, h: ch, n: 12, life: 7 / 12, R, seed: sd(s), update: still });
-    if (s.take === 2 && !sub) for (let i = 0; i < n(12); i++) {
+    // the crown, and a second smaller ring of it thrown up inside as the first falls
+    s.add({ k: "crown", x, y, z: cz, r: cr, h: ch, n: sub ? 10 : 16, life: 7 / 12, R, seed: sd(s), update: still });
+    if (!sub) s.add({ k: "crown", x, y, z: cz, r: cr * 0.45, h: ch * 1.25, n: 8, life: 7 / 12, R, seed: sd(s), wait: 0.2, update: still });
+    // the shock of the water hitting: a ring thrown across the floor
+    if (!sub) s.add({ k: "ring", x, y, r: Math.min(rad * 2.2 + 1, rad * 1.1 + 1.5) * Math.min(1.3, mm), life: 0.5, R, seed: sd(s), update: still });
+    if (s.take === 2 && !sub) for (let i = 0; i < n(18); i++) {
       // a geyser: a column thrown straight up that rains back down
-      s.add({ k: "droplet", x: x + s.rand(-0.1, 0.1), y: y + s.rand(-0.05, 0.05), z: cz, vx: s.rand(-0.6, 0.6), vy: s.rand(-0.4, 0.4), vz: s.rand(4.5, 7.5) * Math.min(1.3, mm), g: 9, drag: 0.3, life: 3, R, big: true, onGround: wet, wait: s.rand(0, 0.12) });
+      s.add({ k: "droplet", x: x + s.rand(-0.1, 0.1), y: y + s.rand(-0.05, 0.05), z: cz, vx: s.rand(-0.8, 0.8), vy: s.rand(-0.5, 0.5), vz: s.rand(5, 9) * Math.min(1.3, mm), g: 11, drag: 0.3, life: 3, R, big: true, onGround: wet, wait: s.rand(0, 0.15), minor: i >= 6 });
     }
-    for (let i = 0, N = sub ? n(8) : n(16); i < N; i++) {
-      const o = out(s, s.rand(1.5, 3.5)); o.vz = Math.abs(o.vz) + s.rand(1.5, 3);
-      s.add({ k: "droplet", x, y, z: cz + 0.1, ...o, g: 9, drag: 0.5, life: 3, R, big: s.R() < 0.35, onGround: wet, minor: i % 3 === 2 });
+    // droplets in arcs: they land as rings and plinks across a couple of squares
+    for (let i = 0, N = n(32); i < N; i++) {
+      const q = s.rand(0, TAU), v = s.rand(1.6, 5.5);
+      s.add({ k: "droplet", x, y, z: cz + 0.1, vx: Math.cos(q) * v, vy: Math.sin(q) * v, vz: s.rand(2.5, 5.5), g: 13, drag: 0.5, life: 3, R, big: s.R() < 0.35, onGround: wet, minor: i >= (sub ? 3 : 10) });
     }
-    for (let i = 0; i < (sub ? 0 : n(2)); i++) { const q = s.rand(0, TAU); s.add({ k: "smoke", x: x + Math.cos(q) * rad * 0.6, y: y + Math.sin(q) * rad * 0.6, z: cz + 0.2, vx: Math.cos(q) * 0.6, vy: Math.sin(q) * 0.6, vz: 0.3, g: -0.05, drag: 2, r: s.rand(2.5, 3.5) * Math.min(1.3, m), life: s.rand(0.5, 0.7), lobes: [[0, 0, 1], [0.55, 0.25, 0.6]], R, tone: 0.67, wait: 0.08, minor: true }); }
+    foam(s, R, x, y, cz, n(18));
+    mist(s, R, x, y, sub ? Math.min(2, n(4)) : n(7), { r0: rad * 0.5 });
+    for (let i = 0, N = sub ? 0 : n(4); i < N; i++) s.add({ k: "glint", x: x + s.rand(-1, 1) * (rad + 0.4), y: y + s.rand(-1, 1) * (rad + 0.4) * 0.7, z: s.rand(0.05, 0.7), life: 5 / 12, R, wait: s.rand(0.1, 0.6), minor: i >= 1, update: still });
     if (sub) {
-      if (s.R() < 0.35) s.add({ k: "sheen", x, y, r: rad * 0.7 + 0.15, life: 5, R, seed: sd(s), debris: true, update: still });
-      s.add({ k: "ripple", x, y, r: rad * 1.1 + 0.2, n: 1, life: 0.9, R, update: still });
+      if (s.R() < 0.35) s.add({ k: "sheen", x, y, r: rad * 0.9 + 0.2, life: 5, R, seed: sd(s), debris: true, update: still });
+      s.add({ k: "ripple", x, y, r: rad * 1.6 + 0.3, n: 2, life: 1, R, update: still });
     } else if (pow >= 0.5) {
-      s.add({ k: "sheen", x, y, r: rad * 0.8 + 0.15, life: 5, R, seed: sd(s), debris: true, update: still });
-      for (let i = 0; i < 2; i++) s.add({ k: "ripple", x, y, r: rad * 1.15 + 0.3, n: 2, life: 1.1, R, wait: i * 0.3, update: still });
+      s.add({ k: "sheen", x, y, r: rad * 1.4 + 0.35, life: 5, R, seed: sd(s), debris: true, update: still });
+      for (let i = 0; i < 3; i++) s.add({ k: "ripple", x, y, r: Math.min(rad * 2 + 0.8, rad * 1.1 + 1.3) * (1 - i * 0.15), n: 2, life: 1.3, R, wait: i * 0.28, update: still });
     }
     flourish(s, M, x, y, z, rad, Math.round(5 * m));
   },
@@ -91,33 +142,38 @@ export default {
     const pl = Math.hypot(px, py) || 1; px /= pl; py /= pl;
     const ph = s.t * 26;
     for (let k = 0; k < 2; k++) {
-      const a = ph + k * Math.PI, ox = Math.sin(a) * 0.14, oz = Math.cos(a) * 0.14;
-      for (let i = s.count(110 * s.m, dt); i > 0; i--) s.add({ k: "droplet", x: x + px * ox, y: y + py * ox, z: z + oz, vx: -dir[0] * 0.5, vy: -dir[1] * 0.5, g: 1.2, drag: 3, life: s.rand(0.2, 0.3), R, tone: k ? 0.67 : 0.95, minor: k === 1 && i % 2 === 0 });
+      const a = ph + k * Math.PI, ox = Math.sin(a) * 0.18, oz = Math.cos(a) * 0.18;
+      for (let i = s.count(120 * s.m, dt); i > 0; i--) s.add({ k: "droplet", x: x + px * ox, y: y + py * ox, z: z + oz, vx: -dir[0] * 0.5, vy: -dir[1] * 0.5, g: 1.2, drag: 3, life: s.rand(0.22, 0.34), R, tone: k ? 0.67 : 0.95, minor: k === 1 && i % 2 === 0 });
     }
-    for (let i = s.count(8 * s.m, dt); i > 0; i--) s.add({ k: "droplet", x, y, z, vx: s.rand(-0.5, 0.5), vy: s.rand(-0.5, 0.5), vz: s.rand(-0.5, 0.5), g: 8, drag: 0.5, life: 3, R, onGround: wet });
+    for (let i = s.count(16 * s.m, dt); i > 0; i--) s.add({ k: "droplet", x, y, z, vx: s.rand(-0.8, 0.8), vy: s.rand(-0.8, 0.8), vz: s.rand(-0.3, 0.8), g: 9, drag: 0.5, life: 3, R, onGround: wet, minor: s.R() < 0.5 });
+    for (let i = s.count(10 * s.m, dt); i > 0; i--) s.add({ k: "phDust", x, y, z, vz: 0.1, drag: 2.5, r: s.rand(2.5, 4), life: s.rand(0.35, 0.5), R, tone: 0.83, a0: 0.35, minor: true });
   },
   linger(s, M, { at }) {
-    at(3, () => ({ k: "ripple", n: 1, r: s.rand(0.15, 0.3), life: 0.7, update: still }));
-    at(2.5, () => ({ k: "droplet", vz: s.rand(1.2, 2), vx: s.rand(-0.3, 0.3), g: 9, life: 2, onGround: wet, minor: true }));
-    at(2, () => ({ k: "waterbubble", vz: 0.3, drag: 1, r: 1, life: s.rand(0.4, 0.7), seed: sd(s) }));
+    at(4, () => ({ k: "ripple", n: 1, r: s.rand(0.18, 0.36), life: 0.8, update: still }));
+    at(4, () => ({ k: "droplet", vz: s.rand(1.5, 2.6), vx: s.rand(-0.4, 0.4), g: 10, life: 2, onGround: wet, minor: true }));
+    at(3, () => ({ k: "waterbubble", vz: 0.3, drag: 1, r: s.R() < 0.3 ? 2 : 1, life: s.rand(0.4, 0.8), seed: sd(s) }));
+    at(0.5, () => ({ k: "crown", z: 0, r: s.rand(0.12, 0.2), h: s.rand(7, 11), n: 8, life: 7 / 12, seed: sd(s), update: still }));
   },
   spray(s, M, { emit, hand, dir, half, len }) {
     if (!s.tideCrest) {
       s.tideCrest = true;
-      s.add({ k: "crest", ox: hand[0], oy: hand[1], x: hand[0], y: hand[1], dir, half, len, h: 15 * Math.min(1.4, s.m), life: 0.8, R: M.R, seed: sd(s), update: rollCrest });
+      s.add({ k: "crest", ox: hand[0], oy: hand[1], x: hand[0], y: hand[1], dir, half, len, h: 22 * Math.min(1.4, s.m), life: 0.85, R: M.R, seed: sd(s), update: rollCrest });
     }
-    emit("droplet", 70, () => ({ g: 7, drag: 1, life: 2, big: s.R() < 0.3, onGround: wet }));
-    emit("smoke", 12, () => ({ drag: 1.8, life: 0.6, r: s.rand(2.5, 3.5), lobes: [[0, 0, 1], [0.5, 0.2, 0.6]], tone: 0.83 }));
+    emit("droplet", 90, () => ({ g: 8, drag: 1, life: 2, big: s.R() < 0.3, onGround: wet, minor: s.R() < 0.6 }));
+    emit("flake", 40, () => ({ g: 6, drag: 1.6, life: s.rand(0.4, 0.7), big: s.R() < 0.2, minor: true }));
+    emit("phDust", 14, () => ({ drag: 1.8, life: s.rand(0.6, 0.9), r: s.rand(4, 7), tone: 0.83, a0: 0.32, lobes: dustLobes(s), minor: s.R() < 0.5 }));
   },
   auraStart(s, M, T) {
-    s.add({ k: "sheen", x: T.x + 0.05, y: T.y + 0.12, r: 0.32 * T.size, life: 1e9, R: M.R, seed: 4, update: still });
+    s.add({ k: "sheen", x: T.x + 0.05, y: T.y + 0.12, r: 0.4 * T.size, life: 1e9, R: M.R, seed: 4, update: still });
   },
   aura(s, M, { at }) {
-    at(5, () => ({ k: "waterbubble", vz: s.rand(0.3, 0.6), g: -0.1, drag: 1.2, r: s.R() < 0.35 ? 2 : 1, life: s.rand(0.7, 1.1), seed: sd(s) }));
-    at(3, () => ({ k: "droplet", g: 7, life: 2, onGround: wet }));
+    at(7, () => ({ k: "waterbubble", vz: s.rand(0.3, 0.6), g: -0.1, drag: 1.2, r: s.R() < 0.35 ? 2 : 1, life: s.rand(0.7, 1.1), seed: sd(s) }));
+    at(4, () => ({ k: "droplet", g: 7, life: 2, onGround: wet }));
+    at(1, () => ({ k: "ripple", n: 1, r: s.rand(0.3, 0.45), life: 0.9, update: still }), false);
   },
   tick(s, M, T) {
-    s.add({ k: "crown", x: T.x, y: T.y, z: 0, r: 0.3 * T.size, h: 9, n: 10, life: 7 / 12, R: M.R, seed: sd(s), update: still });
+    s.add({ k: "crown", x: T.x, y: T.y, z: 0, r: 0.38 * T.size, h: 14, n: 12, life: 7 / 12, R: M.R, seed: sd(s), update: still });
+    for (let i = 0; i < 10; i++) { const q = s.rand(0, TAU), v = s.rand(1, 2.5); s.add({ k: "droplet", x: T.x, y: T.y, z: 0.2, vx: Math.cos(q) * v, vy: Math.sin(q) * v, vz: s.rand(2, 3.5), g: 12, life: 2, R: M.R, onGround: wet, minor: i > 3 }); }
   },
 };
 
@@ -130,6 +186,29 @@ const RINGS = {
 };
 
 registerShapes({
+  /**
+   * The splash on a body (deliveries.mjs bloom): sheets of water thrown out
+   * of a hollow middle, each a thick arc with a lit crest and a dark
+   * underside that rises, tips over and falls, its end breaking into drops
+   * as it goes. White only at a crit's crests on the first frame.
+   */
+  tdSplash(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 8) return;
+    const [x, y] = v.ap(p.x, p.y, p.z), top = v.kind === "top", sq = top ? 0.85 : 0.5, R = p.R, u = p.age / p.life, a = u < 0.65 ? 1 : (1 - u) / 0.35;
+    const reach = Math.min(1, (fr + 1) / 3), r0 = Math.max(6, p.r * 0.28), H = p.r * (top ? 0.3 : 0.6);
+    for (let k = 0; k < p.n; k++) {
+      const q = (k / p.n) * TAU + hash(k, p.seed) * 0.4, c = Math.cos(q), sn = Math.sin(q), L = (p.r - r0) * (0.7 + 0.5 * hash(k, p.seed, 1));
+      const W = (k % 2 ? 2 : 3) * Math.min(1.4, p.r / 26), steps = Math.ceil(L), gone = u > 0.4 ? (u - 0.4) / 0.6 : 0;
+      for (let j = 0; j <= steps; j++) {
+        const f = j / steps; if (f > reach || f < gone * 0.9) continue;
+        const d = r0 + j, lift = Math.sin(Math.PI * Math.min(1, f * 0.9 + 0.1)) * H * (1 - u * 0.6) - u * u * 8, cx = x + c * d, cy = y + sn * d * sq - lift;
+        // the far half breaks into drops
+        if (f > 0.65 && (j + fr) % 3) { if ((j + k) % 2 === 0) P.dot(cx, cy, S(R, 0.95), a, 1); continue; }
+        const w = W * (1 - f * 0.5);
+        for (let i = 0; i <= w; i++) P.dot(cx, cy + i, i === 0 ? (p.hero && fr === 0 ? WHITE : S(R, 1)) : i >= w - 0.5 ? S(R, 0.42) : S(R, 0.67), a, 1);
+      }
+    }
+  },
   /** A splash crown: a rim and a ring of columns that rise, throw their tips, and fall. */
   crown(v, P, p) {
     const fr = Math.floor(p.age * 12);

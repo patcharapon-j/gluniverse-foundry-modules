@@ -24,10 +24,13 @@ ChatMessage ─read─▶ event ─semantics─▶ spec ─looks─▶ spec ─c
 |---|---|---|
 | `read.mjs` | no | Chat, Regions and condition items into events. Every privacy decision. |
 | `semantics.mjs` | yes | Material, function, delivery, area, outcome, magnitude, tradition. |
+| `passives.mjs` | yes | Which passive an item is, its spec, its play key, who may see it. |
+| `handoff.mjs` | yes | The Strike-rider memory a follow-up maneuver draws from. |
 | `looks.mjs` | yes | Merges the look layers onto a spec. |
 | `compile.mjs` | yes | A spec into a seeded `Sim` with its cues. |
 | `area.mjs` | yes | The area language (below). |
-| `families/`, `forms.mjs`, `strikes.mjs`, `conditions.mjs` | yes | What each material, function, weapon style and condition draws. |
+| `families/`, `forms.mjs`, `strikes.mjs`, `deliveries.mjs`, `conditions.mjs` | yes | What each material, function, delivery, weapon style and condition draws. |
+| `archetypes/` | yes | One animation per meaning, reused across documents (below). |
 | `core/` | yes | Sim, shapes, palettes, the pixel buffer, frame painting. |
 | `director.mjs` | yes | Which sims run, on which scene, under which budget. |
 | `host-2d.mjs` | no | Puts the buffers on the Foundry canvas and moves the tokens. |
@@ -44,8 +47,9 @@ the message id.
 A spell posts a cast card, then a save per target, then damage. They are
 joined by origin uuid and cast rank inside `TIMING.joinWindow`. The cast card
 starts the charge, each save plays its own target's impact, and a target whose
-save has not arrived by `TIMING.saveWait` gets the neutral impact. Damage
-messages play nothing. With Dice So Nice the impact waits for the die, capped
+save has not arrived by `TIMING.saveWait` gets the neutral impact. A damage
+message plays nothing, with two exceptions: a persistent-damage tick, and a
+damage card whose origin is a passive aura (below). With Dice So Nice the impact waits for the die, capped
 at `TIMING.diceWait`. An area takes its geometry from the Region the spell
 placed (`flags.pf2e.areaShape`); with none it falls back to the first target.
 
@@ -53,6 +57,63 @@ PF2e 8.5 facts the reader depends on: a spell attack and a Strike are both
 `context.type: "attack-roll"`; the cast rank is `origin.castRank`; a save from
 a spell card carries the spell as `flags.pf2e.origin`; a persistent damage tick's
 only origin is the `persistent-damage` condition item.
+
+An Elemental Blast is not a Strike and not a spell: its roll carries
+`context.action: "elemental-blast"` and `context.identifier`
+(`element.damageType.melee|ranged.cost`), and its origin is an `action` item.
+`describeBlast` plays it as a spell attack, its material the damage type when that
+is energy and the element otherwise, as an orb at range and a touch in melee.
+
+### Strike riders
+
+A Strike whose `system.attackEffects` lists Grab, Knockdown or Push (Improved
+too; `riderOf` also reads Rend) carries `rider: { arch, slug }`, and plays only
+its blow. In PF2e the maneuver is a follow-up: a Grapple, Trip or Shove check,
+which already plays its archetype with its own outcome, or the creature's Grab,
+Knockdown or Push action. That action's card plays nothing when it only rolls
+the check (`checkBacked`: its text, `@Localize` expanded, carries
+`[[/act grapple]]`, an action link, or an `@Check[athletics]` tagged
+`action:grapple`; a bare Athletics check rolls with no `action:` option and is
+often the target's way out, as in Tangled Forest Trip), so the check plays
+it once with the body part; a roll-free card plays it and uses the body part up. Drawing it on the Strike too grabbed twice when
+it was followed up, and showed a grab that never happened when it was not.
+
+So `read.mjs` remembers, per attacker **token** (`Riders` in `handoff.mjs`),
+the last Strike's rider and its body part (`limbOf`: delivery, motif, item
+slug, rider slug, style) with its target and arrival time. It records this
+only when the degree this viewer sees is a hit or a crit; any later Strike from
+that token replaces it. When a follow-up of the same archetype arrives from that
+token within `TIMING.handoff` (12 s, arrival to arrival: the Strike's dice take
+up to `diceWait`, which leaves the GM as long again), and it is aimed at the same
+creature or at nobody, `finish()` puts the body part on its spec as `limb` and
+the entry is used up. `grab` closes as coils after a tongue, tail or tentacle.
+The memory only restyles a spec that already plays, and never makes one play.
+It holds 64 entries and is cleared on unwire.
+
+### Passives
+
+Nothing posts a passive's card, so each plays on the PF2e event that shows it
+happening (`passives.mjs` cites the system source for each):
+
+- **Frightful Presence** (any `fear` aura): its Will saves carry the passive as
+  `flags.pf2e.origin`. A save with no cast to join goes to `onPassiveRoll`,
+  the saves of one passive are joined like a cast's, per source token
+  (`passiveJoinKey`: two tokens of one linked actor share the item's uuid), and
+  `fear` plays from that token onto everyone who saved against it.
+- **Other auras**: a save card (Stench) or a damage card (Dragon Heat) from the
+  passive pulses `HARM.aura` round the creature. On `combatTurnChange`, which
+  reaches every client, a creature with a visible aura (`turnPulse`: the
+  damaging one first) breathes it out once per round.
+- **Regeneration / Fast Healing**: the rule element's turn-start healing card,
+  or the healing applied on that creature's own turn, plays one small `rise`.
+
+Cards go through `canRead` like any other. The turn pulse has no message, so it
+takes the status cards' rule (`observable`: a player-owned creature always,
+anything else only while its token is not hidden) and PF2e's own aura rule
+(`auraShown`: a viewer who sees the truth, or a creature of the party
+alliance), then `bodyOf`'s sight. Every regen and turn pulse is keyed
+`pas:<kind>:<tokenId>:<round>` in a bounded `Seen`, so a viewer who saw both
+the card and the heal sees one rise.
 
 Condition loops are keyed `cond:<tokenId>:<slug>` (never the actor id, which
 unlinked tokens share), start on `createItem` and stop on `deleteItem`.
@@ -130,6 +191,19 @@ cinches, and a flat green cross pops up (`CRAFTS.medicine` in `forms.mjs`,
 `linen` and `salve` ramps). The green cross is the one healing sign shared with
 magical healing; the cloth is what says nobody cast anything.
 
+**Size.** A Strike is drawn at the attacker's size (`bulkOf` in `strikes.mjs`):
+√size of its footprint, so a Huge creature's bite is √3 the reach and
+thickness of a Medium one, with a quarter-power nod to a bigger target so a
+dagger still reads on a dragon.
+
+**Blooms.** `HARM.bloom` (`deliveries.mjs`) opens on the target from inside
+out. A family may draw its own with an optional `bloom(s, M, B)` hook: psyche
+spikes, umbra's void pulse, shock's crackle. `bloomCtx` hands it one creature,
+its beats (`B.at`, `B.b`) and a radius already scaled by rank, outcome and
+size. The hook draws only the look; the hit, the motif, the marks, the crit's
+beats and the linger stay with the delivery. A family without one gets the
+shared bloom.
+
 ## Hosts
 
 **2D.** Ground effects sit in `canvas.primary` just under the tokens;
@@ -154,6 +228,44 @@ height while it crosses terrain; the decal does not follow slopes.
 `tokenLight`, `lightBands`, `debris`, `shake`, then `concurrency` (halves
 `fx.maxConcurrent`). Pixel size is never shed. While anything plays the
 Director holds `Budget.claimMotion`.
+
+## Archetypes
+
+An archetype is one animation reused by every document that means the same
+thing: one grab for every Grab and Improved Grab, one rage for barbarian Rage and
+every NPC berserk, one rise for every healing spell. `archetypes/rules.mjs`
+`pickArch` chooses it from the slug (`BY_SLUG`, first match wins), then the
+traits (`BY_TRAIT`), then the function (`BY_FUNC`), and `depictSpec` puts it
+on the spec as `arch`. The drawers are
+`archetypes/{mind,body,self,shift,ward,veil}.mjs`, called exactly like a `FORMS`
+entry, and they take the creature sizes, the material ramp, the outcome and the
+rank as their parameters, so one drawing serves a goblin's Grab and a dragon's.
+Variants read the spec: `slug` and `traits` (a swarm polymorph, an undead
+summon), `cast` (a spell that grabs still charges; a maneuver does not),
+`passive` (nobody cast it: no charge) and `limb` (a follow-up's Strike, above).
+`docs/SPELLSPRITE_ARCHETYPES.md` is the catalogue and the build order; the
+coverage report counts what each archetype plays.
+
+- **mind** — hex (the catch-all for any hinder), fear, charm, slow, sleep, blind,
+  vanish.
+- **body** — grab, trip, shove (Trample and Throw Rock by slug), rend, charge,
+  flurry. These are maneuvers: `noCharge` skips the spell charge unless a spell
+  plays one (`spec.cast`), and none of them may read as a second hit, because the
+  Strike beside it plays its own.
+- **self** — rise, drink (the flask, then the potion's own form; a restore
+  potion ends in rise), rage, stance, light, fortune.
+- **shift** — polymorph (mist, swarm and shadow forms), teleport, haste, fly
+  (levitate gentler).
+- **ward** — ward, in four forms by slug: dome (protective wards), disc (the
+  Shield cantrip), block (Shield Block, parry, dodge) and counter (counterspell);
+  dispel; detect.
+- **veil** — conceal (darkness, mist, blur, mirror, figment), drain (feed, or
+  an affliction's seep), summon.
+
+A name never moves a document across functions: `fits` gates each archetype,
+so See the Unseen is a detect, not a vanish. A silent action is lifted only by an
+archetype marked `rescue`, and a damaging ability takes only a body archetype and
+only in place of a generic delivery.
 
 ## Looks
 
@@ -185,7 +297,12 @@ Zero problems required. Regenerate coverage after any change to
 - `node tools/diorama-preview.mjs` with `?fx=burst|strike|cone|condition`.
 
 Headless Chrome delivers almost no animation frames under a virtual-time
-budget, so judge stills with `seek`, never by waiting.
+budget, so judge stills with `seek`, never by waiting. `fx.html` takes `arch`
+and `slug` to play an archetype, and `layers=flat,stand,light` to find which
+layer a wash comes from.
+
+The size, density and timing bar lives in the `spellsprite-craft` skill, which
+benchmarks against the pixelfx reference (`node tools/fx-reference.mjs`).
 
 ## Fails silently
 
@@ -202,8 +319,30 @@ budget, so judge stills with `seek`, never by waiting.
   Spellsprite's own functions, which Spellglass's classifier never returns,
   so `pickFunc` reads their traits and slugs before it asks the classifier.
   Check the function table in the coverage report after adding one.
+- An archetype left as a placeholder plays its function's old form for
+  thousands of documents. fx-check refuses one.
+- `spec.slug` is how an archetype picks a variant (charm's heart, Trample, Throw
+  Rock). `finish()` in `read.mjs` must keep copying it; without it every variant
+  works in the preview and never in play.
+- A release flash sized by the area whites out the whole footprint for two
+  frames, and every eruption under it. `releaseFlash` caps the white core in
+  squares; the area's own lights stay below a wash for the same reason.
 - Persistent bleed arrives as slug `persistent-damage` with
   `damageType: "bleed"`; the bleed ramp is chosen on either.
+- A Strike that draws its rider again grabs twice when the GM follows up, and
+  grabs nobody when they do not. fx-check refuses a rider beat in `compile.mjs`.
+- The rider memory keyed by actor id hands one goblin's tongue to its twin.
+  A follow-up after `TIMING.handoff`, or one aimed at someone else, draws the
+  plain hand with nothing reported. fx-check pins the key, the window and the
+  bound.
+- `spec.cast` and `spec.passive` decide the charge. Dropped by `finish()`, a
+  grabbing spell loses its charge and Regeneration gains one.
+- A turn pulse without `observable` and `auraShown` draws an enemy's hidden
+  aura on every player's screen. fx-check pins both gates in `onTurnChange`.
+- The regen key is shared by the healing card and the applied heal. Split it
+  and a GM, who sees both, watches every regeneration twice.
+- A family `bloom` hook that draws the hit too flinches the target twice; the
+  delivery owns the hit.
 
 ## Needs a live session
 

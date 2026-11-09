@@ -12,7 +12,11 @@
  *   motif                 the motif's hooks or null (impact is called on contact)
  *
  * The delivery shapes it (a chop is a falling wedge, jaws are fangs closing),
- * `M` colours it (its ramp, its release), the props size and time it.
+ * `M` colours it (its ramp, its release: a fire elemental's slam burns, an
+ * acid bite fumes), the attacker's size scales it (`bulkOf`: a Huge
+ * creature's bite is a huge bite), the props size and time it. A rider
+ * (Grab, Knockdown, Push, Rend) is never drawn here: PF2e's follow-up plays it,
+ * drawn with this Strike's body part (handoff.mjs).
  *
  * The three outcomes have to read apart at a glance, on a token 26 px wide:
  *   hit    one stroke on the body, one release, a flinch
@@ -32,11 +36,47 @@
 import { TAU, clamp, hash, fadeOut } from "./core/rand.mjs";
 import { RAMP, S, WHITE } from "./core/palette.mjs";
 import { lobes, out, releaseFlash, still, splat } from "./core/motifs.mjs";
-import { registerShapes, snapH, GLYPHS } from "./core/shapes.mjs";
+import { registerShapes, snapH, GLYPHS, DRAW } from "./core/shapes.mjs";
 import physical from "./families/physical.mjs";
 
 const DUST = { id: "kinetic", material: "kinetic", family: "physical", mod: physical, R: RAMP.kinetic, dark: false };
 const norm = (x, y) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
+/** Art pixels per square (constants.mjs ART_PER_SQUARE). */
+const AP = 26;
+/**
+ * Presence (spellsprite-craft §1): every weapon shape is drawn this much
+ * bigger than its one-square sprite, so a blow reads from across the table.
+ * Strikes size their shapes from `sc`, which carries it.
+ */
+const BIG = 1.8;
+/**
+ * Which kind a spray's i-th spark is. Every spark and streak carries its own
+ * floor light (core/frame.mjs SHAPE_GLOW), and a spray is born on one point,
+ * so thirty of them stack into one white blot that buries the hit. One in
+ * three glows; the rest draw the same streak as `stSpark` / `stStreak`.
+ */
+const SPK = (i) => (i % 3 === 0 ? "spark" : "stSpark");
+const STK = (i) => (i % 3 === 0 ? "streak" : "stStreak");
+/** A random unit direction on the floor within `spread` radians of angle `q`. */
+const fan = (s, q, spread) => { const a = q + s.rand(-spread, spread); return [Math.cos(a), Math.sin(a)]; };
+
+/**
+ * How big a blow is drawn (catalogue §4 row 9): the ATTACKER's size, so a
+ * Huge creature's bite is a huge bite (√3 the reach and thickness of a
+ * Medium one), with a quarter-power nod to a bigger target so a dagger still
+ * reads on a dragon. Footprints in squares; a Medium-on-Medium blow is 1.
+ */
+export const bulkOf = (caster, T) => {
+  const cs = Math.max(0.5, caster?.size ?? 1), ts = Math.max(0.5, T?.size ?? 1);
+  return Math.sqrt(cs) * Math.max(1, ts / cs) ** 0.25;
+};
+
+/**
+ * When a Strike's last blow on any creature it hit has landed (a crit's
+ * second impact included), or null when it hit nothing: anything that must
+ * follow the blow rather than land on top of it starts after this.
+ */
+export const contactOf = (s) => s.strikeContact ?? null;
 
 /**
  * Where a blow is aimed: on the body, or for a miss over the shoulder and on
@@ -52,7 +92,7 @@ function aimOf(ctx, T) {
   if (py < 0 || (py === 0 && px < 0)) { px = -px; py = -py; }
   const miss = ctx.outcome(T) === "miss", sz = Math.sqrt(T.size ?? 1), side = 0.22 * sz, past = 0.5 * sz;
   return {
-    from, ux, uy, px, py, miss,
+    from, ux, uy, px, py, miss, B: bulkOf(ctx.caster, T),
     x: miss ? T.x + px * side + ux * past : T.x, y: miss ? T.y + py * side + uy * past : T.y,
     z: (k) => (miss ? 1.15 : k) * T.h,
   };
@@ -61,27 +101,56 @@ function aimOf(ctx, T) {
 /** A hitstop: the whole effect holds still for `t` seconds (the sim skips its steps). */
 function hitstop(s, t) { s.freeze = Math.max(s.freeze, t); s.impact = Math.max(s.impact, t); }
 
-/** Speed lines that carry a whiff on past the target. */
+/** Speed lines that carry a whiff on past the target: a sheaf of them, long and fast, so the miss reads as speed. */
 function whoosh(s, M, A, T, at) {
   s.at(at, (s2) => {
-    for (let k = 0; k < 4; k++) {
-      const o = (k - 1.5) * 0.11, sp = s2.rand(7, 9);
-      s2.add({ k: "streak", x: A.x - A.ux * 0.9 + A.px * o, y: A.y - A.uy * 0.9 + A.py * o, z: (1.0 + k * 0.08) * T.h, vx: A.ux * sp, vy: A.uy * sp, vz: 0, life: 0.14 + k * 0.02, R: M.R, minor: k > 1, wait: k * 0.015 });
+    for (let k = 0; k < 7; k++) {
+      const o = (k - 3) * 0.12, sp = s2.rand(10, 14);
+      s2.add({ k: "streak", x: A.x - A.ux * 1.1 + A.px * o, y: A.y - A.uy * 1.1 + A.py * o, z: (0.85 + k * 0.07) * T.h, vx: A.ux * sp, vy: A.uy * sp, vz: 0, life: 0.18 + (k % 3) * 0.03, R: M.R, minor: k % 2 === 1, wait: Math.abs(k - 3) * 0.012 });
     }
   });
 }
 
-/** The crit's second impact: a star, a fan of speed lines thrown out along the blow, a ring. `k` grows it (deadly, fatal). */
+/**
+ * The crit's second impact (pixelfx crit-hit): a jagged starburst slams in
+ * white and overshoots, a flare along the blow, a ring that breaks into arcs,
+ * a spray of sparks mostly on along the blow (a few kicked back), shards that
+ * tumble and settle, embers drifting off, twinkles round the ring and a big
+ * lamp. `k` grows it (deadly, fatal).
+ */
 function critImpact(s, M, A, T, k = 1) {
-  const z = 0.6 * T.h, x = T.x - 0.05, y = T.y, base = Math.atan2(A.uy, A.ux);
-  s.add({ k: "star", x, y, z, L: 9 * k * Math.min(1.4, s.m) * Math.sqrt(T.size ?? 1), life: 3 / 12, R: M.R, update: still });
-  const n = 7 + Math.round((k - 1) * 8);
+  // a big attacker crits big (bulkOf): the star, the sparks and the rings grow with the blow, not only with the body
+  const sz = A.B ?? Math.sqrt(T.size ?? 1), rs = Math.max(T.size ?? 1, A.B ?? 0), K = k * clamp(s.m, 0.9, 1.25) * sz, z = 0.6 * T.h, x = T.x - 0.05, y = T.y, base = Math.atan2(A.uy, A.ux);
+  // ~1.4× the hit's flare (34 px), the burst's spikes 11-15 px as the reference's
+  s.add({ k: "stBurst", x, y, z, ux: A.ux, uy: A.uy, L: 11 * K, n: 14, life: 5 / 12, R: M.R, seed: s.R(), update: still });
+  s.add({ k: "stFlare", x, y, z, ux: A.ux, uy: A.uy, L: 44 * K, life: 4 / 12, R: M.R, seed: s.R(), update: still });
+  s.light(x, y, z, 2.6 * k * sz, S(M.R, 0.9), 0.4, 0.5);
+  const n = Math.round(30 * k);
   for (let i = 0; i < n; i++) {
-    const q = base + (i - (n - 1) / 2) * (2.1 / (n - 1)) + s.rand(-0.06, 0.06), sp = s.rand(8, 11) * k;
-    s.add({ k: "streak", x, y, z, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s.rand(-1.5, 2.5), life: s.rand(0.14, 0.2), R: M.R, minor: i % 2 === 1 });
+    const back = i % 5 === 4, [cx, cy] = fan(s, back ? base + Math.PI : base, back ? 0.6 : 0.8), sp = s.rand(6.5, 16.5) * (back ? 0.6 : 1);
+    s.add({ k: SPK(i), x, y, z, vx: cx * sp, vy: cy * sp, vz: s.rand(0.5, 3.5), g: 30, drag: 2.2, bounce: 0.4, life: s.rand(0.18, 0.5), R: M.R, minor: i % 2 === 1, wait: i % 7 === 3 ? s.rand(0, 0.04) : 0 });
   }
-  s.add({ k: "ring", x: T.x, y: T.y, r: 0.75 * k * (T.size ?? 1), life: 0.4, R: M.R, broken: true, seed: 5, update: still });
-  if (k > 1.3) s.add({ k: "ring", x: T.x, y: T.y, r: 1.15 * k * (T.size ?? 1), life: 0.5, R: M.R, broken: true, seed: 9, wait: 1 / 12, update: still });
+  // the old fan of speed lines along the blow: what says "critical" at a glance from above
+  const m = 7 + Math.round((k - 1) * 8);
+  for (let i = 0; i < m; i++) {
+    const q = base + (i - (m - 1) / 2) * (2.1 / (m - 1)) + s.rand(-0.06, 0.06), sp = s.rand(11, 15) * k;
+    s.add({ k: STK(i), x, y, z, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s.rand(-1.5, 2.5), life: s.rand(0.16, 0.24), R: M.R, minor: i % 2 === 1 });
+  }
+  for (let i = 0; i < Math.round(10 * k); i++) {
+    const [cx, cy] = fan(s, base - 0.35, 1.1), sp = s.rand(4, 10.5);
+    s.add({ k: "shard", x, y, z, vx: cx * sp, vy: cy * sp, vz: s.rand(1.5, 4), g: 30, drag: 0.9, bounce: 0.35, life: s.rand(0.9, 1.5), R: M.R, seed: s.R(), debris: true, minor: i > 4 });
+  }
+  for (let i = 0; i < 12; i++) {
+    const [cx, cy] = fan(s, s.rand(0, TAU), 0), sp = s.rand(1.3, 4.2);
+    s.add({ k: "ember", x: x + cx * 0.15, y: y + cy * 0.15, z, vx: cx * sp, vy: cy * sp, vz: s.rand(1, 3), g: -0.4, drag: 2.4, life: s.rand(0.4, 0.8), R: M.R, seed: s.R(), wait: s.rand(0, 0.05), minor: true });
+  }
+  for (let i = 0; i < 5; i++) {
+    const q = s.rand(0, TAU), d = s.rand(0.55, 1.3) * K;
+    s.add({ k: "glint", x: x + Math.cos(q) * d, y: y + Math.sin(q) * d * 0.8, z: z + s.rand(-0.2, 0.4), life: 5 / 12, R: M.R, big: i < 2, wait: s.rand(0.08, 0.32), minor: true, update: still });
+  }
+  s.add({ k: "ring", x: T.x, y: T.y, r: 1.55 * k * rs, life: 0.45, R: M.R, broken: true, seed: 5, update: still });
+  s.add({ k: "ring", x: T.x, y: T.y, r: 0.9 * k * rs, life: 0.3, R: M.R, seed: 7, update: still });
+  if (k > 1.3) s.add({ k: "ring", x: T.x, y: T.y, r: 2.1 * k * rs, life: 0.55, R: M.R, broken: true, seed: 9, wait: 1 / 12, update: still });
 }
 
 const hasProp = (spec, k) => { const p = spec?.props; return Array.isArray(p) ? p.includes(k) : !!p?.has?.(k); };
@@ -114,52 +183,83 @@ function feelOf(s) {
  * through the body splits outward, grit and chips are thrown along the blow.
  * A nonlethal blow keeps the hold and the grit and loses the cut.
  */
-function heavyContact(s, A, T, W, soft = false) {
-  s.freeze = Math.max(s.freeze, W > 1.5 ? 2 / 12 : 1 / 12);
-  s.shake = Math.max(s.shake, 0.6 + W);
-  const base = Math.atan2(A.uy, A.ux);
+function heavyContact(s, M, A, T, W, soft = false) {
+  // pixelfx heavy-cleave / hammer-smash: the frame holds 0.1-0.2 s, a lamp swells over the body,
+  // grit and chips are thrown hard along the blow, dust rolls out, embers rise
+  s.freeze = Math.max(s.freeze, W > 1.5 ? 2.5 / 12 : 1.5 / 12);
+  s.shake = Math.max(s.shake, 0.8 + W);
+  const base = Math.atan2(A.uy, A.ux), sz = A.B ?? Math.sqrt(T.size ?? 1);
+  s.light(T.x, T.y, 0.4 * T.h, 2.5 * W * sz, S(M.R, 0.85), 0.5, 0.8);
   // the cut runs across the blow, leaning with it: a diagonal through the body
   const q = base + Math.PI / 2 - 0.55;
-  if (!soft) s.add({ k: "cut", x: T.x, y: T.y, z: 0.62 * T.h, ux: Math.cos(q), uy: Math.sin(q), len: (1.1 + 0.9 * (W - 1)) * Math.sqrt(T.size ?? 1), life: 6 / 12, R: RAMP.kinetic, wait: 1 / 12, update: still });
-  for (let i = 0; i < Math.round(4 + 6 * (W - 1)); i++) {
-    const a = base + s.rand(-0.7, 0.7), sp = s.rand(2.5, 5);
-    s.add({ k: "chunk", x: T.x + A.ux * 0.15, y: T.y + A.uy * 0.15, z: 0.4 * T.h, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: s.rand(1.5, 3.5), g: 9, drag: 0.8, bounce: 0.35, life: s.rand(1.6, 2.6), R: RAMP.kinetic, s: 2, wide: s.R() < 0.3, debris: true });
+  if (!soft) s.add({ k: "cut", x: T.x, y: T.y, z: 0.62 * T.h, ux: Math.cos(q), uy: Math.sin(q), len: (1.7 + 1.3 * (W - 1)) * sz, life: 6 / 12, R: RAMP.kinetic, wait: 1 / 12, update: still });
+  for (let i = 0; i < Math.round(8 + 12 * (W - 1)); i++) {
+    const [cx, cy] = fan(s, base, 0.8), sp = s.rand(3.5, 8);
+    s.add({ k: "chunk", x: T.x + A.ux * 0.15, y: T.y + A.uy * 0.15, z: 0.4 * T.h, vx: cx * sp, vy: cy * sp, vz: s.rand(2, 4.5), g: 30, drag: 1, bounce: 0.35, life: s.rand(1.4, 2.4), R: RAMP.kinetic, s: i % 3 ? 1 : 2, wide: s.R() < 0.3, debris: true, minor: i > 5 });
   }
-  s.add({ k: "ring", x: T.x, y: T.y, r: 0.6 * (T.size ?? 1) * W, life: 0.45, R: RAMP.kinetic, broken: true, seed: 17, update: still });
-  for (let i = 0; i < 3; i++) s.add({ k: "smoke", x: T.x + A.ux * 0.3 + s.rand(-0.25, 0.25), y: T.y + A.uy * 0.3 + s.rand(-0.2, 0.2), z: 0.1, vx: A.ux * s.rand(0.6, 1.2), vy: A.uy * s.rand(0.6, 1.2), vz: 0.2, g: -0.05, drag: 1.8, r: s.rand(2.5, 4), life: s.rand(0.7, 1.1), lobes: lobes(s), tone: 0.5, minor: i > 0 });
+  for (let i = 0; i < Math.round(10 * W); i++) {
+    const [cx, cy] = fan(s, base, 1.1), sp = s.rand(5, 11);
+    s.add({ k: SPK(i), x: T.x, y: T.y, z: 0.45 * T.h, vx: cx * sp, vy: cy * sp, vz: s.rand(0.5, 3), g: 30, drag: 2, bounce: 0.35, life: s.rand(0.25, 0.5), R: M.R, minor: i % 2 === 1 });
+  }
+  for (let i = 0; i < 8; i++) s.add({ k: "ember", x: T.x + s.rand(-0.3, 0.3), y: T.y + s.rand(-0.2, 0.2), z: 0.2, vx: s.rand(-1.5, 1.5), vy: s.rand(-0.8, 0.8), vz: s.rand(1.2, 3.5), g: -0.3, drag: 2, life: s.rand(0.6, 1.2), R: M.R, seed: s.R(), minor: true });
+  s.add({ k: "ring", x: T.x, y: T.y, r: 0.95 * (T.size ?? 1) * W, life: 0.5, R: RAMP.kinetic, broken: true, seed: 17, update: still });
+  s.add({ k: "ring", x: T.x, y: T.y, r: 1.5 * (T.size ?? 1) * W, life: 0.65, R: RAMP.kinetic, broken: true, seed: 23, wait: 1 / 12, minor: true, update: still });
+  for (let i = 0; i < 4; i++) s.add({ k: "smoke", x: T.x + A.ux * 0.3 + s.rand(-0.3, 0.3), y: T.y + A.uy * 0.3 + s.rand(-0.25, 0.25), z: 0.1, vx: A.ux * s.rand(0.8, 1.6), vy: A.uy * s.rand(0.8, 1.6), vz: 0.25, g: -0.05, drag: 1.8, r: s.rand(3.5, 5.5), life: s.rand(0.8, 1.2), lobes: lobes(s), tone: 0.5, minor: i > 1 });
+  dustRing(s, T.x, T.y, 6, 0.5 * sz);
 }
 
 /** Weight's wind-up: the caster plants (a scuff of dust at the feet) and the weapon draws back. */
 function windUp(s, M, caster, A, T, at, W) {
   if (!caster || W <= 1) return;
   s.at(Math.max(0, at - 0.24), (s2) => {
-    for (let i = 0; i < 2; i++) s2.add({ k: "smoke", x: caster.x - A.ux * 0.25 + s2.rand(-0.15, 0.15), y: caster.y - A.uy * 0.25 + 0.2, z: 0.05, vx: -A.ux * 0.6, vy: -A.uy * 0.6, vz: 0.15, drag: 2, r: s2.rand(1.6, 2.4), life: 0.55, lobes: lobes(s2), tone: 0.5, minor: i > 0 });
-    // the backswing: a thin dim arc on the far side, drawn the other way
+    for (let i = 0; i < 3; i++) s2.add({ k: "smoke", x: caster.x - A.ux * 0.25 + s2.rand(-0.2, 0.2), y: caster.y - A.uy * 0.25 + 0.2, z: 0.05, vx: -A.ux * 0.9, vy: -A.uy * 0.9, vz: 0.15, drag: 2, r: s2.rand(2.2, 3.2), life: 0.6, lobes: lobes(s2), tone: 0.5, minor: i > 0 });
+    // the backswing: a dim arc on the far side, drawn the other way, and a glint where the weapon tops out
     const [bx, by] = across(A, T, 180);
-    s2.add({ k: "crescent", x: caster.x - A.ux * 0.1, y: caster.y - A.uy * 0.1, z: 1.1 * caster.h, from: [bx, by, 1.2], life: 3 / 12, R: M.R, flip: -1, span: 1.4, R2: 8 * W, T: 1.5, dim: true, update: still });
+    s2.add({ k: "crescent", x: caster.x - A.ux * 0.1, y: caster.y - A.uy * 0.1, z: 1.1 * caster.h, from: [bx, by, 1.2], life: 3 / 12, R: M.R, flip: -1, span: 1.6, R2: 18 * W, T: 3, dim: true, update: still });
+    s2.add({ k: "glint", x: caster.x - A.ux * 0.55, y: caster.y - A.uy * 0.55, z: 1.5 * caster.h, life: 5 / 12, R: M.R, big: true, wait: 0.1, update: still });
+    s2.light(caster.x - A.ux * 0.4, caster.y - A.uy * 0.4, 1.4 * caster.h, 1, S(M.R, 0.9), 0.35, 0.3, { swell: true });
   });
 }
 
 /**
- * A contact's release. An element releases its family's burst; plain steel and
- * bone get a Strike-sized kinetic pop instead (a flash, a star, sparks and a
- * pinch of grit), because the physical family's smoke puffs bury the shape
- * that says what the blow was under a grey cloud.
+ * A contact's release (pixelfx hit-spark): a lopsided cross flare with its
+ * long ray on along the blow, a lamp ahead of it, and for plain steel and
+ * bone a Strike-sized kinetic pop (a flash, a cone of sparks thrown hard on
+ * along the blow and hot chips that tick off the floor), because the physical
+ * family's smoke puffs bury the shape that says what the blow was under a
+ * grey cloud. An element releases its family's burst under the same flare.
  */
-function contactRelease(s, ctx, M, x, y, z, pow, rad) {
-  if (M.family !== "physical") { ctx.release(s, M, x, y, z, pow, rad); return; }
-  releaseFlash(s, M, x, y, z, pow, rad, { light: 0.45, flash: 0.6 });
-  const mm = Math.min(1.6, s.m * pow);
-  s.add({ k: "star", x, y, z, L: 4 * mm, life: 3 / 12, R: M.R, update: still });
-  for (let i = 0; i < Math.round(7 * mm); i++) s.add({ k: "spark", x, y, z, ...out(s, s.rand(3, 6.5)), g: 9, drag: 1.3, bounce: 0.4, life: s.rand(0.25, 0.5), R: M.R, minor: i % 2 === 1 });
-  for (let i = 0; i < 2; i++) s.add({ k: "chunk", x, y, z, ...out(s, s.rand(1.5, 3)), g: 9, drag: 0.8, bounce: 0.35, life: s.rand(1.2, 1.8), R: M.R, s: 1, debris: true });
-  if (pow > 1.2) s.add({ k: "smoke", x, y: y + 0.05, z: z * 0.5, vx: s.rand(-0.5, 0.5), vz: 0.3, drag: 2.5, g: -0.05, r: 2.5, life: 0.7, lobes: lobes(s), R: M.R, tone: 0.4, minor: true });
+function contactRelease(s, ctx, M, A, x, y, z, pow, rad) {
+  // a big attacker's contact is drawn at its size (bulkOf): a longer flare, a wider pop, faster sparks
+  const B = A.B ?? 1, mm = clamp(s.m * pow, 0.9, 1.6), base = Math.atan2(A.uy, A.ux), sv = Math.sqrt(B);
+  // the release grows by the root: an element's crit already erupts, and at full bulk a Large fire slam buried the body
+  rad *= sv;
+  s.add({ k: "stFlare", x, y, z, ux: A.ux, uy: A.uy, L: 34 * mm * B, life: 4 / 12, R: M.R, seed: s.R(), update: still });
+  s.light(x + A.ux * 0.4, y + A.uy * 0.4, z, B, S(M.R, 1), 0.5 * mm, 0.14);
+  const sparks = (n, lo, hi, R) => {
+    for (let i = 0; i < n; i++) {
+      const back = i % 6 === 5, [cx, cy] = fan(s, back ? base + Math.PI : base - 0.1, back ? 0.5 : 0.6), sp = s.rand(lo, hi) * (back ? 0.5 : 1) * sv;
+      s.add({ k: SPK(i), x, y, z, vx: cx * sp, vy: cy * sp, vz: s.rand(0.5, 3), g: 30, drag: 2.2, bounce: 0.4, life: s.rand(0.25, 0.45), R, minor: i % 2 === 1, wait: i > 7 ? s.rand(0.01, 0.03) : 0 });
+    }
+  };
+  if (B > 1.3) s.shake = Math.max(s.shake, 0.6 + B);
+  if (M.family !== "physical") { ctx.release(s, M, x, y, z, pow, rad); sparks(Math.round(5 * mm * sv), 6, 12, M.R); return; }
+  releaseFlash(s, M, x, y, z, pow, rad, { light: 0.55, flash: 0.6 });
+  sparks(Math.round(11 * mm), 6.5, 14, M.R);
+  for (let i = 0; i < Math.round(6 * mm); i++) {
+    const [cx, cy] = fan(s, base - 0.3, 0.8), sp = s.rand(2.7, 6.5);
+    s.add({ k: "chunk", x, y, z, vx: cx * sp, vy: cy * sp, vz: s.rand(1.2, 3), g: 30, drag: 1, bounce: 0.35, life: s.rand(0.6, 1.2), R: M.R, s: 1, debris: true, minor: i > 2 });
+  }
+  if (pow > 1.2) for (let i = 0; i < 2; i++) s.add({ k: "smoke", x: x + A.ux * 0.2, y: y + 0.05, z: z * 0.5, vx: A.ux * s.rand(0.4, 1) + s.rand(-0.4, 0.4), vz: 0.3, drag: 2.5, g: -0.05, r: s.rand(3, 4), life: 0.8, lobes: lobes(s), R: M.R, tone: 0.4, minor: true });
 }
 
-/** A miss's scuff: a puff of dust and a few grains where the blow runs out. */
-function scuff(s, x, y, W) {
-  for (let i = 0; i < 2; i++) s.add({ k: "smoke", x: x + s.rand(-0.12, 0.12), y: y + s.rand(-0.08, 0.08), z: 0.05, vx: s.rand(-0.6, 0.6), vy: s.rand(-0.3, 0.3), vz: 0.2, drag: 2.5, r: s.rand(1.8, 2.6) * Math.sqrt(W), life: s.rand(0.5, 0.75), lobes: lobes(s), tone: 0.45, minor: i > 0 });
-  for (let i = 0; i < 3; i++) s.add({ k: "spark", x, y, z: 0.05, ...out(s, s.rand(1.5, 3)), g: 9, drag: 1.5, life: s.rand(0.2, 0.35), R: RAMP.kinetic, minor: true });
+/** A miss's scuff: dust kicked up where the blow runs out, grit skittering on along it. */
+function scuff(s, A, x, y, W) {
+  for (let i = 0; i < 3; i++) s.add({ k: "smoke", x: x + s.rand(-0.15, 0.15), y: y + s.rand(-0.1, 0.1), z: 0.05, vx: A.ux * s.rand(0.4, 1.2) + s.rand(-0.4, 0.4), vy: A.uy * s.rand(0.4, 1.2) + s.rand(-0.3, 0.3), vz: 0.2, drag: 2.5, r: s.rand(2.6, 3.6) * Math.sqrt(W), life: s.rand(0.6, 0.9), lobes: lobes(s), tone: 0.45, minor: i > 0 });
+  for (let i = 0; i < 6; i++) {
+    const [cx, cy] = fan(s, Math.atan2(A.uy, A.ux), 0.9), sp = s.rand(2, 4.5);
+    s.add({ k: "chunk", x, y, z: 0.05, vx: cx * sp, vy: cy * sp, vz: s.rand(0.8, 2), g: 30, drag: 1.5, bounce: 0.3, life: s.rand(0.4, 0.7), R: RAMP.kinetic, s: 1, minor: i > 2 });
+  }
 }
 
 /** What a wound bleeds, or null: a cut on plain flesh, never a nonlethal one or an element's. */
@@ -170,7 +270,7 @@ function propsOnHit(s, M, A, T, F, o, zk) {
   const z = zk * T.h;
   if (F.forceful) {
     // knocked back: speed lines past the body and a skid of dust at its feet
-    for (let k = 0; k < 3; k++) s.add({ k: "streak", x: T.x + A.ux * 0.2 + A.px * (k - 1) * 0.16, y: T.y + A.uy * 0.2 + A.py * (k - 1) * 0.16, z: z + (k - 1) * 0.12, vx: A.ux * 9, vy: A.uy * 9, life: 0.16, R: M.R, wait: k * 0.02 });
+    for (let k = 0; k < 5; k++) s.add({ k: "streak", x: T.x + A.ux * 0.2 + A.px * (k - 2) * 0.16, y: T.y + A.uy * 0.2 + A.py * (k - 2) * 0.16, z: z + (k - 2) * 0.1, vx: A.ux * 12, vy: A.uy * 12, life: 0.2, R: M.R, wait: Math.abs(k - 2) * 0.02, minor: k % 2 === 1 });
     for (let k = 0; k < 2; k++) s.add({ k: "smoke", x: T.x + A.ux * 0.35, y: T.y + A.uy * 0.35 + 0.12, z: 0.05, vx: A.ux * 1.6, vy: A.uy * 1.6, vz: 0.1, drag: 3, r: s.rand(2, 3), life: 0.6, lobes: lobes(s), tone: 0.5, minor: k > 0 });
   }
   if (F.soft) {
@@ -179,9 +279,9 @@ function propsOnHit(s, M, A, T, F, o, zk) {
   }
   const B = bleedOf(M, F);
   if (o.blood && B) {
-    for (let k = 0; k < 5; k++) {
-      const q = Math.atan2(A.uy, A.ux) + s.rand(-0.9, 0.9), sp = s.rand(2, 4.5);
-      s.add({ k: "spark", x: T.x, y: T.y, z, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s.rand(0.5, 2.5), g: 9, drag: 1.2, life: s.rand(0.25, 0.45), R: B, minor: k > 2 });
+    for (let k = 0; k < 9; k++) {
+      const q = Math.atan2(A.uy, A.ux) + s.rand(-0.9, 0.9), sp = s.rand(3.5, 7.5);
+      s.add({ k: "spark", x: T.x, y: T.y, z, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s.rand(0.5, 3), g: 30, drag: 1.5, life: s.rand(0.3, 0.5), R: B, minor: k > 3 });
     }
   }
   if (F.persistent) {
@@ -210,29 +310,33 @@ function land(s, M, ctx, T, at, stroke, o = {}) {
   const out = ctx.outcome(T), A = aimOf(ctx, T), F = feelOf(s), W = F.W, c = at + (o.contact ?? 0.06), zk = o.zk ?? 0.6;
   if (out === "miss") {
     whoosh(s, M, A, T, c - 0.03);
-    s.at(c + 0.04, (s2) => { scuff(s2, A.x + A.ux * 0.3, A.y + A.uy * 0.3, W); o.whiff?.(s2, A, T); });
+    s.at(c + 0.04, (s2) => { scuff(s2, A, A.x + A.ux * 0.3, A.y + A.uy * 0.3, W); o.whiff?.(s2, A, T); });
     s.phases.push("whiff");
     return;
   }
   s.at(c, (s2) => {
     // a crit's first contact is hit-sized: the hitstop marks it, and a bigger cloud would bury the second stroke
-    contactRelease(s2, ctx, M, T.x - 0.1, T.y, zk * T.h, (o.pow ?? 0.75) * Math.min(1.3, W), o.rad ?? 0.32);
+    contactRelease(s2, ctx, M, A, T.x - 0.1, T.y, zk * T.h, (o.pow ?? 0.75) * Math.min(1.3, W), o.rad ?? 0.32);
     s2.hit(T.id, Math.min(1.5, W) * (o.knock ?? 1) * (F.forceful ? 1.4 : 1), A.from, M.R);
-    if (W > 1) heavyContact(s2, A, T, W, F.soft);
+    if (W > 1) heavyContact(s2, M, A, T, W, F.soft);
     if (out === "crit") hitstop(s2, 1 / 12);
     o.onHit?.(s2, A, T, out);
     propsOnHit(s2, M, A, T, F, o, zk);
     ctx.motif?.impact?.(s2, M, { x: T.x, y: T.y, z: zk * T.h, pow: out === "crit" ? 1.6 : 1, rad: 0.35, at: s2.t });
   });
-  for (const d of o.again ?? []) s.at(c + d, (s2) => { contactRelease(s2, ctx, M, T.x - 0.1, T.y, zk * T.h, 0.5, 0.25); s2.hit(T.id, 0.7, A.from, M.R); });
+  for (const d of o.again ?? []) s.at(c + d, (s2) => { contactRelease(s2, ctx, M, A, T.x - 0.1, T.y, zk * T.h, 0.5, 0.25); s2.hit(T.id, 0.7, A.from, M.R); });
   if (W > 1) s.phases.push("held contact", F.soft ? "soft" : "cut", "debris");
+  const tail = (o.again?.length ? Math.max(...o.again) : 0);
   if (out === "crit") {
-    const tail = (o.again?.length ? Math.max(...o.again) : 0);
     s.at(c + tail + 0.14, (s2) => stroke(s2, -1, true));
-    s.at(c + tail + 0.22, (s2) => { contactRelease(s2, ctx, M, T.x - 0.1, T.y, zk * T.h, 1.6, 0.4); critImpact(s2, M, A, T, F.critK); s2.hit(T.id, 1.6 * F.critK, A.from, M.R); o.onHit?.(s2, A, T, "crit2"); });
+    s.at(c + tail + 0.22, (s2) => { contactRelease(s2, ctx, M, A, T.x - 0.1, T.y, zk * T.h, 1.6, 0.4); critImpact(s2, M, A, T, F.critK); s2.hit(T.id, 1.6 * F.critK, A.from, M.R); o.onHit?.(s2, A, T, "crit2"); });
     s.phases.push("hitstop", "second stroke", "impact frames");
   }
-  if (M.id !== "kinetic") ctx.linger(s, M, T.x, T.y, 0.35, c + 0.1, c + 1.25);
+  // the last blow on this body (contactOf); a held frame stretches it
+  const last = c + tail + (out === "crit" ? 0.22 : 0) + (W > 1 ? 0.2 : 0);
+  s.strikeContact = Math.max(s.strikeContact ?? 0, last);
+  // an element's wound lingers: a fire elemental's slam keeps burning, an acid bite keeps fuming
+  if (M.id !== "kinetic") ctx.linger(s, M, T.x, T.y, 0.35 * A.B, c + 0.1, c + 1.25);
 }
 
 function glint(s, M, caster, at = 0.02) {
@@ -275,10 +379,14 @@ function melee(s, M, ctx, def) {
   if (caster && ctx.windUp) ctx.windUp(M, caster, ctx.handOf(caster, ctx.targets[0] ?? null), 0, lead);
   const cf = def.cf ?? 1, contact = cf / 12 + 0.005;
   ctx.targets.forEach((T, i) => {
-    const at = lead + i * 0.2, A = aimOf(ctx, T), sz = Math.sqrt(T.size ?? 1);
-    const stroke = (s2, flip, big) => def.stroke(s2, A, T, { flip, big, sc: sc0 * sz * (big ? 1.4 * F.critK : 1), skip: big ? Math.max(0, cf - 1) : 0, F, W });
+    // every shape is sized by the blow (bulkOf: the attacker's size, a nod to the target's)
+    const at = lead + i * 0.2, A = aimOf(ctx, T), sz = A.B;
+    const stroke = (s2, flip, big) => def.stroke(s2, A, T, { flip, big, sc: sc0 * BIG * sz * (big ? 1.4 * F.critK : 1), skip: big ? Math.max(0, cf - 1) : 0, F, W });
     windUp(s, M, caster, A, T, at, W);
-    s.at(at, (s2) => stroke(s2, 1, false));
+    s.at(at, (s2) => {
+      stroke(s2, 1, false);
+      if (def.lit !== false) s2.light(A.x - A.ux * 0.35, A.y - A.uy * 0.35, A.z(0.6), 1.4, S(M.R, 0.9), 0.5, contact + 0.06, { swell: true });
+    });
     if (F.magical) shimmer(s, M, A, T, at);
     land(s, M, ctx, T, at, stroke, { contact, ...def.land });
   });
@@ -293,17 +401,90 @@ const at3 = (A, T, k) => ({ x: A.x, y: A.y, z: A.z(k), fx: A.from.x, fy: A.from.
 /** The material's tear: kinetic bleeds, an element scars in its own colour. */
 const tearOf = (M, F) => bleedOf(M, F) ?? M.R;
 
+/**
+ * A swing on a tilted plane in the world (squares): a circle round (cx, cy, cz)
+ * with axes e1 (on along the blow) and e2 (across it, tilted up by `tilt`),
+ * swept from th0 through `span` radians in direction `dir`. Both views project
+ * it to an ellipse: from above a wide arc over the floor, on a billboard a
+ * tilted crescent. A hit puts the body in the middle of the band, `at` of the
+ * way along it; a miss keeps the whole band clear past the body.
+ *   k   the scale (sc / BIG)   W   the weight   R0, W0  radius (squares) and head thickness (px) at k = 1
+ */
+function slashArc(A, T, { k = 1, W = 1, reach = 1, sweep = 1, dir = 1, big = false, zk = 0.55, R0 = 1.6, W0 = 12, at = 0.8, tilt = 0.45, span = 2.4 } = {}) {
+  // a miss is a tighter arc centred on the empty air past the body, so its tails never sweep a neighbour
+  if (A.miss) { R0 *= 0.8; span *= 0.6; at = 0.5; }
+  // a big wielder's swing is thicker by its whole bulk, wider only by its root: the arc stays
+  // centred on the wielder instead of wrapping round its own token
+  const R = R0 * (k / Math.sqrt(A.B ?? 1)) * (1 + 0.25 * (W - 1)) * (reach > 1 ? 1.12 : 1);
+  const Wpx = W0 * Math.min(1.6, k) * (1 + 0.4 * (W - 1)), Rw = Wpx / AP;
+  let ux = A.ux, uy = A.uy;
+  // a crit's second stroke comes in across the first
+  if (big) { const c = Math.cos(1.2), n = Math.sin(1.2); [ux, uy] = [ux * c - uy * n, ux * n + uy * c]; }
+  const px = -uy, py = ux, tl = big ? -tilt : tilt;
+  const back = A.miss ? Math.max(0.2, R - Rw - 0.45 * Math.sqrt(T.size ?? 1)) : R - Rw * 0.5, sp = span * sweep;
+  return {
+    cx: T.x - ux * back, cy: T.y - uy * back, cz: A.z(zk), R, W: Wpx, dir, span: sp, th0: -dir * sp * at,
+    e1: [ux * R, uy * R, 0], e2: [px * R * Math.cos(tl), py * R * Math.cos(tl), R * Math.sin(tl)],
+  };
+}
+/** The world point `f` of the way along a swing, at `rr` of its radius. */
+function arcAt(a, f, rr = 1) {
+  const th = a.th0 + a.dir * a.span * f, c = Math.cos(th) * rr, n = Math.sin(th) * rr;
+  return [a.cx + a.e1[0] * c + a.e2[0] * n, a.cy + a.e1[1] * c + a.e2[1] * n, a.cz + a.e1[2] * c + a.e2[2] * n];
+}
+
+/**
+ * Draw a swing: the smear (and a thinner echo inside it a beat behind), light
+ * riding its head frame by frame and along the arc on contact, a glint at the
+ * tip, sparks thrown off the tip along its travel and shavings flung outward
+ * off the arc. A miss keeps the smear, the light and the shavings (that is the
+ * blade cutting air) and loses the sparks.
+ */
+function slash(s, M, a, { edge = false, sparks = true, echo = true, light = 1, n = 10 } = {}) {
+  const geo = { cx: a.cx, cy: a.cy, cz: a.cz, e1: a.e1, e2: a.e2, th0: a.th0, dir: a.dir, span: a.span };
+  const [x, y, z] = arcAt(a, 0.62);
+  s.add({ k: "stSlash", x, y, z, ...geo, W: a.W, life: 7 / 12, R: M.R, edge, update: still });
+  if (echo) {
+    const k = 0.79;
+    s.add({ k: "stSlash", x, y, z, ...geo, e1: a.e1.map((v) => v * k), e2: a.e2.map((v) => v * k), th0: a.th0 + a.dir * a.span * 0.1, span: a.span * 0.86, W: a.W * 0.4, dim: true, life: 6 / 12, R: M.R, wait: 0.04, minor: true, update: still });
+  }
+  const rr = 1 - (a.W * 0.4) / (a.R * AP), h0 = arcAt(a, 0.6, rr);
+  s.light(h0[0], h0[1], h0[2], 1.55 * light, S(M.R, 0.9), 0.6, 0.12);
+  s.at(s.t + 1 / 12, (s2) => {
+    const tip = arcAt(a, 1, rr);
+    s2.light(tip[0], tip[1], tip[2], 1.55 * light, S(M.R, 0.9), 0.6, 0.22);
+    for (const f of [0.3, 0.65]) { const g = arcAt(a, f, rr); s2.light(g[0], g[1], g[2], 1 * light, S(M.R, 0.8), 0.28, 0.2); }
+    s2.add({ k: "glint", x: tip[0], y: tip[1], z: tip[2], life: 5 / 12, R: M.R, big: true, update: still });
+    // the travel at the tip: d/dθ of the arc, in the sweep's direction
+    const th = a.th0 + a.dir * a.span, tv = [0, 1, 2].map((i) => (-Math.sin(th) * a.e1[i] + Math.cos(th) * a.e2[i]) * a.dir), tl = Math.hypot(...tv) || 1;
+    const [tx, ty, tz] = tv.map((v) => v / tl);
+    if (sparks) for (let i = 0; i < n; i++) {
+      const j = s2.rand(-0.5, 0.5), sp = s2.rand(5.8, 15);
+      s2.add({ k: SPK(i), x: tip[0], y: tip[1], z: tip[2], vx: (tx - ty * j) * sp, vy: (ty + tx * j) * sp, vz: tz * sp + s2.rand(0, 2), g: 30, drag: 2.2, bounce: 0.4, life: s2.rand(0.12, 0.35), R: M.R, minor: i % 2 === 1 });
+    }
+    for (let i = 0; i < 16; i++) {
+      const p = arcAt(a, s2.rand(0.3, 1)), ox = (p[0] - a.cx) / a.R, oy = (p[1] - a.cy) / a.R, oz = (p[2] - a.cz) / a.R, sp = s2.rand(1.2, 3.8);
+      s2.add({ k: "ember", x: p[0], y: p[1], z: p[2], vx: ox * sp, vy: oy * sp, vz: oz * sp + 0.4, drag: 3, life: s2.rand(0.25, 0.55), R: M.R, seed: s2.R(), minor: i > 5 });
+    }
+  });
+}
+
 /* ── the deliveries ──────────────────────────────────────────────────── */
 
 const DELIVER = {
-  /** Sword: a crescent slash; weight adds a white cutting rim and a smear echo. */
+  /**
+   * Sword (pixelfx sword-slash): a crescent ~1.6 squares in radius whips
+   * round the wielder through the body in two frames, thickest just behind
+   * its head, white at the rim on contact, then cools and closes up from the
+   * tail into a dotted trace. A thinner echo rides inside it, light rides its
+   * head, the tip glints and throws sparks, shavings fly off the arc. Weight
+   * widens it and gives it a white cutting rim.
+   */
   swing: (s, M, ctx) => melee(s, M, ctx, {
-    name: "slash", at: 0.3, cf: 1, period: 2.4,
+    name: "slash", at: 0.3, cf: 1, period: 2.4, lit: false,
     stroke(s2, A, T, { flip, big, sc, W, F }) {
-      const [fx, fy] = big ? across(A, T, 70) : [A.from.x, A.from.y];
-      const R2 = 12 * sc * W * F.sweep, Tk = 4 * (big ? 1.5 : 1) * W * Math.min(1.5, sc);
-      s2.add({ k: "crescent", x: A.x - 0.05, y: A.y, z: A.z(0.55), from: [fx, fy, big ? 1.1 : 0.6 * F.reach], life: 6 / 12, R: M.R, flip, R2, T: Tk, span: 2.3 * F.sweep, edge: W > 1 || big, update: still });
-      if (W > 1) s2.add({ k: "crescent", x: A.x - 0.05, y: A.y, z: A.z(0.55), from: [fx, fy, big ? 1.1 : 0.6], life: 5 / 12, R: M.R, flip, R2: R2 * 0.8, T: Tk * 0.7, span: 2.3 * F.sweep, dim: true, wait: 1 / 12, update: still });
+      const arc = slashArc(A, T, { k: sc / BIG, W, reach: F.reach, sweep: F.sweep, dir: flip, big });
+      slash(s2, M, arc, { edge: W > 1 || big, sparks: !A.miss, echo: true, light: big ? 1.2 : 1 });
     },
   }),
 
@@ -317,64 +498,98 @@ const DELIVER = {
       zk: 0.5, pow: 0.7,
       onHit(s2, A, T, o) {
         if (o === "crit2") return;
-        s2.add({ k: "mlSplit", x: T.x, y: T.y, z: 0.55 * T.h, L: 16 * Math.sqrt(T.size ?? 1), life: 6 / 12, R: RAMP.kinetic, update: still });
-        for (let i = 0; i < 3; i++) s2.add({ k: "chunk", x: T.x, y: T.y, z: 0.5 * T.h, vx: s2.rand(-2.5, 2.5), vy: s2.rand(-1, 1), vz: s2.rand(2, 3.5), g: 9, drag: 0.8, bounce: 0.3, life: s2.rand(1.2, 2), R: RAMP.wood, s: 2, debris: true });
+        s2.add({ k: "mlSplit", x: T.x, y: T.y, z: 0.55 * T.h, L: 28 * Math.sqrt(T.size ?? 1), life: 6 / 12, R: RAMP.kinetic, update: still });
+        for (let i = 0; i < 7; i++) s2.add({ k: "chunk", x: T.x, y: T.y, z: 0.5 * T.h, vx: s2.rand(-4, 4), vy: s2.rand(-1.5, 1.5), vz: s2.rand(3, 5.5), g: 30, drag: 0.8, bounce: 0.3, life: s2.rand(1.2, 2), R: RAMP.wood, s: 2, debris: true, minor: i > 2 });
         s2.shake = Math.max(s2.shake, 1);
       },
     },
   }),
 
-  /** Club and hammer: a downward arc ending in a hammer head, radial impact lines, a ground ring. */
+  /**
+   * Club and hammer (pixelfx hammer-smash, blunt-hit): the head comes over the
+   * top and down onto the body in a wedge of motion on a steep plane, a light
+   * riding it; the head lands white, then radial impact lines, a dome ring and
+   * a dent of cracks, rocks thrown up that bounce and settle, dust rolling out.
+   */
   smash: (s, M, ctx) => melee(s, M, ctx, {
-    name: "smash", at: 0.36, cf: 1, period: 2.5,
+    name: "smash", at: 0.36, cf: 1, period: 2.5, lit: false,
     stroke(s2, A, T, { flip, big, sc, W }) {
-      const [fx, fy] = big ? across(A, T, -40) : [A.x, A.y], g = (big ? 1.2 : 1) * W;
-      s2.add({ k: "crescent", x: A.x, y: A.y, z: A.z(0.7), from: [fx, fy, big ? 2.4 : 2], life: 5 / 12, R: M.R, flip, span: 1.6, R2: 10 * g * sc, T: 6 * g * Math.min(1.5, sc), update: still });
-      s2.add({ k: "mlMaul", ...at3(A, T, 0.75), sc: sc * Math.min(1.3, W) * (big ? 1.1 : 1), life: 5 / 12, R: M.R });
+      // it falls: the sweep runs from the top of the steep plane down onto the body (dir against flip)
+      const arc = slashArc(A, T, { k: sc / BIG, W, dir: -flip, big, R0: 1.25, W0: 15, at: 0.96, tilt: 1.15, span: 2.1, zk: 0.7 });
+      slash(s2, M, arc, { edge: true, sparks: false, echo: true, light: 1.1 });
+      const [hx, hy, hz] = arcAt(arc, 1, 1 - (arc.W * 0.45) / (arc.R * AP));
+      s2.add({ k: "mlMaul", x: hx, y: hy, z: hz, fx: A.from.x, fy: A.from.y, sc: sc * Math.min(1.3, W) * (big ? 1.1 : 1), life: 5 / 12, R: M.R, update: still });
     },
     land: {
       zk: 0.65,
-      onHit(s2, A, T) {
-        s2.add({ k: "mlPow", x: T.x, y: T.y, z: 0.65 * T.h, r: 5, L: 6, n: 8, life: 3 / 12, R: M.R, seed: 0.2, update: still });
-        s2.add({ k: "ring", x: T.x, y: T.y, r: 0.55 * T.size, life: 0.45, R: RAMP.kinetic, broken: true, seed: 11, update: still });
-        s2.shake = Math.max(s2.shake, 1.2);
+      onHit(s2, A, T, o) {
+        const sz = Math.max(T.size ?? 1, A.B), R = M.id === "kinetic" ? RAMP.earth : M.R;
+        s2.add({ k: "mlPow", x: T.x, y: T.y, z: 0.65 * T.h, r: 10 * A.B, L: 13 * A.B, n: 12, life: 3 / 12, R: M.R, seed: 0.2, update: still });
+        s2.add({ k: "ring", x: T.x, y: T.y, r: 1.0 * sz, life: 0.45, R: RAMP.kinetic, broken: true, seed: 11, update: still });
+        if (o !== "crit2") s2.add({ k: "mlCracks", x: T.x, y: T.y, r: 0.65 * sz, life: 1.6, R, seed: s2.seedInt(), update: still });
+        s2.light(T.x, T.y, 0.3, 2.4 * Math.sqrt(sz), S(M.R, 0.85), 0.45, 0.6);
+        for (let i = 0; i < 10; i++) {
+          const q = s2.rand(0, TAU), sp = s2.rand(1.5, 4);
+          s2.add({ k: "chunk", x: T.x + Math.cos(q) * 0.15, y: T.y + Math.sin(q) * 0.15, z: 0.05, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(3, 6), g: 30, drag: 0.8, bounce: 0.35, life: s2.rand(1.2, 2), R, s: i % 3 ? 1 : 2, debris: true, minor: i > 4 });
+        }
+        dustRing(s2, T.x, T.y, 7, 0.5 * Math.sqrt(sz));
+        s2.shake = Math.max(s2.shake, 1.6);
       },
     },
   }),
 
-  /** Spear: a long shaft driven in with a leaf head; reach draws it from further back. */
+  /**
+   * Spear (pixelfx thrust): a bundle of streaks shoots out from the hand to the
+   * point with the shaft and its leaf head driven along it, light riding the
+   * point; on contact a long four-point star flares at the tip, a pierce ring
+   * pops and a spray comes out of the far side. Reach draws it from further back.
+   */
   thrust: (s, M, ctx) => melee(s, M, ctx, {
-    name: "thrust", at: 0.28, cf: 1, period: 2.3,
+    name: "thrust", at: 0.28, cf: 1, period: 2.3, lit: false,
     stroke(s2, A, T, { big, sc, W, F }) {
-      const on = A.miss ? 0.45 : big ? 0.3 : 0;
-      s2.add({ k: "mlSpear", ...at3(A, T, 0.6), x: A.x + A.ux * on, y: A.y + A.uy * on, ux: A.ux, uy: A.uy, len: (1.0 + 0.2 * (T.size ?? 1)) * F.reach * (big ? 1.3 : 1) * Math.min(1.25, W), sc, life: 5 / 12, R: M.R });
+      const on = A.miss ? 0.45 : big ? 0.3 : 0, len = (1.15 * A.B + 0.2 * (T.size ?? 1)) * F.reach * (big ? 1.3 : 1) * Math.min(1.25, W);
+      const x = A.x + A.ux * on, y = A.y + A.uy * on, z = A.z(0.6);
+      s2.add({ k: "stBundle", x, y, z, ux: A.ux, uy: A.uy, len: len * 1.25, sc, life: 4 / 12, R: M.R, update: still });
+      s2.add({ k: "mlSpear", ...at3(A, T, 0.6), x, y, ux: A.ux, uy: A.uy, len, sc, life: 5 / 12, R: M.R });
+      s2.light(x - A.ux * 0.3, y - A.uy * 0.3, z, 1.5, S(M.R, 0.9), 0.55, 0.2);
     },
     land: {
-      onHit(s2, A, T) {
+      onHit(s2, A, T, o) {
+        const z = 0.6 * T.h, q0 = Math.atan2(A.uy, A.ux);
+        s2.add({ k: "star", x: T.x + A.ux * 0.1, y: T.y + A.uy * 0.1, z, L: o === "crit2" ? 16 : 12, life: 3 / 12, R: M.R, update: still });
+        s2.add({ k: "mlPop", x: T.x, y: T.y, z, r: 4, life: 3 / 12, R: M.R, update: still });
         // through: a spray out of the far side
-        for (let k = 0; k < 4; k++) { const q = Math.atan2(A.uy, A.ux) + (k - 1.5) * 0.25, sp = s2.rand(6, 8); s2.add({ k: "streak", x: T.x + A.ux * 0.2, y: T.y + A.uy * 0.2, z: 0.6 * T.h, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, life: 0.13, R: M.R, minor: k % 2 === 1 }); }
+        for (let k = 0; k < 8; k++) { const q = q0 + (k - 3.5) * 0.16, sp = s2.rand(9, 13); s2.add({ k: "streak", x: T.x + A.ux * 0.2, y: T.y + A.uy * 0.2, z, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, life: 0.16, R: M.R, minor: k % 2 === 1 }); }
       },
     },
   }),
 
-  /** Polearm: a wide flat arc swept round from the wielder, passing through the body. */
+  /**
+   * Polearm (pixelfx spear-sweep, spin-slash): a long, flat arc swept round the
+   * wielder at waist height, wider and thinner than a sword's, through the body.
+   */
   sweep: (s, M, ctx) => melee(s, M, ctx, {
-    name: "sweep", at: 0.32, cf: 1, period: 2.4,
+    name: "sweep", at: 0.32, cf: 1, period: 2.4, lit: false,
     stroke(s2, A, T, { flip, big, sc, F, W }) {
-      const r = Math.max(0.9, Math.hypot(A.x - A.from.x, A.y - A.from.y)), mid = Math.atan2(A.y - A.from.y, A.x - A.from.x);
-      const span = 1.5 * F.sweep * (big ? 1.25 : 1), dir = flip;
-      s2.add({ k: "mlSwath", x: A.from.x, y: A.from.y, z: A.z(0.5) + (big ? 0.15 : 0), r, q0: mid - (dir * span) / 2, dir, span, th: Math.round(2 + sc * Math.min(1.3, W)), life: 6 / 12, R: M.R, edge: W > 1 || big, update: still });
+      const arc = slashArc(A, T, { k: sc / BIG, W, reach: F.reach, sweep: F.sweep, dir: flip, big, R0: 1.75, W0: 10, at: 0.7, tilt: 0.2, span: 2.7, zk: 0.5 });
+      slash(s2, M, arc, { edge: W > 1 || big, sparks: !A.miss, echo: true, light: 1.15, n: 8 });
     },
     land: { zk: 0.5 },
   }),
 
-  /** Knife: a quick agile double jab. */
+  /**
+   * Knife (pixelfx dagger-flurry): a quick agile double jab, each a small quick
+   * crescent at its own angle round the blade driven in, with a flick of sparks.
+   */
   stab: (s, M, ctx) => melee(s, M, ctx, {
-    name: "double jab", at: 0.22, cf: 1, period: 2.1,
-    stroke(s2, A, T, { big, sc }) {
-      const len = 0.55 * (big ? 1.3 : 1), sh = big ? 0.25 : 0;
+    name: "double jab", at: 0.22, cf: 1, period: 2.1, lit: false,
+    stroke(s2, A, T, { big, sc, W }) {
+      const len = 0.85 * (big ? 1.3 : 1), sh = big ? 0.25 : 0;
       s2.add({ k: "mlShiv", ...at3(A, T, 0.62), x: A.x + A.ux * sh, y: A.y + A.uy * sh, ux: A.ux, uy: A.uy, len, sc, life: 3 / 12, R: M.R });
-      s2.add({ k: "mlShiv", ...at3(A, T, 0.45), x: A.x + A.ux * sh + A.px * 0.08, y: A.y + A.uy * sh + A.py * 0.08, ux: A.ux, uy: A.uy, len, sc, life: 3 / 12, R: M.R, wait: 0.1 });
+      s2.add({ k: "mlShiv", ...at3(A, T, 0.45), x: A.x + A.ux * sh + A.px * 0.12, y: A.y + A.uy * sh + A.py * 0.12, ux: A.ux, uy: A.uy, len, sc, life: 3 / 12, R: M.R, wait: 0.1 });
+      const k = sc / BIG;
+      slash(s2, M, slashArc(A, T, { k, W, dir: 1, big, R0: 0.62, W0: 6, tilt: 0.7, span: 2.6, at: 0.7, zk: 0.62 }), { sparks: !A.miss, echo: false, light: 0.6, n: 4 });
+      s2.at(s2.t + 0.1, (s3) => slash(s3, M, slashArc(A, T, { k, W, dir: -1, big: !big, R0: 0.58, W0: 5.5, tilt: -0.6, span: 2.5, at: 0.7, zk: 0.45 }), { sparks: !A.miss, echo: false, light: 0.6, n: 4 }));
     },
     land: { again: [0.1], pow: 0.6, blood: true },
   }),
@@ -387,7 +602,7 @@ const DELIVER = {
     },
     land: {
       pow: 0.6,
-      onHit(s2, A, T, o) { if (o !== "crit2") s2.add({ k: "cut", x: T.x, y: T.y, z: 0.62 * T.h, ux: A.px, uy: A.py, len: 0.5, life: 5 / 12, R: RAMP.kinetic, wait: 1 / 12, update: still }); },
+      onHit(s2, A, T, o) { if (o !== "crit2") s2.add({ k: "cut", x: T.x, y: T.y, z: 0.62 * T.h, ux: A.px, uy: A.py, len: 0.9, life: 5 / 12, R: RAMP.kinetic, wait: 1 / 12, update: still }); },
     },
   }),
 
@@ -399,7 +614,7 @@ const DELIVER = {
       s2.add({ k: "mlFlail", ...at3(A, T, 0.62), fx: hand[0], fy: hand[1], fz: big ? hand[2] + 0.5 : hand[2], sc: sc * Math.min(1.3, W), q0: s2.rand(0, TAU), life: 7 / 12, R: M.R, skip });
     },
     land: {
-      onHit(s2, A, T) { s2.add({ k: "mlPow", x: T.x, y: T.y, z: 0.62 * T.h, r: 4, L: 5, n: 6, life: 3 / 12, R: M.R, seed: 0.5, update: still }); },
+      onHit(s2, A, T) { s2.add({ k: "mlPow", x: T.x, y: T.y, z: 0.62 * T.h, r: 8, L: 10, n: 8, life: 3 / 12, R: M.R, seed: 0.5, update: still }); },
     },
   }),
 
@@ -411,9 +626,13 @@ const DELIVER = {
       // a weapon whip is a cord; a tail or a tentacle is a limb
       const thin = ["whip", "chain"].includes(s2.spec.motif) || !!s2.spec.weapon?.group;
       const reach = F.reach;
-      s2.add({ k: "mlWhip", x: A.x + A.ux * 0.05 * reach, y: A.y + A.uy * 0.05 * reach, z: A.z(0.7), fx: hand[0] - A.ux * 0.2 * (reach - 1), fy: hand[1] - A.uy * 0.2 * (reach - 1), fz: hand[2] + (big ? 0.4 : 0), thick: (thin ? 1 : 1.8) * Math.min(1.3, sc), life: 7 / 12, R: M.R, skip, flip: big ? -1 : 1, update: still });
+      s2.add({ k: "mlWhip", x: A.x + A.ux * 0.05 * reach, y: A.y + A.uy * 0.05 * reach, z: A.z(0.7), fx: hand[0] - A.ux * 0.2 * (reach - 1), fy: hand[1] - A.uy * 0.2 * (reach - 1), fz: hand[2] + (big ? 0.4 : 0), thick: (thin ? 1.2 : 2) * Math.min(2, sc), life: 7 / 12, R: M.R, skip, flip: big ? -1 : 1, update: still });
     },
-    land: { zk: 0.7, pow: 0.65 },
+    land: {
+      zk: 0.7, pow: 0.65,
+      onHit(s2, A, T, o) { if (o !== "crit2") crack(s2, M, T.x - A.ux * 0.1, T.y - A.uy * 0.1, 0.7 * T.h, A, Math.sqrt(A.B)); },
+      whiff(s2, A, T) { crack(s2, M, A.x, A.y, A.z(0.7), A, 0.8 * Math.sqrt(A.B)); },
+    },
   }),
 
   /** Brawling: a knuckle punch with an impact ring; a flurry is two quick ones. */
@@ -428,8 +647,9 @@ const DELIVER = {
       land: {
         pow: 0.6, again: flurry ? [0.13] : [],
         onHit(s2, A, T, o) {
-          const pop = (z, w) => s2.add({ k: "mlPop", x: T.x - A.ux * 0.1, y: T.y - A.uy * 0.1, z, r: o === "crit2" ? 3 : 2, life: 3 / 12, R: M.R, wait: w, update: still });
+          const pop = (z, w) => s2.add({ k: "mlPop", x: T.x - A.ux * 0.1, y: T.y - A.uy * 0.1, z, r: o === "crit2" ? 5 : 3.5, life: 3 / 12, R: M.R, wait: w, update: still });
           pop(0.62 * T.h, 0);
+          if (o !== "crit2") s2.add({ k: "stBurst", x: T.x, y: T.y, z: 0.66 * T.h, ux: A.ux, uy: A.uy, L: 9, n: 10, life: 4 / 12, R: M.R, seed: s2.R(), update: still });
           if (flurry && o !== "crit2") pop(0.5 * T.h, 0.13);
         },
       },
@@ -468,9 +688,9 @@ const DELIVER = {
       blood: true, pow: 0.6,
       onHit(s2, A, T, o) {
         const B = bleedOf(M, feelOf(s2)) ?? M.R;
-        for (let k = 0; k < (o === "crit2" ? 8 : 5); k++) {
-          const q = s2.rand(0, TAU), sp = s2.rand(2.5, 4.5);
-          s2.add({ k: "spark", x: T.x + Math.cos(q) * 0.08, y: T.y, z: 0.62 * T.h, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.5, vz: s2.rand(0, 2.5), g: 9, drag: 1.2, life: s2.rand(0.25, 0.4), R: B, minor: k > 3 });
+        for (let k = 0; k < (o === "crit2" ? 14 : 10); k++) {
+          const q = s2.rand(0, TAU), sp = s2.rand(4, 8) * Math.sqrt(A.B);
+          s2.add({ k: "spark", x: T.x + Math.cos(q) * 0.08, y: T.y, z: 0.62 * T.h, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp * 0.5, vz: s2.rand(0.5, 3), g: 30, drag: 1.6, life: s2.rand(0.3, 0.5), R: B, minor: k > 4 });
         }
       },
     },
@@ -486,8 +706,9 @@ const DELIVER = {
       zk: 0.5, blood: true, knock: 1.2,
       onHit(s2, A, T) {
         // the toss: grit and lines thrown up off the hook
-        for (let k = 0; k < 4; k++) s2.add({ k: "streak", x: T.x + (k - 1.5) * 0.12, y: T.y, z: 0.5 * T.h, vx: A.ux * 1.5, vy: A.uy * 1.5, vz: s2.rand(7, 9), life: 0.14, R: M.R, minor: k % 2 === 1 });
-        for (let k = 0; k < 3; k++) s2.add({ k: "chunk", x: T.x, y: T.y, z: 0.05, vx: s2.rand(-1, 1), vy: s2.rand(-0.5, 0.5), vz: s2.rand(3, 4.5), g: 9, drag: 0.8, bounce: 0.3, life: s2.rand(1.2, 1.8), R: RAMP.kinetic, s: 1, debris: true });
+        for (let k = 0; k < 7; k++) s2.add({ k: "streak", x: T.x + (k - 3) * 0.1, y: T.y, z: 0.5 * T.h, vx: A.ux * 2.5, vy: A.uy * 2.5, vz: s2.rand(9, 13), life: 0.18, R: M.R, minor: k % 2 === 1 });
+        for (let k = 0; k < 7; k++) s2.add({ k: "chunk", x: T.x, y: T.y, z: 0.05, vx: s2.rand(-2.5, 2.5) + A.ux, vy: s2.rand(-1.2, 1.2) + A.uy, vz: s2.rand(4, 7), g: 30, drag: 0.8, bounce: 0.3, life: s2.rand(1.2, 1.8), R: RAMP.kinetic, s: 1, debris: true, minor: k > 3 });
+        dustRing(s2, T.x, T.y, 4, 0.35 * A.B);
       },
     },
   }),
@@ -502,7 +723,8 @@ const DELIVER = {
       pow: 0.5, rad: 0.22,
       onHit(s2, A, T) {
         const V = M.id === "kinetic" || M.id === "neutral" ? RAMP.poison : M.R;
-        s2.add({ k: "mlPop", x: T.x, y: T.y, z: 0.62 * T.h, r: 2, life: 3 / 12, R: V, update: still });
+        s2.add({ k: "mlPop", x: T.x, y: T.y, z: 0.62 * T.h, r: 3.5, life: 3 / 12, R: V, update: still });
+        s2.light(T.x, T.y, 0.62 * T.h, 1.3, S(V, 0.85), 0.45, 0.6);
         for (let k = 0; k < 4; k++) s2.add({ k: "drip", x: T.x + s2.rand(-0.08, 0.08), y: T.y + 0.02, z: 0.6 * T.h, vx: s2.rand(-0.4, 0.4), vz: s2.rand(0, 0.6), g: 6, life: 3, R: V, wait: 0.05 + k * 0.12, onGround: splat });
         for (let k = 0; k < 3; k++) s2.add({ k: "mote", x: T.x + s2.rand(-0.2, 0.2), y: T.y + s2.rand(-0.1, 0.1), z: s2.rand(0.4, 0.8) * T.h, vz: 0.3, life: 0.9, R: V, plus: true, wait: 0.1 + k * 0.1, minor: k > 0 });
       },
@@ -520,9 +742,11 @@ const DELIVER = {
       zk: 0.25, pow: 0.6, knock: 1.2,
       onHit(s2, A, T, o) {
         const R = M.id === "kinetic" ? RAMP.earth : M.R;
-        s2.add({ k: "mlCracks", x: T.x, y: T.y, r: (o === "crit2" ? 0.85 : 0.6) * (T.size ?? 1), life: 1.6, R, seed: s2.seedInt(), update: still });
-        s2.add({ k: "ring", x: T.x, y: T.y, r: 0.7 * (T.size ?? 1), life: 0.45, R: RAMP.kinetic, broken: true, seed: 13, update: still });
-        dustRing(s2, T.x, T.y, 6, 0.4);
+        const sz = Math.max(T.size ?? 1, A.B);
+        s2.add({ k: "mlCracks", x: T.x, y: T.y, r: (o === "crit2" ? 1.1 : 0.8) * sz, life: 1.6, R, seed: s2.seedInt(), update: still });
+        s2.add({ k: "ring", x: T.x, y: T.y, r: 1.15 * sz, life: 0.45, R: RAMP.kinetic, broken: true, seed: 13, update: still });
+        dustRing(s2, T.x, T.y, 9, 0.55 * A.B);
+        for (let i = 0; i < 8; i++) { const q = s2.rand(0, TAU), sp = s2.rand(1.5, 3.5); s2.add({ k: "chunk", x: T.x, y: T.y, z: 0.05, vx: Math.cos(q) * sp, vy: Math.sin(q) * sp, vz: s2.rand(3, 5.5), g: 30, drag: 0.8, bounce: 0.35, life: s2.rand(1, 1.8), R, s: i % 3 ? 1 : 2, debris: true, minor: i > 3 }); }
         s2.shake = Math.max(s2.shake, 1.4);
       },
       whiff(s2, A) { dustRing(s2, A.x, A.y, 4, 0.3); },
@@ -553,13 +777,14 @@ const DELIVER = {
   slam: (s, M, ctx) => melee(s, M, ctx, {
     name: "slam", at: 0.28, cf: 2, period: 2.5, glint: false,
     stroke(s2, A, T, { sc, skip, W }) {
-      s2.add({ k: "mlSlab", ...at3(A, T, 0.55), sc: sc * Math.min(1.3, W) * Math.sqrt(T.size ?? 1), life: 6 / 12, R: M.R, skip });
+      s2.add({ k: "mlSlab", ...at3(A, T, 0.55), sc: (sc / BIG) * 1.35 * Math.min(1.3, W), life: 6 / 12, R: M.R, skip });
     },
     land: {
       zk: 0.55, pow: 0.8, knock: 1.4,
       onHit(s2, A, T) {
-        s2.add({ k: "mlPow", x: T.x, y: T.y, z: 0.55 * T.h, r: 7, L: 8, n: 10, life: 3 / 12, R: M.R, seed: 0.1, update: still });
-        s2.add({ k: "ring", x: T.x, y: T.y, r: 0.65 * (T.size ?? 1), life: 0.45, R: RAMP.kinetic, broken: true, seed: 3, update: still });
+        s2.add({ k: "mlPow", x: T.x, y: T.y, z: 0.55 * T.h, r: 12 * A.B, L: 14 * A.B, n: 12, life: 3 / 12, R: M.R, seed: 0.1, update: still });
+        s2.add({ k: "ring", x: T.x, y: T.y, r: 1.05 * Math.max(T.size ?? 1, A.B), life: 0.45, R: RAMP.kinetic, broken: true, seed: 3, update: still });
+        dustRing(s2, T.x, T.y, 6, 0.45 * A.B);
         s2.shake = Math.max(s2.shake, 1.6);
       },
     },
@@ -578,7 +803,7 @@ const DELIVER = {
   grasp: (s, M, ctx) => melee(s, M, ctx, {
     name: "grasp", at: 0.22, cf: 2, period: 2.3, glint: false,
     stroke(s2, A, T, { sc, skip }) {
-      s2.add({ k: "mlHand", ...at3(A, T, 0.6), sc: sc * Math.sqrt(T.size ?? 1), life: 8 / 12, R: M.R, skip });
+      s2.add({ k: "mlHand", ...at3(A, T, 0.6), sc: sc * Math.max(1, Math.sqrt(T.size ?? 1) / A.B), life: 8 / 12, R: M.R, skip });
     },
     land: { pow: 0.5, rad: 0.25, knock: 0.7 },
   }),
@@ -588,11 +813,25 @@ const DELIVER = {
     name: "constrict", at: 0.2, cf: 3, period: 2.8, glint: false,
     stroke(s2, A, T, { big, skip }) {
       const sz = T.size ?? 1;
-      s2.add({ k: "mlCoil", x: A.x, y: A.y, z: 0, z0: (A.miss ? 0.75 : 0.15) * T.h, z1: (A.miss ? 1.2 : 0.8) * T.h, r: 0.44 * sz, q0: s2.rand(0, TAU), frames: big ? 6 : 13, pulses: big ? [2, 4] : [3, 7, 11], life: (big ? 6 : 13) / 12, R: M.R, skip, update: still });
+      s2.add({ k: "mlCoil", x: A.x, y: A.y, z: 0, z0: (A.miss ? 0.75 : 0.15) * T.h, z1: (A.miss ? 1.2 : 0.8) * T.h, r: 0.6 * sz, q0: s2.rand(0, TAU), frames: big ? 6 : 13, pulses: big ? [2, 4] : [3, 7, 11], life: (big ? 6 : 13) / 12, R: M.R, skip, update: still });
     },
     land: { pow: 0.45, rad: 0.3, again: [4 / 12, 8 / 12], knock: 0.6 },
   }),
 };
+
+/** A whip's crack (pixelfx whip-crack): a pop of spikes, a ring of air, sparks, a puff and twinkles. `cool` keeps it off white (a miss has no hero frame). */
+function crack(s, M, x, y, z, A, k = 1, cool = false) {
+  const base = Math.atan2(A.uy, A.ux);
+  s.add({ k: "stBurst", x, y, z, ux: A.ux, uy: A.uy, L: 10 * k, n: 8, life: 4 / 12, R: M.R, seed: s.R(), cool, update: still });
+  s.add({ k: "mlPop", x, y, z, r: 3 * k, life: 3 / 12, R: M.R, update: still });
+  s.light(x, y, z, 1.8 * k, S(M.R, 0.9), cool ? 0.35 : 0.6, 0.3);
+  for (let i = 0; i < Math.round(12 * k); i++) {
+    const [cx, cy] = fan(s, base, 1.3), sp = s.rand(5, 11);
+    s.add({ k: SPK(i), x, y, z, vx: cx * sp, vy: cy * sp, vz: s.rand(0, 2.5), g: 30, drag: 2.2, life: s.rand(0.15, 0.35), R: M.R, minor: i % 2 === 1 });
+  }
+  for (let i = 0; i < 2; i++) s.add({ k: "smoke", x: x + s.rand(-0.1, 0.1), y, z, vx: A.ux * s.rand(0.4, 1.4), vy: A.uy * s.rand(0.4, 1.4), vz: 0.3, drag: 2.5, g: -0.05, r: s.rand(2.2, 3.2), life: s.rand(0.5, 0.8), lobes: lobes(s), tone: 0.5, minor: true });
+  for (let i = 0; i < 3; i++) s.add({ k: "glint", x: x + s.rand(-0.35, 0.4), y: y + s.rand(-0.3, 0.3), z: z + s.rand(-0.2, 0.3), life: 5 / 12, R: M.R, wait: s.rand(0.05, 0.2), minor: true, update: still });
+}
 
 /** Dust thrown out in a low ring at the feet. */
 function dustRing(s, x, y, n, r) {
@@ -712,7 +951,128 @@ function blobAt(P, cx, cy, rx, ry, col, o = 1) {
   }, o);
 }
 
+/** A ray from (x, y) along the unit (ux, uy), `L` long, `w` half-wide at the root tapering to a point; `col(f, e)`. */
+function wedge(P, x, y, ux, uy, L, w, col, o = 2) {
+  if (L < 1) return;
+  const ex = x + ux * L, ey = y + uy * L, pad = w + 1;
+  P.shade(Math.min(x, ex) - pad, Math.min(y, ey) - pad, Math.max(x, ex) + pad, Math.max(y, ey) + pad, (px, py) => {
+    const rx = px - x, ry = py - y, al = rx * ux + ry * uy;
+    if (al < 0 || al > L) return null;
+    const hw = w * (1 - al / L) + 0.35, pe = Math.abs(rx * uy - ry * ux);
+    return pe > hw ? null : col(al / L, pe / hw);
+  }, o);
+}
+/** The screen direction of a world blow (ux, uy) at a point, nudged by `tq` radians; (1, 0) when it points at the camera. */
+function blowDir(v, p, tq = 0) {
+  const [x, y] = v.ap(p.x, p.y, p.z), [bx, by] = v.ap(p.x - p.ux, p.y - p.uy, p.z);
+  let ux = x - bx, uy = y - by; const l = Math.hypot(ux, uy);
+  if (l < 3) { ux = 1; uy = 0; } else { ux /= l; uy /= l; }
+  const c = Math.cos(tq), n = Math.sin(tq);
+  return [x, y, ux * c - uy * n, ux * n + uy * c];
+}
+/** A diamond core: white in its middle on a hero frame. */
+function diamond(P, x, y, r, R, hot) {
+  P.shade(x - r - 1, y - r - 1, x + r + 1, y + r + 1, (px, py) => {
+    const d = Math.abs(px - x) + Math.abs(py - y);
+    return d > r ? null : d < r - 1.5 && hot ? WHITE : S(R, 1);
+  }, 2);
+}
+
+/* The shared contact shapes: the swing smear, the hit's cross flare, the crit's starburst. */
 registerShapes({
+  /**
+   * A swing (`slashArc`): the world ellipse projected to the screen and shaded
+   * per pixel. The band runs from the rim inward, thickest just behind the
+   * head and tapering to a hair at the tail (pixelfx's sin(π v^2.2)^0.6), its
+   * tail dissolving through the dither. White at the rim on the contact frame
+   * only; the rest cools down the ramp with age and towards the tail. `dim` is
+   * the echo inside it; `edge` a heavy blade's white cutting rim.
+   */
+  stSlash(v, P, p) {
+    const fr = frame(p); if (fr > 6) return;
+    const head = [0.6, 1, 1, 1, 1, 1, 1][fr], tail = [0, 0, 0, 0.3, 0.58, 0.8, 0.94][fr], wk = [1, 1, 1, 0.85, 0.7, 0.55, 0.4][fr];
+    const [cx, cy] = v.ap(p.cx, p.cy, p.cz), e = p.e1, f2 = p.e2;
+    const [ax, ay] = v.ap(p.cx + e[0], p.cy + e[1], p.cz + e[2]), [bx, by] = v.ap(p.cx + f2[0], p.cy + f2[1], p.cz + f2[2]);
+    const a1 = ax - cx, a2 = ay - cy;
+    let b1 = bx - cx, b2 = by - cy;
+    // a view that sees the plane edge-on (a billboard whose depth cancels the tilt's lift) is opened out
+    // along the screen normal of e1, keeping its side, so the crescent never collapses to a line
+    const la = Math.hypot(a1, a2) || 1, nx = -a2 / la, ny = a1 / la, cr = b1 * nx + b2 * ny, want = 0.55 * Math.max(la, Math.hypot(b1, b2));
+    if (Math.abs(cr) < want) { const sg = Math.abs(cr) > 0.5 ? Math.sign(cr) : ny < 0 ? 1 : -1, dd = sg * want - cr; b1 += nx * dd; b2 += ny * dd; }
+    const det = a1 * b2 - a2 * b1;
+    if (Math.abs(det) < 8) return;
+    const W = p.W * wk, lo = Math.max(4, Math.min(Math.hypot(a1, a2), Math.hypot(b1, b2))), inR = 1 - (W + 1.5) / lo, outR = 1 + 0.6 / lo;
+    const ex = Math.hypot(a1, b1) + 1, ey = Math.hypot(a2, b2) + 1, vis = head - tail, hot = fr === 1;
+    P.shade(cx - ex, cy - ey, cx + ex, cy + ey, (x, y) => {
+      const dx = x - cx, dy = y - cy, u = (dx * b2 - dy * b1) / det, w = (a1 * dy - a2 * dx) / det, r = Math.hypot(u, w);
+      if (r > outR || r < inR) return null;
+      const th = Math.atan2(w, u);
+      let s = ((th - p.th0) * p.dir) % TAU; if (s < 0) s += TAU;
+      const f = s / p.span; if (f > head || f < tail) return null;
+      const vv = (f - tail) / vis, thick = W * Math.pow(Math.sin(Math.PI * Math.pow(vv, 2.2)), 0.6);
+      if (thick < 0.45) return null;
+      const c = Math.cos(th), n = Math.sin(th), d = (1 - r) * Math.hypot(c * a1 + n * b1, c * a2 + n * b2);
+      if (d > thick) return null;
+      const q = Math.max(0, d) / thick;
+      let col;
+      if (p.dim) col = q < 0.34 ? S(p.R, 0.72 - fr * 0.05) : (Math.floor(x) + Math.floor(y)) % 2 ? S(p.R, 0.5) : null;
+      else if (q < 0.22 && fr < 3) col = (hot && vv > 0.3) || (p.edge && fr < 2 && vv > 0.25) ? WHITE : S(p.R, 1);
+      else col = S(p.R, 0.95 - q * 0.5 - fr * 0.07 - (1 - vv) * 0.18);
+      if (!col) return null;
+      return vv < 0.16 ? { c: col, a: vv / 0.16 } : col;
+    }, 1);
+    // the dotted trace the blade left, fading behind the closing smear
+    if (tail > 0.02 && !p.dim) {
+      const n = Math.ceil((p.span * tail * lo) / 1.6), rr = 1 - 0.8 / lo, a = fr > 5 ? 0.35 : 0.6;
+      for (let i = 0; i <= n; i++) {
+        const th = p.th0 + p.dir * p.span * tail * (i / n), c = Math.cos(th) * rr, sn = Math.sin(th) * rr;
+        P.dot(cx + c * a1 + sn * b1, cy + c * a2 + sn * b2, S(p.R, 0.4), a * (0.4 + 0.6 * (i / n)));
+      }
+    }
+  },
+  /**
+   * A hit's flare (pixelfx hit-spark): a lopsided cross round a diamond core,
+   * its long ray on along the blow. Frame 0 is the white flash; frame 1 reaches
+   * further and thins; then only the long ray lingers, its root burning away.
+   */
+  stFlare(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 3) return;
+    const [x, y, ux, uy] = blowDir(v, p, (p.seed - 0.5) * 0.16), px = -uy, py = ux, L = p.L, d = Math.SQRT1_2;
+    const rays = [[ux, uy, 1, 2.2], [-ux, -uy, 0.26, 2.2], [px, py, 0.48, 2.6], [-px, -py, 0.33, 2.3], [(ux + px) * d, (uy + py) * d, 0.17, 1]];
+    if (fr === 0) {
+      for (const [rx, ry, k, w] of rays) wedge(P, x, y, rx, ry, L * k, w, (f, e) => (e < 0.45 && f < 0.8 ? WHITE : S(p.R, 1)));
+      diamond(P, x, y, 4, p.R, true);
+    } else if (fr === 1) {
+      for (const [rx, ry, k, w] of rays) wedge(P, x, y, rx, ry, L * k * 1.2, Math.max(1, w * 0.55), (f, e) => (e < 0.5 ? S(p.R, 1) : S(p.R, 0.82)));
+      diamond(P, x, y, 3, p.R, false);
+    } else {
+      const cut = fr === 2 ? 0.3 : 0.55;
+      wedge(P, x, y, ux, uy, L * (fr === 2 ? 1.3 : 1.38), 1, (f) => (f < cut ? null : S(p.R, 0.5 + f * 0.4 - (fr - 2) * 0.15)));
+    }
+  },
+  /**
+   * A crit's starburst (pixelfx crit-hit): `n` jagged spikes, longer on along
+   * the blow. It slams in white, overshoots, settles, then breaks off the
+   * centre and flies apart.
+   */
+  stBurst(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 4) return;
+    const [x, y, ux, uy] = blowDir(v, p), A = Math.atan2(uy, ux), sd = Math.floor(p.seed * 997);
+    const sc = [1, 1.25, 1.05, 0.9, 0.75][fr], thk = [1, 1, 0.8, 0.6, 0.45][fr], hot = fr < 2 && !p.cool;
+    for (let i = 0; i < p.n; i++) {
+      const a = (i / p.n) * TAU + (hash(i, 3, sd) - 0.5) * 0.4, fwd = Math.max(0, Math.cos(a - A));
+      const len = p.L * (0.7 + 0.45 * hash(i, 7, sd)) * (1 + 0.5 * fwd) * (i < 2 ? 1.3 : 1) * sc, w = (1.8 + 0.7 * hash(i, 11, sd)) * thk;
+      const r0 = fr >= 3 ? len * (fr - 2) * 0.35 : 0, cx = Math.cos(a), cy = Math.sin(a);
+      wedge(P, x + cx * r0, y + cy * r0, cx, cy, len - r0, w, (f, e) => (hot ? (e < 0.5 && f < 0.7 ? WHITE : S(p.R, 1)) : e < 0.5 ? S(p.R, 1 - (fr - 2) * 0.12) : S(p.R, 0.78 - (fr - 2) * 0.12)));
+    }
+    if (fr < 3) diamond(P, x, y, fr === 1 ? 6 : 5, p.R, hot);
+  },
+});
+
+registerShapes({
+  /** A spark and a streak that do not light the floor (see SPK). */
+  stSpark: (v, P, p, s) => DRAW.spark(v, P, p, s),
+  stStreak: (v, P, p, s) => DRAW.streak(v, P, p, s),
   /** A heavy blow's cut: a hairline across the body that lands whole, then splits outward from its middle. */
   cut(v, P, p) {
     const fr = Math.floor(p.age * 12); if (fr > 5) return;
@@ -824,22 +1184,20 @@ registerShapes({
     // the head: a leaf, widest a third of the way back from the point
     ribbon(P, [[tx - ux * hl, ty - uy * hl], [tx, ty]], (f) => hw * Math.sin(Math.PI * Math.min(1, (f * 0.75 + 0.25))) * (1 - f * 0.6), (f, e) => (f > 0.8 && fr === 1 ? WHITE : e < 0.5 ? S(p.R, 1) : S(p.R, 0.72)));
   },
-  /** Sweep: a wide flat arc round the wielder at waist height, its head bright, its tail breaking up. */
-  mlSwath(v, P, p) {
-    const fr = Math.floor(p.age * 12); if (fr > 5) return;
-    const head = [0.5, 1, 1, 1, 1, 1][fr], tail = [0, 0, 0.35, 0.6, 0.8, 0.92][fr], N = Math.max(12, Math.ceil(p.r * v.aps * p.span * 1.6));
-    for (let i = 0; i <= N; i++) {
-      const f = i / N; if (f < tail || f > head) continue;
-      const q = p.q0 + p.dir * f * p.span, [x, y] = v.ap(p.x + Math.cos(q) * p.r, p.y + Math.sin(q) * p.r, p.z), lead = head - f;
-      const back = Math.sin(q) < -0.2 && v.kind === "side";
-      if (lead < 0.1 && fr < 2) { for (let k = 0; k < p.th + 1; k++) P.px(x, y - k + 1, fr === 1 || p.edge ? WHITE : S(p.R, 1), 2); continue; }
-      const old = f - tail < 0.22;
-      for (let k = 0; k < p.th; k++) {
-        const c = k === 0 ? S(p.R, back ? 0.62 : 0.95) : S(p.R, back ? 0.45 : old ? 0.6 : 0.78);
-        if (old && (Math.floor(x) + Math.floor(y) + k) % 2) continue;
-        P.px(x, y - k + 1, c, 1);
-      }
-    }
+  /** Thrust: a bundle of streaks shooting from behind the point to it, the middle one hot; it draws back and thins. */
+  stBundle(v, P, p) {
+    const fr = Math.floor(p.age * 12); if (fr > 3) return;
+    const [tx, ty, ux, uy] = blowDir(v, p), [bx, by] = v.ap(p.x - p.ux * p.len, p.y - p.uy * p.len, p.z), L = Math.hypot(tx - bx, ty - by);
+    if (L < 4) return;
+    const px = -uy, py = ux, k = Math.min(1.5, p.sc / BIG), from = [0, 0.35, 0.6, 0.8][fr];
+    [-7, -4, -2, 0, 2, 4, 7].forEach((o, i) => {
+      if (fr >= 2 && Math.abs(o) > 2) return;
+      const off = o * k, s0 = Math.max(from, 0.06 * Math.abs(o) + 0.04 * (i % 2)), mid = o === 0;
+      const x0 = tx - ux * L * (1 - s0) + px * off, y0 = ty - uy * L * (1 - s0) + py * off, x1 = tx - ux * Math.abs(o) * 1.2 + px * off, y1 = ty - uy * Math.abs(o) * 1.2 + py * off;
+      const col = (f) => (mid && f > 0.8 && fr === 0 ? WHITE : mid || f > 0.7 ? S(p.R, 1 - fr * 0.1) : S(p.R, 0.6 + 0.3 * f - fr * 0.1));
+      P.line(x0, y0, x1, y1, null, 1, 1, col);
+      if (mid && fr < 2) P.line(x0 + px, y0 + py, x1 + px, y1 + py, null, 1, 1, (f) => S(p.R, 0.82 + f * 0.15));
+    });
   },
   /** Stab: a short knife jab, in and out in two frames. */
   mlShiv(v, P, p) {

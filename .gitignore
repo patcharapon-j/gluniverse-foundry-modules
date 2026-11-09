@@ -6,6 +6,9 @@ node_modules/
 # Local preview output (tools/*-preview.mjs)
 .preview/
 
+# Reference material fetched per machine (tools/fx-reference.mjs), never committed
+.reference/
+
 # Impeccable: the engine binary is downloaded per machine by its launcher,
 # and per-developer config and live-mode state stay local.
 .claude/skills/impeccable/scripts/bin/

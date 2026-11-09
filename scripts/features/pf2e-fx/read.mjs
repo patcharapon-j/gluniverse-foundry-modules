@@ -22,6 +22,11 @@
  *                  the condition item).
  *   self-effect    the item named by context.item on the speaker's actor.
  *
+ * A Strike that lists Grab, Knockdown or Push plays only its blow. PF2e's
+ * follow-up (a Grapple check; a Grab action card only when it rolls none) plays the maneuver
+ * with its own outcome, and draws it with the body part the Strike landed with
+ * when it comes from the same token inside TIMING.handoff (handoff.mjs).
+ *
  * Privacy is the message's: a card this viewer cannot read plays nothing, a
  * degree this viewer may not see plays "neutral", a token this viewer cannot
  * see is not drawn (and a GM-hidden one never on the stream login, which
@@ -34,7 +39,9 @@ import { metagame, reachedPlayers } from "../pf2e-odds/observe.mjs";
 import { seedOf } from "./core/rand.mjs";
 import { LOOK_FLAG, SETTINGS, TIMING } from "./constants.mjs";
 import { applyLook, mergeLooks } from "./looks.mjs";
-import { describeCondition, describeItem, describeSkillAction, describeTick, outcomeFrom, slugOf } from "./semantics.mjs";
+import { describeBlast, describeCondition, describeItem, describeSkillAction, describeTick, outcomeFrom, slugOf, traitsOf } from "./semantics.mjs";
+import { HANDOFF_ARCHES, Riders, checkBacked, limbOf } from "./handoff.mjs";
+import { Seen, auraArea, auraDesc, auraShown, fearDesc, observable, passiveJoinKey, passiveKey, passiveOf, regenDesc, turnAdvanced, turnPulse } from "./passives.mjs";
 
 /* ── settings and viewer ───────────────────────────────────────────────── */
 
@@ -42,6 +49,7 @@ const setting = (key, fallback) => {
   try { const v = game.settings.get(SUITE_ID, key); return v ?? fallback; } catch { return fallback; }
 };
 const enabled = (key) => setting(key, true) !== false;
+const localize = (key) => game.i18n?.localize?.(key) ?? key;
 
 /** May this viewer read the message at all? pf2e-odds' landingOf gate, which
  *  itself answers only for check cards; a cast card or a tick has no roll. */
@@ -186,8 +194,9 @@ function itemOf(message) {
   try { return message.item ?? null; } catch { return null; }
 }
 
-/** Semantics + bodies + look → a spec the Director can play, or null. */
-function finish(desc, { id, seedKey, caster = null, targets = [], area = null, outcome = "neutral", slug = null, actor = null, item = null }) {
+/** Semantics + bodies + look → a spec the Director can play, or null.
+ *  `follow` ({ token, at }): who posted it and when, so a maneuver can take the body part of the Strike it follows. */
+function finish(desc, { id, seedKey, caster = null, targets = [], area = null, outcome = "neutral", slug = null, actor = null, item = null, follow = null }) {
   if (!desc || desc.silent) return null;
   const spec = {
     id, seed: seedOf(String(seedKey ?? id)),
@@ -197,8 +206,18 @@ function finish(desc, { id, seedKey, caster = null, targets = [], area = null, o
     craft: desc.craft ?? null,
     // the look axes (docs/SPELLSPRITE_LOOK.md)
     delivery: desc.delivery ?? null, motif: desc.motif ?? null, props: desc.props ?? [], flavor: desc.flavor ?? null,
+    arch: desc.arch ?? null, rider: desc.rider ?? null,
+    // archetypes read the slug for their variants (charm's heart, trample, throw rock);
+    // a cast is told apart from an action so a maneuver never plays a spell's charge
+    slug: slug ?? desc.slug ?? null, cast: item?.type === "spell", passive: !!desc.passive,
+    // archetype variants read traits beside the slug (a swarm polymorph, an undead summon, a poison seep)
+    traits: item ? [...traitsOf(item)] : [],
   };
   if (!spec.caster && !spec.targets.length && !spec.area) return null;
+  // only a spec that already plays is restyled; a spell or a passive that grabs follows no Strike
+  spec.limb = follow && !spec.cast && !spec.passive && spec.kind !== "strike" && HANDOFF_ARCHES.has(spec.arch)
+    ? riders.take(follow.token, spec.arch, { at: follow.at, targets: spec.targets.map((t) => t.id) })
+    : null;
   return applyLook(spec, lookFor(slug ?? desc.slug, actor, item));
 }
 
@@ -308,6 +327,8 @@ function areaFallback(desc, caster, casterToken, targets) {
 /* ── casts: the card, its region, its saves ───────────────────────────── */
 
 let director = null;
+/** attacker token id → the body part of its last rider-bearing hit (handoff.mjs) */
+const riders = new Riders({ window: TIMING.handoff, limit: 64 });
 /** castId → record */
 const casts = new Map();
 /** origin uuid → [castId] newest last */
@@ -389,7 +410,7 @@ async function fire(rec) {
   }
   targets = targets.map((t) => ({ ...t, outcome: outcomeOf(t.id) }));
   const primary = targets.find((t) => t.outcome !== "neutral")?.outcome ?? "neutral";
-  const spec = finish(rec.desc, { id: `msg:${rec.id}`, seedKey: rec.id, caster, targets, area, outcome: primary, slug: rec.slug, actor: rec.actor, item: rec.item });
+  const spec = finish(rec.desc, { id: `msg:${rec.id}`, seedKey: rec.id, caster, targets, area, outcome: primary, slug: rec.slug, actor: rec.actor, item: rec.item, follow: { token: casterToken?.id, at: rec.at } });
   play(spec, `msg:${rec.id}`);
 }
 
@@ -443,6 +464,9 @@ function onCard(message, ctx, origin) {
   });
   if (!desc || desc.silent) return;
   if (desc.kind === "attack" && isSpell) return; // the attack roll plays it
+  // a Grab / Knockdown / Push card that rolls a Grapple / Trip / Shove: that check plays the maneuver,
+  // with its outcome and the Strike's body part, so the card plays nothing and leaves the memory
+  if (!isSpell && HANDOFF_ARCHES.has(desc.arch) && checkBacked(desc.arch, item, localize)) return;
   const rec = openCast(message, item, desc, casterToken);
   const stray = strayRegions.get(message.id);
   if (stray) { strayRegions.delete(message.id); attachRegion(rec, stray); return; }
@@ -517,6 +541,18 @@ function poweredSwing(actor) {
   } catch { return false; }
 }
 
+/**
+ * An Elemental Blast: an attack roll whose origin is the impulse (an action),
+ * which the weapon/melee/spell gate would drop. PF2e 8.7 tags it
+ * `action: "elemental-blast"` and names the choice in `identifier`
+ * (`<element>.<damageType>.<melee|ranged>.<cost>`).
+ */
+const isBlast = (ctx) => ctx?.action === "elemental-blast" || !!ctx?.options?.includes?.("action:elemental-blast");
+function blastOf(ctx, ranged) {
+  const [element = null, damageType = null, reach = null] = String(ctx?.identifier ?? "").split(".");
+  return { element, damageType, melee: reach ? reach === "melee" : !ranged };
+}
+
 async function onAttack(message, ctx, origin) {
   const isSpell = origin?.type === "spell";
   if (isSpell ? !enabled(SETTINGS.spells) : !enabled(SETTINGS.strikes)) return;
@@ -529,15 +565,18 @@ async function onAttack(message, ctx, origin) {
   const domains = ctx?.domains ?? [];
   const options = ctx?.options ?? [];
   const ranged = domains.includes?.("ranged-attack-roll") || options.includes?.("item:ranged");
-  const desc = isSpell
+  const blast = isBlast(ctx) ? blastOf(ctx, ranged) : null;
+  const desc = blast ? describeBlast(item, blast) : isSpell
     ? describeItem(item, { use: "cast", castRank: origin?.castRank, tradition: message.flags?.pf2e?.casting?.tradition ?? null, actorLevel: message.actor?.level, targetUndead: isUndead(targetToken?.actor) })
     : describeItem(item, { use: "strike", ranged, actorLevel: message.actor?.level, weapon: linkedWeapon(item) });
   if (!desc || desc.silent) return;
+  const outcome = degreeShown() ? outcomeFrom(ctx?.outcome, "attack") : "neutral";
+  // a Strike's rider is the follow-up's to play: remember what landed it, from the degree this viewer sees
+  if (!isSpell && !blast && casterToken) riders.note(casterToken.id, { rider: desc.rider, limb: limbOf(desc, slugOf(item)), outcome, target: targetToken?.id ?? null, at: received });
   await diceDone(message);
   if (nowS() - received > TIMING.stale) return;
   const caster = bodyOf(casterToken);
   const target = bodyOf(targetToken);
-  const outcome = degreeShown() ? outcomeFrom(ctx?.outcome, "attack") : "neutral";
   const targets = target ? [{ ...target, outcome }] : [];
   let area = null;
   if (desc.area && target) area = { ...desc.area, x: target.x, y: target.y, dir: aim(caster, target) };
@@ -548,7 +587,7 @@ async function onAttack(message, ctx, origin) {
     desc.weapon = { ...desc.weapon, power: true };
     desc.props = [...new Set([...(desc.props ?? []), "power"])].sort();
   }
-  const spec = finish({ ...desc, kind: isSpell ? "attack" : "strike" }, {
+  const spec = finish({ ...desc, kind: isSpell || blast ? "attack" : "strike" }, {
     id: `msg:${message.id}`, seedKey: message.id, caster, targets, area, outcome,
     slug: slugOf(item), actor: message.actor, item,
   });
@@ -567,13 +606,14 @@ async function onSkillAction(message, ctx) {
   const received = nowS();
   await diceDone(message);
   if (nowS() - received > TIMING.stale) return;
-  const caster = bodyOf(speakerToken(message));
+  const speaker = speakerToken(message);
+  const caster = bodyOf(speaker);
   const target = bodyOf(tokenOf(ctx?.target?.token));
   const outcome = degreeShown() && desc.mode === "attack" ? outcomeFrom(ctx?.outcome, "attack") : "neutral";
   const spec = finish(desc, {
     id: `msg:${message.id}`, seedKey: message.id, caster,
     targets: target && desc.kind !== "self" ? [{ ...target, outcome }] : [],
-    outcome, slug, actor: message.actor,
+    outcome, slug, actor: message.actor, follow: { token: speaker?.id, at: received },
   });
   play(spec, `msg:${message.id}`);
 }
@@ -589,7 +629,7 @@ async function onTick(message, origin) {
   const body = bodyOf(speakerToken(message) ?? tokenOf(cond.actor));
   if (!body) return;
   const desc = describeTick(cond.system?.persistent?.damageType, {});
-  const spec = finish(desc, { id: `msg:${message.id}`, seedKey: message.id, targets: [{ ...body, outcome: "neutral" }], slug: "persistent-damage", actor: cond.actor });
+  const spec = finish(desc, { id: `msg:${message.id}`, seedKey: message.id, targets: [{ ...body, outcome: "neutral" }], slug: "persistent-damage" });
   play(spec, `msg:${message.id}`);
 }
 
@@ -601,8 +641,9 @@ function onSelfEffect(message, ctx) {
   if (enabled(SETTINGS.standDown) && aaPlays(item)) return;
   const desc = describeItem(item, { use: "action", actorLevel: actor?.level });
   if (!desc || desc.silent) return;
-  const caster = bodyOf(speakerToken(message));
-  const spec = finish({ ...desc, kind: "self" }, { id: `msg:${message.id}`, seedKey: message.id, caster, slug: slugOf(item), actor, item });
+  const speaker = speakerToken(message);
+  const caster = bodyOf(speaker);
+  const spec = finish({ ...desc, kind: "self" }, { id: `msg:${message.id}`, seedKey: message.id, caster, slug: slugOf(item), actor, item, follow: { token: speaker?.id, at: nowS() } });
   play(spec, `msg:${message.id}`);
 }
 
@@ -614,14 +655,24 @@ function onMessage(message) {
     const origin = originOf(message);
     const type = ctx?.type ?? null;
     if (type === "attack-roll") {
-      if (["weapon", "melee", "spell"].includes(origin?.type)) void onAttack(message, ctx, origin);
+      if (["weapon", "melee", "spell"].includes(origin?.type) || isBlast(ctx)) void onAttack(message, ctx, origin);
       return;
     }
-    if (type === "saving-throw") { if (origin?.uuid) onSave(message, ctx, origin); return; }
+    if (type === "saving-throw") {
+      // a passive's save (Frightful Presence, Stench) has no cast to join: it is the moment itself
+      if (origin?.uuid) { if (!castFor(origin) && PASSIVE_ORIGINS.has(origin.type)) onPassiveRoll(message, ctx, origin); else onSave(message, ctx, origin); }
+      return;
+    }
+    if (type === "damage-taken") { onHealTaken(message); return; }
     if (type === "skill-check" || type === "perception-check") { void onSkillAction(message, ctx); return; }
     if (type === "self-effect") { onSelfEffect(message, ctx); return; }
-    if (type === "damage-roll") { if (!ctx?.origin && origin?.uuid && !origin.type) void onTick(message, origin); return; }
+    if (type === "damage-roll") {
+      if (!ctx?.origin && origin?.uuid && !origin.type) void onTick(message, origin);
+      else if (origin?.uuid && PASSIVE_ORIGINS.has(origin.type)) onPassiveRoll(message, ctx, origin);
+      return;
+    }
     if (!ctx && origin?.uuid && !origin.type && message.rolls?.length) { void onTick(message, origin); return; }
+    if (!ctx && !origin && message.rolls?.length) { void onRegenCard(message); return; }
     if (type === null || type === "spell-cast") {
       if (origin?.type && origin.type !== "weapon" && origin.type !== "melee") onCard(message, ctx, origin);
     }
@@ -689,7 +740,8 @@ function reconcile() {
         const desc = describeCondition(c.slug, { value: c.value, damageType: c.damageType });
         if (!desc || desc.silent) continue;
         const key = `cond:${token.id}:${keySlug}`;
-        const spec = finish(desc, { id: key, seedKey: key, targets: [{ ...body, outcome: "neutral" }], slug: c.slug, actor: token.actor });
+        // no actor: a creature's look styles what it does, never what is done to it
+        const spec = finish(desc, { id: key, seedKey: key, targets: [{ ...body, outcome: "neutral" }], slug: c.slug });
         if (spec) want.set(key, spec);
       }
     }
@@ -719,6 +771,200 @@ export function primeScene(dir = director) {
   active.clear();
   if (reconcileTimer) { clearTimeout(reconcileTimer); reconcileTimer = null; }
   reconcile();
+}
+
+/* ── passives: Frightful Presence, auras, Regeneration ────────────────── */
+/*
+ * Nothing posts a passive's card, so each plays on the PF2e event that shows it
+ * happening (passives.mjs cites the system source for each):
+ *   - a save or damage card whose origin is the passive (Frightful Presence's
+ *     Will save, Stench's Fortitude save, Dragon Heat's damage): the saves of
+ *     one passive are joined like a cast's, then `fear` plays from the creature
+ *     onto every saver, or the aura pulses round it;
+ *   - FastHealing's turn-start healing card, and the healing applied from it on
+ *     that creature's turn: one small `rise` per creature per round;
+ *   - `combatTurnChange` (every client): a creature with a visible aura pulses
+ *     once per round, for the viewers PF2e itself draws that aura for.
+ * The cards are read through canRead like any other; the turn pulse has no
+ * message, so it takes the status cards' rule (`observable`) and bodyOf's sight.
+ */
+
+const PASSIVE_ORIGINS = new Set(["action", "feat"]);
+/** passiveJoinKey(source token, origin uuid) → the open join of one creature's passive's saves */
+const passiveRolls = new Map();
+/** Keys already played: one regen and one turn pulse per creature per round. */
+const passiveSeen = new Seen(256);
+
+const gridDistance = () => Number(canvas?.dimensions?.distance ?? canvas?.scene?.grid?.distance) || 5;
+
+/** The passive an origin uuid names, with its item, or null. */
+function passiveFromUuid(uuid) {
+  let item = null;
+  try { item = uuid ? fromUuidSync(uuid) : null; } catch { item = null; }
+  if (!item || item.documentName !== "Item") return null;
+  const p = passiveOf(item, { actorLevel: item.actor?.level });
+  return p ? { ...p, item } : null;
+}
+
+/** Every passive an actor carries, each with its item. */
+function passivesOf(actor) {
+  const out = [];
+  try {
+    for (const item of actor?.items ?? []) {
+      if (!PASSIVE_ORIGINS.has(item?.type)) continue;
+      const p = passiveOf(item, { actorLevel: actor.level });
+      if (p) out.push({ ...p, item });
+    }
+  } catch { /* an actor mid-update */ }
+  return out;
+}
+
+/** The aura's live radius in feet (PF2e's prepared `auras`), else what the item says. */
+function auraFeetOf(token, p) {
+  try {
+    const live = token?.document?.auras?.get?.(p.slug)?.radius ?? token?.actor?.auras?.get?.(p.slug)?.radius;
+    if (Number(live) > 0) return Number(live);
+  } catch { /* fall through */ }
+  return p.feet;
+}
+
+/** A save or damage card from a passive: join it with the others of the same passive. */
+function onPassiveRoll(message, ctx, origin) {
+  if (!enabled(SETTINGS.actions)) return;
+  const p = passiveFromUuid(origin.uuid);
+  if (!p || p.kind === "regen") return;
+  if (enabled(SETTINGS.standDown) && aaPlays(p.item)) return;
+  // two tokens of one linked actor share the item: each one's saves are its own join, from it
+  const source = tokenOf(ctx?.origin?.token) ?? tokenOf(p.item.actor);
+  const key = passiveJoinKey(source?.id, origin.uuid);
+  let rec = passiveRolls.get(key);
+  if (!rec || rec.fired || nowS() - rec.at > TIMING.joinWindow) {
+    rec = {
+      id: message.id, key, at: nowS(), p, actor: p.item.actor ?? null,
+      source, saves: new Map(), messages: [], timer: null, fired: false,
+    };
+    passiveRolls.set(key, rec);
+  }
+  rec.messages.push(message);
+  const who = ctx?.type === "saving-throw" ? speakerToken(message) ?? tokenOf(ctx?.token) : tokenOf(ctx?.target?.token);
+  if (who && who.id !== rec.source?.id) rec.saves.set(who.id, { token: who, message });
+  // the next save may still be coming; never wait past the join window
+  if (rec.timer) { clearTimeout(rec.timer); timers.delete(rec.timer); }
+  rec.timer = later(Math.max(0, Math.min(TIMING.saveWait, TIMING.joinWindow - (nowS() - rec.at))), () => void firePassive(rec));
+}
+
+async function firePassive(rec) {
+  if (rec.fired) return;
+  rec.fired = true;
+  if (passiveRolls.get(rec.key) === rec) passiveRolls.delete(rec.key);
+  await Promise.all(rec.messages.map((m) => diceDone(m)));
+  if (nowS() - rec.at > TIMING.stale + TIMING.joinWindow) return;
+  const caster = bodyOf(rec.source);
+  const shown = degreeShown();
+  const targets = [];
+  for (const { token, message } of rec.saves.values()) {
+    const b = bodyOf(token);
+    if (!b) continue;
+    const c = ctxOf(message);
+    const outcome = shown && canRead(message) && c?.type === "saving-throw" ? outcomeFrom(c.outcome, "save") : "neutral";
+    targets.push({ ...b, outcome });
+  }
+  const primary = targets.find((t) => t.outcome !== "neutral")?.outcome ?? "neutral";
+  let desc, area = null;
+  if (rec.p.kind === "fear") {
+    // the dread lands on whoever saved; an unseen source simply is not drawn
+    if (!targets.length) return;
+    desc = fearDesc(rec.p);
+  } else {
+    // an aura is drawn round its creature: one this viewer cannot see pulses nowhere
+    if (!caster) return;
+    desc = auraDesc(rec.p);
+    area = auraArea(caster, auraFeetOf(rec.source, rec.p), gridDistance());
+  }
+  const spec = finish(desc, { id: `pas:${rec.id}`, seedKey: rec.id, caster, targets, area, outcome: primary, slug: rec.p.slug, actor: rec.actor, item: rec.p.item });
+  play(spec, `pas:${rec.id}`);
+}
+
+/** The round a creature's regeneration belongs to: the running combat's, else the message's own. */
+function regenRound(token, fallback) {
+  const c = game.combat;
+  return c?.started && c.round > 0 && (c.combatant?.tokenId === token?.id) ? `${c.id}:${c.round}` : `msg:${fallback}`;
+}
+
+/** Seeded by its key, so the GM (who saw the card) and a player (who saw the heal) draw one take. */
+function playRegen(token, p, round) {
+  const body = bodyOf(token);
+  if (!body) return;
+  const key = passiveKey("regen", token.id, round);
+  if (!passiveSeen.claim(key)) return;
+  const spec = finish(regenDesc(p, { undead: isUndead(token.actor) }), {
+    id: key, seedKey: key, targets: [{ ...body, outcome: "neutral" }], outcome: "neutral", slug: p.slug, actor: token.actor, item: p.item,
+  });
+  play(spec, key);
+}
+
+/** FastHealingRuleElement's turn-start card: one roll `{(N)[healing]}`, no PF2e context, the creature speaking. */
+async function onRegenCard(message) {
+  if (!enabled(SETTINGS.actions)) return;
+  if (message.rolls.length !== 1 || !/\[healing\]/.test(String(message.rolls[0]?.formula ?? ""))) return;
+  const token = speakerToken(message);
+  const p = passivesOf(token?.actor ?? message.actor).find((x) => x.kind === "regen");
+  if (!token || !p) return;
+  if (enabled(SETTINGS.standDown) && aaPlays(p.item)) return;
+  const received = nowS();
+  await diceDone(message);
+  if (nowS() - received > TIMING.stale) return;
+  playRegen(token, p, regenRound(token, message.id));
+}
+
+/** Healing applied (`damage-taken`, isHealing) to a regenerating creature on its own turn: the heal players see. */
+function onHealTaken(message) {
+  if (!enabled(SETTINGS.actions)) return;
+  if (!message.flags?.pf2e?.appliedDamage?.isHealing) return;
+  const token = speakerToken(message);
+  const c = game.combat;
+  if (!token || !c?.started || c.combatant?.tokenId !== token.id) return;
+  const p = passivesOf(token.actor).find((x) => x.kind === "regen");
+  if (!p) return;
+  if (enabled(SETTINGS.standDown) && aaPlays(p.item)) return;
+  // the same key as the card's, so a viewer who saw the card does not see it twice
+  playRegen(token, p, regenRound(token, message.id));
+}
+
+/** Foundry's `combatTurnChange` (every client): a creature with a visible aura breathes it out once a round. */
+function onTurnChange(combat, prior, current) {
+  try {
+    if (!director || !canvas?.ready || !enabled(SETTINGS.actions)) return;
+    if (!turnAdvanced(prior, current)) return;
+    if (combat?.scene && combat.scene.id !== sceneId()) return;
+    const token = canvas.tokens?.get(current.tokenId);
+    const actor = token?.actor;
+    if (!actor) return;
+    const combatant = combat.combatants?.get?.(current.combatantId);
+    const truth = seesTruth();
+    const hidden = !!(token.document?.hidden || combatant?.hidden);
+    if (!observable({ truth, playerOwned: !!actor.hasPlayerOwner, hidden, onScene: token.document?.parent?.id === sceneId() })) return;
+    if (!auraShown({ truth, party: actor.alliance === "party" })) return;
+    const p = turnPulse(passivesOf(actor));
+    if (!p) return;
+    if (enabled(SETTINGS.standDown) && aaPlays(p.item)) return;
+    const body = bodyOf(token);
+    if (!body) return;
+    const key = passiveKey("aura", token.id, `${combat.id}:${current.round}`);
+    if (!passiveSeen.claim(key)) return;
+    const spec = finish(auraDesc(p), {
+      id: key, seedKey: key, caster: body, targets: [], area: auraArea(body, auraFeetOf(token, p), gridDistance()),
+      outcome: "neutral", slug: p.slug, actor, item: p.item,
+    });
+    play(spec, key);
+  } catch (e) {
+    console.warn("Spellsprite | could not read a turn change", e);
+  }
+}
+
+function resetPassives() {
+  passiveRolls.clear();
+  passiveSeen.clear();
 }
 
 /* ── wiring ────────────────────────────────────────────────────────────── */
@@ -751,6 +997,7 @@ export function wireReader(dir) {
   on("sightRefresh", () => scheduleReconcile(0.25));
   on("canvasReady", () => primeScene());
   on("updateSetting", (s) => { if (OUR_SETTINGS.has(s?.key)) scheduleReconcile(); });
+  on("combatTurnChange", (combat, prior, current) => onTurnChange(combat, prior, current));
 
   if (canvas?.ready) primeScene();
 
@@ -760,7 +1007,7 @@ export function wireReader(dir) {
     for (const t of timers) clearTimeout(t);
     timers.clear();
     if (reconcileTimer) { clearTimeout(reconcileTimer); reconcileTimer = null; }
-    casts.clear(); byOrigin.clear(); strayRegions.clear();
+    casts.clear(); byOrigin.clear(); strayRegions.clear(); resetPassives(); riders.clear();
     try { director?.stopLoops("cond:"); } catch { /* none */ }
     active.clear();
     director = null;

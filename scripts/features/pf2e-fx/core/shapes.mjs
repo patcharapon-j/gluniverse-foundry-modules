@@ -66,7 +66,8 @@ registerShapes({
         return fade < 1 ? { c: S(R, t), a: fade } : S(R, t);
       }
       return null;
-    }, 1);
+    // a fading puff is truly translucent (quarter alpha), never a dithered checkerboard
+    }, 1, fade < 1 ? "mix" : undefined);
   },
   tongue(v, P, p) {
     const u = clamp(q12(p.age) / p.life), fr = Math.floor(p.age * 12), grow = Math.sin(Math.PI * Math.min(1, u * 1.15));
@@ -80,8 +81,9 @@ registerShapes({
     }
   },
   spark(v, P, p) {
-    const u = p.age / p.life, [hx, hy] = v.ap(p.x, p.y, p.z), [tx, ty] = v.ap(p.x - p.vx * 0.035, p.y - p.vy * 0.035, p.z - p.vz * 0.035);
-    P.line(tx, ty, hx, hy, null, 0, 1, (f) => (f > 0.7 ? S(p.R, 1 - u * 0.3) : S(p.R, 0.62 - u * 0.2)));
+    // stretched by its speed (a fast spark is a streak), white at the head while it is young
+    const u = p.age / p.life, [hx, hy] = v.ap(p.x, p.y, p.z), [tx, ty] = v.ap(p.x - p.vx * 0.055, p.y - p.vy * 0.055, p.z - p.vz * 0.055);
+    P.line(tx, ty, hx, hy, null, 0, 1, (f) => (f > 0.82 && u < 0.3 ? WHITE : f > 0.6 ? S(p.R, 1 - u * 0.3) : S(p.R, 0.62 - u * 0.2)));
   },
   streak(v, P, p) {
     const [hx, hy] = v.ap(p.x, p.y, p.z), [tx, ty] = v.ap(p.x - p.vx * 0.05, p.y - p.vy * 0.05, p.z - p.vz * 0.05);
