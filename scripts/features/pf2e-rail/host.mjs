@@ -35,7 +35,7 @@ import { answers, echoOf } from "./echo.mjs";
 import { combatOf, isTurnOf, subjectOf } from "./subject.mjs";
 import { actionPeek, effectRows, inventoryRows, macroSlots, spellPeek, strikePeek } from "./peeks.mjs";
 import { FLAGS, SETTINGS, setting } from "./settings.mjs";
-import { knownStat } from "../pf2e-odds/knowledge.mjs";
+import { clearKnowledgeCache, knownStat } from "../pf2e-odds/knowledge.mjs";
 import { nameFor, seesTruth } from "../pf2e-odds/view.mjs";
 import { metagame } from "../pf2e-odds/observe.mjs";
 
@@ -131,6 +131,12 @@ export class RailHost {
     this.on("createChatMessage", (m) => this.onMessage(m));
     this.on("renderHotbar", () => this.hotbar());
     this.on("collapseSidebar", () => requestAnimationFrame(() => { this.place(); this.publishEdge(); }));
+    /* What the party knows (PF2e Odds' ledger, a Creaturedex reveal) moves the
+       finder's chances, whether or not the Odds feature is on to notice. */
+    this.on("updateSetting", (setting) => {
+      const key = String(setting?.key ?? "");
+      if (key.endsWith(".od.ledger") || key.endsWith(".od.partyKnowledge") || key.includes(".dex.")) { clearKnowledgeCache(); this.schedule(); }
+    });
     this.on("clientSettingChanged", (key) => { if (String(key).startsWith(`${SUITE_ID}.ph.`)) { this.hotbar(); this.schedule(); } });
   }
 
@@ -158,7 +164,7 @@ export class RailHost {
   }
 
   /** Foundry's hotbar is hidden while the rail is up; the Macros drawer shows it. */
-  hotbar(hide = !!this.el && setting(SETTINGS.hideHotbar, true)) {
+  hotbar(hide = !!this.el && !!this.model && setting(SETTINGS.hideHotbar, true)) {
     const hb = document.getElementById("hotbar");
     if (hb) hb.style.display = hide ? "none" : "";
   }
@@ -285,7 +291,10 @@ export class RailHost {
     const { target, know } = this.targetFor(actor, truth);
     const data = await this.dataOf(actor);
     const v = this.viewOf(actor);
-    const current = combat?.combatant ? nameFor(combat.combatant.token, combat.combatant.actor) || t("GLRAIL.skill.target") : "";
+    const cb = combat?.combatant;
+    const veiled = !truth && !!(cb?.hidden || cb?.token?.hidden);
+    const current = cb ? (veiled ? t("GLRAIL.turnbar.someone") : nameFor(cb.token, cb.actor) || t("GLRAIL.skill.target")) : "";
+    this.turnKeyNow = turnKey(combat);
     return readPlayer({
       ...this.common(), actor, token, readonly: !actor.isOwner, mode: combat ? "encounter" : "exploration",
       turn: combat ? { mine, current, round: combat.round } : null, econ: turn.economy(base), map: mine ? turn.map : 0,
@@ -317,6 +326,7 @@ export class RailHost {
   clear() {
     this.model = this.prev = null; this.subjectKey = null; this.subj = null;
     if (this.el) this.el.innerHTML = "";
+    this.hotbar();
     this.publishEdge();
   }
 
@@ -348,6 +358,7 @@ export class RailHost {
     if (this.fs.open) this.settleFinder();
     if (this.peek) this.showPeek(this.peek.model, root.querySelector(this.peek.anchor), this.peek);
     this.prev = this.model;
+    this.hotbar();
     this.publishEdge();
   }
 
@@ -520,13 +531,27 @@ export class RailHost {
     if (b) D.echo(b, e);
   }
 
-  /** A costed press drains the tally; an attack advances the MAP step. */
-  spend(cost, attack = false) {
+/** Who is spending and in which turn, taken when the press lands: PF2e's
+   *  dialog may still be open when the subject or the turn moves on. */
+  spendCtx() {
     const actor = this.subj?.actor, tb = this.model?.turnbar;
-    if (!actor || this.model?.mode !== "encounter" || !tb?.economy) return;
-    const turn = this.turnOf(actor);
-    if (!turn.spend(cost, attack, { mine: !!tb.mine, max: tb.economy.max })) return;
-    this.update({ ...this.model, turnbar: { ...tb, map: tb.mine ? turn.map : 0, economy: turn.economy(tb.economy) } });
+    if (!actor || this.model?.mode !== "encounter" || !tb?.economy) return null;
+    return { actor, turn: this.turnOf(actor), key: this.turnKeyNow, mine: !!tb.mine, max: tb.economy.max };
+  }
+
+  /** A costed press drains the tally; an attack advances the MAP step. A
+   *  press that finishes in a later turn spends nothing; one that finishes
+   *  after the subject changed spends from its own actor's tally. */
+  spend(cost, attack = false, ctx = this.spendCtx()) {
+    if (!ctx || ctx.key !== this.turnKeyNow) return;
+    const before = ctx.turn.map;
+    if (!ctx.turn.spend(cost, attack, { mine: ctx.mine, max: ctx.max })) return;
+    const tb = this.model?.turnbar;
+    if (this.subj?.actor !== ctx.actor || !tb?.economy) return;
+    const next = { ...this.model, turnbar: { ...tb, map: tb.mine ? ctx.turn.map : 0, economy: ctx.turn.economy(tb.economy) } };
+    /* The skill keys and the finder print attack actions at the MAP step. */
+    if (ctx.turn.map !== before && (this.model.deck?.tab === "skills" || this.fs.open)) { this.model = next; this.render(); }
+    else this.update(next);
   }
 
   deny(el) { el.classList.remove("is-denied"); void el.offsetWidth; el.classList.add("is-denied"); }
@@ -546,7 +571,7 @@ export class RailHost {
       if (d.pip != null) { const turn = this.turnOf(actor), tb = m.turnbar; turn.pip(d.pip, tb.economy.max); return this.update({ ...m, turnbar: { ...tb, economy: turn.economy(tb.economy) } }); }
       if (d.explore) return this.explore(d.explore);
       if (d.act === "explore") { this.open.drawer = this.open.drawer === "explore" ? null : "explore"; return this.render(); }
-      if (d.act === "raise") { if (b.getAttribute("aria-disabled") === "true") return this.deny(b); await game.pf2e.actions.raiseAShield({ actors: [actor], event: e }); return this.spend(1); }
+      if (d.act === "raise") { if (b.getAttribute("aria-disabled") === "true") return this.deny(b); const ctx = this.spendCtx(); await game.pf2e.actions.raiseAShield({ actors: [actor], event: e }); return this.spend(1, false, ctx); }
       if (d.tab) { if (d.tab === m.deck.tab) return; const from = m.deck.tabs.findIndex((x) => x.key === m.deck.tab); this.viewOf(actor).tab = d.tab; this.model = { ...m, deck: { ...m.deck, tab: d.tab } }; this.render(); return D.travelTab(this.root, from); }
       if (d.act === "expand") { const tab = m.deck?.tab; if (tab === "skills") return this.openFinder(""); this.open.drawer = tab === "items" ? "inventory" : tab === "spells" ? "ranks" : "effects"; return this.render(); }
       if (d.act === "finder") return this.openFinder("");
@@ -561,8 +586,9 @@ export class RailHost {
       if (d.variant != null && d.strike) {
         if (b.getAttribute("aria-disabled") === "true") return this.deny(b.closest(".gph-stk, .gph-nstk") ?? b);
         this.expect(b);
+        const ctx = this.spendCtx();
         await this.strike(d.strike, "attack", +d.variant, e);
-        return this.spend(1, true);
+        return this.spend(1, true, ctx);
       }
       if (d.dmg) { this.expect(b); return this.strike(d.dmg, "damage", 0, e); }
       if (d.crit) { this.expect(b); return this.strike(d.crit, "critical", 0, e); }
@@ -603,7 +629,7 @@ export class RailHost {
     return s[what]?.({ event });
   }
 
-  async useSkillAction(id, variant, event, button) {
+  async useSkillAction(id, variant, event, button, kind = null) {
     const f = this.finder("", "all");
     const a = f?.actions.find((x) => x.id === id);
     const actor = this.subj?.actor;
@@ -614,22 +640,32 @@ export class RailHost {
     /* Earn Income is PF2e's own dialog, opened for the actor. */
     if (a.slug === "earn-income") return game.pf2e.actions.earnIncome?.(actor);
     const action = game.pf2e.actions.get?.(a.slug);
-    if (action) await action.use({ actors: [actor], statistic: a.skill.slug, event, ...(a.attack ? { multipleAttackPenalty: map } : {}) });
+    /* PF2e refuses to guess between an action's variants (Administer First
+       Aid, Create a Diversion, Perform): the press asks which, over itself. */
+    const variants = action?.variants ? [...action.variants.values()] : [];
+    if (!kind && variants.length > 1) {
+      return this.showPeek({ name: a.name, from: `${a.skill.name} ${(a.mapMod ?? a.skill.mod) < 0 ? "−" : "+"}${Math.abs(a.mapMod ?? a.skill.mod)}`,
+        actions: variants.map((x) => ({ id: `variant:${x.slug}`, label: game.i18n.localize(x.name ?? x.slug), ...(a.cost != null ? { cost: a.cost } : {}) })) },
+        button, { kind: "variant", id: a.id, anchor: `[data-skill-action="${CSS.escape(a.id)}"]` });
+    }
+    const ctx = this.spendCtx();
+    if (action) await action.use({ actors: [actor], statistic: a.skill.slug, event, ...(kind ? { variant: kind } : {}), ...(a.attack ? { multipleAttackPenalty: map } : {}) });
     else {
       const legacy = game.pf2e.actions[camel(a.slug)];
       if (typeof legacy !== "function") { warn(`PF2e HUD | PF2e has no action "${a.slug}"`); return; }
       await legacy({ actors: [actor], skill: a.skill.slug, event });
     }
-    this.spend(a.cost, a.attack);
+    this.spend(a.cost, a.attack, ctx);
   }
 
   async cast(id, card, event) {
     const ref = this.spellRef(id);
     if (!ref.entry || !ref.spell) return;
     if (card.closest(".gph-card.is-spent")) return this.deny(card);
+    const ctx = this.spendCtx();
     await D.castCard(card);
     await ref.entry.cast(ref.spell, { ...(typeof ref.key === "number" ? { rank: ref.key } : {}), ...(ref.slotId != null ? { slotId: ref.slotId } : {}) });
-    this.spend(card.dataset.cost ?? null);
+    this.spend(card.dataset.cost ?? null, false, ctx);
   }
 
   async pressPeek(pa, event) {
@@ -643,8 +679,13 @@ export class RailHost {
     if (p.kind === "action") {
       const item = actor.items.get(p.id);
       this.closePeek();
-      if (pa === "use") { await game.pf2e.rollItemMacro(item.uuid, event); return this.spend(costOf(item)); }
+      if (pa === "use") { const ctx = this.spendCtx(); await game.pf2e.rollItemMacro(item.uuid, event); return this.spend(costOf(item), false, ctx); }
       if (pa === "post") return item?.toMessage(event);
+    }
+    if (p.kind === "variant" && pa.startsWith("variant:")) {
+      const button = this.root?.querySelector(p.anchor);
+      this.closePeek();
+      return this.useSkillAction(p.id, undefined, event, button, pa.slice(8));
     }
     if (p.kind === "strike" && pa === "post") { const s = list(actor.system?.actions)[+p.id]; this.closePeek(); return s?.item?.toMessage(event); }
   }
@@ -658,7 +699,7 @@ export class RailHost {
     if (kind === "macro") return game.macros.get(id)?.execute();
     if (kind === "foe") return this.controlToken(id);
     if (kind === "explore") { this.open.drawer = null; return this.explore(id); }
-    if (kind === "strike") { const s = this.model?.strikes?.list?.find((x) => x.id === id); this.open.drawer = null; this.render(); await this.strike(id, "attack", this.model?.turnbar?.map ?? 0, event); return s ? this.spend(1, true) : null; }
+    if (kind === "strike") { const s = this.model?.strikes?.list?.find((x) => x.id === id); this.open.drawer = null; this.render(); const ctx = this.spendCtx(); await this.strike(id, "attack", this.model?.turnbar?.map ?? 0, event); return s ? this.spend(1, true, ctx) : null; }
     if (kind === "i") { const it = actor?.items?.get(id); if (!it) return; return it.type === "consumable" ? it.consume() : it.toMessage(event); }
   }
 

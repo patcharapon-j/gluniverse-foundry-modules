@@ -388,6 +388,7 @@ section("the action economy is local and follows PF2e's counts", () => {
   ok(economyOf([cond("quickened", "Quickened")]).max === 4, "Quickened: four");
   ok(economyOf([cond("slowed", "Slowed", 1)]).max === 2 && economyOf([cond("slowed", "Slowed", 1)]).tone === "danger", "Slowed 1: two, in red");
   ok(economyOf([cond("stunned", "Stunned", 2), cond("quickened", "Quickened")]).max === 2, "Stunned 2 and Quickened: two");
+  ok(economyOf([cond("stunned", "Stunned", 1), cond("slowed", "Slowed", 2)]).max === 1, "Stunned 1 and Slowed 2: one (the larger loss, never the sum)");
   const tn = new Turn();
   ok(tn.sync("c:1:0", true) === true && tn.spent === 0, "a new turn refills");
   tn.spend(2, false, { mine: true, max: 3 }); tn.spend(1, true, { mine: true, max: 3 });
@@ -525,6 +526,11 @@ section("the host keeps to its own corner", () => {
   ok(/style\.display = hide \? "none" : ""/.test(h), "the hotbar is hidden, and given back");
   ok(/--gph-rail-top/.test(h), "the rail publishes its top edge");
   ok(/Budget\.claimMotion/.test(h) === false, "the rail animates only on input, so it claims no motion");
+  ok(/hidden[^\n]*GLRAIL\.turnbar\.someone|GLRAIL\.turnbar\.someone[^\n]*hidden/.test(h) || /veiled[\s\S]{0,200}GLRAIL\.turnbar\.someone/.test(h), "a hidden combatant's name never reaches a player's turn bar");
+  ok(/variants[\s\S]{0,400}kind: "variant"/.test(h) && /variant: kind/.test(h), "an action with several PF2e variants asks which, and passes it to use()");
+  ok(/spendCtx\(\)[\s\S]{0,40}await/.test(h) && !/await [^;]+;\s*(return )?this\.spend\([^)]*\)\s*;?\s*(\}|$)/m.test(h.replace(/this\.spend\([^)]*ctx\)/g, "")), "every press that awaits PF2e spends against the context it started in");
+  ok(/updateSetting[\s\S]{0,240}clearKnowledgeCache/.test(h), "a knowledge change refreshes the rail");
+  ok(/hotbar\(hide = !!this\.el && !!this\.model/.test(h), "the hotbar is hidden only while a rail is drawn");
 });
 
 console.log(problems.length ? `\n${problems.length} problem(s):\n  ${problems.join("\n  ")}` : `\nall ${passed} checks passed`);

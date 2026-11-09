@@ -203,5 +203,6 @@
   "GLRAIL.inv.consumables": "Consumables",
   "GLRAIL.inv.held": "Worn and held",
   "GLRAIL.inv.worn": "Worn",
-  "GLRAIL.inv.heldIn": "Held, {n} hand(s)"
+  "GLRAIL.inv.heldIn": "Held, {n} hand(s)",
+  "GLRAIL.turnbar.someone": "Someone"
 }

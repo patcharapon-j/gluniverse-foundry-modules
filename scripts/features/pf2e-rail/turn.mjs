@@ -25,7 +25,9 @@ export function economyOf(conds = []) {
   const said = (slug) => { const c = conds.find((x) => x?.slug === slug); return c ? `${c.name ?? slug}${v(slug) > 1 || c.system?.value?.value ? ` ${v(slug)}` : ""}` : ""; };
   const quick = conds.some((x) => x?.slug === "quickened");
   const slowed = v("slowed"), stunned = v("stunned");
-  const max = Math.max(0, Math.min(4, 3 + (quick ? 1 : 0) - slowed - stunned));
+  /* The actions lost to Stunned count toward those lost to Slowed (PF2e): the
+     loss is the larger of the two, never their sum. */
+  const max = Math.max(0, Math.min(4, 3 + (quick ? 1 : 0) - Math.max(slowed, stunned)));
   const note = slowed || stunned ? [said("stunned"), said("slowed")].filter(Boolean).join(", ") : quick ? said("quickened") : null;
   return { max, ...(note ? { note, tone: quick && !slowed && !stunned ? "good" : "danger" } : {}) };
 }
