@@ -148,7 +148,7 @@ export class RailHost {
     this.on("updateToken", (doc, change) => { if (["name", "disposition", "hidden", "actorId", "ring", "texture", "x", "y"].some((k) => k in (change ?? {}))) this.schedule(); });
     this.on("updateUser", (user, change) => { if (user.id === game.user.id && ("character" in change || "flags" in change)) this.schedule(); });
     this.on("createChatMessage", (m) => this.onMessage(m));
-    this.on("pf2eRangedCombatReload", (actor) => this.onReloaded(actor));
+    this.on("pf2eRangedCombatReload", (actor, weapon) => this.onReloaded(actor, weapon));
     this.on("renderHotbar", () => this.dock());
     this.on("renderPlayers", () => this.dock());
     this.on("collapseSidebar", () => requestAnimationFrame(() => { this.place(); this.publishEdge(); }));
@@ -620,15 +620,18 @@ export class RailHost {
     const s = this.model?.strikes?.list?.find((x) => x.id === id);
     if (!s?.reload || !rangedCombat()) return this.deny(b);
     const ctx = this.spendCtx(), actor = this.subj?.actor;
-    this.reloading = { ctx, cost: s.reload.cost, actorId: actor?.id, until: Date.now() + TIMING.rerollWindow };
+    this.reloading = { ctx, actorId: actor?.id, until: Date.now() + TIMING.rerollWindow };
     return game.pf2eRangedCombat.reload();
   }
 
-  onReloaded(actor) {
+  /** The module may load another weapon than the one pressed (it picks), so
+   *  the cost is the loaded weapon's own Reload. */
+  onReloaded(actor, weapon) {
     const p = this.reloading;
     if (!p || Date.now() > p.until || actor?.id !== p.actorId) return;
     this.reloading = null;
-    if (p.cost) this.spend(p.cost, false, p.ctx);
+    const n = Number(weapon?.reloadActions ?? actor.items?.get?.(weapon?.id)?.system?.reload?.value);
+    if (Number.isInteger(n) && n >= 1 && n <= 3) this.spend(n, false, p.ctx);
   }
 
   deny(el) { el.classList.remove("is-denied"); void el.offsetWidth; el.classList.add("is-denied"); }

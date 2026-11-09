@@ -691,7 +691,8 @@ section("reload (PF2e Ranged Combat)", () => {
   ok(/gph-rld is-loaded/.test(V.STRIKES({ list: [{ id: "1", name: "Crossbow", variants: ["+9"], reload: { cost: 1, loaded: true } }] }, tt)), "a loaded weapon's press goes faint");
   const h = strip(src["host.mjs"]);
   ok(/game\.pf2eRangedCombat\.reload\(\)/.test(h) && /pf2eRangedCombatReload/.test(h), "Reload is the module's own action, and the actions are spent on its hook");
-  ok(/onReloaded\(actor\)[\s\S]{0,200}actor\?\.id !== p\.actorId/.test(h) && /this\.spend\(p\.cost, false, p\.ctx\)/.test(h), "a reload spends only for the actor pressed, against the turn it was pressed in");
+  ok(/onReloaded\(actor, weapon\)[\s\S]{0,200}actor\?\.id !== p\.actorId/.test(h) && /this\.spend\(n, false, p\.ctx\)/.test(h), "a reload spends only for the actor pressed, against the turn it was pressed in");
+  ok(/pf2eRangedCombatReload", \(actor, weapon\) => this\.onReloaded\(actor, weapon\)/.test(h) && /weapon\?\.reloadActions/.test(h) && !/p\.cost/.test(h), "the cost is the reloaded weapon's, not the pressed row's");
   ok(/\.gph-stk\.has-reload \{ grid-template-columns: minmax\(0, 1fr\) 24px repeat\(3, 32px\) 34px 34px; \}/.test(css), "the Reload press takes its own track, the MAP steps keep theirs");
 });
 
