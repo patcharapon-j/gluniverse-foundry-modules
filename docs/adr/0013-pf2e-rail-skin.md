@@ -40,10 +40,18 @@ it has to read over any map, dark or parchment, and never move the scene.
   rank; the hue makes it findable at a glance and matches what every PF2e
   player already reads on their sheet. They are identity, not signals, and
   nothing else may borrow them.
-- **No light on the rail.** The No Glow Rule holds without exception. An
-  amber halo behind the figure once drew the Hero Point pool as light; it was
-  removed at the author's request, because it tinted every portrait gold and
-  the gems already say the count. Hero Points are the gems alone.
+- **No light at rest; one light as a moment.** An amber halo behind the
+  figure once drew the Hero Point pool as light; it was removed at the
+  author's request, because it tinted every portrait gold and the gems already
+  say the count. Hero Points are the gems alone, and at rest the rail holds no
+  light at all. The one exception is the turn's light (`light.mjs`), asked
+  for as the rail's broadcast moment: when your turn comes round a paper spark
+  runs the plates' top edges with lit smoke rising behind it, and when you go
+  down the same pass runs in red as the plates dim. It is never a state: the
+  pass is over within one and a half cinematic beats and leaves the canvas
+  clear. It stands behind the rail, so it never lies over a face or a card,
+  and its colours are the skin's paper, red and ink. A second light on the
+  rail, or this one held as a state, is a change to this record.
 - **The rail is 112px and never taller**: four rows of 24px presses in every
   plate (strikes, actions with their toggles), which is what a PF2e character
   reaches for in a turn. It was 96px (three rows) and was raised once, on
@@ -87,8 +95,9 @@ it has to read over any map, dark or parchment, and never move the scene.
   prints them that way.
 - **Motion is from the shared tokens and plays for everyone** (no
   `prefers-reduced-motion`, per CLAUDE.md). The authored moment is the turn
-  ignition: when the turn comes round, the bar's edge sweeps paper and the
-  diamonds light in turn. Around it: a diamond drains when an action is spent,
+  ignition: when the turn comes round, the light runs the rail's edges (above),
+  the bar's edge sweeps paper and the diamonds light in turn. Under load the
+  light is the first thing shed and the CSS half still plays. Around it: a diamond drains when an action is spent,
   the next-MAP marker slides under the strike presses, a lost length of Hit
   Points stays lit red and drains after the fill, a heal sweeps up from green,
   the deck's tab marker travels, a cast card leaves the hand upward, a roll

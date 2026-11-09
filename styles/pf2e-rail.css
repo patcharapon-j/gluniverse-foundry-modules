@@ -135,7 +135,12 @@
 .gph-acts { display: inline-flex; align-items: center; gap: 1px; font-size: var(--gl-is-t-meta); }
 .gph-cost { flex: none; display: inline-flex; align-items: center; color: var(--gph-dim); }
 
-.gph-rail { display: flex; align-items: flex-end; gap: 6px; height: var(--gph-h); }
+/* The rail stacks over the light (light.mjs), which stands behind it: the
+   plates are opaque, so the light shows only on and above their edges, and
+   the figure and the held cards stay in front of its smoke. */
+.gph-rail { position: relative; z-index: 1; display: flex; align-items: flex-end; gap: 6px; height: var(--gph-h); }
+.gph-light { position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--gph-h) + 150px); z-index: 0; width: 100%; pointer-events: none; }
+.gph[data-folded] .gph-light { display: none; }
 .gph-body {
   position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; gap: 6px; height: var(--gph-h);
   transition: opacity var(--gl-d-quick) var(--gl-ease), translate var(--gl-d-brisk) var(--gl-ease);
@@ -234,6 +239,18 @@
    still seen. */
 .gph[data-down] :is(.gph-strikes, .gph-pane) { opacity: 0.38; transition: opacity var(--gl-d-quick) var(--gl-ease); }
 .gph[data-down] :is(.gph-strikes, .gph-pane):hover { opacity: 1; }
+/* The light (light.mjs): while a pass runs the root carries data-light, and
+   each plate's top edge takes the pass's colour the moment the spark reaches
+   it (--gph-lit-d, written from the shader's own easing), then cools. Going
+   down, the strikes and the deck dim on the same beat, not all at once. */
+.gph[data-light] { --gph-lit-c: var(--gph-paper); }
+.gph[data-light="out"] { --gph-lit-c: var(--gph-red); }
+.gph[data-light] :is(.gph-plinth .gph-plate, .gph-turnbar, .gph-body > .gph-pl:not(.gph-deck, .gph-hand)),
+.gph[data-light] :is(.gph-deck, .gph-hand)::before { animation: gph-rimlit var(--gl-d-reveal) var(--gl-ease) var(--gph-lit-d, 0ms); }
+@keyframes gph-rimlit { 0% { box-shadow: inset 0 2px 0 var(--gph-lit-c), inset 0 0 0 1px var(--gph-line-2); } }
+.gph.is-going-down[data-down] .gph-strikes { animation: gph-down var(--gl-d-move) var(--gl-ease) var(--gph-lit-d, 0ms) both, gph-rimlit var(--gl-d-reveal) var(--gl-ease) var(--gph-lit-d, 0ms); }
+.gph.is-going-down[data-down] .gph-pane { animation: gph-down var(--gl-d-move) var(--gl-ease) var(--gph-lit-d, 0ms) both; }
+@keyframes gph-down { from { opacity: 1; } }
 
 /* Conditions ride just above the name, where the figure meets the rail: a
    state of the character, on the character, clear of its face. They are in

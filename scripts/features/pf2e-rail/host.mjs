@@ -29,6 +29,7 @@ import * as D from "./drive.mjs";
 import * as S from "./shape.mjs";
 import * as K from "./skill-actions.mjs";
 import { TIMING } from "./const.mjs";
+import { RailLight, downOf, relight } from "./light.mjs";
 import { costOf, readGM, readPlayer, SKILLS, withSkills } from "./read.mjs";
 import { Turn, economyOf, turnKey } from "./turn.mjs";
 import { answers, echoOf } from "./echo.mjs";
@@ -75,6 +76,7 @@ export class RailHost {
     this.gen = 0;
     this.raf = 0;
     this.peekT = 0;
+    this.light = new RailLight();
   }
 
   /* ── lifecycle ──────────────────────────────────────────────── */
@@ -106,6 +108,8 @@ export class RailHost {
     this.hooks = [];
     document.removeEventListener("keydown", this.keyH, true);
     window.removeEventListener("resize", this.resizeH);
+    this.light.dispose();
+    this.light = new RailLight();
     this.el?.remove();
     this.el = null;
     this.hotbar(false);
@@ -319,8 +323,13 @@ export class RailHost {
       this.open.drawer = null; this.peek = null;
       this.model = model;
       this.render({ arrive: true });
-    } else this.update(model);
-    if (this.fresh) { this.fresh = false; D.ignite(this.root); }
+    } else {
+      const was = downOf(this.model);
+      this.update(model);
+      const pass = relight(was, downOf(model));
+      if (pass) this.light.play(this.root, pass);
+    }
+    if (this.fresh) { this.fresh = false; D.ignite(this.root); this.light.play(this.root, "in"); }
   }
 
   clear() {
@@ -353,6 +362,7 @@ export class RailHost {
     if (!this.model || !this.el) return;
     this.el.innerHTML = V.RAIL(this.compose(), t);
     const root = this.root;
+    this.light.attach(root);
     if (arrive) { root.classList.add("is-arriving"); setTimeout(() => root.classList.remove("is-arriving"), D.token(root, "--gl-d-cinematic", 900)); }
     if (this.open.drawer && !this.fs.open) D.placeDrawer(root);
     if (this.fs.open) this.settleFinder();

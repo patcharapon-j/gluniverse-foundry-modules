@@ -114,6 +114,37 @@ No press opens a dialog of the HUD's own. Where PF2e shows its
 check refuses one without a handler, and every finder slug PF2e's bundle does
 not define.
 
+## The light (`light.mjs`)
+
+The rail's one moment that is not feedback. One WebGL2 canvas is prepended
+to the `.gph` root after every render (the node and its context survive a
+render) and stacked under `.gph-rail` (`z-index` 1 over 0): the plates are
+opaque, so the light shows only on and above their edges, and the figure and
+the held cards stay in front of it without a mask.
+
+- **"in"** plays when your turn comes round (beside `D.ignite`) and when you
+  get up from dying: a paper spark leaves the portrait, runs every plate's
+  top edge left to right (fast, slowing at the far end), and lit smoke and
+  sparks rise behind it.
+- **"out"** plays when you go down (`relight(was, now)`; dying to dead plays
+  nothing): the same pass in red, heavier with smoke, and the strikes and the
+  deck dim (`is-going-down`) the moment it reaches them.
+- Each plate's edge flashes as the spark arrives: the host writes
+  `--gph-lit-d` per plate from the inverse of the shader's own easing, so
+  the CSS and the shader agree.
+- The plate edges are measured at the start of a pass and handed to the
+  shader as spans; every edge lights what stands above it and falls off past
+  its ends, and the brightest wins, so no wall appears where two plates meet.
+- Shed first (`SHED_ORDER = ["light"]`), registered with `Surfaces`,
+  compiled in idle time after the first attach, motion claimed only while it
+  plays, length `--gl-d-cinematic × 1.6` through the motion tier. Never on a
+  folded rail or a hidden tab, and never the GM's.
+
+`pf2e-rail-check` pins the uniforms (every declared one written and looked
+up), the stacking, the shed, the transition table and the purity. It cannot
+compile GLSL: serve the preview and look (`&light=in|out&lt=0..1` holds a
+frame).
+
 ## The echo (`echo.mjs`)
 
 A roll's total (and its degree, where PF2e would show it: `seesTruth()` or the

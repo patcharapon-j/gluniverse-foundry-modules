@@ -25,6 +25,11 @@ export const TIMING = Object.freeze({
   refreshFallback: 120,
 });
 
+/** What the shared frame budget may take away, first to last. The light
+ *  (light.mjs) is the rail's only animation that is not feedback, so it goes
+ *  first; the CSS ignition under it still plays. */
+export const SHED_ORDER = Object.freeze(["light"]);
+
 /** How much of the PF2e Hit Point track reads as low. The resource bars use
  *  the same line (`LOW_HEALTH_AT`), so a bar and the rail turn together. */
 export const LOW_HEALTH_AT = 0.25;

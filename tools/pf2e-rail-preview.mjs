@@ -27,6 +27,7 @@
  *   &tab=spells|actions|skills|items   the deck's tab
  *   &finder=1&q=tri&group=maneuvers   the skill finder, open
  *   &map=0|1|2   the MAP step   &turn=ignite   play the turn ignition
+ *   &light=in|out&lt=0.3   play the rail light (light.mjs), frozen at lt for a still
  *   &echo=<selector>,<total>,<degree 0-3>   a roll echo on that press
  *   &drawer=inventory|effects|rest|macros|ranks
  *   &folded=1  &readonly=1  &bright=1 (a parchment map)
@@ -124,6 +125,7 @@ const html = `<!doctype html>
 import * as V from '/scripts/features/pf2e-rail/view.mjs';
 import * as D from '/scripts/features/pf2e-rail/drive.mjs';
 import * as S from '/scripts/features/pf2e-rail/shape.mjs';
+import { RailLight, downOf, relight } from '/scripts/features/pf2e-rail/light.mjs';
 import { TIMING } from '/scripts/features/pf2e-rail/const.mjs';
 import * as K from '/scripts/features/pf2e-rail/skill-actions.mjs';
 import * as G from '/scripts/core/pf2e-degree.mjs';
@@ -178,9 +180,11 @@ try {
     else if (open.drawer && DRAWER_BODIES[open.drawer]) o.overlay = V.DRAWER(DRAWER_BODIES[open.drawer](V, t, art, model));
     return o;
   }
+  const light = new RailLight();
   function render({ arrive = false } = {}) {
     host.innerHTML = V.RAIL(compose(), t);
     const root = host.firstElementChild;
+    light.attach(root);
     root.style.setProperty('--gph-gutter-r', gutter() + 'px');
     if (arrive) { root.classList.add('is-arriving'); setTimeout(() => root.classList.remove('is-arriving'), 900); }
     if (open.drawer && !fs.open) D.placeDrawer(root);
@@ -191,12 +195,14 @@ try {
   }
   /* The host's one decision: values are driven, anything else redraws. */
   function update(next) {
-    const root = host.firstElementChild;
+    const root = host.firstElementChild, was = downOf(model);
     if (prev && S.shapeOf(prev) === S.shapeOf(next)) {
       D.drive(root, S.liveOf(next), { raised: t('GLRAIL.shield.raised'), raise: t('GLRAIL.shield.raise') });
       if (S.tookHit(prev.vitals ?? prev.creature, next.vitals ?? next.creature)) D.flinch(root);
       model = next; prev = next;
     } else { model = next; render(); }
+    const pass = relight(was, downOf(next));
+    if (pass) light.play(host.firstElementChild, pass);
   }
 
   /* ── the finder ── typing redraws the panel only, and keeps the caret */
@@ -259,6 +265,7 @@ try {
     m.turnbar = { ...m.turnbar, mine: true, map: 0, economy: { ...m.turnbar.economy, spent: 0, reaction: true } };
     model = m; render();
     D.ignite(host.firstElementChild);
+    light.play(host.firstElementChild, 'in');
   }
   function rollSkillAction(id, variant) {
     const a = finder('', 'all').actions.find((x) => x.id === id);
@@ -379,8 +386,9 @@ try {
 
   render({ arrive: q.get('still') !== '1' });
   if (q.get('turn') === 'ignite') newTurn();
+  if (q.get('light')) { light.ensure(); light.play(host.firstElementChild, q.get('light')); if (q.get('lt')) light.seek(+q.get('lt')); }
   if (q.get('echo')) { const [sel, total, degree] = q.get('echo').split(','); const el = host.querySelector(sel); if (el) D.echo(el, { total, degree: +degree, word: WORDS[+degree] }); }
-  window.__rail = { get model() { return model; }, render, update, V, D, S, K, t, openFinder, newTurn };
+  window.__rail = { get model() { return model; }, render, update, V, D, S, K, t, openFinder, newTurn, light };
 
   if (q.get('bench') === '1') {
     const N = 60, o = compose();

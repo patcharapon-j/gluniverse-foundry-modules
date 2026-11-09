@@ -28,7 +28,8 @@ import { answers, echoOf } from "../scripts/features/pf2e-rail/echo.mjs";
 import { combatOf, isTurnOf, shouldMount, subjectOf } from "../scripts/features/pf2e-rail/subject.mjs";
 import { PEEK_PRESSES, ROW_KEYS, actionPeek, effectRows, inventoryRows, macroSlots, spellPeek, strikePeek } from "../scripts/features/pf2e-rail/peeks.mjs";
 import { PRESSES } from "../scripts/features/pf2e-rail/presses.mjs";
-import { FEATURE_ID, PREFIX } from "../scripts/features/pf2e-rail/const.mjs";
+import { FEATURE_ID, PREFIX, SHED_ORDER } from "../scripts/features/pf2e-rail/const.mjs";
+import { downOf, relight } from "../scripts/features/pf2e-rail/light.mjs";
 import { FLAGS, SETTINGS } from "../scripts/features/pf2e-rail/settings.mjs";
 import * as K from "../scripts/features/pf2e-rail/skill-actions.mjs";
 const { SKILL_ACTIONS } = K;
@@ -47,7 +48,7 @@ const section = (title, fn) => {
 const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/([^:"'`])\/\/[^\n"'`]*$/gm, "$1");
 
 const DIR = "scripts/features/pf2e-rail/";
-const src = Object.fromEntries(["view.mjs", "read.mjs", "turn.mjs", "echo.mjs", "subject.mjs", "peeks.mjs", "presses.mjs", "shape.mjs", "skill-actions.mjs", "host.mjs", "index.mjs", "settings.mjs", "const.mjs", "drive.mjs"].map((f) => [f, read(DIR + f)]));
+const src = Object.fromEntries(["view.mjs", "read.mjs", "turn.mjs", "echo.mjs", "subject.mjs", "peeks.mjs", "presses.mjs", "shape.mjs", "skill-actions.mjs", "host.mjs", "index.mjs", "settings.mjs", "const.mjs", "drive.mjs", "light.mjs"].map((f) => [f, read(DIR + f)]));
 const css = read("styles/pf2e-rail.css");
 const lang = JSON.parse(read("lang/pf2e-rail.en.json"));
 const seen = new Set();
@@ -532,6 +533,35 @@ section("the host keeps to its own corner", () => {
   ok(/turnKey\(ctx\.combat\) !== ctx\.key/.test(h), "a pending press checks its own combat's live turn before spending");
   ok(/updateSetting[\s\S]{0,240}clearKnowledgeCache/.test(h), "a knowledge change refreshes the rail");
   ok(/hotbar\(hide = !!this\.el && !!this\.model/.test(h), "the hotbar is hidden only while a rail is drawn");
+});
+
+/* The light fails silently in every way it can: a uniform the shader declares
+   and the host never writes holds 0, a canvas stacked over the rail puts its
+   smoke over the figure and the cards, a shed name SHED_ORDER does not list
+   never degrades, and a pass that fires on the wrong transition plays the
+   lights going out on someone who just got up. */
+section("the light is a moment, behind the rail", () => {
+  const l = src["light.mjs"], code = strip(l);
+  const frag = l.slice(l.indexOf("const FRAG"), l.indexOf("}`;", l.indexOf("const FRAG")));
+  const declared = [...frag.matchAll(/uniform\s+\w+\s+(\w+)/g)].map((m) => m[1]);
+  const written = new Set([...code.matchAll(/u\.(u[A-Z]\w*)/g)].map((m) => m[1]));
+  ok(declared.length > 5, "the light's shader declares its uniforms");
+  for (const u of declared) ok(written.has(u), `the light's uniform ${u} is declared and never written`);
+  ok(/for \(const n of \[([^\]]+)\]\)/.test(code) && declared.every((u) => code.match(/for \(const n of \[([^\]]+)\]\)/)[1].includes(`"${u}"`)), "every uniform's location is looked up");
+  ok(SHED_ORDER.includes("light") && /this\.ladder\.allows\("light"\)/.test(code) && /Budget\.ladder\(FEATURE_ID, SHED_ORDER\)/.test(code), "the light is shed through the shared budget");
+  ok(/Surfaces\.register\(/.test(code) && /this\.surface\?\.use\(\)/.test(code), "the light's context is registered and used before each draw");
+  ok(/claimMotion\(`\$\{FEATURE_ID\}\.light`, true\)/.test(code) && /claimMotion\(`\$\{FEATURE_ID\}\.light`, false\)/.test(code), "the light claims motion only while it plays");
+  ok(!/(?<![.\w])(game|canvas|foundry|ui|Hooks)\./.test(code), "the light is pure: the preview plays the shipped one");
+  ok(/scaledMs\(/.test(code), "the light's length follows the motion tier");
+  const rail = css.match(/\.gph-rail \{[^}]*\}/)?.[0] ?? "", lightRule = css.match(/\.gph-light \{[^}]*\}/)?.[0] ?? "";
+  const z = (r) => +(r.match(/z-index:\s*(\d+)/)?.[1] ?? NaN);
+  ok(/position:\s*relative/.test(rail) && z(rail) > z(lightRule), "the rail stacks over the light, so its smoke stays behind the figure and the cards");
+  ok(/root\.prepend\(this\.canvas\)/.test(code), "the canvas goes in first, under the rail");
+  const host = strip(src["host.mjs"]);
+  ok(/this\.light\.attach\(root\)/.test(host) && /D\.ignite\(this\.root\); this\.light\.play\(this\.root, "in"\)/.test(host) && /relight\(was, downOf\(model\)\)/.test(host), "the host attaches the light after every render, plays it on the turn and on going down or getting up");
+  ok(relight("", "dying") === "out" && relight("dying", "") === "in" && relight("dying", "dead") === null && relight("", "") === null && relight("dead", "") === "in", "the lights go out on going down and come back on getting up, never between dying and dead");
+  ok(downOf({ role: "player", plinth: { dying: { value: 1 } } }) === "dying" && downOf({ role: "gm", plinth: { dead: true } }) === "" && downOf({ role: "player", plinth: {} }) === "", "only a player's own rail goes down");
+  ok(/\.gph\[data-light\][^{]*\{[^}]*animation: gph-rimlit[^}]*var\(--gph-lit-d/.test(css) && /--gph-lit-d/.test(code), "each plate's edge takes the light when the spark reaches it");
 });
 
 console.log(problems.length ? `\n${problems.length} problem(s):\n  ${problems.join("\n  ")}` : `\nall ${passed} checks passed`);
