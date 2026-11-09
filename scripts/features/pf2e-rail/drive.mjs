@@ -358,12 +358,18 @@ export function placePeek(root, anchor, peek, zoom = 1) {
    Each restarts a class whose CSS animation is the moment and takes it off
    once that animation has had its length, so the next one plays from the
    start. The lengths are the CSS's own tokens, scaled by the motion tier. */
-function restart(el, cls, ms) {
-  if (!el) return;
-  el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
-  el._gphMoment ??= {};
-  clearTimeout(el._gphMoment[cls]);
-  el._gphMoment[cls] = setTimeout(() => el.classList.remove(cls), ms);
+function restart(el, cls, ms) { restartAll(el ? [el] : [], cls, ms); }
+/* Several at once take one reflow between them, not one each. */
+function restartAll(els, cls, ms) {
+  if (!els.length) return;
+  for (const el of els) el.classList.remove(cls);
+  void els[0].offsetWidth;
+  for (const el of els) {
+    el.classList.add(cls);
+    el._gphMoment ??= {};
+    clearTimeout(el._gphMoment[cls]);
+    el._gphMoment[cls] = setTimeout(() => el.classList.remove(cls), ms);
+  }
 }
 const rootOf = (rail) => rail?.closest?.(".gph") ?? rail;
 
@@ -414,9 +420,8 @@ export function dyingBeat(rail, { from, to }) {
   const beads = [...(root?.querySelectorAll(".gph-dying .gph-beads i") ?? [])];
   const ms = scaledMs(620, root);
   const [lo, hi] = to > from ? [from, to] : [to, from];
-  for (let i = lo; i < hi && i < beads.length; i++) {
-    beads[i].style.setProperty("--k", String(to > from ? i - lo : hi - 1 - i));
-    restart(beads[i], to > from ? "is-burn" : "is-exhale", ms + 4 * scaledMs(70, root));
-  }
+  const moved = beads.slice(lo, hi);
+  moved.forEach((b, i) => b.style.setProperty("--k", String(to > from ? i : moved.length - 1 - i)));
+  restartAll(moved, to > from ? "is-burn" : "is-exhale", ms + moved.length * scaledMs(70, root));
   if (to > from) restart(root, "is-flicker", ms);
 }

@@ -175,7 +175,9 @@ is yours (`upNext` over `combat.turns`, skipping the defeated where core's
 `skipDefeated` does), the turn bar's label reads "You're next" in an
 outlined paper slab, the diamonds you are about to have are drawn in paper and
 its top edge breathes. Whose turn it is now rides the title and the screen
-reader. The canvas light never plays for it.
+reader. The canvas light never plays for it. An observer's rail is somebody
+else's character, so the bar names them ("Valeros is next", "Valeros's turn",
+`turnbar.observer`) and never says "you".
 
 **A Hero Point's reroll** is PF2e's `rerollFromMessage`: it lowers the
 points first, deletes the old message and posts a new one whose check context

@@ -132,6 +132,7 @@
   "GLRAIL.turnbar.map": "MAP",
   "GLRAIL.turnbar.next": "You’re next",
   "GLRAIL.turnbar.nextSaid": "Your turn comes after this one. Get ready.",
+  "GLRAIL.turnbar.nextOf": "{name} is next",
   "GLRAIL.skill.title": "Skill actions",
   "GLRAIL.skill.find": "Find a skill action",
   "GLRAIL.skill.placeholder": "Trip, demoralize, recall…",

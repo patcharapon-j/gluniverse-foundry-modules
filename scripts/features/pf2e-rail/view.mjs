@@ -214,8 +214,8 @@ export const TURNBAR = (tb, t) => {
   return `
 <div class="gph-turnbar${tb.mine ? " is-mine" : ""}${tb.next && !tb.mine ? " is-next" : ""}" data-turnbar data-left="${left}">
   ${tb.next && !tb.mine
-    ? `<span class="gph-tb-k" role="status" title="${esc(t("GLRAIL.turnbar.theirs", { name: tb.current ?? "" }))}"><span>${esc(t("GLRAIL.turnbar.next"))}</span>${SR(`. ${t("GLRAIL.turnbar.theirs", { name: tb.current ?? "" })}. ${t("GLRAIL.turnbar.nextSaid")}`)}</span>`
-    : `<span class="gph-tb-k"><span>${tb.mine ? esc(t("GLRAIL.turnbar.yours")) : esc(t("GLRAIL.turnbar.theirs", { name: tb.current ?? "" }))}</span></span>`}
+    ? `<span class="gph-tb-k" role="status" title="${esc(t("GLRAIL.turnbar.theirs", { name: tb.current ?? "" }))}"><span>${esc(tb.observer != null ? t("GLRAIL.turnbar.nextOf", { name: tb.observer }) : t("GLRAIL.turnbar.next"))}</span>${SR(`. ${t("GLRAIL.turnbar.theirs", { name: tb.current ?? "" })}.${tb.observer != null ? "" : ` ${t("GLRAIL.turnbar.nextSaid")}`}`)}</span>`
+    : `<span class="gph-tb-k"><span>${esc(tb.mine ? (tb.observer != null ? t("GLRAIL.turnbar.theirs", { name: tb.observer }) : t("GLRAIL.turnbar.yours")) : t("GLRAIL.turnbar.theirs", { name: tb.current ?? "" }))}</span></span>`}
   <span class="gph-econ" role="group" aria-label="${esc(t("GLRAIL.turnbar.said", { left, max: e.max }) + (e.reaction ? ` ${t("GLRAIL.turnbar.reactionReady")}` : ""))}">
     ${Array.from({ length: e.max }, (_, i) => `<button type="button" class="gph-pip${i < left ? " on" : ""}${i >= 3 ? " is-extra" : ""}" data-pip="${i}" style="--i:${i}"${i >= 3 && e.note ? ` title="${esc(e.note)}"` : ""} aria-label="${esc(t("GLRAIL.turnbar.pip", { i: i + 1, max: e.max }))}" aria-pressed="${i < left}"></button>`).join("")}
     <button type="button" class="gph-pip is-react${e.reaction ? " on" : ""}" data-pip="r" style="--i:${e.max}" aria-label="${esc(t("GLRAIL.cost.r"))}" aria-pressed="${!!e.reaction}">${costGlyph("r")}</button>

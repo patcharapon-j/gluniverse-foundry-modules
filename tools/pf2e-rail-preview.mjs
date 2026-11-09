@@ -158,7 +158,7 @@ try {
   const stateName = q.get('state') || 'martial';
   let model = STATES[stateName](art);
   if (q.get('folded') === '1') model.folded = true;
-  if (q.get('readonly') === '1') model.readonly = true;
+  if (q.get('readonly') === '1') { model.readonly = true; if (model.turnbar?.mode === 'encounter') model.turnbar = { ...model.turnbar, observer: model.plinth.name }; }
   if (q.get('tab') && model.deck) model.deck = { ...model.deck, tab: q.get('tab') };
   if (q.get('map') && model.turnbar) model.turnbar = { ...model.turnbar, map: +q.get('map') };
   if (q.get('next') === '1' && model.turnbar?.mode === 'encounter') model.turnbar = { ...model.turnbar, mine: false, current: model.turnbar.current ?? 'Kyra', map: 0, next: true };

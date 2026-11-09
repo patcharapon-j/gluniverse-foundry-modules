@@ -164,7 +164,7 @@ function paths(o, pre = "", out = new Set()) {
    view.mjs; a path here that the view does not read is a reader bug. */
 const VIEW_EXTRAS = [".plinth.img", ".plinth.frame", ".plinth.dead", ".plinth.frame.x", ".plinth.frame.y", ".plinth.frame.scale", ".deck.spells.cards[].entry",
   ".vitals.shield.destroyed", ".stack[].turn", ".stack[].self", ".stack[].temp", ".creature.adjust", ".hazard.complex", ".foes.foes[].turn", ".folded", ".readonly",
-  ".deck.skills.target.known", ".vitals.sp", ".vitals.sp.value", ".vitals.sp.max", ".turnbar.economy.note", ".turnbar.economy.tone",
+  ".deck.skills.target.known", ".vitals.sp", ".vitals.sp.value", ".vitals.sp.max", ".turnbar.economy.note", ".turnbar.economy.tone", ".turnbar.next", ".turnbar.observer",
   ".deck.skills.suggested[].vs.degrees[]", ".sk.target.recallDC", ".plinth.speed"];
 const playerFix = ["martial", "prepared", "spontaneous", "kineticist", "companion", "dying", "stress"].map((k) => STATES[k](art));
 const gmFix = ["gm", "hazard", "gm-horde"].map((k) => STATES[k](art));
@@ -615,7 +615,7 @@ section("the moments", () => {
   }
   ok(/\.gph-streak \{/.test(css) && /scaledMs\(/.test(drv), "the streak is styled, and the moments' lengths follow the motion tier");
   const host = strip(src["host.mjs"]);
-  ok(/playMoments\(this\.root, momentsOf\(was, model, \{ fresh: this\.fresh \}\), \{ light: this\.light, heroAt: this\.heroAt\(\) \}\)/.test(host), "the host plays the moments it reads between two rails of one subject");
+  ok(/playMoments\(this\.root, momentsOf\(was, model, \{ fresh: this\.fresh \}\), \{ light: this\.light, heroAt: \(\) => this\.heroAt\(\) \}\)/.test(host), "the host plays the moments it reads between two rails of one subject");
   ok(/momentsOf\(was, next, \{ fresh \}\)/.test(read("tools/pf2e-rail-preview.mjs")) && /playMoments\(/.test(read("tools/pf2e-rail-preview.mjs")), "the preview decides moments with the same module");
   ok(/this\.gmKey !== undefined && k !== this\.gmKey/.test(host), "the GM's light waits for a turn to change, never the first read");
   ok(/context\?\.isReroll/.test(host) && /within: TIMING\.rerollWindow/.test(host) && /this\.lastEcho = \{/.test(host), "a Hero Point reroll echoes on the press the first roll did");
@@ -632,6 +632,10 @@ section("the moments", () => {
   const tt = (k) => k;
   const onDeck = V.TURNBAR(tbN, (k, d) => (d?.name ? `${k}:${d.name}` : k)), mineBar = V.TURNBAR(tbM, tt);
   ok(/is-next/.test(onDeck) && /<span>GLRAIL\.turnbar\.next<\/span>/.test(onDeck) && !/is-next|GLRAIL\.turnbar\.next</.test(mineBar), "the on-deck bar's label says you're next, and your own turn's never does");
+  const T2 = (k, d) => (d?.name ? `${k}:${d.name}` : k);
+  const obsNext = V.TURNBAR({ ...tbN, observer: "Seelah" }, T2), obsMine = V.TURNBAR({ ...tbM, observer: "Seelah" }, T2);
+  ok(/GLRAIL\.turnbar\.nextOf:Seelah/.test(obsNext) && !/GLRAIL\.turnbar\.(next|nextSaid|yours)\b(?!Of)/.test(obsNext.replace(/GLRAIL\.turnbar\.nextOf/g, "")) && /GLRAIL\.turnbar\.theirs:Seelah/.test(obsMine) && !/GLRAIL\.turnbar\.yours/.test(obsMine), "an observer's bar names the character, never \"you\"");
+  ok(R.turnbarOf({ name: "Seelah" }, { mode: "encounter", readonly: true, turn: { mine: false }, econ: { max: 3, spent: 0, reaction: true } }).observer === "Seelah" && R.turnbarOf({ name: "Seelah" }, { mode: "encounter", turn: { mine: false }, econ: { max: 3, spent: 0, reaction: true } }).observer === undefined, "the reader names the observed character only on a read-only rail");
   ok(/title="GLRAIL\.turnbar\.theirs:Kyra"/.test(onDeck) && /GLRAIL\.turnbar\.nextSaid/.test(onDeck), "on deck, whose turn it is now is still said (title and screen reader)");
   ok(/\.gph-turnbar\.is-next::before \{[^}]*animation/.test(css), "the on-deck edge breathes while it is true");
   /* the live attack: the grid's live track is where the marker's arithmetic puts it */

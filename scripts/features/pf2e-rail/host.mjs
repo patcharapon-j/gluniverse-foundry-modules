@@ -341,7 +341,7 @@ export class RailHost {
     } else {
       const was = this.model;
       this.update(model);
-      playMoments(this.root, momentsOf(was, model, { fresh: this.fresh }), { light: this.light, heroAt: this.heroAt() });
+      playMoments(this.root, momentsOf(was, model, { fresh: this.fresh }), { light: this.light, heroAt: () => this.heroAt() });
     }
     this.fresh = false;
   }

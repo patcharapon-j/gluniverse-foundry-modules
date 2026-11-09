@@ -384,6 +384,8 @@ export function turnbarOf(actor, ctx) {
   const tb = { mode: "encounter", mine: !!ctx.turn?.mine, round: num(ctx.turn?.round, 1), economy: { ...ctx.econ }, map: ctx.map ?? 0 };
   if (!tb.mine) tb.current = ctx.turn?.current ?? "";
   if (!tb.mine && ctx.turn?.next) tb.next = true;
+  /* Somebody else's character: the bar names them, never "you". */
+  if (ctx.readonly) tb.observer = ctx.token?.name ?? actor?.name ?? "";
   return tb;
 }
 

@@ -64,7 +64,8 @@ export function momentsOf(was, now, { fresh = false } = {}) {
 /**
  * Play what `momentsOf` returned over the drawn rail. `light` is the rail's
  * `RailLight`; `heroAt` the press a Hero Point's light streaks to (the last
- * echoed roll), or null.
+ * echoed roll), or a function that finds it — asked only when a point was
+ * spent, so a refresh that moved nothing queries nothing.
  */
 export function playMoments(root, mo, { light = null, heroAt = null } = {}) {
   if (!root || !mo) return;
@@ -72,6 +73,6 @@ export function playMoments(root, mo, { light = null, heroAt = null } = {}) {
   if (mo.light) light?.play(root, mo.light, { tone: mo.tone });
   if (mo.card) D.callCard(root, mo.card);
   if (mo.call) D.callUp(root);
-  if (mo.hero) D.spendHero(root, mo.hero, heroAt);
+  if (mo.hero) D.spendHero(root, mo.hero, typeof heroAt === "function" ? heroAt() : heroAt);
   if (mo.dying) D.dyingBeat(root, mo.dying);
 }
