@@ -529,6 +529,7 @@ section("the host keeps to its own corner", () => {
   ok(/hidden[^\n]*GLRAIL\.turnbar\.someone|GLRAIL\.turnbar\.someone[^\n]*hidden/.test(h) || /veiled[\s\S]{0,200}GLRAIL\.turnbar\.someone/.test(h), "a hidden combatant's name never reaches a player's turn bar");
   ok(/variants[\s\S]{0,400}kind: "variant"/.test(h) && /variant: kind/.test(h), "an action with several PF2e variants asks which, and passes it to use()");
   ok(/spendCtx\(\)[\s\S]{0,40}await/.test(h) && !/await [^;]+;\s*(return )?this\.spend\([^)]*\)\s*;?\s*(\}|$)/m.test(h.replace(/this\.spend\([^)]*ctx\)/g, "")), "every press that awaits PF2e spends against the context it started in");
+  ok(/turnKey\(ctx\.combat\) !== ctx\.key/.test(h), "a pending press checks its own combat's live turn before spending");
   ok(/updateSetting[\s\S]{0,240}clearKnowledgeCache/.test(h), "a knowledge change refreshes the rail");
   ok(/hotbar\(hide = !!this\.el && !!this\.model/.test(h), "the hotbar is hidden only while a rail is drawn");
 });

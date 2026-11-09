@@ -294,7 +294,7 @@ export class RailHost {
     const cb = combat?.combatant;
     const veiled = !truth && !!(cb?.hidden || cb?.token?.hidden);
     const current = cb ? (veiled ? t("GLRAIL.turnbar.someone") : nameFor(cb.token, cb.actor) || t("GLRAIL.skill.target")) : "";
-    this.turnKeyNow = turnKey(combat);
+    this.combatNow = combat ?? null;
     return readPlayer({
       ...this.common(), actor, token, readonly: !actor.isOwner, mode: combat ? "encounter" : "exploration",
       turn: combat ? { mine, current, round: combat.round } : null, econ: turn.economy(base), map: mine ? turn.map : 0,
@@ -536,14 +536,17 @@ export class RailHost {
   spendCtx() {
     const actor = this.subj?.actor, tb = this.model?.turnbar;
     if (!actor || this.model?.mode !== "encounter" || !tb?.economy) return null;
-    return { actor, turn: this.turnOf(actor), key: this.turnKeyNow, mine: !!tb.mine, max: tb.economy.max };
+    const combat = this.combatNow;
+    return { actor, combat, turn: this.turnOf(actor), key: turnKey(combat), mine: !!tb.mine, max: tb.economy.max };
   }
 
   /** A costed press drains the tally; an attack advances the MAP step. A
    *  press that finishes in a later turn spends nothing; one that finishes
    *  after the subject changed spends from its own actor's tally. */
   spend(cost, attack = false, ctx = this.spendCtx()) {
-    if (!ctx || ctx.key !== this.turnKeyNow) return;
+    /* The originating combat, read live: a turn that moved on while PF2e's
+       dialog was open has already refilled this tally, and spends nothing. */
+    if (!ctx || turnKey(ctx.combat) !== ctx.key) return;
     const before = ctx.turn.map;
     if (!ctx.turn.spend(cost, attack, { mine: ctx.mine, max: ctx.max })) return;
     const tb = this.model?.turnbar;
