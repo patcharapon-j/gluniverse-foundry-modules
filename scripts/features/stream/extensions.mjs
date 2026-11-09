@@ -76,7 +76,9 @@ export function createCardFeed(overlay, system) {
  *
  * @param {object} section
  * @param {string} section.id      unique; re-registering replaces.
- * @param {number} [section.order] ascending; panel-native sections sit at 0.
+ * @param {number} [section.order] ascending; panel-native sections sit at 0. Below 0 the
+ *        section leads its tab, above the native sections (`lead` of
+ *        renderPanelSectionsByTab); 0 and above follow them.
  * @param {() => Promise<string>|string} section.render  the section's HTML.
  * @param {(name: string, value: unknown) => Promise<boolean>|boolean} [section.change]
  *        offered every form change the panel did not recognise as its own,
@@ -134,15 +136,17 @@ export function getPanelSections() {
  */
 export async function renderPanelSections() {
   const byTab = await renderPanelSectionsByTab();
-  return PANEL_TABS.map((tab) => byTab[tab]).join("");
+  return PANEL_TABS.map((tab) => byTab.lead[tab] + byTab[tab]).join("");
 }
 
 /**
  * Every contributed section rendered and grouped by its tab: `{ shot, overlay, screen, access }`, each
- * the joined HTML of that tab's sections in display order (an empty string for a tab with none).
+ * the joined HTML of that tab's sections in display order (an empty string for a tab with none), drawn
+ * after the tab's own sections, and `lead`, the same for sections ordered below 0, drawn before them.
  */
 export async function renderPanelSectionsByTab() {
   const out = Object.fromEntries(PANEL_TABS.map((tab) => [tab, []]));
+  const lead = Object.fromEntries(PANEL_TABS.map((tab) => [tab, []]));
   const isGM = Boolean(globalThis.game?.user?.isGM);
   for (const section of getPanelSections()) {
     try {
@@ -150,14 +154,15 @@ export async function renderPanelSectionsByTab() {
       if (!html) continue;
       // Shown, not hidden: a director should still be able to read what the
       // cards and the arcs are set to while looking at the shot they affect.
-      out[panelTabOf(section)].push(section.gmOnly && !isGM
+      (section.order < 0 ? lead : out)[panelTabOf(section)].push(section.gmOnly && !isGM
         ? `<fieldset class="gluniverse-stream-controls" disabled>${html}</fieldset>`
         : html);
     } catch (error) {
       console.error(`GLUniverse Suite | Stream: panel section "${section.id}" failed to render.`, error);
     }
   }
-  return Object.fromEntries(PANEL_TABS.map((tab) => [tab, out[tab].join("")]));
+  const join = (by) => Object.fromEntries(PANEL_TABS.map((tab) => [tab, by[tab].join("")]));
+  return { ...join(out), lead: join(lead) };
 }
 
 /** Offer a form change to the contributed sections. True once one claims it. */
@@ -184,4 +189,80 @@ export async function offerPanelAction(action, element) {
     }
   }
   return false;
+}
+
+/* ── Feature commands and status ──────────────────────────────────────────
+   A sibling feature that changes what the capture shows (the Diorama's 3D
+   view) needs the same two things the panel's own buttons have: a director's
+   command that reaches the stream client with an attested author, and a line in
+   the client's status report saying what it is showing. Both ride `stream`'s
+   own channels; this slot only names them, so `stream` still imports no child. */
+
+const commandHandlers = new Map();
+const statusFields = new Map();
+let commandSender = null;
+let statusReporter = null;
+let statusSource = null;
+
+/**
+ * Handle `id` on the stream client. Runs only for a command whose User document
+ * author is a director (director-auth.mjs), with the `args` the sender passed:
+ * treat them as untrusted shape, never as authority.
+ * @param {string} id  @param {(args: object) => unknown} handler
+ */
+export function registerStreamCommand(id, handler) {
+  if (typeof id !== "string" || !id) return;
+  if (typeof handler === "function") commandHandlers.set(id, handler);
+  else commandHandlers.delete(id);
+}
+
+/** Stream client side: run a feature's command. False when no feature claims it. */
+export async function runStreamCommand(id, args) {
+  const handler = commandHandlers.get(id);
+  if (!handler) return false;
+  await handler(args && typeof args === "object" ? args : {});
+  return true;
+}
+
+/**
+ * Add `{ [id]: read() }` to every status report the stream client sends, so the
+ * Control Room can say what a feature has on the capture. `read` runs on the
+ * stream client and returns plain data.
+ */
+export function registerStatusField(id, read) {
+  if (typeof id !== "string" || !id) return;
+  if (typeof read === "function") statusFields.set(id, read);
+  else statusFields.delete(id);
+}
+
+/** Every registered field, read now. A field that throws is left out. */
+export function readStatusFields() {
+  const out = {};
+  for (const [id, read] of statusFields) {
+    try { out[id] = read(); } catch { /* left out */ }
+  }
+  return out;
+}
+
+/** `stream` wires these at ready; a feature calls the exported forms below. */
+export function setStreamChannels({ send = null, report = null, status = null } = {}) {
+  commandSender = typeof send === "function" ? send : null;
+  statusReporter = typeof report === "function" ? report : null;
+  statusSource = typeof status === "function" ? status : null;
+}
+
+/** Send a feature command to the stream client as this director. False when stream is not running or refuses. */
+export async function sendStreamCommand(id, args = {}) {
+  if (!commandSender) return false;
+  return Boolean(await commandSender(id, args));
+}
+
+/** The stream client: report status again now (a feature's field just moved). A no-op anywhere else. */
+export function reportStreamStatus() {
+  try { statusReporter?.(); } catch { /* the next report carries it */ }
+}
+
+/** The stream client's last status report as this client has it, or undefined. */
+export function streamClientStatus() {
+  try { return statusSource?.(); } catch { return undefined; }
 }

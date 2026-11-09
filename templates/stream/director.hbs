@@ -35,6 +35,7 @@
 <fieldset class="gluniverse-stream-controls" {{#if readOnly}}disabled{{/if}}>
 
 <div class="gluniverse-stream-tabpanel" role="tabpanel" data-tab="shot" {{#unless tab.shot}}hidden{{/unless}}>
+{{{sections.lead.shot}}}
 <section class="gluniverse-stream-panel">
   <h2>{{localize "GLUNIVERSE_STREAM.room.camera.heading"}}</h2>
   <div class="gluniverse-stream-fields">
@@ -102,6 +103,7 @@
 </div>
 
 <div class="gluniverse-stream-tabpanel" role="tabpanel" data-tab="overlay" {{#unless tab.overlay}}hidden{{/unless}}>
+{{{sections.lead.overlay}}}
 <section class="gluniverse-stream-panel">
   <h2>{{localize "GLUNIVERSE_STREAM.room.chat.heading"}}</h2>
   <div class="gluniverse-stream-filter-entry">
@@ -132,6 +134,7 @@
 </div>
 
 <div class="gluniverse-stream-tabpanel" role="tabpanel" data-tab="screen" {{#unless tab.screen}}hidden{{/unless}}>
+{{{sections.lead.screen}}}
 <section class="gluniverse-stream-panel">
   <h2>{{localize "GLUNIVERSE_STREAM.room.dialog.heading"}}</h2>
   <div class="gluniverse-stream-fields">
@@ -183,6 +186,7 @@
 </div>
 
 <div class="gluniverse-stream-tabpanel" role="tabpanel" data-tab="access" {{#unless tab.access}}hidden{{/unless}}>
+{{{sections.lead.access}}}
 <section class="gluniverse-stream-panel">
   <h2>{{localize "GLUNIVERSE_STREAM.room.access.login"}}</h2>
   <label class="gluniverse-stream-field gluniverse-stream-field--wide"><span>{{localize "GLUNIVERSE_STREAM.room.access.loginLabel"}}</span>

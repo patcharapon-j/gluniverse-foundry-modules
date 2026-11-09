@@ -1,12 +1,12 @@
 /**
- * Diorama — resource bars on the standees, by Foundry's own visibility rule.
+ * Diorama — the display-mode rules the 3D view still asks itself.
  *
- * Foundry decides `token.bars.visible` as `!isSecret && actor && _canViewMode(
- * document.displayBars)`, and `_canViewMode` reads the 2D canvas's hover. In
- * 3D the 2D hover never happens, so the same rule is restated here against the
- * view's own hover (`canViewMode`, pure). The same rule decides the name.
- *
- * Bar colours are Foundry's own (Token#_drawBar): data, not theme.
+ * The bars themselves are not drawn here: view/bar-layer.mjs puts the 2D
+ * canvas's own bars (Resource Bars', or Foundry's `token.bars`) on the
+ * standees, and who sees one is Foundry's `token.bars.visible`, with the view's
+ * hover handed to the 2D token. Two questions are left that Foundry cannot
+ * answer: whether a name shows (the snapshot's), and what a *player* would see
+ * while the GM looks through "view as players".
  */
 
 /** CONST.TOKEN_DISPLAY_MODES, with the v14 numbers as the fallback. */
@@ -33,37 +33,17 @@ export function canViewMode(mode, { controlled = false, hovered = false, isOwner
 }
 
 /**
- * One bar from a `getBarAttribute` result, or null for a value-only attribute.
- * @param {{type:string, value:number, max:number}|null} attr
- * @param {number} index  0 = bar1, 1 = bar2
- * @returns {{frac:number, color:string}|null}
+ * Whether some player could see a token's bars at all, for the GM's "view as
+ * players": shown to everyone (always, or on hover), or to its owners when a
+ * player owns it. Never more than a player would get.
+ * @param {number} mode  the token's displayBars
+ * @param {boolean} playerOwned
  */
-export function barFrom(attr, index) {
-  if (!attr || attr.type !== "bar") return null;
-  const max = Number(attr.max);
-  const value = Number(attr.value);
-  if (!(max > 0) || !Number.isFinite(value)) return null;
-  const pct = Math.max(0, Math.min(max, value)) / max;
-  const rgb = index === 0 ? [1 - pct / 2, pct, 0] : [0.5 * pct, 0.7 * pct, 0.5 + pct / 2];
-  const c = rgb.map((v) => Math.round(Math.max(0, Math.min(1, v)) * 255));
-  return { frac: pct, color: `rgb(${c[0]}, ${c[1]}, ${c[2]})` };
-}
-
-/**
- * Bars a viewer may see on a token, by the token's own display mode.
- * @param {Token} token
- * @param {{hovered:boolean, isSecret:boolean}} s
- */
-export function barsFor(token, { hovered = false, isSecret = false } = {}) {
-  const doc = token?.document;
-  if (!doc || !token.actor || isSecret) return [];
-  if (!canViewMode(doc.displayBars, { controlled: !!token.controlled, hovered, isOwner: !!doc.isOwner })) return [];
-  const out = [];
-  ["bar1", "bar2"].forEach((name, i) => {
-    let attr = null;
-    try { attr = doc.getBarAttribute?.(name) ?? null; } catch { attr = null; }
-    const b = barFrom(attr, i);
-    if (b) out.push(b);
-  });
-  return out;
+export function playersSeeBars(mode, playerOwned) {
+  const M = modes();
+  switch (Number(mode)) {
+    case M.ALWAYS: case M.HOVER: return true;
+    case M.OWNER: case M.OWNER_HOVER: case M.CONTROL: return !!playerOwned;
+    default: return false;
+  }
 }

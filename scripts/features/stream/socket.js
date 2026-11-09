@@ -26,7 +26,8 @@
 
 import { onSocket, emitSocket } from "../../core/socket.mjs";
 import { FEATURE_ID, HOOKS, MODULE_ID, SOCKET_TYPES, STREAM_COMMANDS } from "./constants.js";
-import { installCommandListener } from "./director-auth.mjs";
+import { installCommandListener, requestCommand } from "./director-auth.mjs";
+import { readStatusFields, runStreamCommand, setStreamChannels } from "./extensions.mjs";
 import { getSetting, isConfiguredStreamUser } from "./settings.js";
 
 let services = {};
@@ -59,10 +60,18 @@ export function registerSocket(nextServices) {
     if (!isConfiguredStreamUser()) return;
     await handleStreamCommand(command, payload);
   });
+
+  // The children's road to the same two channels (extensions.mjs): a director's
+  // command, and a field in this client's status report.
+  setStreamChannels({
+    send: (id, args) => requestCommand(STREAM_COMMANDS.feature, { id: String(id), args: args ?? {} }),
+    report: () => { if (isConfiguredStreamUser()) services.streamMode?.reportStatus(); },
+    status: () => getStreamClientStatus()
+  });
 }
 
 export function emitClientStatus(status) {
-  const payload = { timestamp: Date.now(), ...status };
+  const payload = { timestamp: Date.now(), ...status, features: readStatusFields() };
   clientStatusByUser.set(game.user.id, payload);
   emitSocket(FEATURE_ID, { type: SOCKET_TYPES.clientStatus, payload });
   Hooks.callAll(HOOKS.clientStatus, payload);
@@ -93,6 +102,11 @@ async function handleStreamCommand(command, payload) {
       break;
     case STREAM_COMMANDS.toggleRestore:
       services.streamMode?.toggleRestore();
+      break;
+    case STREAM_COMMANDS.feature:
+      // A sibling feature's command; the author was already checked to be a director.
+      if (typeof payload?.id === "string") await runStreamCommand(payload.id, payload.args);
+      services.streamMode?.reportStatus();
       break;
     case STREAM_COMMANDS.reframe:
       services.streamMode?.reportStatus();

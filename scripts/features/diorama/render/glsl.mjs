@@ -65,6 +65,10 @@ vec3 mapSoft(vec2 xz) {
  * World-space light, vision, the key light's shadow and up to eight effect
  * lights. Every lit material includes this.
  */
+/** See-through (dioSeeThrough): the most figures an occluder is cut around, and the share of it kept. */
+export const SEE_MAX = 16;
+export const SEE_KEEP = 0.2;
+
 const LIT = /* glsl */ `
 uniform sampler2D uLightMap;
 uniform sampler2D uVisionMap;
@@ -582,6 +586,59 @@ vec3 dioFinish(vec3 c, float vis, vec3 wp) {
 vec3 dioFinishFigure(vec3 c, vec3 wp) {
   return finish(dioAtmosphere(c, wp), 1.0);
 }
+
+/*
+ * See-through: what stands between the camera and a figure is cut away around
+ * it, the way an isometric CRPG opens a wall or a pillar in front of the party.
+ * The renderer hands the figures on screen (SEE_MAX at most), each as a capsule
+ * on screen from its base to its head, in DEVICE px of the render target
+ * (uSeeSeg: foot xy, head xy), with uSeeInfo = (radius px, the window depth of
+ * the base's camera-side rim, the height of its feet plus a lip, strength).
+ * A fragment is cut only when it is nearer the camera than that rim AND above
+ * those feet, so the floor a figure stands on, and everything behind it, stay.
+ * The cut is an ordered dither that keeps SEE_KEEP of the occluder, so a pillar
+ * still reads as a stippled ghost where it was. Occluders call dioSeeThrough
+ * first thing; figures, the ground's own shadow pass and the mist never do.
+ */
+#define SEE_MAX ${SEE_MAX}
+uniform float uSeeCount;
+uniform vec4 uSeeSeg[SEE_MAX];
+uniform vec4 uSeeInfo[SEE_MAX];
+const float SEE_KEEP = ${SEE_KEEP.toFixed(2)};
+
+/** A 4x4 ordered dither, 0..1 (a screen-locked pattern: no crawl as the camera eases). */
+float dioBayer4(vec2 p) {
+  vec2 q = mod(floor(p), 4.0);
+  float a = mod(q.x + 2.0 * q.y, 4.0);
+  float b = mod(floor(q.x / 2.0) + 2.0 * floor(q.y / 2.0), 4.0);
+  float m = a * 4.0 + b;
+  return (m + 0.5) / 16.0;
+}
+
+/** How much of an occluder at wp is cut away, 0..1. No texture reads in the loop (ANGLE D3D). */
+float dioSeeCut(vec3 wp) {
+  float cut = 0.0;
+  for (int i = 0; i < SEE_MAX; i++) {
+    if (float(i) < uSeeCount) {
+      vec4 sg = uSeeSeg[i];
+      vec4 nf = uSeeInfo[i];
+      if (gl_FragCoord.z < nf.y && wp.y > nf.z) {
+        vec2 ab = sg.zw - sg.xy;
+        vec2 ap = gl_FragCoord.xy - sg.xy;
+        float t = clamp(dot(ap, ab) / max(dot(ab, ab), 1e-3), 0.0, 1.0);
+        float d = length(ap - ab * t);
+        cut = max(cut, (1.0 - smoothstep(nf.x * 0.55, nf.x, d)) * nf.w);
+      }
+    }
+  }
+  return cut;
+}
+
+/** Discard this occluder fragment where it hides a figure (see above). */
+void dioSeeThrough(vec3 wp) {
+  float c = uSeeCount > 0.5 ? dioSeeCut(wp) : 0.0;
+  if (c * (1.0 - SEE_KEEP) > dioBayer4(gl_FragCoord.xy)) discard;
+}
 `;
 
 /** Noise, the map and the lit chunk: what a lit program outside this file includes. */
@@ -630,6 +687,7 @@ float gridLine(vec2 xz) {
 const float LIP_RANGE = 0.5;
 
 void main() {
+  dioSeeThrough(vWorld);
   // never seen: nothing at all, mist or not (the fog's backdrop fills the gap)
   float vis = visionAt(vWorld.xz);
   if (vis <= 0.0) discard;
@@ -862,6 +920,7 @@ const float FACE_LIP = 0.03;
 const float FACE_FOG = 0.6;
 
 void main() {
+  dioSeeThrough(vWorld);
   vec2 out2 = normalize(vNormal.xz + vec2(1e-6));
   vec2 foot = vLip + out2 * (FACE_LIP + FACE_FOOT);
   float visLip = visionAt(vLip), visFoot = visionAt(foot);
@@ -1210,6 +1269,7 @@ vec3 wallAlbedo(int m, float a, float yl, float h, bool cap, vec3 mapC) {
 }
 
 void main() {
+  dioSeeThrough(vWorld);
   float vis = max(visionAt(vWorld.xz + vPerp * 0.16), visionAt(vWorld.xz - vPerp * 0.16));
   if (vis <= 0.0) discard;
   vec3 n = normalize(vNormal);

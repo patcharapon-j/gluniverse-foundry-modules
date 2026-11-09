@@ -23,6 +23,7 @@
  *   tab=shot|overlay|screen|access room: the tab to open on
  *   state=live|exposed|idle|unknown|offline|unset   room: the on-air state (default live)
  *   readonly                       room: a director whose edits cannot be saved
+ *   board=2d|3d|unsupported        room: what the capture reports for Diorama's Board view (Shot tab)
  *   w=<px>, h=<px>                 room and filter: the window's size (default the shipped size)
  *   rev=before                     room and filter: origin/main's template and stylesheet, for a
  *                                  before/after pair (written by `--before`, see below)
@@ -127,6 +128,7 @@ const lang = Object.assign({},
   await (await fetch("/lang/stream.en.json")).json(),
   await (await fetch("/lang/stream-cards.en.json")).json(),
   await (await fetch("/lang/stream-targets.en.json")).json(),
+  await (await fetch("/lang/diorama.en.json")).json(),
   await (await fetch("/lang/en.json")).json().catch(() => ({})));
 const localize = (key) => (key in lang ? lang[key] : key);
 const text = async (path) => (await fetch(path)).text();
@@ -304,6 +306,10 @@ async function room() {
     targeting: { ...DEFAULT_TARGETING_SETTINGS }, weightPercent: Math.round(DEFAULT_TARGETING_SETTINGS.intensity * 100), showVisibility: true, canEdit: !readOnly,
     visibilityOptions: [{ value: "everyone", label: "Everyone", selected: "selected" }, { value: "gmAndStream", label: "GM and stream" }]
   });
+  // Diorama's "Board view" on Shot, from the shipped section markup; board=2d|3d|unsupported is the capture's report.
+  const { sectionHtml, roomState } = await import("/scripts/features/diorama/stream-bridge.mjs");
+  const board = qs.get("board") || "2d";
+  const boardSection = sectionHtml(roomState({ active: live, features: { diorama: { view: board === "3d" ? "3d" : "2d", offered: board !== "unsupported" } } }), localize);
   // A gmOnly section a non-GM sees sits in a disabled fieldset, as renderPanelSectionsByTab wraps it.
   const gmOnly = (html) => readOnly ? '<fieldset class="gluniverse-stream-controls" disabled>' + html + "</fieldset>" : html;
 
@@ -325,7 +331,8 @@ async function room() {
     chatFilterSummary: "Players 19 of 23 · GM 15 of 23",
     cardScale: { ...CARD_SCALE_RANGE, percent: Math.round(chat.cardScale * 100) },
     dialog: { lifetimeMs: 10000 },
-    sections: { shot: "", overlay: gmOnly(targetsSection) + gmOnly(cardsSection), screen: "", access: "" },
+    sections: { shot: "", overlay: gmOnly(targetsSection) + gmOnly(cardsSection), screen: "", access: "",
+      lead: { shot: boardSection, overlay: "", screen: "", access: "" } },
     canEdit: !readOnly, canEditAdmin: !readOnly, readOnly,
     readOnlyMessage: localize("GLUNIVERSE_STREAM.notifications.readOnlyNoGm"),
     tokenRows, detectedUi,

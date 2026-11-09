@@ -197,7 +197,12 @@ export default async function check(ctx) {
   const binds = [...main.matchAll(/keybindings\.register\(\s*SUITE_ID\s*,\s*"([^"]+)"/g)].map((m) => m[1]);
   ctx.ok("keybindings are dio.-prefixed", binds.length >= 4 && binds.every((k) => k.startsWith(C.PREFIX)), binds.join(", "));
   ctx.ok("Shift+V toggles the view", /"dio\.toggle"[\s\S]{0,200}key:\s*"KeyV",\s*modifiers:\s*\["Shift"\]/.test(main));
-  ctx.ok("scene controls go through the suite group", /ensureSuiteGroup\(controls\)/.test(main) && !/controls\.tokens/.test(main));
+  // The way in and out is ONE toggle in the Token Controls; the view's tools join it there while
+  // it is open, and nothing of the view's is pinned on the board. Edit terrain stays in the suite group.
+  ctx.ok("the 3D view is a toggle in the Token Controls", /controls\.tokens/.test(main) && /tools\[TOOL_VIEW\] = \{[\s\S]{0,400}toggle: true/.test(main));
+  ctx.ok("the view's tools join the Token Controls only while it is open", /if \(isOpen\(\)\) \{[\s\S]{0,200}VIEW_TOOLS\.forEach/.test(main));
+  ctx.ok("Edit terrain goes through the suite group", /ensureSuiteGroup\(controls\)[\s\S]{0,200}TOOL_EDIT/.test(main));
+  ctx.ok("nothing of the view's is pinned on the board", !/\bel\("button"/.test(read(`${DIO}/view/hud.mjs`)) && !existsSync(join(ctx.root, `${DIO}/view/entry.mjs`)));
   ctx.ok("main.mjs imports the view lazily", !/^import[^;]*view\/overlay\.mjs/m.test(main) && /import\("\.\/view\/overlay\.mjs"\)/.test(main));
   for (const f of files) {
     if (/^import[^;]*render\/renderer\.mjs/m.test(read(f))) ctx.ok(`${f} imports the renderer lazily`, false);
@@ -273,22 +278,20 @@ export default async function check(ctx) {
   ctx.ok("a malformed wall is dropped", Snap.wallState(W({ c: [0, 0, "x", 1] }), { isGM: true, terrain: null, size: 100, distance: 5 }) === null);
 
   const art = Snap.tokenArtFor;
-  ctx.ok("the GM's standee override wins", art({ standee: "s.webp", canObserve: false, actorImg: "a.webp", tokenImg: "t.webp" }) === "s.webp");
-  ctx.ok("every viewer sees the portrait (a bestiary creature stands as its art)",
-    art({ canObserve: false, actorImg: "a.webp", tokenImg: "t.webp", protoImg: "t.webp" }) === "a.webp"
-    && art({ canObserve: false, actorImg: "a.webp", tokenImg: "t.webp" }) === "a.webp"
-    && art({ canObserve: false, actorImg: "a.webp", tokenImg: null }) === "a.webp");
-  ctx.ok("a disguised token stays disguised to a viewer who cannot Observe",
-    art({ canObserve: false, actorImg: "mimic.webp", tokenImg: "chest.webp", protoImg: "mimic-token.webp" }) === "chest.webp");
-  ctx.ok("an observer sees through the disguise",
-    art({ canObserve: true, actorImg: "mimic.webp", tokenImg: "chest.webp", protoImg: "mimic-token.webp" }) === "mimic.webp");
-  ctx.ok("a random or wildcard prototype image is no disguise",
-    art({ canObserve: false, actorImg: "a.webp", tokenImg: "wolf-2.webp", protoImg: "wolf-*.webp" }) === "a.webp"
-    && art({ canObserve: false, actorImg: "a.webp", tokenImg: "wolf-2.webp", protoImg: "wolf-1.webp", protoRandom: true }) === "a.webp");
-  ctx.ok("an observer sees the portrait", art({ canObserve: true, actorImg: "a.webp", tokenImg: "t.webp" }) === "a.webp");
-  ctx.ok("the mystery-man portrait falls back to the token", art({ canObserve: true, actorImg: Snap.DEFAULT_ART, tokenImg: "t.webp" }) === "t.webp"
-    && art({ canObserve: false, actorImg: Snap.DEFAULT_ART, tokenImg: "t.webp", protoImg: "t.webp" }) === "t.webp");
-  ctx.ok("the standee override beats a disguise", art({ standee: "s.webp", canObserve: false, actorImg: "a.webp", tokenImg: "chest.webp", protoImg: "p.webp" }) === "s.webp");
+  ctx.ok("the actor's standee art wins", art({ standee: "s.webp", actorImg: "a.webp", tokenImg: "t.webp" }) === "s.webp");
+  ctx.ok("otherwise the portrait (a bestiary creature stands as its art)", art({ actorImg: "a.webp", tokenImg: "t.webp" }) === "a.webp"
+    && art({ actorImg: "a.webp", tokenImg: null }) === "a.webp");
+  ctx.ok("the mystery-man portrait falls back to the token", art({ actorImg: Snap.DEFAULT_ART, tokenImg: "t.webp" }) === "t.webp");
+  // One answer for every viewer: a token image that drifted from its prototype
+  // (placed before a prototype edit) once showed players the round token while
+  // the GM saw the portrait. Nothing about the viewer may enter the rule.
+  ctx.ok("standee art is the same for every viewer", art({ canObserve: false, actorImg: "a.webp", tokenImg: "old-token.webp", protoImg: "new-token.webp" }) === "a.webp"
+    && art({ canObserve: true, actorImg: "a.webp", tokenImg: "old-token.webp", protoImg: "new-token.webp" }) === "a.webp");
+  const snapSrc = read(`${DIO}/view/snapshot.mjs`);
+  const readBody = snapSrc.slice(snapSrc.indexOf("export function readTokens"), snapSrc.indexOf("export function backgroundSrc"));
+  ctx.ok("readTokens asks nothing about the viewer for the art", !/testUserPermission|canObserve|isGM[^\n]*art/.test(readBody.slice(readBody.indexOf("const art"), readBody.indexOf("const marks"))));
+  const saSrc = read(`${DIO}/view/standee-app.mjs`);
+  ctx.ok("the Standee window saves to the world actor behind a token", /export function standeeTarget/.test(saSrc) && /baseActor/.test(saSrc) && /standeeTarget\(actor\)/.test(saSrc));
 
   const p1 = Snap.pathCellsTo([{ i: 0, j: 0 }], { i: 2, j: 3 });
   const contiguous = p1.every((c, k) => !k || (Math.abs(c.i - p1[k - 1].i) <= 1 && Math.abs(c.j - p1[k - 1].j) <= 1));
@@ -305,15 +308,49 @@ export default async function check(ctx) {
   ctx.ok("next honours a skip rule", nextCombatant([A, Cc, D], 0, (c) => c.hidden)?.id === "d");
   ctx.ok("next is never the current one", nextCombatant([A], 0) === null && nextCombatant([A, B], 0) === null && nextCombatant([], 0) === null);
 
-  const { canViewMode, barFrom, DISPLAY } = await import(ctx.url(`${DIO}/integrations/bars.mjs`));
+  const { canViewMode, playersSeeBars, DISPLAY } = await import(ctx.url(`${DIO}/integrations/bars.mjs`));
   ctx.ok("display modes follow Foundry", !canViewMode(DISPLAY.NONE, { isOwner: true, hovered: true, controlled: true })
     && canViewMode(DISPLAY.ALWAYS) && canViewMode(DISPLAY.CONTROL, { controlled: true }) && !canViewMode(DISPLAY.CONTROL, { hovered: true })
     && canViewMode(DISPLAY.HOVER, { hovered: true }) && !canViewMode(DISPLAY.OWNER_HOVER, { hovered: true })
     && canViewMode(DISPLAY.OWNER_HOVER, { hovered: true, isOwner: true }) && canViewMode(DISPLAY.OWNER, { isOwner: true }));
-  const bar = barFrom({ type: "bar", value: 5, max: 10 }, 0);
-  ctx.ok("a bar is its fraction in Foundry's colour", bar?.frac === 0.5 && bar.color === "rgb(191, 128, 0)", JSON.stringify(bar));
-  ctx.ok("value-only and empty attributes draw no bar", barFrom({ type: "value", value: 3 }, 0) === null && barFrom({ type: "bar", value: 3, max: 0 }, 1) === null && barFrom(null, 0) === null);
-  ctx.ok("an overfull bar clamps", barFrom({ type: "bar", value: 15, max: 10 }, 1)?.frac === 1);
+  ctx.ok("view as players shows a bar only some player could see", playersSeeBars(DISPLAY.ALWAYS, false) && playersSeeBars(DISPLAY.HOVER, false)
+    && !playersSeeBars(DISPLAY.OWNER, false) && playersSeeBars(DISPLAY.OWNER, true) && !playersSeeBars(DISPLAY.NONE, true) && !playersSeeBars(DISPLAY.CONTROL, false));
+
+  // The bars are the 2D canvas's own, never a diorama lookalike (view/bar-layer.mjs).
+  const { frameOf } = await import(ctx.url(`${DIO}/view/bar-layer.mjs`));
+  const fr = frameOf({ cx: 200, footY: 300, headY: 100, w: 80 }, { left: 10, top: 20 });
+  ctx.ok("a bar frame is the standee's base box in the layer's px", fr?.x === 150 && fr.y === 280 && fr.w === 80 && fr.h === 0 && frameOf(null, { left: 0, top: 0 }) === null, JSON.stringify(fr));
+  const layerSrc = read(`${DIO}/view/bar-layer.mjs`);
+  ctx.ok("the bar layer draws no bar of its own", !/beginFill|drawRect|drawRoundedRect|fillRect|\.fill\(/.test(layerSrc)
+    && /token\.bars|bars\[key\]/.test(layerSrc) && /api\?\.project/.test(layerSrc));
+  ctx.ok("the 3D hover is the 2D token's", /_onHoverIn\(/.test(layerSrc) && /_onHoverOut\(/.test(layerSrc)
+    && /bridgeHover\(/.test(read(`${DIO}/view/overlay.mjs`)));
+  const rbHost = read("scripts/features/resource-bars/host.mjs"), rbMain = read("scripts/features/resource-bars/main.mjs");
+  ctx.ok("Resource Bars draws the 3D bars through a projected host", /export function projectedHost\(/.test(rbHost) && /project:\s*\(view\)/.test(rbMain));
+  ctx.ok("the snapshot carries no bar readings", !/barsFor|\bbars:/.test(read(`${DIO}/view/snapshot.mjs`)));
+  const artSrc = read(`${DIO}/render/art.mjs`);
+  ctx.ok("the plate draws no bar", !/barFrom|bars\b.*frac/.test(artSrc));
+
+  // Targeting: the line lands on the head, the mark over it is the targeter's colour.
+  ctx.ok("the target line ends at the head", /anchorOf\([^)]*"head"/.test(read(`${DIO}/render/links.mjs`)) && !/anchorOf\([^)]*"base"/.test(read(`${DIO}/render/links.mjs`)));
+  ctx.ok("each targeter gets a mark in their own colour", /targetMark\(g, x, y, MARK, col\)/.test(artSrc) && /MARKS_MAX/.test(artSrc));
+
+  // See-through: occluders open around figures; figures and the floor they stand on never do.
+  const glsl = await import(ctx.url(`${DIO}/render/glsl.mjs`));
+  const pglsl = await import(ctx.url(`${DIO}/render/props-glsl.mjs`));
+  const opens = (src) => { const m = src.match(/void main\(\) \{([\s\S]*)/); return !!m && /dioSeeThrough\(vWorld\);/.test(m[1].split(/\n\s*(?:vec|float|bool)\s/)[0]); };
+  const occluders = { top: glsl.PROGRAMS.top, side: glsl.PROGRAMS.side, wall: glsl.PROGRAMS.wall,
+    prop: pglsl.PROPS_PROGRAMS?.prop, propModel: pglsl.PROPS_PROGRAMS?.propModel, propCard: pglsl.PROPS_PROGRAMS?.propCard,
+    slabTop: pglsl.PROPS_PROGRAMS?.slabTop, slabSide: pglsl.PROPS_PROGRAMS?.slabSide };
+  const shut = Object.entries(occluders).filter(([, p]) => !p || !opens(p.fragment)).map(([k]) => k);
+  ctx.ok("every occluder opens around a figure", !shut.length, shut.join(", "));
+  const card = glsl.PROGRAMS.card ?? glsl.PROGRAMS.standee;
+  ctx.ok("a figure's own card is never cut", !card || !/dioSeeThrough\(vWorld\)/.test(card.fragment));
+  const rSrc = read(`${DIO}/render/renderer.mjs`);
+  ctx.ok("the cut is written every frame, and off with the cutaway", /this\.writeSeeThrough\(/.test(rSrc)
+    && /!this\.options\.cutaway[^\n]*uSeeCount\.value = 0/.test(rSrc) && /uSeeSeg\.value\[n\]\.set/.test(rSrc) && /uSeeInfo\.value\[n\]\.set/.test(rSrc));
+  ctx.ok("the cut keeps a ghost of the occluder", glsl.SEE_KEEP > 0 && glsl.SEE_KEEP < 0.5 && glsl.SEE_MAX >= 8);
+  ctx.ok("the cut reads no texture in its loop (ANGLE)", (() => { const m = glsl.PROGRAMS.top.fragment.match(/float dioSeeCut[\s\S]*?\n\}/); return m && !/texture/.test(m[0]); })());
 
   const { classifyEffect } = await import(ctx.url(`${DIO}/integrations/sequencer.mjs`));
   ctx.ok("a GM override wins", classifyEffect({ file: "a/aura.webm", stretch: true }, { "a/aura.webm": "standing" }) === "standing");
@@ -377,7 +414,7 @@ export default async function check(ctx) {
   const syncSrc = readFileSync(join(ctx.root, `${DIO}/view/sync.mjs`), "utf8");
   ctx.ok("an invite never asks the stream audience (no toast in stream mode)", /mode === "auto" \|\| streamOwnsView\(\)/.test(syncSrc));
   const viewCss = readFileSync(join(ctx.root, "styles/diorama.css"), "utf8");
-  ctx.ok("the stream capture hides the view's chrome", /body\.gluniverse-stream-active:not\(\.gluniverse-stream-restore\)[^{]*\.gldio-toolbar/.test(viewCss));
+  ctx.ok("the stream capture hides the view's chrome", /body\.gluniverse-stream-active:not\(\.gluniverse-stream-restore\)[^{]*\.gldio-toast[^{]*\.gldio-peek/.test(viewCss));
   ctx.ok("the view sits at the board's layer so Stage portraits draw over it", /\.gldio-view \{[^}]*z-index: var\(--gl-z-base\);/.test(viewCss));
   ctx.ok("a malformed camera is refused", sanitizeCamera({ yawStep: 0, pitchIndex: 0, zoom: 1, target: { x: "a" } }) === null && sanitizeCamera(null) === null);
 }

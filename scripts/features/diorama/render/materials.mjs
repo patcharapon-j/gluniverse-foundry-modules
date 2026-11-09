@@ -11,7 +11,7 @@
  */
 
 import * as THREE from "./three.mjs";
-import { PROGRAMS } from "./glsl.mjs";
+import { PROGRAMS, SEE_MAX } from "./glsl.mjs";
 import { PALETTE, hexToRgbFloat, mix } from "../../../core/theme.mjs";
 import { NEUTRAL_LIGHT } from "../environment.mjs";
 
@@ -106,6 +106,11 @@ export function createShared() {
     // The fog of war's soft map and style (render/fog.mjs). Off: today's flat fog.
     uFogMap: { value: blankTexture([255, 255, 0, 255]) },
     uFogStyle: { value: new THREE.Vector2(0, 0) },
+    // See-through (glsl.mjs dioSeeThrough): the figures an occluder opens around,
+    // written each frame by the renderer. Count 0: nothing is cut.
+    uSeeCount: { value: 0 },
+    uSeeSeg: { value: Array.from({ length: SEE_MAX }, () => new THREE.Vector4()) },
+    uSeeInfo: { value: Array.from({ length: SEE_MAX }, () => new THREE.Vector4()) },
   };
 }
 

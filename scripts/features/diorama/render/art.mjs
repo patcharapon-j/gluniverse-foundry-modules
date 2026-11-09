@@ -233,29 +233,32 @@ export function maskHit(mask, u, v) {
 const PLATE_W = 256;
 const ICON = 40;
 const GAP = 6;
-const BAR_H = 9;
-const PIP = 22;
+/** One target mark's square, px of the plate canvas (PLATE_W wide). */
+export const MARK = 58;
+/** Marks drawn in a row before the rest fold into a "+N" chip. */
+export const MARKS_MAX = 4;
 
 /**
- * Lay out and draw the plate above a standee's head: target pips, condition
- * icons with value badges, resource bars. Icons that have not loaded yet are
- * drawn as an empty tile; the caller redraws once they arrive.
+ * Lay out and draw the plate above a standee's head: one target mark per user
+ * targeting it, in that user's colour, then condition icons with value badges.
+ * The marks lead because "who is aiming at this" is the fact a table looks for
+ * first; a token's bars are the 2D canvas's own, drawn by the view
+ * (view/bar-layer.mjs), never here. Icons that have not loaded yet are drawn as
+ * an empty tile; the caller redraws once they arrive.
  * @param {HTMLCanvasElement|null} into  reused when given
- * @param {{targets:string[], conditions:{icon:string,value?:any}[], bars:{frac:number,color:string}[]}} s
+ * @param {{targets:string[], conditions:{icon:string,value?:any}[]}} s
  * @param {(url:string) => (HTMLCanvasElement|null|undefined)} icon  sync lookup
  * @returns {{canvas:HTMLCanvasElement, height:number}|null}  null when empty
  */
 export function drawPlate(into, s, icon) {
-  const targets = (s.targets ?? []).slice(0, 8);
+  const targets = (s.targets ?? []).filter(Boolean);
   const conditions = (s.conditions ?? []).filter((c) => c && c.icon).slice(0, 10);
-  const bars = (s.bars ?? []).filter((b) => b && Number.isFinite(Number(b.frac))).slice(0, 3);
-  if (!targets.length && !conditions.length && !bars.length) return null;
+  if (!targets.length && !conditions.length) return null;
   const perRow = Math.floor((PLATE_W + GAP) / (ICON + GAP));
   const condRows = Math.ceil(conditions.length / perRow);
   let h = 0;
-  if (targets.length) h += PIP + GAP;
+  if (targets.length) h += MARK + GAP;
   h += condRows * (ICON + GAP);
-  h += bars.length * (BAR_H + 4);
   h = Math.max(8, h + 4);
   const c = into ?? canvas(PLATE_W, h);
   c.width = PLATE_W;
@@ -264,16 +267,13 @@ export function drawPlate(into, s, icon) {
   g.clearRect(0, 0, c.width, c.height);
   let y = 0;
   if (targets.length) {
-    const w = targets.length * (PIP + 4) - 4;
-    let x = (PLATE_W - w) / 2;
-    for (const col of targets) {
-      g.fillStyle = withAlpha(PALETTE.ink0, 0.7);
-      tri(g, x + 1, y + 2, PIP);
-      g.fillStyle = col || PALETTE.signal;
-      tri(g, x, y, PIP);
-      x += PIP + 4;
-    }
-    y += PIP + GAP;
+    const over = targets.length > MARKS_MAX ? targets.length - (MARKS_MAX - 1) : 0;
+    const shown = over ? targets.slice(0, MARKS_MAX - 1) : targets;
+    const n = shown.length + (over ? 1 : 0);
+    let x = (PLATE_W - (n * MARK + (n - 1) * GAP)) / 2;
+    for (const col of shown) { targetMark(g, x, y, MARK, col); x += MARK + GAP; }
+    if (over) moreChip(g, x, y, MARK, over);
+    y += MARK + GAP;
   }
   for (let r = 0; r < condRows; r++) {
     const row = conditions.slice(r * perRow, (r + 1) * perRow);
@@ -303,18 +303,46 @@ export function drawPlate(into, s, icon) {
     }
     y += ICON + GAP;
   }
-  for (const b of bars) {
-    const w = 150, x = (PLATE_W - w) / 2;
-    const f = Math.max(0, Math.min(1, Number(b.frac)));
-    g.fillStyle = withAlpha(PALETTE.ink0, 0.85);
-    round(g, x - 2, y - 2, w + 4, BAR_H + 4, (BAR_H + 4) / 2); g.fill();
-    if (f > 0) {
-      g.fillStyle = b.color || PALETTE.good;
-      round(g, x, y, Math.max(BAR_H, w * f), BAR_H, BAR_H / 2); g.fill();
-    }
-    y += BAR_H + 4;
-  }
   return { canvas: c, height: c.height };
+}
+
+/**
+ * One target mark in a user's colour: a ring crossed by four sight ticks and a
+ * centre dot, cut on an ink disc and edged in ink, so the colour reads on pale
+ * stone and dark earth alike.
+ */
+function targetMark(g, x, y, m, color) {
+  const cx = x + m / 2, cy = y + m / 2;
+  g.fillStyle = withAlpha(PALETTE.ink0, 0.72);
+  g.beginPath(); g.arc(cx, cy, m * 0.5, 0, Math.PI * 2); g.fill();
+  const ring = m * 0.3, tick0 = m * 0.12, tick1 = m * 0.45;
+  const path = () => {
+    g.beginPath();
+    g.arc(cx, cy, ring, 0, Math.PI * 2);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      g.moveTo(cx + dx * tick0, cy + dy * tick0);
+      g.lineTo(cx + dx * tick1, cy + dy * tick1);
+    }
+  };
+  g.lineCap = "round";
+  path(); g.strokeStyle = PALETTE.ink0; g.lineWidth = m * 0.16; g.stroke();
+  path(); g.strokeStyle = color || PALETTE.signal; g.lineWidth = m * 0.085; g.stroke();
+  g.beginPath(); g.arc(cx, cy, m * 0.065, 0, Math.PI * 2);
+  g.fillStyle = color || PALETTE.signal; g.fill();
+  g.lineWidth = m * 0.04; g.strokeStyle = PALETTE.ink0; g.stroke();
+}
+
+/** "+N": more users aim here than the row has marks for. */
+function moreChip(g, x, y, m, n) {
+  const cx = x + m / 2, cy = y + m / 2;
+  g.fillStyle = withAlpha(PALETTE.ink0, 0.82);
+  g.beginPath(); g.arc(cx, cy, m * 0.5, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = withAlpha(PALETTE.text, 0.5); g.lineWidth = 2;
+  g.beginPath(); g.arc(cx, cy, m * 0.5 - 2, 0, Math.PI * 2); g.stroke();
+  g.fillStyle = PALETTE.textBright;
+  g.font = `700 ${Math.round(m * 0.36)}px Oxanium, system-ui, sans-serif`;
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(`+${n}`, cx, cy + 1);
 }
 
 /* ---------------------------------------------------------------- effect halo */
@@ -377,12 +405,6 @@ function disc(g, x, y, r) {
   g.beginPath();
   g.arc(x, y, Math.max(0.5, r), 0, Math.PI * 2);
   g.closePath();
-}
-
-function tri(g, x, y, s) {
-  g.beginPath();
-  g.moveTo(x, y); g.lineTo(x + s, y); g.lineTo(x + s / 2, y + s * 0.8);
-  g.closePath(); g.fill();
 }
 
 function round(g, x, y, w, h, r) {

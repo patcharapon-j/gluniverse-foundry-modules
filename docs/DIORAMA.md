@@ -11,18 +11,32 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
 
 ## What a table gets
 
-- **The view.** A full-screen 3D overlay over the 2D canvas. The way in is the
-  labelled **3D view** chip on the 2D board, beside the scene controls (shown where
-  the view is offered and the scene is not switched off; hidden while the view is
-  open and on the stream capture; `view/entry.mjs`), Shift+V, or the suite
-  scene-control button. The way out is the labelled **Exit 3D** button under the
-  toolbar (beside the scene controls), Esc or Shift+V; leaving pans the 2D canvas to
-  centre what the 3D camera was looking at, so the switch keeps the player's place
-  (never on the stream capture, whose camera owns the 2D view). A scene-control
-  layer or tool switch never opens or closes it: only a press does. The 2D canvas
-  stays the only source of truth: every action in 3D writes ordinary Foundry
-  documents, and anyone can drop back to 2D for anything 3D does not cover.
-- **The 2D map window** (toolbar map button, Shift+M; `view/peek.mjs`). A small
+- **The view.** A full-screen 3D overlay over the 2D canvas. Nothing of it is
+  pinned on the board: the way in and out is the **3D view** toggle in Foundry's
+  own **Token Controls** (left panel; pressed while the view is open, offered
+  where the view is and the scene is not switched off), Shift+V, and Esc to leave.
+  While the view is open, its tools join the Token Controls under that toggle
+  (`view/hud.mjs` `VIEW_TOOLS`): yaw left / right, pitch, cut away, grid, follow,
+  the 2D map window, graphics, and for the GM view as players, roofs, summon,
+  environment and Edit terrain. They are Foundry's own tool buttons (tooltips,
+  keybinding hints, pressed states) and they vanish when the view closes. The
+  tokens layer is kept active while the view is open, because a Foundry layer
+  switch would replace the group the tools live in. Leaving pans the 2D canvas
+  to centre what the 3D camera was looking at, so the switch keeps the player's
+  place (never on the stream capture, whose camera owns the 2D view). The 2D
+  canvas stays the only source of truth: every action in 3D writes ordinary
+  Foundry documents, and anyone can drop back to 2D for anything 3D does not
+  cover. The GM's Edit terrain also stays in the suite's scene-control group,
+  since it works without the view.
+- **The stream capture's 2D / 3D** (`stream-bridge.mjs`). A director (the GM or
+  a trusted director) switches the capture between the 2D map and the 3D view
+  from the Control Room's Shot tab ("Board view"). The switch rides stream's own
+  attested director command channel through its extension slots
+  (`registerStreamCommand`, `registerStatusField`, `registerPanelSection`), so
+  `stream` still imports nothing of Diorama's; the room shows which one the
+  capture has up from its status report. A 3D switch on a scene the view cannot
+  show is refused quietly, since a warning there would be on the broadcast.
+- **The 2D map window** (the map tool, Shift+M; `view/peek.mjs`). A small
   framed window, docked bottom-right beside the sidebar the first time (32% of the
   viewport wide, 16:10), through which the **live** 2D canvas shows and takes input
   with all its usual tools: tokens, walls, lights, drawings, regions, the scene
@@ -48,7 +62,7 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   tweened. Opening the view frames the controlled token (a player's own token),
   else what the 2D canvas was showing when its centre is on the map, else the
   current combatant, else the scene's middle. The scene's
-  grid can be drawn on the ground (`dio.grid`, per client, toolbar toggle).
+  grid can be drawn on the ground (`dio.grid`, per client, the grid tool).
   Tilt-shift blur is opt-in.
 - **Standees.** Figures cut out of their art with a dark outline, leaned back so
   the art keeps its proportions at every pitch, casting their own silhouette
@@ -56,7 +70,45 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   when targeted, and the accent on hover. They stand on a dark base with a
   disposition ring: gold for the current combatant, green for next. A flyer
   gets a glass stand down to the square it is over. Conditions ring the front
-  of the base (`dio.effects`), and bars follow Foundry's own bar visibility.
+  of the base (`dio.effects`).
+- **Targeting.** A targeted standee's base ring and glow take the first
+  targeter's colour, and a mark for every user targeting it (their own colour: an
+  ink disc, a ring with four ticks and a centre dot; up to four, then "+N") floats
+  over its head on the head plate. The plate is never narrower than
+  `PLATE_MIN_PX` CSS px, so a mark stays about 40 px however far the camera is
+  zoomed out. The marks show whenever someone targets; the target *line* still
+  shows only where `stream-targets` draws it (its turn rule).
+- **Bars** (`view/bar-layer.mjs`). The bars are the 2D canvas's own, placed on
+  the standees; the view draws no bar of its own. With Resource Bars on, that
+  feature draws them through a second, *projected* host
+  (`resource-bars/host.mjs` `projectedHost`, suite api `project(view)`): its
+  readings, permissions, liquids, readouts, names and animations, decided on the
+  same `refreshToken` pass, with each token's frame its standee's base box on
+  screen (`renderer.standeeBox`). With it off, Foundry's own `token.bars.bar1/2`
+  graphics are rendered where the standee stands, bar 1 under the base and bar 2
+  over the head, the 2D token's bottom and top. Who sees a bar is Foundry's
+  `token.bars.visible` either way: the view hands its hover to the 2D token
+  (`bridgeHover`, Foundry's own `_onHoverIn/_onHoverOut`), so Hover and
+  Owner-Hover bars, the readout's hover gate and the tracker's hover behave as on
+  the 2D board. Under the GM's view as players a bar shows only if some player
+  could see it (`integrations/bars.mjs` `playersSeeBars`). Those bars are PIXI
+  display objects, so a small PIXI renderer on a transparent canvas over the 3D
+  canvas draws them, only while the view is open and only when a bar or the
+  camera moves. It is the one context the view owns besides its three.js one; it
+  is paused, released and restored with it.
+- **See-through** (the cut-away tool, on by default; `glsl.mjs`
+  `dioSeeThrough`). Whatever stands between the camera and a figure (a wall, a
+  pillar, a prop, a slab, a higher terrace) opens around it, the way an isometric
+  CRPG opens a wall in front of the party, so a table and the stream capture can
+  always see who is where. Each shown figure is handed to the shaders as a
+  capsule on screen from its base to its head, with its base's camera-side rim
+  depth and its feet: a fragment is cut only when it is nearer the camera than
+  that rim and above those feet, so the floor a figure stands on and everything
+  behind it stay. The cut is an ordered dither that keeps `SEE_KEEP` (20%) of the
+  occluder, so the pillar still reads as a ghost where it was. Up to `SEE_MAX`
+  (16) figures, those being acted on first (targeted, controlled, hovered, on
+  their turn). Shadows are unaffected (the shadow pass and the casters use their
+  own materials), and the cut-away tool switches it off with the wall stubs.
 - **Token life** (`dio.tokenLife`, per client). A moving figure hops once per
   square, timed from the move's own speed (`TIMING.standeeStep`), and settles with
   a slight squash. A walker whose move ends more than half a cell lower steps off
@@ -73,7 +125,7 @@ Feature id `diorama`, setting prefix `dio.`, i18n `GLDIO.*`, CSS prefix `gldio-`
   old slide with a plain bounce, and nothing moves on its own.
 - **Other features, in 3D.** The targeting lines are the ones `stream-targets`
   draws on that client, in its colours: an arc from the source's chest with an
-  arrowhead whose tip lands on the target's base, turned along the arc's end as
+  arrowhead whose tip lands on the target's head, turned along the arc's end as
   it falls on screen, both with the dark ink edge and sized in device pixels
   (`LINK_PX`: a 10 px ribbon, a 32 × 24 px head). pf2e-odds badges and Roleplay
   Chat bubbles hang over the standee's head (suite api `tokenAnchor`). In stream mode the capture's view follows the
@@ -496,14 +548,17 @@ polygons already carry height occlusion, so 2D and 3D agree by construction.
   like a token's. The view hands the renderer each light's position, radii,
   colour and animation from the bake (`view/bake.mjs` `lightData`).
 - Token visibility is Foundry's (`token.isVisible`), never recomputed.
-- Standee art is the actor portrait for every viewer, so a bestiary creature
-  stands as its full art for the players too (a mystery-man or missing portrait
-  falls back to the token image). The GM's standee override (actor flag
-  `dio.standee`) always wins. One escape hatch keeps a disguise: to a viewer who
-  cannot Observe the actor, a token whose image was deliberately changed from
-  the actor's prototype token image shows that token image instead (a mimic's
-  chest token stays a chest). A prototype that picks a random or wildcard image
-  is never read as a disguise. `view/snapshot.mjs` `tokenArtFor`.
+- Standee art is the same for every viewer: the standee override (actor flag
+  `dio.standee`), else the actor portrait, else the token image (a mystery-man or
+  missing portrait). It used to swap in the token image for players who could
+  not Observe the actor whenever the token's image differed from the
+  prototype's, which showed the GM one figure and the players another on any
+  token whose image had been changed. A mimic that must stay a chest gets a
+  standee override instead. The Standee window writes to the **base actor** when
+  opened from a token of an unlinked actor the user may edit (and clears that
+  token's own copy), so the art set on the sheet is the art every token dragged
+  from it stands as. `view/snapshot.mjs` `tokenArtFor`,
+  `view/standee-app.mjs` `standeeTarget`.
 
 ## Looks
 
@@ -621,7 +676,8 @@ every program's info log; run it in headless Chrome with `--use-angle=d3d11`.
 ## Setting up a map (GM)
 
 The first open of an unprepared scene is **flat**: walls and doors in 3D, ground at
-0, usable on day one. A "Not set up" chip offers **Auto setup**, which produces a
+0, usable on day one. The GM hears it once a session (a notification, nothing
+pinned), and **Edit terrain** on an unset scene runs **Auto setup**, which produces a
 *draft* (colour clustering of the map art; walls flood-filled into rooms; water by
 hue; near-black outside rooms becomes void) in the editor.
 
@@ -706,7 +762,7 @@ r.dispose();
 ```
 
 - `WallState = { id, a:[x,y], b:[x,y], type:"wall"|"door"|"secret"|"window"|"terrain"|"invisible", door:"none"|"closed"|"open"|"locked", material, baseQ, topQ }`
-- `TokenState = { id, x, y, footQ, groundQ, heightQ, widthCells, art, artTop, artBottom, disposition, visible, ghost, controlled, hovered, targets:[css colour], turn:"current"|"next"|null, conditions:[{icon, value}], halo, bars:[{frac, color}], name }`.
+- `TokenState = { id, x, y, footQ, groundQ, heightQ, widthCells, art, artTop, artBottom, disposition, visible, ghost, controlled, hovered, targets:[css colour], turn:"current"|"next"|null, conditions:[{icon, value}], halo, name }`. It carries no bars: the view draws the 2D canvas's own (`view/bar-layer.mjs`).
   `groundQ` is the ground under a flyer (its stand reaches down to it); `halo`
   puts `conditions` on the base ring instead of the head plate. `artTop` /
   `artBottom` are the top of the head and the soles of the feet in `art`,

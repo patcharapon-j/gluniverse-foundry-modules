@@ -14,6 +14,13 @@
  *   3. One container is one place to hide everything when the feature is
  *      switched off mid-session.
  *
+ * The same host also draws a second time, *projected*: the Diorama's 3D view
+ * covers the canvas, and it hands a host a view of its own (`CANVAS_VIEW`'s
+ * shape: a layer, a frame per token, a zoom, a renderer) whose frames are the
+ * standees' boxes on screen. Every reading, permission decision, animation and
+ * shader is this file's, decided on the same refreshToken pass; only where a bar
+ * stands differs. See `projectedHost` below.
+ *
  * Visible bars run a quiet idle liquid loop. Value transitions advance even
  * off screen so they return in the correct state. Off-screen liquid clocks are
  * frozen, and the shared shed budget stills the liquid before it touches an
@@ -275,8 +282,35 @@ class BarEntry {
   }
 }
 
+/**
+ * Where a host draws. The default is the 2D canvas: world pixels on
+ * `canvas.interface`. A projected view (the Diorama) answers the same questions
+ * in its own space: every frame is a token's box there, or null when the token
+ * is not drawn in it (its bar is then not rendered, whatever it may show).
+ */
+export const CANVAS_VIEW = Object.freeze({
+  primary: true,
+  layer: () => canvas?.interface ?? canvas?.tokens,
+  tokens: () => canvas?.tokens?.placeables ?? [],
+  grid: () => canvas?.dimensions?.size ?? 100,
+  frame: (token) => ({ x: token.x, y: token.y, w: token.w, h: token.h }),
+  zoom: () => Math.abs(canvas?.stage?.scale?.x ?? 1) || 1,
+  renderer: () => canvas?.app?.renderer ?? null,
+  ticker: () => canvas?.app?.ticker ?? null,
+  /* A drawing the 2D app renders itself every frame. */
+  changed: () => {},
+});
+
 class BarHost {
-  constructor() {
+  /**
+   * @param {object} [view]   CANVAS_VIEW's shape
+   * @param {BarHost|null} [parent]  a projected host's: the shed, the motion claim and
+   *   the shared rasters are the 2D host's, never a second copy of them.
+   */
+  constructor(view = CANVAS_VIEW, parent = null) {
+    this.view = view;
+    this.parent = parent;
+    this.motionId = parent ? "resource-bars-projected" : "resource-bars";
     this.entries = new Map();
     this.container = null;
     /** Names: the unfiltered layer the labels live on. */
@@ -291,7 +325,7 @@ class BarHost {
     this.opts = {};
     this.liquid = DEFAULT_LIQUID;
     /* Stable reference: the ticker removes by identity. */
-    this._tick = Budget.measure("resource-bars", this.tick.bind(this));
+    this._tick = Budget.measure(this.motionId, this.tick.bind(this));
     this._lastTime = 0;
   }
 
@@ -325,6 +359,7 @@ class BarHost {
       if (entry.label) entry.label.motionScale = opts.motionScale;   // names
     }
     this.applyBloom();
+    if (!this.parent) for (const p of projected) { p.configure(opts); p.refreshAll(); }
   }
 
   /**
@@ -354,7 +389,7 @@ class BarHost {
    * the atlas is not rasterised before the display face has loaded.
    */
   warm() {
-    if (!this.container) return;
+    if (!this.container || this.parent) return;
     const quad = new PIXI.Geometry()
       .addAttribute("aVertexPosition", [0, 0, 1, 0, 1, 1, 0, 1], 2)
       .addAttribute("aUvs", [0, 0, 1, 0, 1, 1, 0, 1], 2)
@@ -392,7 +427,7 @@ class BarHost {
 
   attach() {
     if (this.container) return;
-    const layer = canvas?.interface ?? canvas?.tokens;
+    const layer = this.view.layer();
     if (!layer) return;
     this.container = new PIXI.Container();
     this.container.eventMode = "none";
@@ -402,7 +437,8 @@ class BarHost {
        on top anyway — both paths land above the token furniture. */
     this.container.zIndex = CONTAINER_Z;
     layer.addChild(this.container);
-    this.ladder = Budget.ladder("resource-bars", SHED_ORDER);
+    /* A projected host sheds by the 2D host's ladder: one feature, one rung. */
+    this.ladder = this.parent ? null : Budget.ladder("resource-bars", SHED_ORDER);
     /* Shedding "flow" takes idle bars out of the ticker, and a stopped ticker
        used to be the only thing that could give it back. The budget recovers on
        its own clock now, so a level change re-asks whether anything wants
@@ -421,18 +457,21 @@ class BarHost {
     /* The words are rasterised in the display face, a web font. If a strip was
        drawn before it loaded, ticker.mjs redraws every strip in place once it
        has, and a settled bar is not ticking to pick up the new aspect. */
-    onStripsChanged(() => this.refreshAll());
+    if (!this.parent) onStripsChanged(() => { this.refreshAll(); for (const p of projected) p.refreshAll(); });
     /* Names are set in the Ink and Signal face, a web font too: the same wait,
        then every label re-measures its fit. */
     awaitLabelFace(() => {
       for (const entry of this.entries.values()) if (entry.label) { entry.label.refit(); entry.label.flush(); }
+      this.view.changed();
     });
     this.refreshAll();
   }
 
   detach() {
-    onStripsChanged(null);
-    resetStrips();
+    if (!this.parent) {
+      onStripsChanged(null);
+      resetStrips();
+    }
     this.stopTicker();
     this._unbudget?.();
     this._unbudget = null;
@@ -448,7 +487,7 @@ class BarHost {
     }
     this.container = null;
     this.bloom = null;
-    resetAtlas();
+    if (!this.parent) resetAtlas();
     /* ── Names ── */
     try {
       this.labels?.destroy({ children: true });
@@ -456,8 +495,10 @@ class BarHost {
       /* Torn down with its layer, as the bar container can be. */
     }
     this.labels = null;
-    resetNameRasters();
-    resetCipherAtlas();
+    if (!this.parent) {
+      resetNameRasters();
+      resetCipherAtlas();
+    }
   }
 
   /* ── Entries ─────────────────────────────────────────────────────────── */
@@ -465,7 +506,7 @@ class BarHost {
   refreshAll() {
     if (!this.container || !canvas?.tokens) return;
     const seen = new Set();
-    for (const token of canvas.tokens.placeables) {
+    for (const token of this.view.tokens()) {
       if (token.isPreview) continue;
       seen.add(token.id);
       this.refreshToken(token, { decide: false });
@@ -502,8 +543,9 @@ class BarHost {
     entry.token = token;
     this.layout(entry);
     this.cullEntry(entry);
-    this.writeUniforms(entry, canvas.app?.ticker?.lastTime / 1000 || 0);
+    this.writeUniforms(entry, this.now());
     entry.label?.flush();
+    this.view.changed();
   }
 
   /**
@@ -549,9 +591,10 @@ class BarHost {
 
     this.layout(entry);
     if (decide) this.applyVisibility(entry);
-    this.writeUniforms(entry, (canvas.app?.ticker?.lastTime ?? 0) / 1000);
+    this.writeUniforms(entry, this.now());
     entry.label?.flush();
     this.syncTicker();
+    this.view.changed();
   }
 
   /**
@@ -568,9 +611,27 @@ class BarHost {
     this.layout(entry);
     this.applyVisibility(entry);
     this.cullEntry(entry);
-    this.writeUniforms(entry, (canvas.app?.ticker?.lastTime ?? 0) / 1000);
+    this.writeUniforms(entry, this.now());
     entry.label?.flush();
     this.syncTicker();
+    this.view.changed();
+  }
+
+  /**
+   * Every bar stands somewhere else now (a projected view's camera moved): lay
+   * each one out again and re-cull, reading nothing and deciding nothing.
+   */
+  relayout() {
+    if (!this.container) return;
+    const time = this.now();
+    for (const entry of this.entries.values()) {
+      if (!entry.reading && !entry.label) continue;
+      this.layout(entry);
+      this.writeUniforms(entry, time);
+      entry.label?.flush();
+    }
+    this.cull();
+    this.view.changed();
   }
 
   /**
@@ -662,7 +723,7 @@ class BarHost {
     const label = new NameLabel({ seed: cipherSeed(entry.token?.id), motionScale: this.motionScale ?? 1 });
     entry.label = label;
     this.labels?.addChild(label.group);
-    label.view(this.zoom(), canvas?.app?.renderer?.resolution ?? 1);
+    label.view(this.zoom(), this.resolution());
     label.setRenderable(entry.group.renderable !== false);
     this.layoutLabel(entry);
     return label;
@@ -681,13 +742,23 @@ class BarHost {
 
   /** The canvas zoom, read where it is set rather than off a transform PIXI updates on render. */
   zoom() {
-    return Math.abs(canvas?.stage?.scale?.x ?? 1) || 1;
+    return this.view.zoom();
+  }
+
+  /** The drawing renderer's resolution: device pixels per unit of this host's space at zoom 1. */
+  resolution() {
+    return this.view.renderer()?.resolution ?? 1;
+  }
+
+  /** The clock every uniform write is stamped with, in seconds: the canvas ticker's. */
+  now() {
+    return (canvas?.app?.ticker?.lastTime ?? 0) / 1000;
   }
 
   /** Re-read zoom and resolution into every label: raster bucket, hairline, zoom fade. */
   viewLabels() {
     const scale = this.zoom();
-    const res = canvas?.app?.renderer?.resolution ?? 1;
+    const res = this.resolution();
     for (const entry of this.entries.values()) {
       if (!entry.label) continue;
       entry.label.view(scale, res);
@@ -786,8 +857,13 @@ class BarHost {
 
   layout(entry) {
     const token = entry.token;
-    const grid = canvas.dimensions?.size ?? 100;
-    const w = token.w;
+    const grid = this.view.grid();
+    /* The token's box in this host's space: world pixels on the canvas, a
+       standee's box on screen when projected. None: not drawn here at all. */
+    const frame = this.view.frame(token);
+    entry.framed = !!frame;
+    const fr = frame ?? { x: 0, y: 0, w: token.w || grid, h: token.h || grid };
+    const w = fr.w;
 
     const heroH = clamp(grid * LAYOUT.heroH, LAYOUT.minHeroPx, LAYOUT.maxHeroPx);
     const railH = clamp(grid * LAYOUT.railH, LAYOUT.minRailPx, LAYOUT.maxRailPx);
@@ -799,9 +875,9 @@ class BarHost {
     if (entry.reading?.rail) rows.push(["rail", ROLE.rail, railH]);
     if (entry.reading?.shield) rows.push(["shield", ROLE.shield, railH]);
 
-    entry.baseX = token.x + off.x * grid;
+    entry.baseX = fr.x + off.x * grid;
     // The default stack begins below the token; explicit offsets still apply.
-    const top = token.y + token.h + grid * LAYOUT.tokenGap + off.y * grid;
+    const top = fr.y + fr.h + grid * LAYOUT.tokenGap + off.y * grid;
     /* ── Names ── The name row is reserved whenever a label is *possible*, not
        when one is drawn, so the bars under it never move with a hover. The
        offsets above move it with the rest of the stack. */
@@ -841,7 +917,7 @@ class BarHost {
        with a name row, out of the top of the row, which is still no higher than
        this: the row sits between the token and the bars and the deltas start
        above it, so both reach the same height they did without one. */
-    entry.box = { x0: entry.baseX, y0: token.y + token.h - heroH * 1.5 + off.y * grid,
+    entry.box = { x0: entry.baseX, y0: fr.y + fr.h - heroH * 1.5 + off.y * grid,
                   x1: entry.baseX + w, y1: y };
   }
 
@@ -863,7 +939,7 @@ class BarHost {
    * with a different pixel ratio changes `renderer.resolution` underneath us.
    */
   syncFilterResolution() {
-    const r = canvas?.app?.renderer;
+    const r = this.view.renderer();
     if (!this.bloom || !r) return;
     const res = r.resolution || 1;
     if (this.bloom.resolution !== res) this.bloom.resolution = res;
@@ -890,7 +966,7 @@ class BarHost {
   cull() {
     if (!this.container) return;
     this.syncFilterResolution();
-    const screen = canvas?.app?.renderer?.screen;
+    const screen = this.view.renderer()?.screen;
     if (!screen) return;
 
     const a = this.container.toLocal({ x: screen.x, y: screen.y });
@@ -902,6 +978,7 @@ class BarHost {
     for (const entry of this.entries.values()) this.cullEntry(entry);
     this.viewLabels();   // names: zoom decides raster size, hairline width and fade
     this.syncTicker();
+    this.view.changed();
   }
 
   /**
@@ -916,8 +993,8 @@ class BarHost {
     const box = entry.box;
     /* No view or no box yet means nothing has been measured; leave the bar
        visible rather than hiding one this pass has no information about. */
-    entry.group.renderable =
-      !v || !box || !(box.x1 < v.x0 || box.x0 > v.x1 || box.y1 < v.y0 || box.y0 > v.y1);
+    entry.group.renderable = entry.framed !== false
+      && (!v || !box || !(box.x1 < v.x0 || box.x0 > v.x1 || box.y1 < v.y0 || box.y0 > v.y1));
     entry.label?.setRenderable(entry.group.renderable);   // names share the stack's box
     /* The dying clock freezes off screen, as the idle clock does — decided here
        as well as in tick(), so a dying bar scrolled back into view is hot again
@@ -935,11 +1012,11 @@ class BarHost {
       e.vis.hot || e.label?.hot || (e.group.visible
         && ((e.group.renderable && idleFlow) || Object.values(e.anims).some((a) => a?.hot))));
     if (wanted && !this.ticking) {
-      canvas.app.ticker.add(this._tick);
+      this.view.ticker()?.add(this._tick);
       this.ticking = true;
       this._lastTime = performance.now();
       /* A ticking bar is moving on its own; no idle-rate drop may slow it. */
-      Budget.claimMotion("resource-bars", true);
+      Budget.claimMotion(this.motionId, true);
     } else if (!wanted && this.ticking) {
       this.stopTicker();
     }
@@ -947,9 +1024,9 @@ class BarHost {
 
   stopTicker() {
     if (!this.ticking) return;
-    canvas.app?.ticker?.remove(this._tick);
+    this.view.ticker()?.remove(this._tick);
     this.ticking = false;
-    Budget.claimMotion("resource-bars", false);
+    Budget.claimMotion(this.motionId, false);
   }
 
   tick() {
@@ -991,11 +1068,13 @@ class BarHost {
       if (hot || idle) anyHot = true;
     }
     if (!anyHot) this.stopTicker();
+    this.view.changed();
   }
 
   /** True while an effect is still inside the shed budget. Unattached (no
    *  ladder yet) nothing is shed. */
   allows(effect) {
+    if (this.parent) return this.parent.allows(effect);
     return this.ladder ? this.ladder.allows(effect) : true;
   }
 
@@ -1091,7 +1170,7 @@ class BarHost {
    */
   texelFor(mesh) {
     const scale = mesh.worldTransform?.a ?? 1;
-    const res = canvas.app?.renderer?.resolution ?? 1;
+    const res = this.resolution();
     const widthPx = Math.abs(scale) * res;
     return widthPx > 1 ? 1 / widthPx : 0;
   }
@@ -1352,3 +1431,32 @@ class BarHost {
 }
 
 export const host = new BarHost();
+
+/** Live projected hosts (the Diorama's 3D view), fed every call the 2D host is. */
+const projected = new Set();
+
+/** The 2D host and every projected one: what main.mjs's hooks drive. */
+export function hosts() {
+  return projected.size ? [host, ...projected] : [host];
+}
+
+/**
+ * Draw these bars a second time, into a view of the caller's (CANVAS_VIEW's
+ * shape): the same readings, permissions, animations and shaders, standing
+ * where `view.frame(token)` says. The caller renders `view.layer()` on
+ * `view.changed()` and calls `relayout()` whenever its frames move. The
+ * returned handle's `dispose()` takes everything back.
+ * @param {object} view
+ */
+export function projectedHost(view) {
+  const p = new BarHost({ ...CANVAS_VIEW, primary: false, ...view }, host);
+  p.configure(host.opts);
+  projected.add(p);
+  p.attach();
+  return {
+    host: p,
+    relayout: () => p.relayout(),
+    refresh: () => p.refreshAll(),
+    dispose: () => { projected.delete(p); p.detach(); },
+  };
+}

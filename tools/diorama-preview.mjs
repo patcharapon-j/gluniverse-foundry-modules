@@ -45,6 +45,8 @@
  *               unseen=wall  the walled room's inside never seen (the mist ends on its walls);
  *               unseen=dead  the knight on the plateau: the ground at its foot is dead ground
  *               (dead=rogue: seen from the rogue on the grass)
+ *   see=pillar|wall  the rogue behind the pillar, or behind the house's back wall:
+ *               the see-through cut opens the occluder around it (cutaway=0: closed)
  *   tower=1     a 50 ft tower in the far corner (hidden under unseen=wide)
  *   reach=1     the rogue's movement range, stepping round the other creatures
  *   props=1     the props gallery (every shape, every material, a stack, cards,
@@ -344,7 +346,7 @@ function buildTerrain() {
   // void notch in the far corner
   for (let si = ROWS * SUB - 2; si < ROWS * SUB; si++) for (let sj = 0; sj < 4; sj++) t.set(si, sj, { kind: KIND.VOID });
   // unseen=pillar: a stone pillar on the grass the party looks past (cell 5, 5, 20 ft)
-  if (Q.get("unseen") === "pillar") fillCells(5, 5, 5, 5, extra("Pillar", 16, "stone"), 16);
+  if (Q.get("unseen") === "pillar" || Q.get("see") === "pillar") fillCells(5, 5, 5, 5, extra("Pillar", 16, "stone"), 16);
   // tower=1: a 50 ft tower in the far corner, where unseen=wide hides it
   if (Q.get("tower") === "1") fillCells(10, 10, 14, 14, extra("Tower", 40, "stone"), 40);
   return t;
@@ -552,7 +554,9 @@ const ART = {
   harpy: figure({ body: "#8a5a3a", trim: "#d9b24a", skin: "#e6b98f", cape: "#5c3a7a", weapon: "dagger", hat: "#3b2a52" }),
   drake: figure({ body: "#9a2f2a", trim: "#f0b13c", skin: "#c9443a", cape: "#5a1a18", weapon: "club" }),
 };
-let rogueAt = { x: 650, y: 650 };
+// see=pillar|wall: the rogue hidden behind the pillar, or behind the house's back wall (the see-through cut)
+const SEE_AT = { pillar: { x: 450, y: 450, q: 0 }, wall: { x: 1250, y: 150, q: 8 } }[Q.get("see")] ?? null;
+let rogueAt = SEE_AT ? { x: SEE_AT.x, y: SEE_AT.y } : { x: 650, y: 650 };
 let ghosts = Q.get("ghosts") !== "0";
 // knight=wall: the knight backed against the house's north-west corner, to
 // prove a leaning card is never sliced by a wall standing behind it.
@@ -565,7 +569,7 @@ const tokens = () => [
   { id: "knight", name: "Knight", x: knightAt.x, y: knightAt.y, footQ: 8, groundQ: 8, heightQ: 6, widthCells: 1, art: ART.knight, disposition: 1, visible: true, ghost: false,
     controlled: false, hovered: false, targets: Q.get("target") === "knight" ? [PALETTE.hazard] : [], turn: "current", halo: haloN > 0,
     conditions: haloN > 0 ? haloList(haloN) : [{ icon: ICONS.frightened, value: 2 }, { icon: ICONS.prone }], bars: [{ frac: 0.72, color: PALETTE.good }, { frac: 0.4, color: PALETTE.info }] },
-  { id: "rogue", name: "Rogue", x: rogueAt.x, y: rogueAt.y, footQ: 0, heightQ: 5, widthCells: 1, art: ART.rogue, disposition: 1, visible: true, ghost: false,
+  { id: "rogue", name: "Rogue", x: rogueAt.x, y: rogueAt.y, footQ: SEE_AT?.q ?? 0, heightQ: 5, widthCells: 1, art: ART.rogue, disposition: 1, visible: true, ghost: false,
     controlled: false, hovered: true, targets: [], turn: "next", halo: haloN > 0,
     conditions: haloN > 0 ? haloList(3, 4) : [{ icon: ICONS.hidden }], bars: [{ frac: 1, color: PALETTE.good }] },
   { id: "goblin", name: "Goblin", x: 250, y: 150, footQ: 4, heightQ: 4, widthCells: 1, art: ART.goblin, disposition: -1, visible: true, ghost: false,
