@@ -392,7 +392,7 @@ export const DECK = (d, t) => {
     : ACTIONS(d.actions ?? {}, t);
   const n = d.tab === "spells" && d.spells ? d.spells.cards.filter((c) => c.rank === (d.spells.rank ?? d.spells.ranks[0].key)).length : 1;
   return `
-<section class="gph-pl gph-deck" data-tab="${esc(d.tab)}" style="--n:${Math.max(1, n)}" aria-label="${esc(t("GLRAIL.deck"))}">
+<section class="gph-pl gph-deck" data-tab="${esc(d.tab)}" style="--n:${Math.max(1, n)}" aria-label="${esc(t("GLRAIL.deck.label"))}">
   ${TABS(d, t)}
   <div class="gph-pane" role="tabpanel" data-pane="${esc(d.tab)}">${pane}</div>
   <button type="button" class="gph-expand" data-act="expand" aria-label="${esc(t("GLRAIL.deck.expand", { tab: t(`GLRAIL.tab.${d.tab}`) }))}">${ICON.expand}</button>
@@ -721,7 +721,7 @@ export const EMPTY = (t) => `
    finder) and `o.peek` the open peek, both already built by the host. */
 export const RAIL = (o, t) => {
   const body = o.role === "gm"
-    ? (o.hazard ? HAZARD(o.hazard, t) : o.creature ? CREATURE(o.creature, t) : EMPTY(t)) + (o.foes?.foes?.length ? FOES(o.foes, t) : "")
+    ? (o.hazard ? HAZARD(o.hazard, t) : o.creature ? CREATURE(o.creature, t) : o.foes?.foes?.length ? "" : EMPTY(t)) + (o.foes?.foes?.length ? FOES(o.foes, t) : "")
     : VITALS(o.vitals, t) + STRIKES(o.strikes ?? { list: [] }, t) + DECK(o.deck, t) + (o.slim ? "" : UTIL(o.util, t));
   return `
 <div class="gph" data-role="${o.role}" data-mode="${o.mode ?? "exploration"}" data-map="${o.turnbar?.map ?? 0}" style="--gph-map:${o.turnbar?.map ?? 0}"${o.slim ? " data-slim" : ""}${o.folded ? " data-folded" : ""}${o.readonly ? " data-readonly" : ""}${o.overlay ? " data-overlay" : ""}>

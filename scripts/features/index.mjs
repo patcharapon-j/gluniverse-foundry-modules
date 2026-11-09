@@ -39,3 +39,4 @@ import "./hexcrawl/index.mjs";
 import "./theatre/index.mjs";
 import "./roleplay-chat/index.mjs";
 import "./diorama/index.mjs";
+import "./pf2e-rail/index.mjs";

@@ -97,8 +97,9 @@ etc. (full matrix in `docs/FEATURE_CONTRACT.md`).
   docs/adr/0007-stream-view-skin.md, the Stage and Theatre GM console,
   docs/adr/0008-stage-theatre-console.md, the Mythic GME panel,
   docs/adr/0009-mythic-gme-skin.md, Flatfinder's ink skin,
-  docs/adr/0010-flatfinder-skin.md, and Destiny Dice's skin,
-  docs/adr/0011-destiny-dice-skin.md — each lives only under its features' own
+  docs/adr/0010-flatfinder-skin.md, Destiny Dice's skin,
+  docs/adr/0011-destiny-dice-skin.md, and the PF2e HUD's skin,
+  docs/adr/0013-pf2e-rail-skin.md — each lives only under its features' own
   roots and never on `:root`); `styles/gl-tokens.css` is the single source of truth and
   `styles/gl-motion.css` the single keyframe pool. Use the `--gl-*` tokens and
   the `.gl-*` utilities. The non-negotiables:
@@ -1877,6 +1878,48 @@ animation frames). See `docs/SPELLSPRITE.md`. Before drawing, resizing or
 reviewing an effect, load the `spellsprite-craft` skill: effects read big and
 JRPG, and are benchmarked against the pixelfx reference with
 `node tools/fx-reference.mjs` (fetched locally, never shipped).
+
+**When touching the PF2e HUD** (`features/pf2e-rail/`, `styles/pf2e-rail.css`,
+`lang/pf2e-rail.en.json`), re-run its check. Everything it covers fails
+silently:
+
+```bash
+node tools/pf2e-rail-check.mjs
+```
+
+Zero problems required. Four things are worth knowing before you change it.
+
+**The fixtures are the model contract.** `tools/pf2e-rail-fixtures.mjs` is the
+shape the settled view draws, and the readers in `read.mjs` are held to it path
+for path; a field the reader drops renders as nothing. The MAP step and the
+action economy are **driven** values (`drive.mjs`), so the skill suggestions
+that follow MAP join the deck in the host's `compose()`, never in
+`readPlayer` — there they make every attack a re-render. The economy is stored
+nowhere: a local tally per actor, refilled on a new `id:round:turn` key.
+
+**Every press is PF2e's own entry point** (the table is in
+`docs/PF2E_RAIL.md`), and no press opens a dialog of the HUD's. `presses.mjs`
+lists every handle the view draws; a handle with no branch in `onClick` is a
+button that does nothing, so the check walks the markup and the bundle's
+action slugs. **The echo obeys the message**: never on the stream login, never
+for a blind roll, never for a whisper the viewer is not in; the degree only
+under `seesTruth()` or PF2e's metagame results.
+
+**Four PF2e facts only a live session showed.** Disposition is
+`token.document.disposition` (the placeable's reads as neutral for every
+token); an actor with no `flags.pf2e.kineticist.elementalBlast` gets PF2e's
+fallback blast with empty MAP labels; PF2e files Chalk and Rations as
+consumables, so an item tile needs the `consumable` trait; a hazard's Disable
+text is inline syntax (`inlineText`). And a background tab starves
+`requestAnimationFrame`, so the refresh carries a timer fallback.
+
+**The lang file dies whole.** Foundry expands each language file with
+`expandObject`, and a key that is also the head of another (`GLRAIL.deck` beside
+`GLRAIL.deck.label`) throws and drops *every* key in it; the check refuses
+one. The skin is scoped (docs/adr/0013-pf2e-rail-skin.md), the rail never
+mounts on the stream login or beside pf2e-hud, and it hides `#hotbar` only
+while it is mounted. To see it: `node tools/pf2e-rail-preview.mjs && node
+tools/preview-server.mjs`. See `docs/PF2E_RAIL.md`.
 
 **When touching the shared frame budget or any feature's shedding**
 (`core/budget.mjs`, `core/gl-surfaces.mjs`, `core/pan.mjs`, any `SHED_ORDER`,

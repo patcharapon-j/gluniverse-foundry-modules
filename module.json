@@ -68,7 +68,8 @@
     "styles/diorama-editor.css",
     "styles/diorama-env.css",
     "styles/diorama-props.css",
-    "styles/diorama-standee.css"
+    "styles/diorama-standee.css",
+    "styles/pf2e-rail.css"
   ],
   "languages": [
     {
@@ -260,6 +261,11 @@
       "lang": "en",
       "name": "English",
       "path": "lang/combat-intro.en.json"
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/pf2e-rail.en.json"
     }
   ],
   "packs": [

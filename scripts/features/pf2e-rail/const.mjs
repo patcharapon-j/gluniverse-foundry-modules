@@ -20,6 +20,9 @@ export const TIMING = Object.freeze({
   swap: 150,
   /** The wheel is still while framing for this long before the zoom is saved. */
   frameSettle: 300,
+  /** A refresh waits for the next frame, or this long where frames are
+   *  starved (a background tab). */
+  refreshFallback: 120,
 });
 
 /** How much of the PF2e Hit Point track reads as low. The resource bars use
