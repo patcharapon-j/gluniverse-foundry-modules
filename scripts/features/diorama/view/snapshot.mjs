@@ -24,7 +24,7 @@ import { FLAG_STANDEE, WALL_MATERIALS } from "../constants.mjs";
 import { distToQ } from "../terrain/model.mjs";
 import { groundUnderWall, wallSpanQ } from "../terrain/wall-top.mjs";
 import { artMarksOf, standeeMarks } from "../rules/creature.mjs";
-import { canViewMode, barsFor } from "../integrations/bars.mjs";
+import { canViewMode } from "../integrations/bars.mjs";
 import { conditionsFor } from "../integrations/conditions.mjs";
 import { userColor } from "./util.mjs";
 
@@ -187,7 +187,6 @@ export function readTokens({ isGM, asPlayers, grid, hoveredId, turns, heightOf, 
       turn: token.id === turns.current ? "current" : token.id === turns.next ? "next" : null,
       conditions: conditionsFor(token, systemId, { halo }),
       halo: !!halo,
-      bars: barsFor(token, { hovered, isSecret }),
       name: !isSecret && canViewMode(doc.displayName, { controlled: !!token.controlled, hovered, isOwner }) ? doc.name : "",
     });
   }

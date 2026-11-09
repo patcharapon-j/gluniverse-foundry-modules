@@ -14,7 +14,7 @@ import { MOTION_SCALE, MOTION_TIER_DEFAULT } from "../../core/theme.mjs";
 import { registerWrapper, WRAPPER } from "../../core/wrapper.mjs";
 import { warmAtIdle } from "../../core/warmup.mjs";
 import { DIVIDER, READOUT, SETTINGS } from "./constants.mjs";
-import { host } from "./host.mjs";
+import { host, hosts, projectedHost } from "./host.mjs";
 import { injectTokenConfig } from "./token-config.mjs";
 import { LOW_HEALTH_AT } from "./ramp.mjs";
 import { breakSourceActive, tokensForCombatant } from "./break.mjs";
@@ -174,12 +174,14 @@ export function onReady() {
      around and is then destroyed along with it when the drag ends, and does not
      come back until something updates the token. Native bars are still
      suppressed on it, or the ghost drags Foundry's own bars along. */
+  /* Every token hook below drives every host: the 2D one and any projected one
+     (the Diorama's 3D view), so both decide on the same pass. */
   on("drawToken", (token) => {
     suppressNative(token);
-    if (!token.isPreview) host.track(token);
+    if (!token.isPreview) for (const h of hosts()) h.track(token);
   });
-  on("destroyToken", (token) => { if (!token?.isPreview) host.remove(token?.id, token); });
-  on("deleteToken", (doc) => host.remove(doc?.id));
+  on("destroyToken", (token) => { if (!token?.isPreview) for (const h of hosts()) h.remove(token?.id, token); });
+  on("deleteToken", (doc) => { for (const h of hosts()) h.remove(doc?.id); });
 
   /* Where visibility is decided — and the only place it is.
 
@@ -197,11 +199,13 @@ export function onReady() {
   on("refreshToken", (token, flags) => {
     suppressNative(token);
     if (token.isPreview) return;
-    if (flags?.refreshBars || flags?.refreshSize) host.refreshToken(token);
-    /* refreshNameplate is how a rename arrives; it is a decision like the rest,
-       because the label's text is part of what is decided. */
-    else if (flags?.refreshState || flags?.refreshVisibility || flags?.refreshNameplate) host.applyState(token);
-    else host.reposition(token);
+    for (const h of hosts()) {
+      if (flags?.refreshBars || flags?.refreshSize) h.refreshToken(token);
+      /* refreshNameplate is how a rename arrives; it is a decision like the rest,
+         because the label's text is part of what is decided. */
+      else if (flags?.refreshState || flags?.refreshVisibility || flags?.refreshNameplate) h.applyState(token);
+      else h.reposition(token);
+    }
   });
 
   /* ── Names ────────────────────────────────────────────────────────────
@@ -241,7 +245,7 @@ export function onReady() {
       flushQueued = false;
       const tokens = [...pending.values()];
       pending.clear();
-      for (const t of tokens) if (!t.destroyed) host.refreshToken(t, { decide: false });
+      for (const t of tokens) if (!t.destroyed) for (const h of hosts()) h.refreshToken(t, { decide: false });
     });
   };
   on("updateToken", (doc) => doc.object && full(doc.object));
@@ -284,8 +288,8 @@ export function onReady() {
   on("deleteCombatant", (combatant) => combatantTokens(combatant));
   /* Starting and ending a combat move every creature in it at once, and ending
      one leaves no combatants to walk. */
-  on("combatStart", () => host.refreshAll());
-  on("deleteCombat", () => host.refreshAll());
+  on("combatStart", () => { for (const h of hosts()) h.refreshAll(); });
+  on("deleteCombat", () => { for (const h of hosts()) h.refreshAll(); });
 
   /* Per-token placement. Both hooks are registered because a prototype token
      opens its own application class in v13; whichever one does not exist simply
@@ -311,4 +315,9 @@ export const api = {
   reconfigure,
   teardown: onDisable,
   get host() { return host; },
+  /**
+   * Draw this feature's bars into another view as well (the Diorama's 3D view):
+   * host.mjs `projectedHost`. Null until the 2D host is attached.
+   */
+  project: (view) => (host.container ? projectedHost(view) : null),
 };

@@ -1795,6 +1795,16 @@ Target lines are the ones `stream-targets` announces on
 at init, because lines are announced when targets change, not when the view
 opens. Conditions ring the base (`dio.effects` "halo") the way PF2e Effects
 Halo rings a 2D token, so PF2e effects that show on the token join them there.
+Bars are the 2D canvas's own (`view/bar-layer.mjs`): Resource Bars' projected
+host when that feature is on, Foundry's `token.bars` graphics when it is off,
+and who sees one is `token.bars.visible` with the 3D hover bridged to the 2D
+token. Never draw a bar in the plate or the snapshot; a lookalike drifts from
+the 2D rules silently. Nothing of the view is pinned on the board: its way in
+and its tools are Token Controls tools (`VIEW_TOOLS`), and the stream's 2D/3D
+switch rides stream's extension slots (`stream-bridge.mjs`). Occluders open
+around figures through `dioSeeThrough`, called first in every occluder's
+`main()`; a new occluder program without it hides figures again, and the check
+pins the list.
 Before touching `render/`, load the `diorama-craft` skill: one sun, contact
 shadow first, hairlines in device px, damped motion, no runtime program
 variants.

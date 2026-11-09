@@ -163,7 +163,7 @@
   "GLDIO.view.yawRight": "Rotate right (E)",
   "GLDIO.view.pitch": "Camera angle (R)",
   "GLDIO.view.grid": "Show the grid",
-  "GLDIO.view.cutaway": "Lower walls facing the camera",
+  "GLDIO.view.cutaway": "Cut away walls and pillars in front of figures",
   "GLDIO.view.follow": "Follow the current combatant",
   "GLDIO.view.graphics": "Graphics",
   "GLDIO.view.environment": "Scene environment",

@@ -1035,6 +1035,19 @@ How the answer changes on screen:
 `reveal` is in `SHED_ORDER`, directly after the liquid's idle motion: under load a bar
 simply pops, which costs nobody any information.
 
+**The Diorama 3D view draws these same bars, through a projected host.** A
+`BarHost` takes a *view* (`CANVAS_VIEW` for the 2D board): where its layer is,
+which tokens it draws, the grid, each token's frame, the zoom, the renderer and
+a `changed()` callback. The suite api's `project(view)` builds a second host
+whose frame for a token is its standee's box on the 3D screen and whose layer is
+rendered by the view's own small PIXI renderer (`diorama/view/bar-layer.mjs`).
+It is the same code: readings, permission, the `refreshToken` decision (every
+hook fans out through `hosts()`), liquids, readouts, names and animation. Two
+things stay the primary host's alone, the shared resets and strips, and a
+projected host's gate defers to its parent's. A token with no frame (its
+standee is not drawn) is culled, not destroyed. The 3D view hands its hover to
+the 2D token, so the hover gates here answer the same way in 3D.
+
 ---
 
 ## Names

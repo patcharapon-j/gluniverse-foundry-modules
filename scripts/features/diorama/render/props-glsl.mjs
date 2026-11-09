@@ -294,6 +294,7 @@ vec3 propAlbedo(int m, int part, vec3 wp, vec3 lp, vec3 n, float seed, float hi)
 }
 
 void main() {
+  dioSeeThrough(vWorld);
   float vis = max(max(visionAt(vWorld.xz), visionAt(vCenter)), vSeen);
   if (vis <= 0.0) discard;
   bool ghost = vInfo.y > 0.5;
@@ -419,6 +420,7 @@ varying float vFade;
 varying float vSeen;
 varying float vBright;
 void main() {
+  dioSeeThrough(vWorld);
   float vis = max(max(visionAt(vWorld.xz), visionAt(vCenter)), vSeen);
   if (vis <= 0.0) discard;
   bool ghost = vInfo.y > 0.5;
@@ -487,6 +489,7 @@ float slabGrid(vec2 xz) {
 }
 
 void main() {
+  dioSeeThrough(vWorld);
   float vis = visionAt(vWorld.xz);
   if (vis <= 0.0) discard;
   // derivatives before any branch that could leave a pixel early
@@ -571,6 +574,7 @@ varying vec3 vWorld;
 varying vec2 vCenter;
 varying vec3 vFace;
 void main() {
+  dioSeeThrough(vWorld);
   float vis = max(visionAt(vCenter), uCardSeen);
   if (vis <= 0.0) discard;
   vec4 tex = uHasTex > 0.5 ? texture2D(uCardTex, vUv) : vec4(0.5, 0.5, 0.55, 1.0);

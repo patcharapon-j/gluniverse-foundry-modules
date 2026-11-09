@@ -76,7 +76,9 @@ export function createCardFeed(overlay, system) {
  *
  * @param {object} section
  * @param {string} section.id      unique; re-registering replaces.
- * @param {number} [section.order] ascending; panel-native sections sit at 0.
+ * @param {number} [section.order] ascending; panel-native sections sit at 0. Below 0 the
+ *        section leads its tab, above the native sections (`lead` of
+ *        renderPanelSectionsByTab); 0 and above follow them.
  * @param {() => Promise<string>|string} section.render  the section's HTML.
  * @param {(name: string, value: unknown) => Promise<boolean>|boolean} [section.change]
  *        offered every form change the panel did not recognise as its own,
@@ -134,15 +136,17 @@ export function getPanelSections() {
  */
 export async function renderPanelSections() {
   const byTab = await renderPanelSectionsByTab();
-  return PANEL_TABS.map((tab) => byTab[tab]).join("");
+  return PANEL_TABS.map((tab) => byTab.lead[tab] + byTab[tab]).join("");
 }
 
 /**
  * Every contributed section rendered and grouped by its tab: `{ shot, overlay, screen, access }`, each
- * the joined HTML of that tab's sections in display order (an empty string for a tab with none).
+ * the joined HTML of that tab's sections in display order (an empty string for a tab with none), drawn
+ * after the tab's own sections, and `lead`, the same for sections ordered below 0, drawn before them.
  */
 export async function renderPanelSectionsByTab() {
   const out = Object.fromEntries(PANEL_TABS.map((tab) => [tab, []]));
+  const lead = Object.fromEntries(PANEL_TABS.map((tab) => [tab, []]));
   const isGM = Boolean(globalThis.game?.user?.isGM);
   for (const section of getPanelSections()) {
     try {
@@ -150,14 +154,15 @@ export async function renderPanelSectionsByTab() {
       if (!html) continue;
       // Shown, not hidden: a director should still be able to read what the
       // cards and the arcs are set to while looking at the shot they affect.
-      out[panelTabOf(section)].push(section.gmOnly && !isGM
+      (section.order < 0 ? lead : out)[panelTabOf(section)].push(section.gmOnly && !isGM
         ? `<fieldset class="gluniverse-stream-controls" disabled>${html}</fieldset>`
         : html);
     } catch (error) {
       console.error(`GLUniverse Suite | Stream: panel section "${section.id}" failed to render.`, error);
     }
   }
-  return Object.fromEntries(PANEL_TABS.map((tab) => [tab, out[tab].join("")]));
+  const join = (by) => Object.fromEntries(PANEL_TABS.map((tab) => [tab, by[tab].join("")]));
+  return { ...join(out), lead: join(lead) };
 }
 
 /** Offer a form change to the contributed sections. True once one claims it. */

@@ -74,6 +74,16 @@ const HOLD_SWING = 9;
 /** Radians of lean per cell/s of hand speed, and the most it leans. */
 const HOLD_LEAN = 0.05;
 const HOLD_LEAN_MAX = 0.32;
+/** A targeted base's ring: its inner edge, as a fraction of the ring (a selection's is 0.68). */
+export const RING_TARGETED_INNER = 0.5;
+/**
+ * The head plate (target marks, conditions) never draws narrower than this
+ * many CSS px, so a target mark (MARK of art.mjs's 256) stays about 40 px on
+ * every screen, zoomed out as well as in, whatever the display's density. Its
+ * world width (PLATE_W) is the floor's other side: zoomed in it grows with the
+ * figure.
+ */
+export const PLATE_MIN_PX = 176;
 /** Outline width by state, device px; the targeted line also glows. */
 export const OUTLINE_PX = Object.freeze({ rest: 2, hovered: 2.25, controlled: 2.5, targeted: 3.5 });
 /** The card quad is grown by this many device px each side for line and glow. */
@@ -564,15 +574,20 @@ export class StandeesLayer {
     e.root.visible = shown;
     const disp = dispositionColor(t.disposition);
     const ru = e.ring.material.uniforms;
-    ru.uColor.value.set(...rgb(t.controlled ? lighten(disp, 0.35) : disp));
-    ru.uOpacity.value = t.controlled ? 1 : 0.82;
-    ru.uInner.value = t.controlled ? 0.68 : 0.8;
+    // Targeted: the base's whole rim lights in the first targeter's colour, wider
+    // than a selection's, so who is aimed at reads from across the board.
+    const aimed = Array.isArray(t.targets) && t.targets.length ? targetRgb(t.targets[0]) : null;
+    if (aimed) ru.uColor.value.set(...aimed);
+    else ru.uColor.value.set(...rgb(t.controlled ? lighten(disp, 0.35) : disp));
+    ru.uOpacity.value = aimed || t.controlled ? 1 : 0.82;
+    ru.uInner.value = aimed ? RING_TARGETED_INNER : t.controlled ? 0.68 : 0.8;
     const tc = turnColor(t.turn);
     e.turn.visible = !!tc;
     if (tc) e.turn.material.uniforms.uColor.value.set(...rgb(tc));
-    e.glow.visible = !!t.hovered || !!t.controlled;
-    e.glow.material.uniforms.uColor.value.set(...rgb(disp));
-    e.glow.material.uniforms.uOpacity.value = t.hovered ? 0.45 : 0.22;
+    e.glow.visible = !!t.hovered || !!t.controlled || !!aimed;
+    if (aimed) e.glow.material.uniforms.uColor.value.set(...aimed);
+    else e.glow.material.uniforms.uColor.value.set(...rgb(disp));
+    e.glow.material.uniforms.uOpacity.value = aimed ? 0.55 : t.hovered ? 0.45 : 0.22;
     const cu = e.card.material.uniforms;
     cu.uGhost.value = ghost ? 1 : 0;
     cu.uOpacity.value = ghost ? 0.4 : 1;
@@ -676,15 +691,15 @@ export class StandeesLayer {
 
   updatePlate(e) {
     const t = e.state;
-    // In halo mode the conditions sit on the ring; the plate keeps pips and bars.
+    // In halo mode the conditions sit on the ring; the plate keeps the target marks.
     const conditions = t.halo ? [] : t.conditions ?? [];
-    const sig = JSON.stringify([t.targets ?? [], conditions, t.bars ?? [],
+    const sig = JSON.stringify([t.targets ?? [], conditions,
       conditions.map((c) => (this.icons.has(c?.icon) ? 1 : 0))]);
     if (sig === e.plateSig) return;
     e.plateSig = sig;
     for (const c of conditions) if (c?.icon) this.wantIcon(c.icon);
     if (typeof document === "undefined") return;
-    const drawn = drawPlate(e.plateCanvas, { targets: t.targets, bars: t.bars, conditions }, (url) => this.icons.get(url));
+    const drawn = drawPlate(e.plateCanvas, { targets: t.targets, conditions }, (url) => this.icons.get(url));
     if (!drawn) { e.plate.visible = false; e.plateH = 0; return; }
     e.plateCanvas = drawn.canvas;
     e.plateH = drawn.height / PLATE_PX;
@@ -811,7 +826,7 @@ export class StandeesLayer {
    * Per frame: billboards, moves, sway.
    * @returns {boolean} true while something moves
    */
-  frame(now, camera, yaw, sway, { pxWorld = this.pxWorld, markers = true, life = true, dust = true, hover = true } = {}) {
+  frame(now, camera, yaw, sway, { pxWorld = this.pxWorld, cssPx = 1, markers = true, life = true, dust = true, hover = true } = {}) {
     this._life = life !== false;
     this._dust = this._life && dust !== false;
     this._hover = this._life && hover !== false;
@@ -901,8 +916,11 @@ export class StandeesLayer {
       }
       if (!h && e.hoverW > 0) e.body.rotation.z += this._hv.roll * e.hoverW;
       e.plate.quaternion.copy(camera.quaternion);
+      // Never narrower than PLATE_MIN_PX CSS px (pxWorld: world units per device px; cssPx device px per CSS px).
+      const pw = Math.max(PLATE_W, PLATE_MIN_PX * (pxWorld || 0) * (cssPx > 0 ? cssPx : 1));
+      if (e.plateH) e.plate.scale.set(pw, pw * e.plateH, 1);
       // Above the card's leaned top, along the card's own up axis.
-      const along = (e.cardH ?? 1) - (e.cardFoot ?? 0) + 0.1 + (PLATE_W * (e.plateH ?? 0)) / 2;
+      const along = (e.cardH ?? 1) - (e.cardFoot ?? 0) + 0.1 + (pw * (e.plateH ?? 0)) / 2;
       const back = Math.sin(lean) * along;
       e.plate.position.set(-back * Math.sin(yaw), BASE_H + Math.cos(lean) * along, -back * Math.cos(yaw));
       // the hover is left out of the cast shadow: it would redraw the shadow map every frame
@@ -1175,13 +1193,25 @@ export class StandeesLayer {
     if (!e || !e.root.visible) return false;
     const p = e.root.position;
     if (which === "base") { out.set(p.x, p.y + BASE_H + 0.02, p.z); return true; }
-    const lean = this.lean ?? 0, yaw = this.yaw ?? 0, along = ((e.cardH ?? 1) - (e.cardFoot ?? 0)) * 0.58;
+    // "head": the top of the leaned card, where the target marks hang; "chest" a little over half way up
+    const lean = this.lean ?? 0, yaw = this.yaw ?? 0, along = ((e.cardH ?? 1) - (e.cardFoot ?? 0)) * (which === "head" ? 1 : 0.58);
     const back = Math.sin(lean) * along;
     out.set(p.x - back * Math.sin(yaw), p.y + e.body.position.y + BASE_H + Math.cos(lean) * along, p.z - back * Math.cos(yaw));
     return true;
   }
 
   /** World anchor above a token's head (for labels). */
+  /**
+   * The middle of a shown standee's base top and the base's radius (cells), or
+   * null: where a figure stands, for anything that hangs a label at its feet.
+   */
+  footOf(id) {
+    const e = this.entries.get(id);
+    if (!e || !e.root.visible) return null;
+    const p = e.root.position;
+    return { x: p.x, y: p.y + BASE_H, z: p.z, r: (e.width ?? 1) * 0.5 };
+  }
+
   headOf(id) {
     const e = this.entries.get(id);
     // a standee this viewer is not shown anchors nothing (bubbles, badges, the HUD)

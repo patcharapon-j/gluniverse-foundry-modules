@@ -23,6 +23,8 @@ import { Baker } from "./bake.mjs";
 import { bakeHidden, bakeViewers, propsSeen } from "./props-seen.mjs";
 import { Input } from "./input.mjs";
 import { Hud } from "./hud.mjs";
+import { BarLayer, bridgeHover } from "./bar-layer.mjs";
+import { playersSeeBars } from "../integrations/bars.mjs";
 import { PEEK, Peek, pivotToShow, sceneAt } from "./peek.mjs";
 import { sendHold, sendInvite, sendSummon } from "./sync.mjs";
 import { reachOf } from "./reach.mjs";
@@ -59,7 +61,7 @@ const fresh = () => ({
   root: null, canvas: null, r: null, Renderer: null, surface: null,
   hooks: [], unTerrain: null, unLines: null, keyFn: null, resizeObs: null, tokenIds: new Set(),
   dirty: new Set(), raf: 0, labelUntil: 0, labelRaf: 0,
-  baker: null, input: null, hud: null, seq: null, peek: null, sprite: null, unSprite: null,
+  baker: null, input: null, hud: null, seq: null, peek: null, sprite: null, unSprite: null, bars: null,
   lighting: null, bg: null, bgSeq: 0, cellSeq: 0,
   overlays: emptyOverlays(),
   asPlayers: false, cutaway: true, savedCamera: null,
@@ -276,16 +278,18 @@ async function mount(scene) {
   S.surface = Surfaces.register({
     id: FEATURE_ID,
     element: () => S.root,
-    pause: () => { S.r?.pause?.(); },
-    resume: () => { S.r?.resume?.(); mark("options"); },
+    pause: () => { S.r?.pause?.(); S.bars?.pause(); },
+    resume: () => { S.r?.resume?.(); S.bars?.resume(); mark("options"); },
     release: () => {
       S.savedCamera = S.r?.getCamera?.() ?? null;
       try { S.r?.dispose(); } catch { /* gone */ }
       S.r = null;
+      S.bars?.dispose();
     },
     restore: () => {
       createRenderer();
       if (S.savedCamera) S.r.setCamera(S.savedCamera, { animate: false });
+      S.bars?.mount();
       markAll();
     },
     // An on-demand renderer holds a still picture; releasing it would blank
@@ -294,6 +298,12 @@ async function mount(scene) {
   });
 
   S.hud = new Hud(root);
+  // The tokens' bars: Resource Bars' or Foundry's own, on the standees (view/bar-layer.mjs).
+  S.bars = new BarLayer(root, {
+    r: () => S.r, after: () => S.canvas, onBoard: (id) => S.tokenIds.has(id),
+    // "view as players": only the bars some player could see
+    shows: (tok) => !S.asPlayers || playersSeeBars(tok?.document?.displayBars, !!tok?.actor?.hasPlayerOwner),
+  });
   S.peek = new Peek(root, {
     onCentre: () => centrePeek(true),
     onSwitch: () => closeView({ at: peekCentreScene() }),
@@ -321,6 +331,7 @@ async function mount(scene) {
   wireHooks();
 
   S.open = true;
+  S.bars.mount();
   syncHud();
   resize();
   initialCamera();
@@ -351,6 +362,8 @@ function createRenderer() {
   else S.root.prepend(c);
   S.canvas = c;
   S.r = new S.Renderer({ canvas: c, pixelRatio: globalThis.devicePixelRatio || 1 });
+  // what hangs over the figures follows the pose each drawn frame took
+  S.r.onDrawn = () => S.bars?.follow();
   // The grid first: the camera converts its px target with the grid size.
   if (S.grid) S.r.setGrid(gridArg());
   if (S.sprite) S.r.setPixelSource?.(S.sprite);
@@ -368,7 +381,8 @@ function bindInput() {
     terrain: () => S.terrain,
     hud: S.hud,
     setOverlays: (patch) => { Object.assign(S.overlays, patch); mark("overlays"); },
-    onHover: () => mark("tokens"),
+    // the 3D hover is the 2D token's too: Foundry's bar and name display modes read it
+    onHover: (id) => { mark("tokens"); bridgeHover(id ? globalThis.canvas?.tokens?.get?.(id) ?? null : null); },
     asPlayers: () => S.asPlayers,
     cameraMoved: () => trackLabels(0),
     reach: () => S.reach,
@@ -454,6 +468,7 @@ function teardown() {
   S.resizeObs?.disconnect();
   const safe = (fn) => { try { fn(); } catch (e) { err("diorama: teardown", e); } };
   safe(() => S.input?.dispose());
+  safe(() => S.bars?.dispose());
   safe(() => S.peek?.dispose());
   safe(() => S.hud?.dispose());
   safe(() => S.baker?.dispose());
@@ -771,6 +786,7 @@ function readGraphics() {
 
 function resize() {
   S.peek?.layout();
+  S.bars?.resize();
   if (!S.root || !S.r) return;
   const w = S.root.clientWidth || globalThis.innerWidth, h = S.root.clientHeight || globalThis.innerHeight;
   S.r.resize(w, h);

@@ -1,13 +1,13 @@
 /**
- * Diorama — target lines: a raised arc from a source standee's chest to its
- * target's base, the 3D form of the 2D canvas's targeting lines.
+ * Diorama — target lines: a raised arc from a source standee's chest down onto
+ * its target's head (where the target marks hang), the 3D form of the 2D canvas's targeting lines.
  *
  *   links  [{ sourceId, targetId, color:[r,g,b] 0..1 (or a CSS colour) }]
  *
  * Only what setLinks hands over is drawn, and a link whose ends are not both on
  * the board (or not shown) is dropped. Each line is a ribbon of constant device
  * pixel width (LINK_VERT, LINK_PX) with a bright core, a dark ink edge and an
- * arrowhead whose tip lands on the target's base, turned along the arc's end as
+ * arrowhead whose tip lands on the target's head, turned along the arc's end as
  * it falls on screen; a glint runs source to target once per TIMING.linkGlint.
  * It is drawn over the board and never depth tested, so it reads like the 2D
  * line it mirrors. Ends follow their tokens every frame into preallocated
@@ -195,7 +195,7 @@ export class LinksLayer {
     const P = TIMING.linkGlint;
     const phase = glint ? (now % P) / P : -1;
     for (const e of this.entries.values()) {
-      const ok = standees.anchorOf(e.sourceId, "chest", _a) && standees.anchorOf(e.targetId, "base", _b);
+      const ok = standees.anchorOf(e.sourceId, "chest", _a) && standees.anchorOf(e.targetId, "head", _b);
       e.mesh.visible = ok;
       if (!ok) continue;
       any = true;
@@ -227,7 +227,7 @@ export class LinksLayer {
         next[k + c] = next[k + 3 + c] = v;
       }
     }
-    // the arrowhead's tip on the target's base, turned along the arc's landing
+    // the arrowhead's tip on the target's head, turned along the arc's landing
     const u = e.mesh.material.uniforms;
     arcEndDir(_A, _B, _p);
     u.uTip.value.set(_B.x, _B.y, _B.z);

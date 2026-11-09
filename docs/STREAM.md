@@ -61,8 +61,20 @@ lost, and the room reopens on the tab it was left on.
 
 A sibling feature puts its section on a tab with `registerPanelSection({ tab })`
 in `extensions.mjs`. A section that names no tab, or a tab that does not exist,
-lands on **Overlay**. The header stays outside the read-only fieldset, so a
+lands on **Overlay**. A section ordered below 0 leads its tab, above the tab's own
+sections (`lead` of `renderPanelSectionsByTab`); the rest follow them. The header stays outside the read-only fieldset, so a
 director who cannot save still sees whether the stream is live.
+
+A sibling feature can also give a director a **command** for the capture and
+read back what the capture is doing, still without `stream` importing it.
+`registerStreamCommand(id, run)` names a command that only the stream client
+runs, and `sendStreamCommand(id, args)` sends it from the room as the
+director's own attested command (`STREAM_COMMANDS.feature`, the same User-flag
+channel as start and stop). `registerStatusField(key, read)` adds a field to the
+stream client's status report, which `streamClientStatus()` returns to the room
+under `features[key]`. Diorama's "Board view" section on **Shot** is the first
+user: a director switches the capture between the 2D map and the 3D view
+(`diorama/stream-bridge.mjs`).
 
 ## Directors
 

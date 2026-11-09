@@ -54,6 +54,7 @@ import { SHED_ORDER, FEATURE_ID, SUB } from "../constants.mjs";
 import { Budget } from "../../../core/budget.mjs";
 import { PALETTE } from "../../../core/theme.mjs";
 import { createShared, cssRgb, MATERIALS } from "./materials.mjs";
+import { SEE_MAX } from "./glsl.mjs";
 import { TerrainLayer } from "./terrain.mjs";
 import { WallsLayer } from "./walls.mjs";
 import { StandeesLayer } from "./standees.mjs";
@@ -75,6 +76,12 @@ import { DEFAULT_GRAPHICS } from "../options.mjs";
 
 /** Under load (the fpsCap rung shed) the cap drops to this. */
 const FPS_CAP_MS = 1000 / 30;
+/** See-through: the cut's reach past a figure's half width, and the floor kept under its feet (cells). */
+const SEE_MARGIN = 0.32;
+const SEE_LIP = 0.22;
+/** Which figures keep their cut when more than SEE_MAX stand on the board. */
+const seeRank = (t) => (t?.targets?.length ? 8 : 0) + (t?.controlled ? 4 : 0) + (t?.hovered ? 2 : 0) + (t?.turn ? 1 : 0);
+
 /** Under load (the renderScale rung shed) the chosen scale is multiplied by this. */
 const RENDER_SCALE = 0.75;
 const MAX_DT = 0.1;
@@ -158,7 +165,7 @@ export class DioramaRenderer {
     /** The shadow pass's own-material casters: standee cards, then props. */
     this._casters = [this.standees.casters, this.props.casters, this.tiles.casters];
     /** Reused every frame: what the standees need from the view. */
-    this._standeeFrame = { pxWorld: 0.01, markers: true, life: true, dust: true, hover: true };
+    this._standeeFrame = { pxWorld: 0.01, cssPx: 1, markers: true, life: true, dust: true, hover: true };
     /** The per-frame pixel effects (setPixelSource), and the view it is handed (reused). */
     this.pixelSource = null;
     this._pixelView = { yaw: 0, pitch: 0, rx: 1, ry: 0, fx: 0, fy: -1, pxWorld: 0.01, size: 100, now: 0 };
@@ -745,6 +752,7 @@ export class DioramaRenderer {
     this.links.setPixelScale(ratio0);
     const sf = this._standeeFrame;
     sf.pxWorld = VIEW_CELLS / Math.max(1e-3, this.rig.view.zoom) / Math.max(1, this._h * ratio0);
+    sf.cssPx = ratio0;
     this.atmosphere.pxWorld = sf.pxWorld;
     this.props.pxWorld = sf.pxWorld;
     sf.markers = fx.markers;
@@ -753,6 +761,7 @@ export class DioramaRenderer {
     if (this.pixelFrame(t, sf.pxWorld)) active = true;
     if (this.standees.frame(t, this.rig.camera, yaw, sway, sf)) active = true;
     if (this.standees.castersDirty) { this.standees.castersDirty = false; this.shadow.dirty = true; }
+    this.writeSeeThrough(sf.pxWorld);
     if (sway) active = true;
     if (this.standees.targeted && fx.markers) active = true;
     if (this.links.frame(t, this.standees, fx.markers) && fx.markers) active = true;
@@ -820,6 +829,8 @@ export class DioramaRenderer {
         }
         prof?.gpu.end();
         this._drawn = true;
+        // whatever hangs over the figures (the view's bars) follows this exact pose
+        try { this.onDrawn?.(); } catch (e) { console.error("GLUniverse Suite | diorama onDrawn", e); }
         this.stats.frames++;
         prof?.frame({ at: t, cpuMs: clock() - t, calls: this.webgl.info.render.calls, triangles: this.webgl.info.render.triangles });
       } catch (e) {
@@ -919,6 +930,80 @@ export class DioramaRenderer {
   }
 
   /** px + q → client px. */
+  /**
+   * A shown standee's box on screen, client px: its middle (cx), the lowest
+   * point of its base (footY), the top of its leaned head (headY), the base's
+   * width (w) and the cells-to-px scale there (pxPerCell). Null when it is not
+   * drawn. Read after a frame, it is that frame's pose.
+   * @param {string} id
+   */
+  /**
+   * See-through (glsl.mjs dioSeeThrough): every figure shown on the board, as a
+   * capsule on screen from its base to its head in the render target's device
+   * px, with its base's camera-side rim depth and its feet. Occluders in front
+   * of a figure are cut around it. Off with the cutaway. Allocates nothing.
+   * Over SEE_MAX figures, the ones a viewer is acting on (targeted, controlled,
+   * hovered, on their turn) are kept first.
+   */
+  writeSeeThrough(pxWorld) {
+    const u = this.shared;
+    if (!this.options.cutaway || !this.standees.count) { u.uSeeCount.value = 0; return; }
+    const cam = this.rig.camera;
+    const buf = this.webgl.getDrawingBufferSize(this._seeBuf ??= new THREE.Vector2());
+    const v = (this._seeV ??= new THREE.Vector3());
+    const head = (this._seeHead ??= new THREE.Vector3());
+    const list = (this._seeList ??= []);
+    list.length = 0;
+    for (const e of this.standees.entries.values()) if (e.root.visible && e.card?.visible !== false) list.push(e);
+    if (list.length > SEE_MAX) list.sort((a, b) => seeRank(b.state) - seeRank(a.state));
+    const yaw = this.rig.view.yaw;
+    const tx = Math.sin(yaw), tz = Math.cos(yaw);
+    const px = Math.max(1e-6, pxWorld);
+    let n = 0;
+    for (let i = 0; i < list.length && n < SEE_MAX; i++) {
+      const e = list[i];
+      const foot = this.standees.footOf(e.id);
+      if (!foot || !this.standees.anchorOf(e.id, "head", head)) continue;
+      v.set(foot.x, foot.y, foot.z).project(cam);
+      const fx = (v.x + 1) * 0.5 * buf.x, fy = (v.y + 1) * 0.5 * buf.y;
+      v.copy(head).project(cam);
+      const hx = (v.x + 1) * 0.5 * buf.x, hy = (v.y + 1) * 0.5 * buf.y;
+      // the base's rim nearest the camera: anything in front of it may hide the figure
+      v.set(foot.x + tx * foot.r, foot.y, foot.z + tz * foot.r).project(cam);
+      const rim = v.z * 0.5 + 0.5;
+      if (![fx, fy, hx, hy, rim].every(Number.isFinite)) continue;
+      const half = Math.max(foot.r, (e.cardW ?? 1) * 0.5);
+      u.uSeeSeg.value[n].set(fx, fy, hx, hy);
+      u.uSeeInfo.value[n].set((half + SEE_MARGIN) / px, rim, foot.y + SEE_LIP, 1);
+      n++;
+    }
+    u.uSeeCount.value = n;
+  }
+
+  standeeBox(id) {
+    const foot = this.standees.footOf?.(String(id));
+    const head = foot ? this.standees.headOf(String(id)) : null;
+    if (!foot || !head) return null;
+    const cam = this.rig.camera;
+    const r = this.canvas.getBoundingClientRect?.() ?? { left: 0, top: 0, width: this._w, height: this._h };
+    const v = (this._boxV ??= new THREE.Vector3());
+    const toClient = (x, y, z) => {
+      v.set(x, y, z).project(cam);
+      return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+    };
+    const yaw = this.rig.view.yaw;
+    // toward the camera along the ground: the base's nearest rim is its lowest point on screen
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    const c = toClient(foot.x, foot.y, foot.z);
+    const low = toClient(foot.x + fx * foot.r, foot.y, foot.z + fz * foot.r);
+    const side = toClient(foot.x + fz * foot.r, foot.y, foot.z - fx * foot.r);
+    const top = toClient(head.x, head.y, head.z);
+    const half = Math.hypot(side.x - c.x, side.y - c.y);
+    const pxPerCell = half / Math.max(1e-6, foot.r);
+    if (![c.x, low.y, top.y, pxPerCell].every(Number.isFinite)) return null;
+    return { cx: c.x, footY: low.y, headY: top.y, w: half * 2, pxPerCell };
+  }
+
   project(x, y, zQ = 0) {
     const S = this.grid.size;
     const v = new THREE.Vector3(Number(x) / S, Number(zQ) / 4, Number(y) / S).project(this.rig.camera);
