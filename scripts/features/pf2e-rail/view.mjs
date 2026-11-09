@@ -50,6 +50,7 @@ import { escapeHTML as esc } from "../../core/util.mjs";
 import { ICON, costGlyph } from "./icons.mjs";
 import { actionIcon } from "./action-icons.mjs";
 import { GM_MOVES, LOW_HEALTH_AT, SAVES, STRIKE_ROWS } from "./const.mjs";
+import { actionsLeft } from "./shape.mjs";
 
 /** Every gesture handle the rail draws, for the host and the check tool. */
 export const HANDLES = Object.freeze([
@@ -210,7 +211,7 @@ export const TURNBAR = (tb, t) => {
   ${(() => { const extra = (tb.activities ?? []).filter((a) => a.on).length - 1; return `<button type="button" class="gph-tb-more" data-act="explore" aria-label="${esc(t("GLRAIL.turnbar.chooseActivity"))}">${extra > 0 ? `<b>+${extra}</b>` : ""}${ICON.more}</button>`; })()}
 </div>`;
   const e = tb.economy ?? { max: 3, spent: 0, reaction: true };
-  const left = Math.max(0, e.max - e.spent);
+  const left = actionsLeft({ ...tb, economy: e });
   return `
 <div class="gph-turnbar${tb.mine ? " is-mine" : ""}${tb.next && !tb.mine ? " is-next" : ""}" data-turnbar data-left="${left}">
   ${tb.next && !tb.mine

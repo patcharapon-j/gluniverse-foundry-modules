@@ -638,6 +638,12 @@ section("the moments", () => {
   ok(R.turnbarOf({ name: "Seelah" }, { mode: "encounter", readonly: true, turn: { mine: false }, econ: { max: 3, spent: 0, reaction: true } }).observer === "Seelah" && R.turnbarOf({ name: "Seelah" }, { mode: "encounter", turn: { mine: false }, econ: { max: 3, spent: 0, reaction: true } }).observer === undefined, "the reader names the observed character only on a read-only rail");
   ok(/title="GLRAIL\.turnbar\.theirs:Kyra"/.test(onDeck) && /GLRAIL\.turnbar\.nextSaid/.test(onDeck), "on deck, whose turn it is now is still said (title and screen reader)");
   ok(/\.gph-turnbar\.is-next::before \{[^}]*animation/.test(css), "the on-deck edge breathes while it is true");
+  {
+    const spentAll = R.turnbarOf({}, { mode: "encounter", turn: { mine: false, next: true, current: "Kyra" }, econ: { max: 3, spent: 3, reaction: true } });
+    const lit = (html) => (html.match(/class="gph-pip on"/g) ?? []).length;
+    ok(lit(V.TURNBAR(spentAll, tt)) === 3 && S.liveOf({ turnbar: spentAll }).econ.left === 3 && S.actionsLeft({ ...spentAll, next: false }) === 0,
+      "on deck the diamonds are the turn coming, not what was left of the last one (drawn and driven alike)");
+  }
   /* the live attack: the grid's live track is where the marker's arithmetic puts it */
   for (const k of [0, 1, 2]) {
     const rule = k === 0 ? css.match(/\n\.gph-stk \{ grid-template-columns: ([^;]+);/)?.[1] : css.match(new RegExp(`\\.gph\\[data-map="${k}"\\] \\.gph-stk \\{ grid-template-columns: ([^;]+);`))?.[1];

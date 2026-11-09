@@ -18,6 +18,15 @@
  */
 const blankMeter = (m) => (m ? { ...m, value: 0, temp: 0 } : m);
 
+/** The action diamonds lit. While you are on deck they are the turn coming,
+ *  so all of them: the tally left over from your last turn is not what you
+ *  are about to have (it refills when the turn comes round). */
+export const actionsLeft = (tb) => {
+  const e = tb?.economy;
+  if (!e) return 0;
+  return tb.next && !tb.mine ? e.max : Math.max(0, e.max - e.spent);
+};
+
 /** The model with every value slot blanked, as a string to compare. */
 export function shapeOf(o) {
   const c = structuredClone(o);
@@ -59,7 +68,7 @@ export function liveOf(o) {
     hp: o.vitals?.hp ?? o.creature?.hp ?? o.hazard?.hp ?? null,
     sp: o.vitals?.sp ?? null,
     shield: o.vitals?.shield ? { hp: o.vitals.shield.hp, raised: !!o.vitals.shield.raised } : null,
-    econ: o.turnbar?.economy ? { left: Math.max(0, o.turnbar.economy.max - o.turnbar.economy.spent), reaction: !!o.turnbar.economy.reaction } : null,
+    econ: o.turnbar?.economy ? { left: actionsLeft(o.turnbar), reaction: !!o.turnbar.economy.reaction } : null,
     map: o.turnbar ? o.turnbar.map ?? 0 : null,
     foes: Object.fromEntries((o.foes?.foes ?? []).filter((f) => f.hp).map((f) => [f.id, f.hp])),
     seats: Object.fromEntries((o.stack ?? []).filter((s) => s.id).map((s) => [s.id, { hp: s.hp ?? null, temp: s.temp ?? 0, hero: s.hero?.[0] ?? null }])),
