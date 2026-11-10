@@ -436,6 +436,13 @@ export const PEEKS = {
       traits: ["Flourish", "Open"], text: "<p>With a quick sprint, you dash up to your foe and swing. Stride twice. If you end your movement within melee reach of at least one enemy, you can make a melee Strike against that enemy.</p>",
       actions: [{ id: "use", label: "Use", cost: 2, primary: true }, { id: "post", label: "Post" }],
     } }),
+  item: () => ({
+    anchor: '.gph-card[data-item]', model: {
+      name: "Minor Elixir of Life", from: "Item 1",
+      traits: ["Alchemical", "Consumable", "Elixir", "Healing"], lines: [["Left", "×2"]],
+      text: "<p>Elixirs of life accelerate a living creature's natural healing processes. Upon drinking one, you regain <strong>1d6 Hit Points</strong> and gain a +1 item bonus to saving throws against diseases and poisons for 10 minutes.</p>",
+      actions: [{ id: "use", label: "Use", primary: true }, { id: "post", label: "Post" }],
+    } }),
 };
 
 export const DRAWER_BODIES = {

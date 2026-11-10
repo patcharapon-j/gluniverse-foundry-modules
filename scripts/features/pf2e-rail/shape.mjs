@@ -75,6 +75,17 @@ export function liveOf(o) {
   };
 }
 
+/** What was typed into the Hit Point field, as the table says it: "-12" (or a
+ *  typographic minus) is damage, "+5" healing, a bare number or "=30" the new
+ *  total. Anything else is null, and the field refuses it. */
+export function hpEntry(text) {
+  const s = String(text ?? "").replace(/\s+/g, "").replace(/[−–—]/g, "-");
+  const m = /^([+\-=]?)(\d{1,5})$/.exec(s);
+  if (!m) return null;
+  const n = +m[2];
+  return m[1] === "+" ? { delta: n } : m[1] === "-" ? { delta: -n } : { set: n };
+}
+
 /** Did the Hit Points get worse? The figure flinches only for that. */
 export const tookHit = (before, after) =>
   !!(before?.hp && after?.hp && after.hp.value + (after.hp.temp ?? 0) < before.hp.value + (before.hp.temp ?? 0));

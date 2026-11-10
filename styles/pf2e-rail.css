@@ -243,8 +243,8 @@
    fold folds and a spell still peeks on hover, but nothing else acts, so
    nothing else answers the pointer as a press would; the nameplate says so.
    The exclusions are the host's own gate (host.mjs onClick). */
-.gph[data-readonly] button:not([data-drawer], [data-act="fold"], [data-act="close"], [data-spell]) { pointer-events: none; }
-.gph[data-readonly] [data-spell] { cursor: default; }
+.gph[data-readonly] button:not([data-drawer], [data-act="fold"], [data-act="close"], [data-spell], .gph-card[data-item]) { pointer-events: none; }
+.gph[data-readonly] :is([data-spell], .gph-card[data-item]) { cursor: default; }
 .gph-watch { justify-self: start; height: 18px; padding: 0 6px; display: flex; align-items: center; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; line-height: 1;
   color: var(--gph-dim); background: var(--gph-scrim); box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: var(--gph-clip-xs); }
 
@@ -355,6 +355,17 @@
 .gph-mn { display: flex; align-items: baseline; gap: 2px; min-width: 0; white-space: nowrap; font-family: var(--gph-num); font-variant-numeric: tabular-nums; }
 .gph-mn b { font-size: var(--gl-is-t-display); font-weight: 600; line-height: 0.9; letter-spacing: -0.02em; }
 .gph-mn s { text-decoration: none; font-size: var(--gl-is-t-lead); color: var(--gph-faint); }
+/* The numeral is a press, and the field it opens stands exactly where it
+   stood: same baseline, same numerals, so nothing on the plate moves. */
+.gph-hpb { display: inline-flex; align-items: baseline; gap: 2px; margin: -3px -4px -2px; padding: 3px 4px 2px; font-family: var(--gph-num); font-variant-numeric: tabular-nums; cursor: text;
+  transition: background var(--gl-d-quick) var(--gl-ease), box-shadow var(--gl-d-quick) var(--gl-ease); }
+.gph-hpb:hover { background: var(--gph-ink-3); box-shadow: inset 0 -1px 0 var(--gph-line-2); }
+.gph-mn { position: relative; }
+.gph-mn[data-editing] .gph-hpb { visibility: hidden; min-width: 92px; }
+.gph-hpin { all: unset; box-sizing: border-box; position: absolute; left: -4px; top: -3px; bottom: -2px; width: 84px; padding: 0 5px;
+  font-family: var(--gph-num); font-variant-numeric: tabular-nums; font-size: var(--gl-is-t-display); font-weight: 600; letter-spacing: -0.02em; line-height: 1; color: var(--gph-text);
+  background: var(--gph-ink-0); box-shadow: inset 0 0 0 1px var(--gph-paper); caret-color: var(--gph-amber); }
+.gph-hpin::placeholder { color: var(--gph-faint); opacity: 0.6; }
 .gph-mn em { margin-left: 6px; font-style: normal; font-size: var(--gl-is-t-meta); font-weight: 600; color: var(--gph-info); font-family: var(--gph-font); }
 .gph-bar { position: relative; display: block; height: 8px; background: var(--gph-ink-0); box-shadow: inset 0 0 0 1px var(--gph-line); overflow: hidden; }
 .gph-fill { position: absolute; inset: 1px auto 1px 1px; width: calc((100% - 2px) * var(--gph-v)); background: var(--gph-paper);
@@ -577,6 +588,9 @@
   font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--gph-dim);
   box-shadow: inset 0 0 0 1px var(--gph-line-2); clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
   transition: background var(--gl-d-quick) var(--gl-ease), color var(--gl-d-quick) var(--gl-ease); }
+/* The label is its own box: a flex container's bare text is never given an
+   ellipsis, and a chip squeezed on a narrow rail was cut mid-letter. */
+.gph-tog > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .gph-tog:hover { background: var(--gph-ink-4); color: var(--gph-text); }
 .gph-tog.on { background: var(--gph-paper); color: var(--gph-on-slab); box-shadow: none; }
 
@@ -620,7 +634,7 @@
    wide deck holds more of them rather than wider ones. */
 .gph-actpane { flex: 1 1 auto; min-width: 0; display: grid; grid-template-rows: minmax(0, 1fr); align-content: start; gap: 2px; }
 .gph-actpane.has-toggles { grid-template-rows: 24px minmax(0, 1fr); }
-.gph-togs { display: flex; align-items: center; gap: 3px; min-width: 0; overflow: hidden; height: 24px; }
+.gph-togs { display: flex; align-items: center; gap: 3px; min-width: 0; overflow: hidden; height: 24px; padding-right: 24px; }
 .gph-togs .gph-tog { height: 24px; min-height: 24px; max-height: 24px; }
 /* Whole columns only: as many as fit, never one cut by the pane edge; what
    does not fit is under the expand press. */
@@ -793,6 +807,11 @@ button.gph-drow:hover { background: var(--gph-ink-4); }
 .gph-key .gph-tag, .gph-cchk .gph-tag { margin-left: 0; padding: 1px 3px; min-width: 14px; }
 .gph-dnone, .gph-dnote { margin: 0; font-size: var(--gl-is-t-body); line-height: 1.4; color: var(--gph-faint); }
 .gph-dnote { margin-top: 8px; font-size: var(--gl-is-t-meta); }
+/* The hotbar's five pages, stepped from the drawer's foot. */
+.gph-pager { display: flex; align-items: center; gap: 2px; }
+.gph-pager .gph-step { width: 22px; height: 22px; min-height: 22px; max-height: 22px; }
+.gph-pager b { min-width: 46px; text-align: center; font-weight: 600; color: var(--gph-dim); font-variant-numeric: tabular-nums; }
+.gph-pager span { margin-left: auto; padding-left: 12px; }
 
 
 .gph-rest { display: grid; gap: 6px; width: 280px; }

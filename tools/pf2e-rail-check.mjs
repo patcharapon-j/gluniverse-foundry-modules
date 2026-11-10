@@ -26,7 +26,7 @@ import * as R from "../scripts/features/pf2e-rail/read.mjs";
 import { Turn, economyOf, turnKey, upNext } from "../scripts/features/pf2e-rail/turn.mjs";
 import { answers, echoOf } from "../scripts/features/pf2e-rail/echo.mjs";
 import { combatOf, isTurnOf, shouldMount, subjectOf } from "../scripts/features/pf2e-rail/subject.mjs";
-import { PEEK_PRESSES, ROW_KEYS, actionPeek, effectRows, inventoryRows, macroSlots, spellPeek, strikePeek } from "../scripts/features/pf2e-rail/peeks.mjs";
+import { PEEK_PRESSES, ROW_KEYS, actionPeek, effectRows, inventoryRows, itemPeek, macroSlots, spellPeek, strikePeek } from "../scripts/features/pf2e-rail/peeks.mjs";
 import { PRESSES } from "../scripts/features/pf2e-rail/presses.mjs";
 import { FEATURE_ID, PREFIX, SHED_ORDER } from "../scripts/features/pf2e-rail/const.mjs";
 import { downOf, momentsOf, relight } from "../scripts/features/pf2e-rail/moments.mjs";
@@ -355,7 +355,7 @@ section("every press the view draws has a host handler", () => {
   const fa = fighter();
   marks.push(V.DLIST({ rows: inventoryRows({ itemTypes: { ...fa.itemTypes, weapon: [item("w", "Longsword", "weapon", { quantity: 1, equipped: { carryType: "held", handsHeld: 1 } })] } }, t) }, t));
   marks.push(V.DLIST({ rows: effectRows(dying()) }, t), V.REST(t), V.MACROS({ page: 1, slots: macroSlots([{ slot: 1, macro: { id: "m1", name: "Hi" } }, { slot: 2 }]) }, t));
-  const ps = [strikePeek(fa.system.actions[0], { t, loc, mod: "+14", damage: "1d8", critical: "2d8" }), spellPeek(SPELL("fire", "Fireball", 3), { t, rank: 3, entryName: "Arcane", dc: 25 }), actionPeek(fa.itemTypes.feat[1], { t })];
+  const ps = [strikePeek(fa.system.actions[0], { t, loc, mod: "+14", damage: "1d8", critical: "2d8" }), spellPeek(SPELL("fire", "Fireball", 3), { t, rank: 3, entryName: "Arcane", dc: 25 }), actionPeek(fa.itemTypes.feat[1], { t }), itemPeek(item("el", "Elixir of Life", "consumable", { quantity: 2, level: { value: 1 } }), { t })];
   for (const p of ps) marks.push(V.PEEK(p, t));
   const html = marks.join("\n");
   const tags = html.match(/<(button|div)\b[^>]*>/g) ?? [];
@@ -694,6 +694,52 @@ section("reload (PF2e Ranged Combat)", () => {
   ok(/onReloaded\(actor, weapon\)[\s\S]{0,200}actor\?\.id !== p\.actorId/.test(h) && /this\.spend\(n, false, p\.ctx\)/.test(h), "a reload spends only for the actor pressed, against the turn it was pressed in");
   ok(/pf2eRangedCombatReload", \(actor, weapon\) => this\.onReloaded\(actor, weapon\)/.test(h) && /weapon\?\.reloadActions/.test(h) && !/p\.cost/.test(h), "the cost is the reloaded weapon's, not the pressed row's");
   ok(/\.gph-stk\.has-reload \{ grid-template-columns: minmax\(0, 1fr\) 24px repeat\(3, 32px\) 34px 34px; \}/.test(css), "the Reload press takes its own track, the MAP steps keep theirs");
+});
+
+/* What the polish pass added, each of which fails without a word: a Hit Point
+   entry read as the wrong kind turns "12 damage" into "set to 12"; a tooltip
+   handed to Foundry as `data-tooltip` is rendered as HTML, and item and macro
+   names are whatever a player typed; an Escape the host does not eat also
+   releases the controlled token, and the rail with it. */
+section("the Hit Point field, tooltips and putting things away", () => {
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  ok(eq(S.hpEntry("-12"), { delta: -12 }) && eq(S.hpEntry("−12"), { delta: -12 }) && eq(S.hpEntry(" – 7 "), { delta: -7 }), "a minus, typed or typographic, is damage");
+  ok(eq(S.hpEntry("+5"), { delta: 5 }), "a plus is healing");
+  ok(eq(S.hpEntry("30"), { set: 30 }) && eq(S.hpEntry("=30"), { set: 30 }) && eq(S.hpEntry("0"), { set: 0 }), "a bare number is the new total, never damage");
+  for (const bad of ["", "abc", "1d8", "--3", "+-3", "12.5", "5+5", "999999"]) ok(S.hpEntry(bad) === null, `the field takes "${bad}"`);
+  const meter = V.METER("hp", { value: 68, max: 76, temp: 5 }, t);
+  ok(/<button type="button" class="gph-hpb" data-act="hp"[^>]*><b data-v>68<\/b>/.test(meter), "the numeral is the press, and still carries data-v for the drive");
+  ok(!/data-act="hp"/.test(V.METER("sp", { value: 3, max: 9 }, t, { big: false })), "Stamina has no field");
+  const h = strip(src["host.mjs"]);
+  ok(/modifyTokenAttribute\("attributes\.hp", e\.delta, true, true\)/.test(h), "damage and healing go through PF2e's applyDamage (temp first, dying after)");
+  const apply = h.slice(h.indexOf("async applyHp("), h.indexOf("pressSeat(id) {"));
+  ok(/e\.delta != null\) return/.test(apply) && /Math\.max\(0,/.test(apply) && /Math\.min\(max, e\.set\)/.test(apply), "a typed total is clamped to 0…max and never applied as a change");
+  ok(/editHp\(b\) \{[\s\S]{0,160}!actor\?\.isOwner/.test(h), "only an owner's field opens");
+  ok(/dataset\.tooltipText = s/.test(h) && !/dataset\.tooltip = |dataset\.tooltipHtml/.test(h), "tooltips are handed over as plain text, never as markup");
+  ok(/removeAttribute\("title"\)/.test(h), "the native title goes, or both tooltips open");
+  ok(/e\.key === "Escape" && \(this\.peek \|\| this\.open\.drawer\)\) \{ eat\(\);/.test(h), "an Escape that closes something is eaten: Foundry would release the token");
+  const outside = h.slice(h.indexOf("onOutside(e) {"), h.indexOf("onKey(e) {"));
+  ok(/!this\.peek && !this\.open\.drawer/.test(outside) && !/closeFinder|fs\.open = false/.test(outside), "a press off the rail closes a drawer or a peek, never the finder");
+  ok(/render\(\{ arrive = false \} = \{\}\) \{[\s\S]{0,700}this\.hoverToken\(null\)/.test(h) && /unmount\(\) \{[\s\S]{0,500}this\.hoverToken\(null\)/.test(h), "a token lit from a card is let go when the card is redrawn or the rail leaves");
+  ok(/tk\.visible && tk\._canHover/.test(h), "a card never lights a token its viewer cannot see");
+  /* an item in the hand */
+  const known = itemPeek(item("el", "Elixir of Life", "consumable", { quantity: 2, level: { value: 1 }, traits: { value: ["healing"] }, uses: { value: 1, max: 3 } }), { t });
+  ok(known.traits.length === 1 && known.lines.length === 2 && known.actions[0].id === "use", "an item peek: traits, what is left and its doses, Use first");
+  const hidden = itemPeek(item("x", "Elixir of Life", "consumable", { quantity: 1, level: { value: 9 }, traits: { value: ["healing"] }, identification: { unidentified: { name: "Unusual Vial" } } }, { isIdentified: false }), { t });
+  ok(hidden.name === "Unusual Vial" && hidden.traits.length === 0 && !/9/.test(hidden.from), "an unidentified item peeks under its unidentified name, with no level and no traits");
+  ok(/p\.kind === "item"/.test(h) && /HOVER_PEEKS = new Set\(\["spell", "item"\]\)/.test(h), "the item peek has its presses, and closes when the pointer leaves");
+  ok(!/data-item="[^"]*" title=/.test(V.ITEMS({ list: [{ id: "a", name: "Potion", qty: 1 }] }, t)), "an item card that peeks carries no tooltip under the peek");
+  ok(/\[data-readonly\] button:not\([^)]*\.gph-card\[data-item\]/.test(css), "an observer's item card still peeks, like a spell");
+  /* macros and ranks */
+  const mac = V.MACROS({ page: 2, slots: macroSlots([]) }, t);
+  ok(/data-row="page:-1"/.test(mac) && /data-row="page:1"/.test(mac) && /cyclePage/.test(h), "the Macros drawer steps Foundry's own hotbar pages");
+  ok(/renderHotbar[^\n]*this\.open\.drawer === "macros"[^\n]*this\.render\(\)/.test(h), "a page turned redraws the open drawer");
+  const ranks = V.RANKS({ ranks: [{ key: "f", cards: 1 }, { key: 1, cards: 3, slots: [2, 3] }] }, t);
+  ok(/1 spell</.test(ranks) && /3 spells</.test(ranks), "one spell is not \"1 spells\"");
+  ok(/aria-label="Close"/.test(V.DRAWER({ title: "Rest", body: "", close: t("GLRAIL.close") })), "a drawer's close press says Close");
+  ok(/drawer\(kind\) \{[\s\S]{0,120}close: t\("GLRAIL\.close"\)/.test(h), "the host names every drawer's close press");
+  ok(/onWheel\(e\) \{[\s\S]{0,400}TIMING\.wheelStep/.test(h), "the wheel turns one rank a gesture");
+  ok(/class="gph-tog[^>]*><span>/.test(V.ACTIONS({ toggles: [{ id: "a|b|c", label: "Aura", on: true }], list: [] }, t)) && /\.gph-tog > span \{[^}]*text-overflow: ellipsis/.test(css), "a squeezed toggle ends in an ellipsis, not mid-letter");
 });
 
 console.log(problems.length ? `\n${problems.length} problem(s):\n  ${problems.join("\n  ")}` : `\nall ${passed} checks passed`);

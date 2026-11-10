@@ -23,7 +23,8 @@
  *          | gm | hazard | gm-empty | stress | gm-horde   (default martial)
  *   &w=1920&h=1080   the stand-in screen (default: the window)
  *   &sidebar=0       collapse the sidebar (default open, 300px)
- *   &peek=strike|spell|action        open that peek
+ *   &peek=strike|spell|action|item   open that peek (item wants &tab=items)
+ *   &hp=-12      open the Hit Point field with that typed in it
  *   &tab=spells|actions|skills|items   the deck's tab
  *   &finder=1&q=tri&group=maneuvers   the skill finder, open
  *   &map=0|1|2   the MAP step   &turn=ignite   play the turn ignition
@@ -342,6 +343,18 @@ try {
     peek.classList.add('is-closing'); setTimeout(() => peek.remove(), 160);
     open.peek = null;
   }
+  /* the Hit Point field: what the host hands PF2e, applied to the model */
+  function editHp(b) {
+    return D.editMeter(b.closest('[data-meter]'), { label: t('GLRAIL.hp.field'), onCommit: (text) => {
+      const e = S.hpEntry(text); if (!e) return false;
+      const m = clone(model), hp = (m.vitals ?? m.creature ?? m.hazard).hp;
+      if (e.set != null) hp.value = Math.max(0, Math.min(hp.max, e.set));
+      else if (e.delta < 0) { const t0 = Math.min(hp.temp ?? 0, -e.delta); if (hp.temp != null) hp.temp -= t0; hp.value = Math.max(0, hp.value + e.delta + t0); }
+      else hp.value = Math.min(hp.max, hp.value + e.delta);
+      toast(e.set != null ? 'actor.update({ "system.attributes.hp.value": ' + hp.value + ' })' : 'actor.modifyTokenAttribute("attributes.hp", ' + e.delta + ', true)');
+      update(m); return true;
+    } });
+  }
   const deny = (el) => { el.classList.remove('is-denied'); void el.offsetWidth; el.classList.add('is-denied'); };
 
   const clone = (o) => structuredClone(o);
@@ -350,6 +363,7 @@ try {
     const d = b.dataset;
     if (d.act === 'fold') { model = { ...model, folded: !model.folded }; render(); return; }
     if (d.act === 'close') { if (fs.open) closeFinder(); else { open.drawer = null; render(); } return; }
+    if (d.act === 'hp') { editHp(b); return; }
     if (d.act === 'frame') { const p = host.querySelector('[data-plinth]'); D.framePlinth(p, model.plinth.frame, { onCommit: (f) => { model.plinth.frame = f; toast('ph.frame ← ' + JSON.stringify(f)); } }); return; }
     if (d.hero) { const n = +d.hero, m = clone(model); m.plinth.hero[0] = m.plinth.hero[0] === n ? n - 1 : n; update(m); return; }
     if (d.pip != null) { const m = clone(model), e2 = m.turnbar.economy; if (d.pip === 'r') e2.reaction = !e2.reaction; else { const i = +d.pip, left = e2.max - e2.spent; e2.spent = e2.max - (i < left ? i : i + 1); } update(m); return; }
@@ -377,7 +391,8 @@ try {
     if (d.act === 'peek-strike') { open.peek === 'strike' ? closePeek() : showPeek('strike', b); return; }
     if (d.check) { const mod = parseMod(b.querySelector('b, em:last-child')?.textContent); roll(b, mod, null, d.check.startsWith('skill:') ? 'actor.skills.' + d.check.slice(6) + '.roll({ event })' : 'actor.' + (d.check === 'perception' ? 'perception' : 'saves.' + d.check) + '.roll({ event })'); return; }
     if (d.toggle) { const m = clone(model); const g = m.deck.actions.toggles.find((x) => x.id === d.toggle); g.on = !g.on; model = m; render(); toast('actor.toggleRollOption(…)'); return; }
-    if (d.item) { const m = clone(model), it = m.deck.items.list.find((x) => x.id === d.item); if (!it.qty) return deny(b); it.qty -= 1; toast('consumable.consume()'); spend(it.cost); model = m; render(); return; }
+    if (d.row?.startsWith('page:')) { toast('ui.hotbar.cyclePage(' + d.row.slice(5) + ')'); return; }
+    if (d.item) { closePeek(); const m = clone(model), it = m.deck.items.list.find((x) => x.id === d.item); if (!it.qty) return deny(b); it.qty -= 1; toast('consumable.consume()'); spend(it.cost); model = m; render(); return; }
     if (d.action || d.stance) { open.peek === 'action' ? closePeek() : showPeek('action', b); return; }
     if (d.spell) { const c = b; D.castCard(c).then(() => { const m = clone(model); const card = m.deck.spells.cards.find((x) => x.id === d.spell); if (/^[1-9]$/.test(String(card.rank))) card.spent = true; model = m; render(); }); toast('entry.cast(spell, { rank })'); spend(+(b.dataset.cost ?? 0)); return; }
     if (d.pa) { toast(d.pa === 'cast' ? 'entry.cast(spell, { rank })' : d.pa === 'post' ? 'item.toMessage()' : d.pa); closePeek(); return; }
@@ -394,12 +409,12 @@ try {
   /* the hover peek: rest 140ms to open, leave for 250ms to close */
   let peekT = 0;
   host.addEventListener('pointerover', (e) => {
-    const c = e.target.closest('[data-spell]'); if (!c || fs.open) return;
-    clearTimeout(peekT); peekT = setTimeout(() => showPeek('spell', c), TIMING.peekOpen);
+    const c = e.target.closest('[data-spell], .gph-card[data-item]'); if (!c || fs.open) return;
+    clearTimeout(peekT); peekT = setTimeout(() => showPeek(c.dataset.spell ? 'spell' : 'item', c), TIMING.peekOpen);
   });
   host.addEventListener('pointerout', (e) => {
-    if (!e.target.closest('[data-spell], .gph-peek')) return;
-    clearTimeout(peekT); peekT = setTimeout(() => { if (!host.querySelector('.gph-peek:hover, [data-spell]:hover')) closePeek(); }, TIMING.peekClose);
+    if (!e.target.closest('[data-spell], .gph-card[data-item], .gph-peek')) return;
+    clearTimeout(peekT); peekT = setTimeout(() => { if (!host.querySelector('.gph-peek:hover, [data-spell]:hover, .gph-card[data-item]:hover')) closePeek(); }, TIMING.peekClose);
   });
   document.addEventListener('keydown', (e) => {
     const inField = e.target.closest?.('[data-find]');
@@ -434,6 +449,7 @@ try {
 
   render({ arrive: q.get('still') !== '1' });
   if (q.get('turn') === 'ignite') newTurn();
+  if (q.get('hp') != null) { const b = host.querySelector('[data-act="hp"]'); if (b) { editHp(b); const i = host.querySelector('.gph-hpin'); if (i) i.value = q.get('hp'); } }
   if (q.get('echo')) { const [sel, total, degree] = q.get('echo').split(','); const el = host.querySelector(sel); if (el) { D.echo(el, { total, degree: +degree, word: WORDS[+degree] }); echoed = el; } }
   const mo = q.get('moment');
   if (mo) {
