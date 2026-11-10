@@ -250,6 +250,11 @@ function makeClass() {
         r.media.replaceWith(i);
         r.media = i;
       }
+      // CORS, like the loader below: an anonymous-less fetch of S3 art leaves a
+      // cache entry with no Access-Control-Allow-Origin that the loader then trips on.
+      if (!/^(data|blob):/i.test(src)) r.media.crossOrigin = "anonymous";
+      const retry = this.#mods.art.corsRetryUrl(src);
+      r.media.onerror = retry ? () => { r.media.onerror = null; if (id === this.#loadId) r.media.src = retry; } : null;
       r.media.src = src;
       r.artName.textContent = this.#s.standee ? src : t("GLDIO.standee.art.default");
       r.artName.title = src;

@@ -27,6 +27,7 @@ import { artMarksOf, standeeMarks } from "../rules/creature.mjs";
 import { canViewMode } from "../integrations/bars.mjs";
 import { conditionsFor } from "../integrations/conditions.mjs";
 import { userColor } from "./util.mjs";
+import { loadCorsMedia } from "../render/art.mjs";
 
 export const DEFAULT_ART = "icons/svg/mystery-man.svg";
 
@@ -211,33 +212,16 @@ const VIDEO_RE = /\.(webm|mp4|m4v|ogv|mov)(\?|$)/i;
  * Load the map art as something three.js can upload: an <img>, or a still of
  * a video's first frame on a <canvas>. Resolves null when it will not load.
  */
-export function loadArt(src) {
-  if (!src) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    if (VIDEO_RE.test(src)) {
-      const v = document.createElement("video");
-      v.crossOrigin = "anonymous";
-      v.muted = true;
-      v.preload = "auto";
-      v.onloadeddata = () => {
-        try {
-          const c = document.createElement("canvas");
-          c.width = v.videoWidth; c.height = v.videoHeight;
-          c.getContext("2d").drawImage(v, 0, 0);
-          resolve(c);
-        } catch { resolve(null); }
-      };
-      v.onerror = () => resolve(null);
-      v.src = src;
-      return;
-    }
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.decoding = "async";
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
+export async function loadArt(src) {
+  if (!src) return null;
+  const el = await loadCorsMedia(src, { video: VIDEO_RE.test(src) });
+  if (!el || !(el.videoWidth > 0)) return el;
+  try {
+    const c = document.createElement("canvas");
+    c.width = el.videoWidth; c.height = el.videoHeight;
+    c.getContext("2d").drawImage(el, 0, 0);
+    return c;
+  } catch { return null; }
 }
 
 /* ───────────────────────────── paths ───────────────────────────── */

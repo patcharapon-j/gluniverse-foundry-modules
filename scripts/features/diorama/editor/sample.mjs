@@ -28,6 +28,7 @@ import { SUB } from "../constants.mjs";
 import { gridOf } from "../terrain/store.mjs";
 import { isMultiLevel, levelBackgroundSrc } from "../terrain/levels.mjs";
 import { warn } from "../../../core/const.mjs";
+import { loadCorsMedia } from "../render/art.mjs";
 
 /** Most canvas px per sub-cell per axis (16 per square: a stair tread is 4–8). */
 export const SAMPLE_PX = 8;
@@ -116,14 +117,7 @@ export async function loadBackground(src) {
     const el = getTexture?.(src)?.baseTexture?.resource?.source;
     if (drawable(el)) return el;
   } catch { /* not cached */ }
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.decoding = "async";
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
+  return loadCorsMedia(src, { video: false });
 }
 
 /** One reading per art + grid: the wand and Auto setup share it. */
