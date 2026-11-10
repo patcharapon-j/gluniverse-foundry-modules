@@ -239,16 +239,36 @@ export function travelTab(rail, from) {
   tabs.parentElement.querySelector(".gph-pane")?.classList.add("is-swapped");
 }
 
-/** A spell is cast: its card leaves the hand upward. Resolves when it has,
- *  so the host redraws the hand after, not under, the card. */
-export function castCard(card) {
+/** A spell is cast. Only a card that was its own resource — a prepared slot
+ *  (`leaves`) — leaves the hand upward; resolves when it has, so the host
+ *  redraws the hand after, not under, the card. Every other cast (a cantrip,
+ *  a focus spell, a spontaneous caster's) keeps its card: it is played — a
+ *  lift and a settle back into the fan — and stays pressable, since the hand
+ *  is not redrawn when nothing in it changed. */
+export function castCard(card, { leaves = false } = {}) {
   const held = card?.closest(".gph-held");
   if (!held) return Promise.resolve();
+  if (!leaves) {
+    held.classList.remove("is-played");
+    void held.offsetWidth;
+    held.classList.add("is-played");
+    const off = () => held.classList.remove("is-played");
+    held.addEventListener("animationend", off, { once: true });
+    setTimeout(off, token(held, "--gl-d-swift", 340) + 100);
+    return Promise.resolve();
+  }
   return new Promise((done) => {
     held.classList.add("is-cast");
     held.addEventListener("animationend", () => done(), { once: true });
     setTimeout(done, token(held, "--gl-d-glide", 540) + 100);
   });
+}
+
+/** A cast that left nothing to redraw (cancelled, or refused by PF2e) gives
+ *  its card back rather than leaving it invisible in the fan. */
+export function uncastCard(card) {
+  const held = card?.isConnected ? card.closest(".gph-held") : null;
+  held?.classList.remove("is-cast");
 }
 
 /** The finder's selection, redrawn on another chip, slides there from where

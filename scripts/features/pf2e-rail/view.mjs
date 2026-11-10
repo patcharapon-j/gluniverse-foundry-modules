@@ -585,41 +585,36 @@ export const PEEK = ({ name, from, traits = [], lines = [], text = "", actions =
 </div>`;
 
 /* ── the party seat ───────────────────────────────────────────────
-   A round portrait with its Hit Points bent round it, the stream kit's
-   geometry (110° to 300°). One continuous arc lit from its start to the
-   fraction left, red under a quarter; temporary Hit Points a thin outer arc
-   in info blue. A seat the viewer may only see LIMITED of carries no ring
-   and no numbers: the portrait, the name and what is visibly wrong. */
-export const SEAT_FROM = 110;
-export const SEAT_TO = 300;
-const RING = 64 / 184, TRING = 76 / 184, DISC = 52 / 184;
-const point = (c, r, deg) => { const a = (deg * Math.PI) / 180; return `${(c + r * Math.cos(a)).toFixed(2)} ${(c + r * Math.sin(a)).toFixed(2)}`; };
-const arc = (c, r, from, to) => `M${point(c, r, from)}A${r.toFixed(2)} ${r.toFixed(2)} 0 ${to - from > 180 ? 1 : 0} 1 ${point(c, r, to)}`;
-export const seatArcLen = (r) => (r * (SEAT_TO - SEAT_FROM) * Math.PI) / 180;
-
+   The plinth in miniature: the same art (the token ring's cut-out where the
+   token wears one, else the painting) under the same frame (the owner's
+   `ph.frame` zoom and offset), so a character reads the same in the party
+   as on their own rail, and a cut-out stands over its plate's top edge the
+   way it does there. The figure is the plinth's own markup scaled down
+   (`--gph-sk`), so every mask, fade and offset is the plinth's, never a
+   lookalike. Hit Points are a bar on the plate's foot, red under a quarter;
+   temporary Hit Points a thin info-blue line over it. A seat the viewer may
+   only see LIMITED of carries no bar and no numbers: the portrait, the name
+   and what is visibly wrong. Exploring, the seat says what the character is
+   doing, so the GM and the party read the marching order at a glance. */
 const seatSaid = (s, t) => [s.name,
   s.hp ? t("GLRAIL.seat.hp", { v: s.hp[0], max: s.hp[1] }) : "", s.temp ? t("GLRAIL.vitals.temp", { n: s.temp }) : "",
   s.ac != null ? t("GLRAIL.vitals.acSaid", { n: s.ac }) : "", s.hero ? t("GLRAIL.hero.count", { n: s.hero[0], max: s.hero[1] }) : "",
-  s.turn ? t("GLRAIL.seat.turn") : "", s.note ?? ""].filter(Boolean).join(", ");
+  s.turn ? t("GLRAIL.seat.turn") : "", s.note ?? "", s.explore ? t("GLRAIL.seat.exploring", { name: s.explore }) : ""].filter(Boolean).join(", ");
 
 export const SEAT = (s, t) => {
-  const size = s.size ?? 60, c = size / 2, d = DISC * size, r = RING * size, tr = TRING * size;
   const hpF = s.hp ? frac(s.hp[0], s.hp[1]) : 0, tF = s.hp && s.temp ? frac(s.temp, s.hp[1]) : 0;
-  const clip = `gphc-${esc(s.id ?? "x")}`;
+  const art = s.cutout || s.img;
   return `
 <div class="gph-seat${s.self ? " is-self" : ""}${s.turn ? " is-turn" : ""}"${s.id ? ` data-seat="${esc(s.id)}"` : ""}${s.state ? ` data-state="${s.state}"` : ""}${s.hp && hpState(...s.hp) ? ' data-low=""' : ""}
-  style="--gph-sz:${size}px;--gph-len:${seatArcLen(r).toFixed(2)};--gph-tlen:${seatArcLen(tr).toFixed(2)};--gph-f:${hpF.toFixed(4)};--gph-tf:${tF.toFixed(4)}" role="img" aria-label="${esc(seatSaid(s, t))}" data-name="${esc(s.name)}">
-  <svg class="gph-ring" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">
-    <defs><clipPath id="${clip}"><circle cx="${c}" cy="${c}" r="${d.toFixed(2)}"/></clipPath></defs>
-    <circle class="gph-well" cx="${c}" cy="${c}" r="${(d + 1.5).toFixed(2)}"/>
-    ${s.img ? `<image href="${esc(s.img)}" x="${(c - d).toFixed(2)}" y="${(c - d).toFixed(2)}" width="${(2 * d).toFixed(2)}" height="${(2 * d).toFixed(2)}" preserveAspectRatio="xMidYMin slice" clip-path="url(#${clip})"/>` : ""}
-    <circle class="gph-lip" cx="${c}" cy="${c}" r="${d.toFixed(2)}"/>
-    ${s.hp ? `<path class="gph-band" d="${arc(c, r, SEAT_FROM - 2, SEAT_TO + 2)}"/><path class="gph-arc" d="${arc(c, r, SEAT_FROM, SEAT_TO)}"/><path class="gph-tarc" d="${arc(c, tr, SEAT_FROM, SEAT_TO)}"/>` : ""}
-  </svg>
+  style="--gph-f:${hpF.toFixed(4)};--gph-tf:${tF.toFixed(4)}${s.frame ? `;${frameVars(s.frame)}` : ""}" role="img" aria-label="${esc(seatSaid(s, t))}" data-name="${esc(s.name)}">
+  <span class="gph-sfig${s.cutout ? " is-cut" : ""}" aria-hidden="true"><span class="gph-sfig-in">
+    <span class="gph-plate"></span>
+    <span class="gph-fig"><span class="gph-img"${art ? ` style="background-image:url('${esc(art)}')"` : ""}></span></span>
+  </span>${s.hp ? '<span class="gph-sbar"><i class="gph-sbar-hp"></i><i class="gph-sbar-tmp"></i></span>' : ""}</span>
   <span class="gph-sid">
-    <b class="gph-sname">${esc(s.name)}</b>
+    <span class="gph-srow"><b class="gph-sname">${esc(s.name)}</b>${s.hero ? `<span class="gph-shero" aria-hidden="true">${Array.from({ length: s.hero[1] }, (_, i) => `<i class="${i < s.hero[0] ? "on" : ""}"></i>`).join("")}</span>` : ""}</span>
     <span class="gph-ssub">${s.ac != null ? `<span class="gph-sac">${esc(t("GLRAIL.vitals.ac"))} <b>${s.ac}</b></span>` : ""}${s.note ? `<span class="gph-snote">${esc(s.note)}</span>` : s.hp ? `<span class="gph-shp"><b data-v>${s.hp[0]}</b>/${s.hp[1]}</span>` : ""}</span>
-    ${s.hero ? `<span class="gph-shero" aria-hidden="true">${Array.from({ length: s.hero[1] }, (_, i) => `<i class="${i < s.hero[0] ? "on" : ""}"></i>`).join("")}</span>` : ""}
+    ${s.explore ? `<span class="gph-sexp" title="${esc(s.explore)}">${esc(s.explore)}</span>` : ""}
   </span>
 </div>`;
 };
