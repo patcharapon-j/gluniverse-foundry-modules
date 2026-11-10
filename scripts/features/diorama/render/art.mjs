@@ -12,6 +12,7 @@
  */
 
 import { PALETTE, mix, withAlpha } from "../../../core/theme.mjs";
+import { warn } from "../../../core/const.mjs";
 
 /** Card texture height, px. */
 const CARD_PX = 512;
@@ -44,19 +45,84 @@ export function readable(c) {
 
 const VIDEO_RE = /\.(webm|mp4|m4v|ogv)(\?|#|$)/i;
 
+/**
+ * The cache-busted twin of a cross-origin URL, or null for a same-origin,
+ * data: or blob: one. Foundry's own texture loader retries a failed load with
+ * exactly this (`foundry.utils.getCacheBustURL`): an S3 / CDN image the
+ * browser first fetched WITHOUT CORS (an actor sheet's <img>, a chat card)
+ * sits in the HTTP cache with no Access-Control-Allow-Origin, and an
+ * anonymous CORS request served from that entry fails. A fresh query string
+ * misses the cache and gets a CORS response.
+ * @param {string} src
+ * @returns {string|null}
+ */
+export function corsRetryUrl(src) {
+  const s = String(src ?? "");
+  if (!s || /^(data|blob):/i.test(s)) return null;
+  try {
+    const bust = globalThis.foundry?.utils?.getCacheBustURL;
+    if (typeof bust === "function") return bust(s) || null;
+  } catch { /* fall through */ }
+  try {
+    const here = globalThis.location?.href;
+    const url = here ? new URL(s, here) : new URL(s);
+    if (here && url.origin === new URL(here).origin) return null;
+    url.searchParams.append("cors-retry", String(RETRY_STAMP));
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+const RETRY_STAMP = Date.now();
+
+/** True when the element can be drawn and read back (not tainted). */
+function cleanElement(el) {
+  try {
+    const c = canvas(1, 1);
+    const g = c.getContext("2d");
+    g.drawImage(el, 0, 0, 1, 1);
+    g.getImageData(0, 0, 1, 1);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Load an image or a video's first frame as a CORS-clean element, retrying once
+ * with the cache-busted URL (corsRetryUrl) when the first try fails or comes
+ * back tainted. Resolves null when neither works. Every Diorama loader that
+ * uploads art to WebGL goes through this.
+ * @param {string} src
+ * @param {{video?:boolean}} [o]  video: load the first frame of a video
+ * @returns {Promise<HTMLImageElement|HTMLVideoElement|null>}
+ */
+export async function loadCorsMedia(src, { video = VIDEO_RE.test(String(src ?? "")) } = {}) {
+  if (!src || !hasDom()) return null;
+  const once = (u) => (video ? loadVideoFrame(u) : loadImage(u))
+    .then((el) => (el && cleanElement(el) ? el : null)).catch(() => null);
+  const first = await once(String(src));
+  if (first) return first;
+  const retry = corsRetryUrl(src);
+  return retry ? once(retry) : null;
+}
+
 /** @type {Map<string, Promise<HTMLImageElement|HTMLCanvasElement|null>>} */
 const imageCache = new Map();
+/** URLs already warned about, so a retried failure is reported once. */
+const warned = new Set();
 
 /**
  * Load an image (or the first frame of a video) once per URL. Resolves to a
- * drawable that is NOT tainted, or null.
+ * drawable that is NOT tainted, or null. A failure is not remembered, so the
+ * next ask (a re-render, the GM fixing the bucket's CORS) tries again.
  */
 export function loadDrawable(url) {
   if (!url || !hasDom()) return Promise.resolve(null);
   const key = String(url);
   let p = imageCache.get(key);
   if (p) return p;
-  p = (VIDEO_RE.test(key) ? loadVideoFrame(key) : loadImage(key)).then((img) => {
+  p = loadCorsMedia(key).then((img) => {
     if (!img) return null;
     const w = img.naturalWidth || img.videoWidth || img.width;
     const h = img.naturalHeight || img.videoHeight || img.height;
@@ -65,7 +131,11 @@ export function loadDrawable(url) {
     const c = canvas(w * scale, h * scale);
     try { c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); } catch { return null; }
     return readable(c) ? c : null;
-  }).catch(() => null);
+  }).catch(() => null).then((c) => {
+    if (!c && imageCache.get(key) === p) imageCache.delete(key);
+    if (!c && !warned.has(key)) warned.add(key), warn(`Diorama: art "${key}" could not be loaded with CORS; drawing the fallback card. Check the storage bucket's CORS rules allow this Foundry origin.`);
+    return c;
+  });
   imageCache.set(key, p);
   return p;
 }
@@ -84,7 +154,7 @@ function loadImage(src) {
 function loadVideoFrame(src) {
   return new Promise((resolve) => {
     const v = document.createElement("video");
-    v.crossOrigin = "anonymous";
+    if (!/^(data|blob):/i.test(src)) v.crossOrigin = "anonymous";
     v.muted = true;
     v.preload = "auto";
     const done = (ok) => { v.onloadeddata = v.onerror = v.onseeked = null; resolve(ok ? v : null); };

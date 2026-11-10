@@ -36,6 +36,7 @@ import * as THREE from "./three.mjs";
 import { PALETTE, hexToRgbFloat } from "../../../core/theme.mjs";
 import { HEAD } from "./glsl.mjs";
 import { SUB } from "../constants.mjs";
+import { loadCorsMedia } from "./art.mjs";
 
 /** Decal drape: vertices per cell along each side, and the most along one side. */
 export const DRAPE_PER_CELL = 8;
@@ -250,24 +251,17 @@ function readableArt(img) {
 }
 
 /** Load tile art once per URL, no larger than `max` on its long side. null when it cannot be used. */
-function loadTileArt(url, max) {
-  if (!url || !hasDom()) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.decoding = "async";
-    if (!/^(data|blob):/i.test(url)) img.crossOrigin = "anonymous";
-    img.onload = () => {
-      const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-      if (!w || !h || !readableArt(img)) { resolve(null); return; }
-      if (Math.max(w, h) <= max) { resolve(img); return; }
-      const k = max / Math.max(w, h);
-      const cv = document.createElement("canvas");
-      cv.width = Math.max(1, Math.round(w * k)); cv.height = Math.max(1, Math.round(h * k));
-      try { cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height); resolve(cv); } catch { resolve(null); }
-    };
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
+async function loadTileArt(url, max) {
+  if (!url || !hasDom()) return null;
+  const img = await loadCorsMedia(url, { video: false });
+  if (!img) return null;
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  if (!w || !h || !readableArt(img)) return null;
+  if (Math.max(w, h) <= max) return img;
+  const k = max / Math.max(w, h);
+  const cv = document.createElement("canvas");
+  cv.width = Math.max(1, Math.round(w * k)); cv.height = Math.max(1, Math.round(h * k));
+  try { cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height); return cv; } catch { return null; }
 }
 
 const isVideoEl = (v) => typeof HTMLVideoElement !== "undefined" && v instanceof HTMLVideoElement;
