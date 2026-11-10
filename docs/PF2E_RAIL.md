@@ -88,7 +88,30 @@ the right edge of `#ui-middle`. While a rail is drawn it hides `#hotbar`
 player list `#players` (`ph.hidePlayers`; a kept list keeps the corner and
 the rail starts beside it), gives both back when it is not, and publishes the rail's top edge as
 `--gph-rail-top` on `body`. `/` opens the finder from the canvas only (never
-while somebody types); Escape closes a peek or a drawer.
+while somebody types).
+
+**Putting things away.** Escape closes a peek or a drawer and is *eaten* when
+it does: left to Foundry the same key also releases the controlled token, and
+on the GM's screen the rail with it. A press anywhere off the rail closes a
+drawer or a peek too. The finder is the exception and stays open through it,
+because targeting a token on the canvas is part of using it.
+
+**Tooltips.** The view states what a press is in `title` (it is pure, and the
+preview has nothing else). On Foundry the host moves every `title` to
+`data-tooltip-text` as markup lands (one MutationObserver on `#gph-host`), so
+they open as Foundry's own tooltips, above the press, in half the time.
+Always `-text`, never `data-tooltip`: that one is rendered as HTML, and item
+and macro names are whatever a player typed. A redraw puts away a tooltip
+standing on a node it is about to replace.
+
+**Cards stand for tokens.** Resting on a card in the GM's hand or on a party
+seat lights that token on the canvas, the way the combat tracker's rows do
+(`_onHoverIn`, only for a token the viewer can see); picking a creature the
+screen is not showing pans to it. A redraw and an unmount let a lit token go,
+since the card that lit it never hears the pointer leave.
+
+**The wheel** over the spell dial or the hand turns the rank, one step a
+gesture (`TIMING.wheelStep`). Nowhere else on the rail does it mean anything.
 
 Stored: the portrait frame in the actor flag `ph.frame`; the finder's pins in
 the user flag `ph.pins` (`{ [actorId]: slug[] }`); `ph.folded`, `ph.gmRail`,
@@ -115,9 +138,10 @@ No press opens a dialog of the HUD's own. Where PF2e shows its
 | Toggle / stance | `actor.toggleRollOption(domain, option, itemId, value)` |
 | Raise | `game.pf2e.actions.raiseAShield({ actors, event })` |
 | Reload (PF2e Ranged Combat) | `game.pf2eRangedCombat.reload()` — the module picks the weapon (it asks only when several could be loaded) and the actor (an open sheet, else the controlled token, else the user's character); the actions are spent on its `pf2eRangedCombatReload` hook |
-| Item | `item.consume()` |
+| Item | `item.consume()`; resting on the card peeks (text, what is left, Use and Post), as a spell does |
+| Hit Points (the numeral) | a field in the numeral's place: `−12` / `+5` → `actor.modifyTokenAttribute("attributes.hp", ±n, true)`, which is PF2e's `applyDamage` (temporary Hit Points first, dying after), as the token HUD's own field does; a bare number → `actor.update` clamped to 0…max. Owners only; the GM's creature panel has it too |
 | Rest | `game.pf2e.actions.restForTheNight` |
-| Macro | `macro.execute()` |
+| Macro | `macro.execute()`; the drawer's foot steps Foundry's own hotbar pages (`ui.hotbar.cyclePage`) |
 | Hero point | `actor.update({ "system.resources.heroPoints.value" })` |
 | Exploration activity | `actor.update({ "system.exploration": [id] })` (one at a time) |
 | Seat | GM: control that PC's token; player: open the sheet they can observe |

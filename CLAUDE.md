@@ -1905,6 +1905,14 @@ action slugs. **The echo obeys the message**: never on the stream login, never
 for a blind roll, never for a whisper the viewer is not in; the degree only
 under `seesTruth()` or PF2e's metagame results.
 
+**Three host habits that fail without a word.** A `title` becomes Foundry's
+tooltip as `data-tooltip-text`, never `data-tooltip`, which renders HTML (item
+and macro names are a player's). An Escape that closes a peek or a drawer is
+eaten, or Foundry also releases the token and the rail with it. And the Hit
+Point field reads a bare number as the new total, never as damage
+(`hpEntry`); a change goes through `modifyTokenAttribute`, PF2e's
+`applyDamage`.
+
 **Four PF2e facts only a live session showed.** Disposition is
 `token.document.disposition` (the placeable's reads as neutral for every
 token); an actor with no `flags.pf2e.kineticist.elementalBlast` gets PF2e's

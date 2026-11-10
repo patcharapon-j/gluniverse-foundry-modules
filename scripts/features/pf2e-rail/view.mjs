@@ -57,7 +57,7 @@ export const HANDLES = Object.freeze([
   "data-act", "data-hero", "data-pip", "data-check", "data-strike", "data-variant", "data-dmg", "data-crit",
   "data-toggle", "data-stance", "data-action", "data-spell", "data-rank-step", "data-tab", "data-item",
   "data-skill-action", "data-find", "data-explore", "data-drawer", "data-row",
-  "data-seat", "data-foe", "data-pa",
+  "data-seat", "data-foe", "data-pa", "data-reload",
 ]);
 
 const sign = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : "+0");
@@ -145,7 +145,12 @@ export const PLINTH = (p, t, { readonly = false } = {}) => {
    has no bloodied rule. Temporary Hit Points ride over the bar as an info
    line from its start. A loss leaves a chip trail: the lost length stays
    lit in red for a beat and then drains (`--gph-was`, driven by drive.mjs),
-   the one place on the rail a number is allowed to be felt. */
+   the one place on the rail a number is allowed to be felt.
+
+   The big numeral is a press: it opens a field in its own place (drive.mjs
+   `editMeter`) that takes what a table says out loud — "−12", "+5", or the
+   new total. Damage and healing typed there go through PF2e's own
+   `applyDamage`, so temporary Hit Points absorb first and dying follows. */
 export const hpState = (value, max) => (max > 0 && value / max <= LOW_HEALTH_AT ? "low" : "");
 
 export const METER = (kind, m, t, { big = true } = {}) => {
@@ -154,7 +159,7 @@ export const METER = (kind, m, t, { big = true } = {}) => {
   const name = t(kind === "sp" ? "GLRAIL.vitals.spName" : "GLRAIL.vitals.hpName");
   return `
 <div class="gph-meter${big ? "" : " is-small"}" data-meter="${kind}" data-max="${m.max}"${low ? ` data-state="${low}"` : ""} style="--gph-v:${v.toFixed(4)};--gph-was:${v.toFixed(4)};--gph-tmp:${tmp.toFixed(4)}">
-  ${big ? `<span class="gph-mn"><b data-v>${m.value}</b><s>/${m.max}</s>${SR(` ${name}`)}<em data-tmp${m.temp ? "" : " hidden"}>${esc(t("GLRAIL.vitals.temp", { n: m.temp ?? 0 }))}</em></span>` : ""}
+  ${big ? `<span class="gph-mn"><button type="button" class="gph-hpb" data-act="hp" title="${esc(t("GLRAIL.hp.title"))}"><b data-v>${m.value}</b><s>/${m.max}</s>${SR(` ${name}`)}</button><em data-tmp${m.temp ? "" : " hidden"}>${esc(t("GLRAIL.vitals.temp", { n: m.temp ?? 0 }))}</em></span>` : ""}
   <span class="gph-bar" role="meter" aria-label="${esc(name)}" aria-valuemin="0" aria-valuemax="${m.max}" aria-valuenow="${m.value}"${big ? "" : ` title="${esc(`${name} ${m.value}/${m.max}`)}"`}>
     <i class="gph-chip"></i><i class="gph-fill"></i><i class="gph-half"></i><i class="gph-tmp"></i></span>
   ${big ? "" : `<span class="gph-mk" aria-hidden="true">${esc(t(kind === "sp" ? "GLRAIL.vitals.sp" : "GLRAIL.vitals.hp"))}</span><span class="gph-ms" aria-hidden="true"><b data-v>${m.value}</b></span>`}
@@ -207,7 +212,7 @@ export const TURNBAR = (tb, t) => {
   if (tb.mode === "exploration") return `
 <div class="gph-turnbar is-explore" data-turnbar>
   <span class="gph-tb-k">${esc(t("GLRAIL.turnbar.exploring"))}</span>
-  <span class="gph-tb-acts">${(tb.activities ?? []).filter((a) => a.on).slice(0, 1).map((a) => `<button type="button" class="gph-tog on" data-explore="${esc(a.id)}" aria-pressed="true">${esc(a.name)}</button>`).join("") || `<span class="gph-none">${esc(t("GLRAIL.turnbar.idle"))}</span>`}</span>
+  <span class="gph-tb-acts">${(tb.activities ?? []).filter((a) => a.on).slice(0, 1).map((a) => `<button type="button" class="gph-tog on" data-explore="${esc(a.id)}" aria-pressed="true"><span>${esc(a.name)}</span></button>`).join("") || `<span class="gph-none">${esc(t("GLRAIL.turnbar.idle"))}</span>`}</span>
   ${(() => { const extra = (tb.activities ?? []).filter((a) => a.on).length - 1; return `<button type="button" class="gph-tb-more" data-act="explore" aria-label="${esc(t("GLRAIL.turnbar.chooseActivity"))}">${extra > 0 ? `<b>+${extra}</b>` : ""}${ICON.more}</button>`; })()}
 </div>`;
   const e = tb.economy ?? { max: 3, spent: 0, reaction: true };
@@ -349,7 +354,7 @@ const ACTION_ROW = (a, t) => {
 
 export const ACTIONS = ({ toggles = [], list = [] }, t) => `
   <div class="gph-actpane${toggles.length ? " has-toggles" : ""}">
-    ${toggles.length ? `<div class="gph-togs">${toggles.map((g) => `<button type="button" class="gph-tog${g.on ? " on" : ""}" data-toggle="${esc(g.id)}" aria-pressed="${!!g.on}" title="${esc(g.label)}">${esc(g.label)}</button>`).join("")}</div>` : ""}
+    ${toggles.length ? `<div class="gph-togs">${toggles.map((g) => `<button type="button" class="gph-tog${g.on ? " on" : ""}" data-toggle="${esc(g.id)}" aria-pressed="${!!g.on}" title="${esc(g.label)}"><span>${esc(g.label)}</span></button>`).join("")}</div>` : ""}
     <div class="gph-arows">${list.length ? list.map((a) => ACTION_ROW(a, t)).join("") : `<span class="gph-none">${esc(t("GLRAIL.actions.none"))}</span>`}</div>
   </div>`;
 
@@ -382,10 +387,11 @@ export const SKILLTAB = (s, t) => `
 /* Items: what is reached for in a fight, held as a hand of the same compact
    card the spells are — the item's own painting, what is left of it on the
    pennant where a spell carries its rank, the action cost top right. A
-   press uses it through PF2e. */
+   press uses it through PF2e; resting on it peeks, as a spell does, because
+   a potion drunk by a slip of the pointer is gone. */
 const ITEM_CARD = (i, t) => {
   const costSaid = i.cost != null ? t(costKey(i.cost), { cost: i.cost }) : "";
-  return `<button type="button" class="gph-card is-item${i.qty === 0 ? " is-spent" : ""}" data-item="${esc(i.id)}" title="${esc(i.name)}"${/^[123]$/.test(String(i.cost)) ? ` data-cost="${i.cost}"` : ""}
+  return `<button type="button" class="gph-card is-item${i.qty === 0 ? " is-spent" : ""}" data-item="${esc(i.id)}"${/^[123]$/.test(String(i.cost)) ? ` data-cost="${i.cost}"` : ""}
     aria-label="${esc([i.name, costSaid, i.qty != null ? t("GLRAIL.items.left", { n: i.qty }) : ""].filter(Boolean).join(", "))}">
     <span class="gph-art"${i.img ? ` style="background-image:url('${esc(i.img)}')"` : ""}></span>
     ${i.qty != null ? `<span class="gph-pen" aria-hidden="true">×${i.qty}</span>` : ""}
@@ -525,9 +531,9 @@ export const FINDER = (f, t) => {
    A drawer is a plate that rises above the rail (placeDrawer). One at a
    time. Rows: a name, what it says about itself, and the number at the
    right edge, where the eye goes down a column of numbers. */
-export const DRAWER = ({ title, note, body, wide }) => `
+export const DRAWER = ({ title, note, body, wide, close = "" }) => `
 <section class="gph-drawer${wide ? " is-wide" : ""}" role="dialog" aria-label="${esc(title)}">
-  <header><b>${esc(title)}</b>${note ? `<span>${note}</span>` : ""}<button type="button" class="gph-x" data-act="close" aria-label="${esc(title)}">${ICON.close}</button></header>
+  <header><b>${esc(title)}</b>${note ? `<span>${note}</span>` : ""}<button type="button" class="gph-x" data-act="close" aria-label="${esc(close || title)}">${ICON.close}</button></header>
   <div class="gph-dbody">${body}</div>
 </section>`;
 
@@ -550,12 +556,12 @@ export const MACROS = ({ page, slots }, t) => `
     <span class="gph-mk">${(i + 1) % 10}</span>${m.img ? `<img src="${esc(m.img)}" alt="">` : ""}<b>${esc(m.name)}</b></button>` : `
   <span class="gph-mac is-empty"><span class="gph-mk">${(i + 1) % 10}</span></span>`).join("")}
 </div>
-<p class="gph-dnote">${esc(t("GLRAIL.macros.page", { n: page }))}</p>`;
+<p class="gph-dnote gph-pager"><button type="button" class="gph-step" data-row="page:-1" aria-label="${esc(t("GLRAIL.macros.prev"))}">${ICON.prev}</button><b>${esc(t("GLRAIL.macros.pageN", { n: page }))}</b><button type="button" class="gph-step" data-row="page:1" aria-label="${esc(t("GLRAIL.macros.next"))}">${ICON.next}</button><span>${esc(t("GLRAIL.macros.page"))}</span></p>`;
 
 /** The spell-rank picker the dial's numeral opens. */
 export const RANKS = (h, t) => DLIST({
   rows: h.ranks.map((r) => ({
-    key: `rank:${r.key}`, act: true, name: rankName(r.key, t), meta: t("GLRAIL.rank.cardsN", { n: r.cards }),
+    key: `rank:${r.key}`, act: true, name: rankName(r.key, t), meta: t(r.cards === 1 ? "GLRAIL.rank.cards1" : "GLRAIL.rank.cardsN", { n: r.cards }),
     n: r.key === "f" && h.focus ? `${h.focus[0]}/${h.focus[1]}` : r.slots ? `${r.slots[0]}/${r.slots[1]}` : null,
     spent: r.slots ? r.slots[0] === 0 : false,
   })),

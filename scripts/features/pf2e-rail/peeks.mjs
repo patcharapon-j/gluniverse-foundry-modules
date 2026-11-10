@@ -15,7 +15,7 @@ import { escapeHTML as esc } from "../../core/util.mjs";
 import { costOf, spellCost } from "./read.mjs";
 
 export const PEEK_PRESSES = Object.freeze(["cast", "use", "post"]);
-export const ROW_KEYS = Object.freeze(["rest", "macro", "i", "foe", "rank", "explore", "strike"]);
+export const ROW_KEYS = Object.freeze(["rest", "macro", "page", "i", "foe", "rank", "explore", "strike"]);
 
 const list = (v) => (Array.isArray(v) ? v : v ? Array.from(v) : []);
 const traitLabels = (traits, labels = {}, loc = (k) => k) => list(traits).map((x) => (typeof x === "string" ? loc(labels[x] ?? x) : x?.label ?? x?.name ?? "")).filter(Boolean);
@@ -61,10 +61,27 @@ export function actionPeek(item, { t, text = "" }) {
   };
 }
 
-/* ── drawer bodies (row models for V.DLIST) ─────────────────────── */
-
 const num = (v, d = null) => (v === null || v === undefined || v === "" || !Number.isFinite(+v) ? d : +v);
 const nameOf = (item) => (item?.isIdentified === false ? item.system?.identification?.unidentified?.name ?? item.name : item?.name ?? "");
+
+/** A consumable in the hand: what it is and what is left of it, its text, and
+ *  Use (the card's own press) and Post. An unidentified one says only what
+ *  PF2e lets its holder read: no level and no traits. */
+export function itemPeek(item, { t, text = "" }) {
+  const known = item.isIdentified !== false;
+  const level = num(item.system?.level?.value);
+  const qty = num(item.system?.quantity, 1), uses = item.system?.uses;
+  return {
+    name: nameOf(item),
+    from: esc(known && level != null ? t("GLRAIL.peek.itemN", { n: level }) : t("GLRAIL.peek.item")),
+    traits: known ? list(item.system?.traits?.value).map((x) => String(x)) : [],
+    lines: [[t("GLRAIL.peek.left"), `×${qty}`], ...(num(uses?.max, 0) > 1 ? [[t("GLRAIL.peek.uses"), `${num(uses.value, 0)}/${uses.max}`]] : [])],
+    text,
+    actions: [{ id: "use", label: t("GLRAIL.peek.use"), primary: true }, { id: "post", label: t("GLRAIL.peek.post") }],
+  };
+}
+
+/* ── drawer bodies (row models for V.DLIST) ─────────────────────── */
 
 /** The inventory: consumables to use, then what is worn and held. */
 export function inventoryRows(actor, t) {

@@ -65,6 +65,46 @@ export function setMeter(el, m) {
   el.querySelector(".gph-bar")?.setAttribute("aria-valuenow", m.value);
 }
 
+/** Open the Hit Point field in the numeral's own place. Enter hands what was
+ *  typed to `onCommit`, which answers false to refuse it (the field shakes
+ *  and keeps the text); Escape, an empty Enter or leaving the field puts it
+ *  away. The numeral stays in the DOM under it, so a value driven meanwhile
+ *  is the one shown when the field closes. */
+export function editMeter(meter, { label = "", onCommit } = {}) {
+  const mn = meter?.querySelector(".gph-mn"), press = mn?.querySelector(".gph-hpb");
+  if (!mn || !press || mn.querySelector(".gph-hpin")) return null;
+  const input = document.createElement("input");
+  input.className = "gph-hpin";
+  input.type = "text";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.maxLength = 7;
+  input.placeholder = press.querySelector("[data-v]")?.textContent ?? "";
+  if (label) input.setAttribute("aria-label", label);
+  let live = true;
+  const close = (refocus = false) => {
+    if (!live) return;
+    live = false;
+    mn.removeAttribute("data-editing");
+    input.remove();
+    if (refocus) press.focus?.({ preventScroll: true });
+  };
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Escape") { e.preventDefault(); close(true); return; }
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (!input.value.trim()) { close(true); return; }
+    if (onCommit?.(input.value) === false) { input.classList.remove("is-denied"); void input.offsetWidth; input.classList.add("is-denied"); input.select(); }
+    else close(true);
+  });
+  input.addEventListener("blur", () => close());
+  mn.setAttribute("data-editing", "");
+  mn.prepend(input);
+  input.focus({ preventScroll: true });
+  return close;
+}
+
 /** Drive the Hero Point gems. Lighting one is an event, so the gem that
  *  changes plays its landing. */
 export function setHero(rail, cur) {

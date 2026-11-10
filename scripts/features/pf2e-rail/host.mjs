@@ -18,9 +18,13 @@
  *   raise shield game.pf2e.actions.raiseAShield({ actors })
  *   reload       game.pf2eRangedCombat.reload() (PF2e Ranged Combat, when it runs)
  *   rest         game.pf2e.actions.restForTheNight({ actors })
+ *   hit points   actor.modifyTokenAttribute("attributes.hp", ±n, true) — PF2e's
+ *                applyDamage, as the token HUD's own field does; a typed total
+ *                is actor.update
  *
  * No roll dialog of its own, and nothing written but what those calls write,
- * the Hero Points, the exploration activity, and the `ph.` keys (settings.mjs).
+ * the Hero Points, the Hit Points typed into their field, the exploration
+ * activity, and the `ph.` keys (settings.mjs).
  * Every press the view can draw is in presses.mjs; the check tool holds the
  * two to each other, and `onClick` below answers each.
  */
@@ -36,7 +40,7 @@ import { costOf, readGM, readPlayer, SKILLS, withSkills } from "./read.mjs";
 import { Turn, economyOf, turnKey, upNext } from "./turn.mjs";
 import { answers, echoOf } from "./echo.mjs";
 import { combatOf, isTurnOf, subjectOf } from "./subject.mjs";
-import { actionPeek, effectRows, inventoryRows, macroSlots, spellPeek, strikePeek } from "./peeks.mjs";
+import { actionPeek, effectRows, inventoryRows, itemPeek, macroSlots, spellPeek, strikePeek } from "./peeks.mjs";
 import { FLAGS, SETTINGS, setting } from "./settings.mjs";
 import { clearKnowledgeCache, knownStat } from "../pf2e-odds/knowledge.mjs";
 import { nameFor, seesTruth } from "../pf2e-odds/view.mjs";
@@ -59,6 +63,12 @@ const isReroll = (m) => !!(m?.flags?.pf2e?.context?.isReroll || m?.rolls?.[0]?.o
 const safe = async (fn) => { try { return await fn(); } catch { return null; } };
 const range = (r) => (r && Number.isFinite(r.lo) && Number.isFinite(r.hi) ? (r.lo === r.hi ? r.lo : { lo: r.lo, hi: r.hi }) : null);
 const WORDS = () => [0, 1, 2, 3].map((i) => t(`GLRAIL.degree.${i}`));
+/* The cards that peek while the pointer rests on them, and the peeks that
+   close when it leaves. */
+const HOVER_CARD = "[data-spell], .gph-card[data-item]";
+const HOVER_PEEKS = new Set(["spell", "item"]);
+/* A card or a seat that stands for a token on the canvas. */
+const TOKEN_CARD = "[data-foe], [data-seat]";
 
 /** The truth about one defence, read off the actor (GMs, and allies). */
 function trueStat(a, stat) {
@@ -91,6 +101,9 @@ export class RailHost {
     this.gen = 0;
     this.raf = 0;
     this.peekT = 0;
+    /* the token a hovered card or seat has lit on the canvas */
+    this.hovered = null;
+    this.wheelAt = 0;
     this.light = new RailLight();
   }
 
@@ -108,8 +121,15 @@ export class RailHost {
     el.addEventListener("contextmenu", (e) => this.onContext(e));
     el.addEventListener("pointerover", (e) => this.onOver(e));
     el.addEventListener("pointerout", (e) => this.onOut(e));
+    el.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
+    /* Foundry's tooltips open above the press, clear of the rail. */
+    el.dataset.tooltipDirection = "UP";
+    this.tipObs = new MutationObserver(() => this.tips());
+    this.tipObs.observe(el, { childList: true, subtree: true });
     this.keyH = (e) => this.onKey(e);
     document.addEventListener("keydown", this.keyH, true);
+    this.downH = (e) => this.onOutside(e);
+    document.addEventListener("pointerdown", this.downH, true);
     this.resizeH = () => { this.place(); this.publishEdge(); };
     window.addEventListener("resize", this.resizeH);
     this.wire();
@@ -122,7 +142,10 @@ export class RailHost {
     for (const [hook, id] of this.hooks) Hooks.off(hook, id);
     this.hooks = [];
     document.removeEventListener("keydown", this.keyH, true);
+    document.removeEventListener("pointerdown", this.downH, true);
     window.removeEventListener("resize", this.resizeH);
+    this.tipObs?.disconnect();
+    this.hoverToken(null);
     this.light.dispose();
     this.light = new RailLight();
     this.el?.remove();
@@ -149,7 +172,7 @@ export class RailHost {
     this.on("updateUser", (user, change) => { if (user.id === game.user.id && ("character" in change || "flags" in change)) this.schedule(); });
     this.on("createChatMessage", (m) => this.onMessage(m));
     this.on("pf2eRangedCombatReload", (actor, weapon) => this.onReloaded(actor, weapon));
-    this.on("renderHotbar", () => this.dock());
+    this.on("renderHotbar", () => { this.dock(); if (this.open.drawer === "macros" && this.model) this.render(); });
     this.on("renderPlayers", () => this.dock());
     this.on("collapseSidebar", () => requestAnimationFrame(() => { this.place(); this.publishEdge(); }));
     /* What the party knows (PF2e Odds' ledger, a Creaturedex reveal) moves the
@@ -367,6 +390,7 @@ export class RailHost {
 
   clear() {
     this.model = this.prev = null; this.subjectKey = null; this.subj = null;
+    this.hoverToken(null);
     if (this.el) this.el.innerHTML = "";
     this.dock();
     this.publishEdge();
@@ -391,8 +415,28 @@ export class RailHost {
 
   get root() { return this.el?.firstElementChild ?? null; }
 
+  /** The view states what a press is in `title`, which a browser shows
+   *  after a second and in its own chrome. On Foundry they are Foundry's
+   *  tooltips: half the wait, and drawn like every other tooltip on the
+   *  screen. `data-tooltip-text` is plain text, never markup. */
+  tips() {
+    for (const n of this.el?.querySelectorAll("[title]") ?? []) {
+      const s = n.getAttribute("title");
+      n.removeAttribute("title");
+      if (!s) continue;
+      n.dataset.tooltipText = s;
+      if (!n.hasAttribute("aria-label") && !n.textContent.trim()) n.setAttribute("aria-label", s);
+    }
+  }
+
   render({ arrive = false } = {}) {
     if (!this.model || !this.el) return;
+    /* The press a tooltip stands on is about to be replaced, and so is the
+       card that lit a token: neither would ever hear the pointer leave. */
+    if (this.el.contains(game.tooltip?.element ?? null)) game.tooltip.deactivate();
+    /* …and one still waiting to open would open on a node no longer drawn */
+    else if (this.el.querySelector("[data-tooltip-text]:hover")) game.tooltip?.clearPending?.();
+    this.hoverToken(null);
     this.el.innerHTML = V.RAIL(this.compose(), t);
     const root = this.root;
     this.light.attach(root);
@@ -417,6 +461,11 @@ export class RailHost {
   /* ── drawers ────────────────────────────────────────────────── */
 
   drawer(kind) {
+    const d = this.drawerOf(kind);
+    return d ? { ...d, close: t("GLRAIL.close") } : null;
+  }
+
+  drawerOf(kind) {
     const actor = this.subj?.actor, m = this.model;
     if (kind === "rest") return { title: t("GLRAIL.drawer.rest"), body: V.REST(t) };
     if (kind === "macros") {
@@ -499,6 +548,8 @@ export class RailHost {
     root.insertAdjacentHTML("beforeend", V.PEEK(model, t));
     const peek = root.querySelector(".gph-peek");
     (anchor.closest(".gph-held") ?? anchor.closest(".gph-row") ?? anchor).classList.add("is-peek");
+    /* a peek says everything its press's tooltip would */
+    if (anchor.contains(game.tooltip?.element ?? null)) game.tooltip.deactivate();
     D.placePeek(root, anchor, peek);
     this.peek = { ...meta, model };
   }
@@ -541,6 +592,14 @@ export class RailHost {
     const text = await this.enrich(ref.spell.description ?? ref.spell.system?.description?.value, ref.spell);
     if (!card.isConnected) return;
     this.showPeek(spellPeek(ref.spell, { t, rank: ref.key, entryName: ref.entry?.name, dc: ref.entry?.statistic?.dc?.value ?? null, text }), card, { kind: "spell", id: card.dataset.spell, anchor: `[data-spell="${CSS.escape(card.dataset.spell)}"]` });
+  }
+
+  async peekItem(card) {
+    const item = this.subj?.actor?.items?.get(card.dataset.item);
+    if (!item) return;
+    const text = await this.enrich(item.description ?? item.system?.description?.value, item);
+    if (!card.isConnected) return;
+    this.showPeek(itemPeek(item, { t, text }), card, { kind: "item", id: item.id, anchor: `.gph-card[data-item="${CSS.escape(item.id)}"]` });
   }
 
   /* ── presses ────────────────────────────────────────────────── */
@@ -647,6 +706,7 @@ export class RailHost {
       if (d.act === "fold") { await game.settings.set(SUITE_ID, SETTINGS.folded, !m.folded); return; }
       if (d.act === "close") { if (this.fs.open) this.closeFinder(); else { this.open.drawer = null; this.render(); } return; }
       if (d.act === "frame") return this.frame();
+      if (d.act === "hp") return this.editHp(b);
       if (d.hero) { const n = +d.hero, cur = m.plinth.hero?.[0] ?? 0; return actor.update({ "system.resources.heroPoints.value": cur === n ? n - 1 : n }); }
       if (d.pip != null) { const turn = this.turnOf(actor), tb = m.turnbar; turn.pip(d.pip, tb.economy.max); return this.update({ ...m, turnbar: { ...tb, economy: turn.economy(tb.economy) } }); }
       if (d.explore) return this.explore(d.explore);
@@ -676,7 +736,7 @@ export class RailHost {
       if (d.check) { this.expect(b); return this.check(d.check, e); }
       if (d.toggle) { const [domain, option, itemId] = d.toggle.split("|"); const g = m.deck?.actions?.toggles?.find((x) => x.id === d.toggle); return actor.toggleRollOption(domain, option, itemId || null, !g?.on); }
       if (d.reload) return this.reload(d.reload, b);
-      if (d.item) { const it = actor.items.get(d.item); if (!it || !(it.system?.quantity > 0)) return this.deny(b); return it.consume(); }
+      if (d.item) { const it = actor.items.get(d.item); if (!it || !(it.system?.quantity > 0)) return this.deny(b); if (this.peek?.kind === "item") this.closePeek(); return it.consume(); }
       if (d.action || d.stance) { const id = d.action ?? d.stance; return this.peek?.kind === "action" && this.peek.id === id ? this.closePeek() : this.peekAction(b); }
       if (d.spell) return this.cast(d.spell, b, e);
       if (d.pa) return this.pressPeek(d.pa, e);
@@ -763,6 +823,12 @@ export class RailHost {
       if (pa === "use") { const ctx = this.spendCtx(); await game.pf2e.rollItemMacro(item.uuid, event); return this.spend(costOf(item), false, ctx); }
       if (pa === "post") return item?.toMessage(event);
     }
+    if (p.kind === "item") {
+      const item = actor.items.get(p.id);
+      this.closePeek();
+      if (pa === "use") return item && item.system?.quantity > 0 ? item.consume() : null;
+      if (pa === "post") return item?.toMessage(event);
+    }
     if (p.kind === "variant" && pa.startsWith("variant:")) {
       const button = this.root?.querySelector(p.anchor);
       this.closePeek();
@@ -778,6 +844,8 @@ export class RailHost {
     if (kind === "rank") { this.viewOf(actor).rank = /^\d+$/.test(id) ? +id : id; this.open.drawer = null; return this.schedule(); }
     if (kind === "rest") { this.open.drawer = null; this.render(); return game.pf2e.actions.restForTheNight({ actors: [actor] }); }
     if (kind === "macro") return game.macros.get(id)?.execute();
+    /* Foundry's own hotbar pages; its render hook redraws the drawer. */
+    if (kind === "page") return ui.hotbar?.cyclePage?.(+id);
     if (kind === "foe") return this.controlToken(id);
     if (kind === "explore") { this.open.drawer = null; return this.explore(id); }
     if (kind === "strike") { const s = this.model?.strikes?.list?.find((x) => x.id === id); this.open.drawer = null; this.render(); const ctx = this.spendCtx(); await this.strike(id, "attack", this.model?.turnbar?.map ?? 0, event); return s ? this.spend(1, true, ctx) : null; }
@@ -801,15 +869,63 @@ export class RailHost {
   }
 
   controlToken(id) {
-    const tk = canvas?.tokens?.get(id);
     this.open.drawer = null;
-    return tk?.control({ releaseOthers: true });
+    return this.pick(canvas?.tokens?.get(id));
+  }
+
+  /** Take a token in hand from its card. One the screen is not showing is
+   *  brought into view, since the card was the only way to find it. */
+  pick(tk) {
+    if (!tk) return;
+    tk.control({ releaseOthers: true });
+    const c = tk.center, at = c ? canvas.clientCoordinatesFromCanvas?.(c) : null;
+    const mid = document.getElementById("ui-middle")?.getBoundingClientRect?.();
+    const box = mid?.width ? mid : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+    const rail = this.root?.querySelector(".gph-rail")?.getBoundingClientRect?.();
+    if (at && (at.x < box.left || at.x > box.right || at.y < box.top || at.y > (rail?.top ?? box.bottom))) canvas.animatePan({ x: c.x, y: c.y });
+  }
+
+  /** A card in the GM's hand and a party seat stand for a token: resting on
+   *  one lights that token on the canvas, as the combat tracker's rows do. */
+  hoverToken(el, event = { buttons: 0 }) {
+    let tk = null;
+    if (el && canvas?.ready) tk = (el.dataset.foe ? canvas.tokens?.get(el.dataset.foe) : game.actors?.get(el.dataset.seat)?.getActiveTokens?.()[0]) ?? null;
+    if (tk && !(tk.visible && tk._canHover?.(game.user, event) !== false)) tk = null;
+    if (tk === this.hovered) return;
+    const was = this.hovered;
+    this.hovered = tk;
+    if (was && !was.destroyed) was._onHoverOut?.(event);
+    if (tk && !tk.controlled) tk._onHoverIn?.(event, { hoverOutOthers: true });
+  }
+
+  /** The Hit Point numeral opens its field. What is typed goes the way the
+   *  token HUD's own field goes: a change through PF2e's `applyDamage`
+   *  (temporary Hit Points first, dying and wounded after), a total as a
+   *  plain update. Refused text shakes the field and stays. */
+  editHp(b) {
+    const actor = this.subj?.actor, meter = b.closest("[data-meter]");
+    if (!actor?.isOwner || !meter) return;
+    D.editMeter(meter, {
+      label: t("GLRAIL.hp.field"),
+      onCommit: (text) => {
+        const e = S.hpEntry(text);
+        if (!e) return false;
+        this.applyHp(actor, e).catch((err) => { warn("PF2e HUD | hit points", err); ui.notifications?.warn?.(err?.message ?? String(err)); });
+        return true;
+      },
+    });
+  }
+
+  async applyHp(actor, e) {
+    if (e.delta != null) return e.delta ? actor.modifyTokenAttribute("attributes.hp", e.delta, true, true) : null;
+    const max = Number(actor.system?.attributes?.hp?.max);
+    return actor.update({ "system.attributes.hp.value": Math.max(0, Number.isFinite(max) && max > 0 ? Math.min(max, e.set) : e.set) });
   }
 
   pressSeat(id) {
     const a = game.actors.get(id);
     if (!a) return;
-    if (game.user.isGM) { const tk = a.getActiveTokens?.()[0]; if (tk) return tk.control({ releaseOthers: true }); }
+    if (game.user.isGM) { const tk = a.getActiveTokens?.()[0]; if (tk) return this.pick(tk); }
     if (a.testUserPermission(game.user, "OBSERVER")) return a.sheet?.render(true);
   }
 
@@ -837,16 +953,43 @@ export class RailHost {
   }
 
   onOver(e) {
-    const c = e.target.closest("[data-spell]");
+    const tc = e.target.closest(TOKEN_CARD);
+    if (tc) this.hoverToken(tc, e);
+    const c = e.target.closest(HOVER_CARD);
     if (!c || this.fs.open) return;
     clearTimeout(this.peekT);
-    this.peekT = setTimeout(() => this.peekSpell(c), TIMING.peekOpen);
+    this.peekT = setTimeout(() => (c.dataset.spell ? this.peekSpell(c) : this.peekItem(c)), TIMING.peekOpen);
   }
 
   onOut(e) {
-    if (!e.target.closest("[data-spell], .gph-peek")) return;
+    if (e.target.closest(TOKEN_CARD) && !e.relatedTarget?.closest?.(TOKEN_CARD)) this.hoverToken(null, e);
+    if (!e.target.closest(`${HOVER_CARD}, .gph-peek`)) return;
     clearTimeout(this.peekT);
-    this.peekT = setTimeout(() => { if (this.peek?.kind === "spell" && !this.el?.querySelector(".gph-peek:hover, [data-spell]:hover")) this.closePeek(); }, TIMING.peekClose);
+    this.peekT = setTimeout(() => { if (HOVER_PEEKS.has(this.peek?.kind) && !this.el?.querySelector(`.gph-peek:hover, :is(${HOVER_CARD}):hover`)) this.closePeek(); }, TIMING.peekClose);
+  }
+
+  /** The wheel over the spell dial or the hand turns the rank, one step a
+   *  gesture. Nowhere else on the rail does the wheel mean anything. */
+  onWheel(e) {
+    if (!e.target.closest?.(".gph-dial, .gph-deck[data-tab='spells'] .gph-fan") || !this.model?.deck?.spells || this.fs.open) return;
+    e.preventDefault();
+    if (!e.deltaY) return;
+    /* A gesture is a run of events with no gap of wheelStep in it: every
+       event extends it, and only the first one steps. */
+    const now = Date.now(), quiet = now - this.wheelAt >= TIMING.wheelStep;
+    this.wheelAt = now;
+    if (!quiet) return;
+    this.closePeek();
+    this.stepRank(e.deltaY > 0 ? 1 : -1);
+  }
+
+  /** A press anywhere off the rail puts a drawer or a peek away. The finder
+   *  stays: targeting a token on the canvas is part of using it. */
+  onOutside(e) {
+    if (!this.root || (!this.peek && !this.open.drawer)) return;
+    if (e.target?.closest?.("#gph-host :is(.gph-rail, .gph-stack, .gph-drawer, .gph-peek, .gph-finder)")) return;
+    this.closePeek();
+    if (this.open.drawer) { this.open.drawer = null; this.render(); }
   }
 
   onKey(e) {
@@ -875,7 +1018,9 @@ export class RailHost {
     /* "/" opens the finder only from the canvas: never while somebody types elsewhere. */
     const typing = e.target.closest?.("input, textarea, select, [contenteditable='true'], .editor");
     if (e.key === "/" && !typing && this.model.sk && !e.ctrlKey && !e.metaKey && !e.altKey) { eat(); return this.openFinder(""); }
-    if (e.key === "Escape" && (this.peek || this.open.drawer)) { this.closePeek(); if (this.open.drawer) { this.open.drawer = null; this.render(); } }
+    /* Escape puts away what is open and stops there: left to Foundry it
+       would also release the controlled token, and the rail with it. */
+    if (e.key === "Escape" && (this.peek || this.open.drawer)) { eat(); this.closePeek(); if (this.open.drawer) { this.open.drawer = null; this.render(); } }
   }
 }
 
