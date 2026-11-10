@@ -973,9 +973,12 @@ export class RailHost {
   onWheel(e) {
     if (!e.target.closest?.(".gph-dial, .gph-deck[data-tab='spells'] .gph-fan") || !this.model?.deck?.spells || this.fs.open) return;
     e.preventDefault();
-    const now = Date.now();
-    if (!e.deltaY || now - this.wheelAt < TIMING.wheelStep) return;
+    if (!e.deltaY) return;
+    /* A gesture is a run of events with no gap of wheelStep in it: every
+       event extends it, and only the first one steps. */
+    const now = Date.now(), quiet = now - this.wheelAt >= TIMING.wheelStep;
     this.wheelAt = now;
+    if (!quiet) return;
     this.closePeek();
     this.stepRank(e.deltaY > 0 ? 1 : -1);
   }

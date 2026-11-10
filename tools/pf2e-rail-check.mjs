@@ -738,7 +738,8 @@ section("the Hit Point field, tooltips and putting things away", () => {
   ok(/1 spell</.test(ranks) && /3 spells</.test(ranks), "one spell is not \"1 spells\"");
   ok(/aria-label="Close"/.test(V.DRAWER({ title: "Rest", body: "", close: t("GLRAIL.close") })), "a drawer's close press says Close");
   ok(/drawer\(kind\) \{[\s\S]{0,120}close: t\("GLRAIL\.close"\)/.test(h), "the host names every drawer's close press");
-  ok(/onWheel\(e\) \{[\s\S]{0,400}TIMING\.wheelStep/.test(h), "the wheel turns one rank a gesture");
+  const wheel = h.slice(h.indexOf("onWheel(e) {"), h.indexOf("onOutside(e) {"));
+  ok(/TIMING\.wheelStep/.test(wheel) && wheel.indexOf("this.wheelAt = now") < wheel.indexOf("if (!quiet) return"), "the wheel turns one rank a gesture: every event extends the gesture, not only the one that stepped");
   ok(/class="gph-tog[^>]*><span>/.test(V.ACTIONS({ toggles: [{ id: "a|b|c", label: "Aura", on: true }], list: [] }, t)) && /\.gph-tog > span \{[^}]*text-overflow: ellipsis/.test(css), "a squeezed toggle ends in an ellipsis, not mid-letter");
 });
 

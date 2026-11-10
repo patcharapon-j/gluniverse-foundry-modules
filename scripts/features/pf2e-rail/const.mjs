@@ -20,8 +20,9 @@ export const TIMING = Object.freeze({
   swap: 150,
   /** The wheel is still while framing for this long before the zoom is saved. */
   frameSettle: 300,
-  /** The wheel over the spell dial steps one rank, then waits this long: a
-   *  trackpad's stream of small deltas is one gesture, not twenty ranks. */
+  /** The wheel over the spell dial steps one rank per gesture, and a gesture
+   *  ends after this long with no wheel event: a trackpad's stream of small
+   *  deltas is one gesture, not twenty ranks. */
   wheelStep: 140,
   /** A refresh waits for the next frame, or this long where frames are
    *  starved (a background tab). */
