@@ -202,7 +202,7 @@ function requires(model, fixtureKeys, name) {
 section("a cast throws away only a prepared slot", () => {
   const h = strip(src["host.mjs"]), d = strip(src["drive.mjs"]);
   const cast = h.slice(h.indexOf("async cast("), h.indexOf("async pressPeek("));
-  ok(/castCard\(card, \{ leaves: ref\.slotId != null \}\)/.test(cast), "the card leaves the hand only for a prepared slot cast; a cantrip, a focus spell and a spontaneous caster's stay");
+  ok(/castCard\(card, \{ leaves: ref\.key !== "c" && ref\.slotId != null \}\)/.test(cast), "the card leaves the hand only for a prepared slot cast; a cantrip (prepared ones carry a slot too), a focus spell and a spontaneous caster's stay");
   ok(/uncastCard\(card\)/.test(cast) && /finally/.test(cast), "a thrown card comes back when the cast left nothing to redraw");
   const fn = d.slice(d.indexOf("export function castCard("), d.indexOf("export function uncastCard("));
   ok(/if \(!leaves\)/.test(fn) && /is-played/.test(fn) && /classList\.remove\("is-played"\)/.test(fn), "a played card animates in place and keeps its press");

@@ -809,9 +809,10 @@ export class RailHost {
     if (!ref.entry || !ref.spell) return;
     if (card.closest(".gph-card.is-spent")) return this.deny(card);
     const ctx = this.spendCtx();
-    /* Only a prepared slot is used up by its cast; every other card stays in
+    /* Only a prepared slot is used up by its cast (a prepared cantrip is not);
+       every other card stays in
        the hand, so it is played rather than thrown away. */
-    await D.castCard(card, { leaves: ref.slotId != null });
+    await D.castCard(card, { leaves: ref.key !== "c" && ref.slotId != null });
     try {
       await ref.entry.cast(ref.spell, { ...(typeof ref.key === "number" ? { rank: ref.key } : {}), ...(ref.slotId != null ? { slotId: ref.slotId } : {}) });
     } finally {

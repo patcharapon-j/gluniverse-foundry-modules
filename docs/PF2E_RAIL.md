@@ -65,7 +65,8 @@ contract; the check holds every reader to it path for path).
   PF2e marks a whole spontaneous rank `expended` when its slots run out, and
   that is the rank's count on the pennant, not the cards.
 - **A cast throws a card away only when it spends that card**: a prepared
-  slot (`data-slot`) leaves the hand upward and the hand redraws it put
+  rank slot (`data-slot` on a ranked card; a prepared cantrip keeps its card)
+  leaves the hand upward and the hand redraws it put
   down. Every other cast is *played* — the card lifts and settles back into
   the fan (`is-played`) and stays pressable, because nothing in the hand
   changed and the host does not redraw it. A thrown card that no redraw
