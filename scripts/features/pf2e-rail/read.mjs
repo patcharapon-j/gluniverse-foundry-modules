@@ -16,7 +16,7 @@
  * through PF2e Odds) and never the actor.
  */
 import { readPf2eDead, readPf2eDying } from "../../core/pf2e-dying.mjs";
-import { SAVES } from "./const.mjs";
+import { SAVES, STANDARD_EXPLORATION, STD_EXPLORE } from "./const.mjs";
 import { finderModel, suggested } from "./skill-actions.mjs";
 
 /** PF2e's sixteen skills, in the sheet's order. */
@@ -404,16 +404,22 @@ export function targetOf(target, { know, t, truth = false }) {
 /* ── the turn bar ───────────────────────────────────────────────── */
 
 /** Exploration activities: what the actor owns with the exploration trait,
- *  lit where PF2e records it as what the character is doing. */
-export function activitiesOf(actor) {
+ *  lit where PF2e records it as what the character is doing. With
+ *  `standard`, PF2e's standard activities the actor does not carry follow
+ *  (`std: true`, id `std:<slug>`): the host copies one from the compendium
+ *  when it is picked, so a character nobody set up still has a bar to use. */
+export function activitiesOf(actor, { standard = false } = {}) {
   const on = new Set(list(actor.system?.exploration));
-  return [...list(actor.itemTypes?.action), ...list(actor.itemTypes?.feat)]
-    .filter((i) => traitsOf(i).has("exploration"))
-    .map((i) => ({ id: i.id, name: i.name, on: on.has(i.id) }));
+  const own = [...list(actor.itemTypes?.action), ...list(actor.itemTypes?.feat)].filter((i) => traitsOf(i).has("exploration"));
+  const rows = own.map((i) => ({ id: i.id, name: i.name, on: on.has(i.id) }));
+  if (!standard) return rows;
+  const held = new Set(own.flatMap((i) => [i.slug ?? i.system?.slug, sluggish(i.name)]).filter(Boolean));
+  return [...rows, ...STANDARD_EXPLORATION.filter((x) => !held.has(x.slug)).map((x) => ({ id: STD_EXPLORE + x.slug, name: x.name, on: false, std: true }))];
 }
+const sluggish = (name) => String(name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 export function turnbarOf(actor, ctx) {
-  if (ctx.mode !== "encounter") return { mode: "exploration", activities: activitiesOf(actor) };
+  if (ctx.mode !== "encounter") return { mode: "exploration", activities: activitiesOf(actor, { standard: !!ctx.standardExploration }) };
   const tb = { mode: "encounter", mine: !!ctx.turn?.mine, round: num(ctx.turn?.round, 1), economy: { ...ctx.econ }, map: ctx.map ?? 0 };
   if (!tb.mine) tb.current = ctx.turn?.current ?? "";
   if (!tb.mine && ctx.turn?.next) tb.next = true;
@@ -433,10 +439,21 @@ export function noteOf(actor, t) {
   return c ? (c.value ? `${c.name} ${c.value}` : c.name) : undefined;
 }
 
+/** What the character is doing while the party travels, as PF2e records it
+ *  (`system.exploration`, item ids), by name: null when nothing is set. */
+export function exploringOf(actor) {
+  const names = list(actor?.system?.exploration).map((id) => actor.items?.get?.(id)?.name).filter(Boolean);
+  return names.length ? names.join(", ") : null;
+}
+
 /** A party seat. Without OBSERVER the seat is the portrait, the name and the
- *  note, and nothing that is a number. */
-export function seatOf(actor, { t, observe = true, turn = false, self = false }) {
-  const s = { id: actor.id, name: actor.name, img: actor.img ?? null };
+ *  note, and nothing that is a number. The art and the frame are the
+ *  plinth's (`artOf` on the seat's token, the owner's `ph.frame`); exploring,
+ *  the seat names the activity, which is the table's to see, not a number. */
+export function seatOf(actor, { t, observe = true, turn = false, self = false, token = null, frame = null, exploring = false }) {
+  const s = { id: actor.id, name: actor.name, ...artOf(actor, token) };
+  if (frame) s.frame = frame;
+  if (exploring) { const x = exploringOf(actor); if (x) s.explore = x; }
   const note = noteOf(actor, t);
   if (observe) {
     const hp = actor.system?.attributes?.hp;
@@ -485,7 +502,7 @@ export function withSkills(deck, sk, { mode, map, t }) {
  *   formulas Map<id, {damage, critical}>, blasts (ElementalBlast configs) | null,
  *   spells (entries for spellsOf) | null, rank, tab,
  *   target { name, img, recallSkill, recallDC } | null, know (stat) → number|{lo,hi}|null, truth,
- *   party [{ actor, observe, turn }], pins, frame, folded
+ *   party [{ actor, observe, turn, token, frame, exploring }], pins, frame, folded
  */
 export function readPlayer(ctx) {
   const { actor, t } = ctx;
@@ -511,7 +528,7 @@ export function readPlayer(ctx) {
     deck: null,
     sk,
     ...(slim ? {} : { util: {} }),
-    stack: list(ctx.party).map((p) => seatOf(p.actor, { t, observe: p.observe, turn: p.turn })),
+    stack: list(ctx.party).map((p) => seatOf(p.actor, { t, observe: p.observe, turn: p.turn, token: p.token, frame: p.frame, exploring: p.exploring })),
     ...(ctx.folded ? { folded: true } : {}),
     ...(ctx.readonly ? { readonly: true } : {}),
   };
@@ -594,11 +611,11 @@ export function hazardOf(actor, ctx) {
  * @param {object} ctx
  *   actor (the selected npc/hazard) | null, token, t, loc, config,
  *   tokens (scene tokens in scene order), selected (token id), turnTokenId,
- *   target, know (the truth), party [{ actor, observe, turn }], pins, frame
+ *   target, know (the truth), party [{ actor, observe, turn, token, frame, exploring }], pins, frame
  */
 export function readGM(ctx) {
   const { actor, t } = ctx;
-  const stack = list(ctx.party).map((p) => seatOf(p.actor, { t, observe: true, turn: p.turn }));
+  const stack = list(ctx.party).map((p) => seatOf(p.actor, { t, observe: true, turn: p.turn, token: p.token, frame: p.frame, exploring: p.exploring }));
   const foes = foesOf(ctx.tokens, { selected: ctx.selected, turnTokenId: ctx.turnTokenId });
   if (!actor) {
     return { role: "gm", plinth: { kind: "npc", name: t("GLRAIL.gm.title"), sub: t(foes.foes.length ? "GLRAIL.gm.none" : "GLRAIL.empty.title"), fold: true }, ...(foes.foes.length ? { foes } : {}), stack };

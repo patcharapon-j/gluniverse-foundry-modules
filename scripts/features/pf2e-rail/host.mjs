@@ -33,7 +33,7 @@ import * as V from "./view.mjs";
 import * as D from "./drive.mjs";
 import * as S from "./shape.mjs";
 import * as K from "./skill-actions.mjs";
-import { TIMING } from "./const.mjs";
+import { EXPLORE_PACK, STANDARD_EXPLORATION, STD_EXPLORE, TIMING } from "./const.mjs";
 import { RailLight } from "./light.mjs";
 import { momentsOf, playMoments } from "./moments.mjs";
 import { costOf, readGM, readPlayer, SKILLS, withSkills } from "./read.mjs";
@@ -320,11 +320,16 @@ export class RailHost {
     return pcs.filter((a) => a.id !== self?.id).map((a) => ({
       actor: a, observe: game.user.isGM || a.testUserPermission(game.user, "OBSERVER"),
       turn: !!combat?.started && combat.combatant?.actorId === a.id,
+      /* the plinth's own art and frame: the token on this scene, else the
+         prototype the next one will be made from */
+      token: a.getActiveTokens?.(false, true)?.[0] ?? a.prototypeToken ?? null,
+      frame: a.getFlag(SUITE_ID, FLAGS.frame) ?? null,
+      exploring: !combat,
     }));
   }
 
   common() {
-    return { t, loc, config: CONFIG.PF2E, stamina: !!game.pf2e?.settings?.variants?.stamina, ranged: rangedCombat() };
+    return { t, loc, config: CONFIG.PF2E, stamina: !!game.pf2e?.settings?.variants?.stamina, ranged: rangedCombat(), standardExploration: setting(SETTINGS.coreExploration, true) };
   }
 
   async readNow(subj) {
@@ -478,7 +483,7 @@ export class RailHost {
     if (kind === "inventory") return { title: t("GLRAIL.drawer.inventory"), body: V.DLIST({ rows: inventoryRows(actor, t) }, t) };
     if (kind === "effects") return { title: t("GLRAIL.drawer.effects"), body: V.DLIST({ rows: effectRows(actor) }, t) };
     if (kind === "strikes") return { title: t("GLRAIL.drawer.strikes"), body: V.DLIST({ rows: (m.strikes?.list ?? []).map((s) => ({ key: `strike:${s.id}`, act: true, name: s.name, icon: s.img, n: s.variants[m.turnbar?.map ?? 0] ?? s.variants[0], meta: s.damage })) }, t) };
-    if (kind === "explore") return { title: t("GLRAIL.turnbar.chooseActivity"), body: V.DLIST({ rows: (m.turnbar?.activities ?? []).map((a) => ({ key: `explore:${a.id}`, act: true, name: a.name, ...(a.on ? { tag: t("GLRAIL.turnbar.on") } : {}) })), empty: t("GLRAIL.turnbar.none") }, t) };
+    if (kind === "explore") return { title: t("GLRAIL.turnbar.chooseActivity"), body: V.DLIST({ rows: (m.turnbar?.activities ?? []).map((a) => ({ key: `explore:${a.id}`, act: true, name: a.name, ...(a.on ? { tag: t("GLRAIL.turnbar.on") } : a.std ? { meta: t("GLRAIL.turnbar.standard") } : {}) })), empty: t("GLRAIL.turnbar.none") }, t) };
     return null;
   }
 
@@ -804,8 +809,17 @@ export class RailHost {
     if (!ref.entry || !ref.spell) return;
     if (card.closest(".gph-card.is-spent")) return this.deny(card);
     const ctx = this.spendCtx();
-    await D.castCard(card);
-    await ref.entry.cast(ref.spell, { ...(typeof ref.key === "number" ? { rank: ref.key } : {}), ...(ref.slotId != null ? { slotId: ref.slotId } : {}) });
+    /* Only a prepared slot is used up by its cast (a prepared cantrip is not);
+       every other card stays in
+       the hand, so it is played rather than thrown away. */
+    await D.castCard(card, { leaves: ref.key !== "c" && ref.slotId != null });
+    try {
+      await ref.entry.cast(ref.spell, { ...(typeof ref.key === "number" ? { rank: ref.key } : {}), ...(ref.slotId != null ? { slotId: ref.slotId } : {}) });
+    } finally {
+      /* the hand redraws without a spent card a frame or two later; a cast
+         that changed nothing (cancelled, refused) gets its card back */
+      setTimeout(() => D.uncastCard(card), TIMING.cardReturn);
+    }
     this.spend(card.dataset.cost ?? null, false, ctx);
   }
 
@@ -862,10 +876,26 @@ export class RailHost {
     this.render();
   }
 
-  explore(id) {
+  async explore(id) {
     const actor = this.subj?.actor;
+    if (!actor) return;
+    if (String(id).startsWith(STD_EXPLORE)) return this.exploreStandard(actor, String(id).slice(STD_EXPLORE.length));
     const now = list(actor.system?.exploration);
     return actor.update({ "system.exploration": now.includes(id) ? [] : [id] });
+  }
+
+  /** A standard activity the character does not carry yet: copied from
+   *  PF2e's Actions compendium onto the sheet (with its source, as a drag
+   *  from the compendium would), then set as what they are doing. */
+  async exploreStandard(actor, slug) {
+    const std = STANDARD_EXPLORATION.find((x) => x.slug === slug);
+    if (!std) return;
+    const pack = game.packs.get(EXPLORE_PACK);
+    const doc = (await pack?.getDocument(std.id)) ?? (await pack?.getDocuments({ "system.slug": slug }))?.[0] ?? null;
+    if (!doc) { warn(`PF2e HUD | no "${slug}" in ${EXPLORE_PACK}`); return; }
+    const data = game.items.fromCompendium ? game.items.fromCompendium(doc) : doc.toObject();
+    const [made] = await actor.createEmbeddedDocuments("Item", [data]);
+    if (made) await actor.update({ "system.exploration": [made.id] });
   }
 
   controlToken(id) {

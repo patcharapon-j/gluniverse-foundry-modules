@@ -64,6 +64,27 @@ contract; the check holds every reader to it path for path).
   focus spells and a spontaneous or flexible caster's spells stay in the hand;
   PF2e marks a whole spontaneous rank `expended` when its slots run out, and
   that is the rank's count on the pennant, not the cards.
+- **A cast throws a card away only when it spends that card**: a prepared
+  rank slot (`data-slot` on a ranked card; a prepared cantrip keeps its card)
+  leaves the hand upward and the hand redraws it put
+  down. Every other cast is *played* — the card lifts and settles back into
+  the fan (`is-played`) and stays pressable, because nothing in the hand
+  changed and the host does not redraw it. A thrown card that no redraw
+  replaces (a cast cancelled or refused) comes back after
+  `TIMING.cardReturn`.
+- **Party seats** are the plinth in miniature: the same art (`artOf` on the
+  member's token on this scene, else its prototype token, so a ring
+  cut-out stands over its plate) under the owner's `ph.frame`, drawn with
+  the plinth's own figure markup scaled by `--gph-sk`. Hit Points are a bar
+  on the plate's foot. Exploring, a seat names the member's exploration
+  activity, for the GM and the party alike (it is not a number, so a
+  LIMITED seat shows it too).
+- **Exploration activities** are the character's own exploration items,
+  then (world setting `ph.coreExploration`, on by default) PF2e's nine
+  standard ones the character does not carry, by slug
+  (`STANDARD_EXPLORATION`, ids pinned against PF2e 8.7's Actions pack).
+  Picking a standard one copies it from `pf2e.actionspf2e` onto the sheet
+  (`game.items.fromCompendium`, so its source is kept) and sets it.
 - **Foes**: disposition is read off `token.document`, never the placeable.
 - **Hazard Disable** text runs through `inlineText`, so
   `@Check[thievery|dc:18]` reads "Thievery DC 18" instead of printing raw.
@@ -115,7 +136,7 @@ gesture (`TIMING.wheelStep`). Nowhere else on the rail does it mean anything.
 
 Stored: the portrait frame in the actor flag `ph.frame`; the finder's pins in
 the user flag `ph.pins` (`{ [actorId]: slug[] }`); `ph.folded`, `ph.gmRail`,
-`ph.hideHotbar` and `ph.hidePlayers` are client settings. **The action economy is stored nowhere**:
+`ph.hideHotbar` and `ph.hidePlayers` are client settings; `ph.coreExploration` is a world setting. **The action economy is stored nowhere**:
 `turn.mjs` keeps a tally per actor on this screen, refilled when the combat's
 `id:round:turn` key names a new turn of that actor, spent only in a started
 encounter. It is a reminder, never a rule.
@@ -143,7 +164,7 @@ No press opens a dialog of the HUD's own. Where PF2e shows its
 | Rest | `game.pf2e.actions.restForTheNight` |
 | Macro | `macro.execute()`; the drawer's foot steps Foundry's own hotbar pages (`ui.hotbar.cyclePage`) |
 | Hero point | `actor.update({ "system.resources.heroPoints.value" })` |
-| Exploration activity | `actor.update({ "system.exploration": [id] })` (one at a time) |
+| Exploration activity | `actor.update({ "system.exploration": [id] })` (one at a time); a standard one the character lacks is first `actor.createEmbeddedDocuments("Item", [game.items.fromCompendium(doc)])` from `pf2e.actionspf2e` |
 | Seat | GM: control that PC's token; player: open the sheet they can observe |
 | Foe | control that token |
 

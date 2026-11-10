@@ -11,6 +11,27 @@ export const FEATURE_ID = "pf2e-rail";
 export const PREFIX = "ph.";
 export const NS = "GLRAIL";
 
+/** PF2e's standard exploration activities (Player Core, "Exploration
+ *  Activities"), as the system's own Actions compendium files them. A
+ *  character carries an activity only once it is an item on the sheet, and
+ *  `system.exploration` holds those item ids, so the bar offers these to a
+ *  character who lacks them and copies one from the compendium on its first
+ *  pick (`ph.coreExploration`). Ids are pinned against PF2e 8.7's pack. */
+export const EXPLORE_PACK = "pf2e.actionspf2e";
+export const STANDARD_EXPLORATION = Object.freeze([
+  { slug: "avoid-notice", id: "IE2nThCmoyhQA0Jn", name: "Avoid Notice" },
+  { slug: "defend", id: "cYtYKa1gDEl7y2N0", name: "Defend" },
+  { slug: "detect-magic", id: "Yb0C1uLzeHrVLl7a", name: "Detect Magic" },
+  { slug: "follow-the-expert", id: "tfa4Sh7wcxCEqL29", name: "Follow the Expert" },
+  { slug: "hustle", id: "JuqmIAnkL9hVGai8", name: "Hustle" },
+  { slug: "investigate", id: "EwgTZBWsc8qKaViP", name: "Investigate" },
+  { slug: "repeat-a-spell", id: "OQaFzDtVEOMWizJJ", name: "Repeat a Spell" },
+  { slug: "scout", id: "kV3XM0YJeS2KCSOb", name: "Scout" },
+  { slug: "search", id: "TiNDYUGlMmxzxBYU", name: "Search" },
+].map(Object.freeze));
+/** The id a standard activity the character does not carry yet goes by. */
+export const STD_EXPLORE = "std:";
+
 export const TIMING = Object.freeze({
   /** A pointer has to rest this long on a card, row or strike before it peeks. */
   peekOpen: 140,
@@ -27,6 +48,9 @@ export const TIMING = Object.freeze({
   /** A refresh waits for the next frame, or this long where frames are
    *  starved (a background tab). */
   refreshFallback: 120,
+  /** A thrown card waits this long for the redraw that replaces it, then
+   *  comes back: a cast that changed nothing left nothing to redraw. */
+  cardReturn: 600,
   /** A Hero Point spent this long after a roll echoed still answers that
    *  roll: its light streaks to the press, and the reroll echoes there. */
   rerollWindow: 60000,

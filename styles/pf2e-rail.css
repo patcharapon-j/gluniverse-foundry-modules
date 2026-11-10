@@ -869,34 +869,45 @@ button.gph-mac:hover { background: var(--gph-ink-4); }
 
 /* ══ THE STACK ═════════════════════════════════════════════════════
    The party, above the plinth, standing clear of the figure's rise. */
-.gph-stack { position: absolute; left: 0; bottom: calc(var(--gph-h) + var(--gph-rise) + 12px); display: flex; flex-direction: column; gap: 4px; width: 200px; }
-.gph[data-role="gm"] .gph-stack { display: grid; grid-template-columns: repeat(2, 172px); gap: 6px 10px; width: auto; }
+.gph-stack { position: absolute; left: 0; bottom: calc(var(--gph-h) + var(--gph-rise) + 12px); display: flex; flex-direction: column; gap: 0; width: 200px; }
+.gph[data-role="gm"] .gph-stack { display: grid; grid-template-columns: repeat(2, 184px); gap: 0 4px; width: auto; }
 
-.gph-seat { display: flex; align-items: center; gap: 6px; min-width: 0; position: relative; }
-.gph-ring { flex: none; width: var(--gph-sz); height: var(--gph-sz); overflow: visible; filter: drop-shadow(0 1px 2px var(--gl-is-shade)); }
-.gph-well { fill: var(--gph-ink-0); }
-.gph-lip { fill: none; stroke: var(--gph-line-2); stroke-width: 1; }
-.gph-band { fill: none; stroke: var(--gph-scrim); stroke-width: 7px; }
-.gph-arc { fill: none; stroke: var(--gph-paper); stroke-width: 4.5px;
-  stroke-dasharray: calc(var(--gph-len) * var(--gph-f) * 1px) calc(var(--gph-len) * 1px);
-  transition: --gph-f var(--gl-d-swift) var(--gl-ease), stroke var(--gl-d-quick) var(--gl-ease); }
-.gph-tarc { fill: none; stroke: var(--gph-info); stroke-width: 2px;
-  stroke-dasharray: calc(var(--gph-tlen) * var(--gph-tf) * 1px) calc(var(--gph-tlen) * 1px); }
-.gph-seat[data-low] .gph-arc { stroke: var(--gph-red); }
-.gph-sid { display: grid; gap: 2px; min-width: 0; padding: 3px 10px 3px 5px; margin-left: -3px;
+/* A seat is the plinth at --gph-sk: the figure box is the plinth's own size,
+   scaled from its foot, so the frame's percentages land where they do on
+   the rail and a cut-out rises over the plate by the same proportion. */
+.gph-seat { --gph-sk: 0.34; display: flex; align-items: flex-end; gap: 6px; min-width: 0; position: relative; }
+.gph-sfig { flex: none; position: relative; width: calc(var(--gph-pw) * var(--gph-sk)); height: calc((var(--gph-h) + var(--gph-rise)) * var(--gph-sk));
+  filter: drop-shadow(0 1px 2px var(--gl-is-shade)); }
+.gph-sfig-in { position: absolute; left: 0; bottom: 0; width: var(--gph-pw); height: var(--gph-h); transform: scale(var(--gph-sk)); transform-origin: 0 100%; }
+.gph-sfig.is-cut .gph-fig { -webkit-mask-image: none; mask-image: none; clip-path: none; overflow: visible; }
+.gph-seat.is-self .gph-plate { box-shadow: inset 0 1px 0 var(--gph-paper), inset 0 0 0 1px var(--gph-line-2); }
+.gph-seat:is([data-state="dying"], [data-state="dead"]) .gph-fig { filter: grayscale(0.85) brightness(0.62); }
+.gph-seat[data-state="dying"] .gph-plate { box-shadow: inset 0 0 0 1px var(--gph-red); }
+
+/* Hit Points on the plate's foot: a bar the fraction left wide, red under a
+   quarter; temporary Hit Points a thin info line along its top. */
+.gph-sbar { position: absolute; left: 2px; right: 2px; bottom: 2px; height: 4px; z-index: 2; background: var(--gph-scrim); box-shadow: 0 0 0 1px var(--gph-scrim); }
+.gph-sbar i { position: absolute; left: 0; transition: width var(--gl-d-swift) var(--gl-ease), background-color var(--gl-d-quick) var(--gl-ease); }
+.gph-sbar-hp { top: 0; bottom: 0; width: calc(100% * var(--gph-f)); background: var(--gph-paper); }
+.gph-sbar-tmp { top: -3px; height: 2px; width: calc(100% * min(1, var(--gph-tf))); background: var(--gph-info); }
+.gph-seat[data-low] .gph-sbar-hp { background: var(--gph-red); }
+
+.gph-sid { display: grid; gap: 1px; min-width: 0; padding: 2px 8px 2px 5px; margin-left: -3px;
   background: linear-gradient(90deg, var(--gph-scrim), var(--gph-scrim-lo) 72%, transparent); text-shadow: 0 1px 2px var(--gph-ink-0); }
 .gph-sname { font-size: var(--gl-is-t-lead); font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gph-ssub { display: flex; gap: 6px; font-size: var(--gl-is-t-meta); line-height: 1.15; color: var(--gph-dim); white-space: nowrap; min-width: 0; }
+.gph-ssub { display: flex; align-items: center; gap: 6px; font-size: var(--gl-is-t-meta); line-height: 1.15; color: var(--gph-dim); white-space: nowrap; min-width: 0; }
 .gph-ssub b { font-family: var(--gph-num); font-weight: 600; color: var(--gph-text); font-variant-numeric: tabular-nums; }
 .gph-shp { font-family: var(--gph-num); font-variant-numeric: tabular-nums; }
 .gph-snote { overflow: hidden; text-overflow: ellipsis; }
-.gph-shero { display: flex; gap: 4px; margin-top: 2px; }
+.gph-srow { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.gph-shero { flex: none; display: flex; gap: 4px; }
 .gph-shero i { width: 6px; height: 6px; rotate: 45deg; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gph-amber) 55%, transparent); }
 .gph-shero i.on { background: var(--gph-amber); box-shadow: none; }
+/* What the character is doing while exploring, under the numbers. */
+.gph-sexp { justify-self: start; max-width: 100%; margin-top: 1px; padding: 1px 6px 1px 5px; font-size: var(--gl-is-t-meta); font-weight: 700; letter-spacing: 0.04em; line-height: 1.2;
+  color: var(--gph-text); background: var(--gph-ink-5); clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gph-seat[data-state="dying"] .gph-snote { color: var(--gph-red); font-weight: 700; }
-.gph-seat[data-state="dying"] .gph-lip { stroke: var(--gph-red); stroke-width: 1.5; }
-.gph-seat:is([data-state="dying"], [data-state="dead"]) image { filter: grayscale(1) brightness(0.55); }
-.gph-seat.is-self .gph-lip { stroke: var(--gph-paper); }
 
 /* ══ THE GM ════════════════════════════════════════════════════════ */
 .gph-empty { flex: 0 1 auto; display: grid; align-content: center; gap: 6px; padding: 0 18px 0 16px; }
@@ -1152,6 +1163,10 @@ button.gph-shead:hover { background: var(--gph-ink-2); }
 /* A spell cast leaves the hand upward before the rail redraws without it. */
 .gph-held.is-cast { animation: gph-cast var(--gl-d-glide) var(--gl-exit) forwards; pointer-events: none; }
 @keyframes gph-cast { 0% { } 30% { transform: translateY(-22px) rotate(0) scale(1.04); } 100% { transform: translateY(-70px) rotate(0) scale(0.92); opacity: 0; } }
+/* A card that stays in the hand (a cantrip, a focus spell, a spontaneous
+   caster's) is played instead: a lift and a settle back into the fan. */
+.gph-held.is-played { animation: gph-played var(--gl-d-swift) var(--gl-ease); }
+@keyframes gph-played { 35% { transform: translateY(-16px) rotate(0) scale(1.05); } }
 /* A condition that just arrived lands like a gem. */
 .gph-cond[data-new] { animation: gph-land var(--gl-d-swift) var(--gl-ease); }
 /* Dying is the one state on the rail that keeps moving: the beads beat. */

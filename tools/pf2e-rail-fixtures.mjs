@@ -18,7 +18,7 @@ const party = (art, skip) => [
   { id: "kyra", name: "Kyra", img: art("iconics/Kyra.webp"), hp: [61, 61], ac: 22, hero: [1, 3] },
   { id: "ezren", name: "Ezren", img: art("iconics/Ezren.webp"), hp: [29, 52], temp: 6, ac: 20, hero: [2, 3] },
   { id: "merisiel", name: "Merisiel", img: art("iconics/Merisiel.webp"), hp: [11, 58], ac: 24, hero: [0, 3], note: "Frightened 2" },
-  { id: "valeros", name: "Valeros", img: art("iconics/Valeros.webp"), hp: [68, 76], temp: 5, ac: 23, hero: [2, 3] },
+  { id: "valeros", name: "Valeros", cutout: art("iconics/ValerosFull.webp"), frame: { x: 0, y: 6, scale: 1.2 }, hp: [68, 76], temp: 5, ac: 23, hero: [2, 3] },
 ].filter((s) => s.id !== skip);
 
 /* ── skills ─────────────────────────────────────────────────────────
@@ -179,12 +179,13 @@ function spontaneous(art, o = {}) {
   };
   return {
     ...base, mode: "exploration",
-    turnbar: { mode: "exploration", activities: [{ id: "detect-magic", name: "Detect Magic", on: true }, ...EXPLORE.filter((x) => x.id !== "detect-magic").map((x) => ({ ...x, on: false }))] },
+    turnbar: { mode: "exploration", activities: [{ id: "detect-magic", name: "Detect Magic", on: true }, ...EXPLORE.filter((x) => x.id !== "detect-magic").map((x) => ({ ...x, on: false })), { id: "std:hustle", name: "Hustle", on: false, std: true }] },
     plinth: { kind: "character", name: "Seoni", sub: "Sorcerer 7", speed: "25 ft", cutout: art("iconics/SeoniFull.webp"), frameable: true, hero: [3, 3], hp: [44, 52] },
     vitals: { ac: 21, hp: { value: 44, max: 52 }, classDC: 26, perception: 12, saves: { fortitude: 12, reflex: 13, will: 15 } },
     deck: deck("spells", { ...base.deck, spells }),
     sk: { ...base.sk, target: null },
-    stack: party(art, null).slice(0, 3),
+    /* exploring, every seat says what its character is doing */
+    stack: party(art, null).slice(0, 3).map((s, i) => ({ ...s, explore: ["Scout", "Search", "Avoid Notice"][i] })),
     ...o,
   };
 }
@@ -293,7 +294,8 @@ function gm(art, o = {}) {
       target: { name: "Valeros", img: art("iconics/Valeros.webp"), known: "AC 23 · Fort 23 · Ref 21 · Will 19", defences: { fortitude: 23, reflex: 21, will: 19, perception: 22, stealth: 20, deception: 11 }, recallSkill: null },
       pins: [],
     },
-    stack: party(art, null),
+    /* a table of five: the GM's two columns */
+    stack: [...party(art, null), { id: "seoni", name: "Seoni", cutout: art("iconics/SeoniFull.webp"), hp: [44, 52], ac: 21, hero: [3, 3] }],
     ...o,
   };
 }

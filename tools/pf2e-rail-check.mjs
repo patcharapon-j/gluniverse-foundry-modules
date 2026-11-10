@@ -28,7 +28,7 @@ import { answers, echoOf } from "../scripts/features/pf2e-rail/echo.mjs";
 import { combatOf, isTurnOf, shouldMount, subjectOf } from "../scripts/features/pf2e-rail/subject.mjs";
 import { PEEK_PRESSES, ROW_KEYS, actionPeek, effectRows, inventoryRows, itemPeek, macroSlots, spellPeek, strikePeek } from "../scripts/features/pf2e-rail/peeks.mjs";
 import { PRESSES } from "../scripts/features/pf2e-rail/presses.mjs";
-import { FEATURE_ID, PREFIX, SHED_ORDER } from "../scripts/features/pf2e-rail/const.mjs";
+import { FEATURE_ID, PREFIX, SHED_ORDER, STANDARD_EXPLORATION, STD_EXPLORE } from "../scripts/features/pf2e-rail/const.mjs";
 import { downOf, momentsOf, relight } from "../scripts/features/pf2e-rail/moments.mjs";
 import { LIGHT_TONE } from "../scripts/features/pf2e-rail/light.mjs";
 import * as Drive from "../scripts/features/pf2e-rail/drive.mjs";
@@ -87,6 +87,7 @@ const base = (o) => ({
     traits: { value: o.traits ?? [], size: { value: o.size ?? "med" } },
   },
   itemTypes: { condition: o.conds ?? [], effect: o.effects ?? [], action: o.actions ?? [], feat: o.feats ?? [], consumable: o.consumables ?? [] },
+  items: new Map([...(o.actions ?? []), ...(o.feats ?? [])].map((i) => [i.id, i])),
   synthetics: { toggles: o.toggles ?? {} },
   classDC: o.type && o.type !== "character" ? null : { dc: { value: 21 } },
   statuses: new Set(o.statuses ?? []),
@@ -198,6 +199,16 @@ function requires(model, fixtureKeys, name) {
   for (const k of fixtureKeys) ok(have.has(k), `${name}: the reader drops ${k}, which the fixtures always carry`);
 }
 
+section("a cast throws away only a prepared slot", () => {
+  const h = strip(src["host.mjs"]), d = strip(src["drive.mjs"]);
+  const cast = h.slice(h.indexOf("async cast("), h.indexOf("async pressPeek("));
+  ok(/castCard\(card, \{ leaves: ref\.key !== "c" && ref\.slotId != null \}\)/.test(cast), "the card leaves the hand only for a prepared slot cast; a cantrip (prepared ones carry a slot too), a focus spell and a spontaneous caster's stay");
+  ok(/uncastCard\(card\)/.test(cast) && /finally/.test(cast), "a thrown card comes back when the cast left nothing to redraw");
+  const fn = d.slice(d.indexOf("export function castCard("), d.indexOf("export function uncastCard("));
+  ok(/if \(!leaves\)/.test(fn) && /is-played/.test(fn) && /classList\.remove\("is-played"\)/.test(fn), "a played card animates in place and keeps its press");
+  ok(/\.gph-held\.is-played \{[^}]*animation:/.test(css) && !/\.gph-held\.is-played \{[^}]*(forwards|pointer-events)/.test(css), "the played card's animation does not hold it away or off the pointer");
+});
+
 /* ══ the readers ═══════════════════════════════════════════════════════ */
 
 section("the readers are pure", () => {
@@ -237,6 +248,23 @@ section("player readers hold the fixture shape", () => {
   const x = R.readPlayer(ctxBase(fighter(), { mode: "exploration", turn: null, map: 0 }));
   ok(x.turnbar.mode === "exploration" && x.turnbar.activities.length === 1 && x.turnbar.activities[0].on, "fighter exploring: the activity bar");
   holds(x, allowP, "fighter exploring");
+  /* PF2e's standard activities follow the character's own, minus the ones
+     they already carry (by slug), each copied from the compendium on pick. */
+  const xs = R.readPlayer(ctxBase(fighter(), { mode: "exploration", turn: null, map: 0, standardExploration: true })).turnbar.activities;
+  const std = xs.filter((a) => a.std);
+  ok(xs[0].id === "a3" && xs[0].on && !xs[0].std, "exploring: the character's own activity leads");
+  ok(std.length === STANDARD_EXPLORATION.length - 1 && !std.some((a) => a.id === `${STD_EXPLORE}search`) && std.every((a) => a.id.startsWith(STD_EXPLORE) && !a.on),
+    `exploring: the standard activities the character lacks follow, Search (carried) left out (got ${std.map((a) => a.id).join(", ")})`);
+  ok(STANDARD_EXPLORATION.every((a) => /^[A-Za-z0-9]{16}$/.test(a.id) && a.slug && a.name), "exploring: every standard activity names its compendium id");
+  /* The seat: the plinth's art and frame, and the activity while exploring. */
+  const ring = { ring: { enabled: true, subject: { texture: "/cut/ezren.webp" } } };
+  const seat = R.seatOf(fighter(), { t, token: ring, frame: { x: 2, y: 4, scale: 1.3 }, exploring: true });
+  ok(seat.cutout === "/cut/ezren.webp" && !seat.img && seat.frame?.scale === 1.3, "seat: the token ring's cut-out under the owner's frame, as the plinth draws it");
+  ok(seat.explore === "Search" && !R.seatOf(fighter(), { t, exploring: false }).explore, "seat: names the exploration activity while exploring only");
+  const sh = V.SEAT(seat, t);
+  ok(/class="gph-sfig is-cut"/.test(sh) && /--fz:1\.3/.test(sh) && /class="gph-fig"><span class="gph-img"/.test(sh) && /gph-sexp/.test(sh), "seat: drawn as the plinth's figure (frame vars, cut-out), with the activity");
+  const xp = R.readPlayer(ctxBase(fighter(), { mode: "exploration", turn: null, map: 0, party: [{ actor: fighter(), observe: false, turn: false, exploring: true }] }));
+  ok(xp.stack[0].explore === "Search" && !xp.stack[0].hp, "seat: the activity shows on a seat without OBSERVER (it is not a number)");
 });
 
 section("the caster's hand", () => {

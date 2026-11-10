@@ -394,7 +394,7 @@ try {
     if (d.row?.startsWith('page:')) { toast('ui.hotbar.cyclePage(' + d.row.slice(5) + ')'); return; }
     if (d.item) { closePeek(); const m = clone(model), it = m.deck.items.list.find((x) => x.id === d.item); if (!it.qty) return deny(b); it.qty -= 1; toast('consumable.consume()'); spend(it.cost); model = m; render(); return; }
     if (d.action || d.stance) { open.peek === 'action' ? closePeek() : showPeek('action', b); return; }
-    if (d.spell) { const c = b; D.castCard(c).then(() => { const m = clone(model); const card = m.deck.spells.cards.find((x) => x.id === d.spell); if (/^[1-9]$/.test(String(card.rank))) card.spent = true; model = m; render(); }); toast('entry.cast(spell, { rank })'); spend(+(b.dataset.cost ?? 0)); return; }
+    if (d.spell) { const c = b, leaves = c.dataset.slot != null && model.deck.spells.cards.find((x) => x.id === d.spell)?.rank !== "c"; D.castCard(c, { leaves }).then(() => { if (!leaves) return; const m = clone(model); const card = m.deck.spells.cards.find((x) => x.id === d.spell); card.spent = true; model = m; render(); }); toast('entry.cast(spell, { rank })'); spend(+(b.dataset.cost ?? 0)); return; }
     if (d.pa) { toast(d.pa === 'cast' ? 'entry.cast(spell, { rank })' : d.pa === 'post' ? 'item.toMessage()' : d.pa); closePeek(); return; }
   });
   /* typing in the Skills tab opens the finder with what was typed; typing

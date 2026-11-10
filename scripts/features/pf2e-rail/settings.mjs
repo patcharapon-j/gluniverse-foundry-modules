@@ -8,7 +8,9 @@
  *     so a player's pins follow them to another computer and a GM's pins
  *     for one creature never crowd another's;
  *   - whether the rail is folded, and the three preferences below: client
- *     settings, because they are about this screen.
+ *     settings, because they are about this screen;
+ *   - whether the exploration bar offers PF2e's standard activities to a
+ *     character who lacks them: a world setting, the table's.
  * The action economy is stored nowhere (turn.mjs).
  */
 import { SUITE_ID } from "../../core/const.mjs";
@@ -18,6 +20,7 @@ export const SETTINGS = Object.freeze({
   hidePlayers: "ph.hidePlayers",
   gmRail: "ph.gmRail",
   folded: "ph.folded",
+  coreExploration: "ph.coreExploration",
 });
 
 export const FLAGS = Object.freeze({
@@ -40,6 +43,11 @@ export function registerSettings() {
     name: "GLRAIL.settings.gmRail.name",
     hint: "GLRAIL.settings.gmRail.hint",
     scope: "client", config: true, type: Boolean, default: true,
+  });
+  game.settings.register(SUITE_ID, SETTINGS.coreExploration, {
+    name: "GLRAIL.settings.coreExploration.name",
+    hint: "GLRAIL.settings.coreExploration.hint",
+    scope: "world", config: true, type: Boolean, default: true,
   });
   game.settings.register(SUITE_ID, SETTINGS.folded, { scope: "client", config: false, type: Boolean, default: false });
 }
